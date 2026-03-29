@@ -427,6 +427,14 @@ function PredictionCore:SmoothAimVelocity(entry, velocity)
     local dt = math.max(now - entry.LastAimVelocityUpdate, 1 / 240)
     entry.LastAimVelocityUpdate = now
 
+    -- ANTI-DRIFT: Nếu SmoothedAimVelocity quá khác biệt so với thực tế → reset
+    local drift = (entry.SmoothedAimVelocity - velocity).Magnitude
+    local vMag = velocity.Magnitude
+    if drift > math.max(vMag * 2, 50) then
+        entry.SmoothedAimVelocity = velocity
+        return velocity
+    end
+
     if self.Options.AssistMode == "Silent Aim" then
         local cur = entry.SmoothedAimVelocity
         local a = 1 - math.pow(0.15, math.max(dt * 60, 1))
@@ -520,10 +528,10 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
     local velErr = (rawVel - entry.KalmanV).Magnitude
     local q = 0.15 + math.clamp(velErr / 28, 0, 2.0) + P.KalmanQBoost
     local r = 0.3
-    entry.KalmanP = entry.KalmanP + q
+    entry.KalmanP = math.min(entry.KalmanP + q, 10) -- CLAMP: tránh KalmanP tăng vô hạn
     local k = entry.KalmanP / (entry.KalmanP + r)
     entry.KalmanV = entry.KalmanV + k * (rawVel - entry.KalmanV)
-    entry.KalmanP = (1 - k) * entry.KalmanP
+    entry.KalmanP = math.clamp((1 - k) * entry.KalmanP, 0.01, 10)
 
     local filtVel = entry.KalmanV
 
@@ -551,13 +559,22 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.KalmanP = math.max(entry.KalmanP, 1 + motionShock)
     end
 
-    -- BƯỚC 3: Confidence
+    -- BƯỚC 3: Confidence (với recovery nhanh hơn)
     if entry.LastExpectedPos then
-        local errPenalty = math.clamp((basePos - entry.LastExpectedPos).Magnitude / 8, 0, 0.3)
-        entry.Confidence = math.clamp(entry.Confidence - errPenalty + 0.1, 0.4, 1)
+        local errDist = (basePos - entry.LastExpectedPos).Magnitude
+        -- Nếu LastExpectedPos quá cũ (>2 giây) → bỏ qua penalty
+        local expectedAge = now - (entry.LastExpectedTime or now)
+        if expectedAge > 2 then
+            entry.Confidence = math.clamp(entry.Confidence + 0.15, 0.4, 1)
+        else
+            local errPenalty = math.clamp(errDist / 8, 0, 0.3)
+            -- Recovery nhanh hơn: +0.15 thay vì +0.1
+            entry.Confidence = math.clamp(entry.Confidence - errPenalty + 0.15, 0.4, 1)
+        end
     else
         entry.Confidence = 1
     end
+    entry.LastExpectedTime = now
 
     -- BƯỚC 4: Acceleration
     if entry.LastFilteredVelocity then
