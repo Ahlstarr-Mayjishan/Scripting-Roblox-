@@ -429,8 +429,8 @@ function PredictionCore:SmoothAimVelocity(entry, velocity)
 
     if self.Options.AssistMode == "Silent Aim" then
         local cur = entry.SmoothedAimVelocity
-        -- Alpha cao hơn (0.25 thay vì 0.15) để phản ứng nhanh hơn, tránh lag tích lũy
-        local a = 1 - math.pow(0.25, math.max(dt * 60, 1))
+        -- Alpha thấp (0.12) cho Silent Aim: ưu tiên độ mượt hơn độ nhạy
+        local a = 1 - math.pow(0.12, math.max(dt * 60, 1))
         local s = cur + ((velocity - cur) * a)
         entry.SmoothedAimVelocity = s
         return s
@@ -895,9 +895,12 @@ function PredictionCore:StabilizeTargetPosition(entry, part, rawPos, deltaTime)
         if not cur then entry.StabilizedTargetPos = rawPos; return rawPos end
         local d = rawPos - cur
         local dm = d.Magnitude
-        if dm > 30 then entry.StabilizedTargetPos = rawPos; return rawPos end
-        if dm < 0.35 then return cur end
-        local a = 1 - math.pow(0.2, math.max((deltaTime or (1/60)) * 60, 1))
+        -- Snap ngay nếu thay đổi quá lớn (target mới hoặc teleport)
+        if dm > 50 then entry.StabilizedTargetPos = rawPos; return rawPos end
+        -- Deadzone: bỏ qua rung nhỏ hơn 1.2 studs
+        if dm < 1.2 then return cur end
+        -- Smoothing mạnh (0.08) để giảm rung đáng kể
+        local a = 1 - math.pow(0.08, math.max((deltaTime or (1/60)) * 60, 1))
         local r = cur:Lerp(rawPos, a)
         entry.StabilizedTargetPos = r
         return r
