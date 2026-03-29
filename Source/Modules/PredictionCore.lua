@@ -427,17 +427,10 @@ function PredictionCore:SmoothAimVelocity(entry, velocity)
     local dt = math.max(now - entry.LastAimVelocityUpdate, 1 / 240)
     entry.LastAimVelocityUpdate = now
 
-    -- ANTI-DRIFT: Nếu SmoothedAimVelocity quá khác biệt so với thực tế → reset
-    local drift = (entry.SmoothedAimVelocity - velocity).Magnitude
-    local vMag = velocity.Magnitude
-    if drift > math.max(vMag * 2, 50) then
-        entry.SmoothedAimVelocity = velocity
-        return velocity
-    end
-
     if self.Options.AssistMode == "Silent Aim" then
         local cur = entry.SmoothedAimVelocity
-        local a = 1 - math.pow(0.15, math.max(dt * 60, 1))
+        -- Alpha cao hơn (0.25 thay vì 0.15) để phản ứng nhanh hơn, tránh lag tích lũy
+        local a = 1 - math.pow(0.25, math.max(dt * 60, 1))
         local s = cur + ((velocity - cur) * a)
         entry.SmoothedAimVelocity = s
         return s
@@ -496,6 +489,17 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
 
     local now = os.clock()
 
+    -- PERIODIC REFRESH: Reset partial state mỗi 15 giây để tránh drift
+    if not entry._lastRefreshTime then entry._lastRefreshTime = now end
+    if (now - entry._lastRefreshTime) >= 15 then
+        entry._lastRefreshTime = now
+        entry.KalmanP = math.clamp(entry.KalmanP, 0.5, 2) -- Normalize KalmanP
+        entry.Confidence = math.max(entry.Confidence, 0.7)  -- Phục hồi confidence
+        if entry.Acceleration and entry.Acceleration.Magnitude > 200 then
+            entry.Acceleration = entry.Acceleration.Unit * 100 -- Giảm acceleration tích lũy
+        end
+    end
+
     -- BƯỚC 1: Raw Velocity
     local rawVel = Vector3.zero
     local dt = 0.03
@@ -528,7 +532,7 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
     local velErr = (rawVel - entry.KalmanV).Magnitude
     local q = 0.15 + math.clamp(velErr / 28, 0, 2.0) + P.KalmanQBoost
     local r = 0.3
-    entry.KalmanP = math.min(entry.KalmanP + q, 10) -- CLAMP: tránh KalmanP tăng vô hạn
+    entry.KalmanP = math.clamp(entry.KalmanP + q, 0.01, 10) -- CLAMP: tránh drift vô hạn
     local k = entry.KalmanP / (entry.KalmanP + r)
     entry.KalmanV = entry.KalmanV + k * (rawVel - entry.KalmanV)
     entry.KalmanP = math.clamp((1 - k) * entry.KalmanP, 0.01, 10)
@@ -559,28 +563,28 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.KalmanP = math.max(entry.KalmanP, 1 + motionShock)
     end
 
-    -- BƯỚC 3: Confidence (với recovery nhanh hơn)
+    -- BƯỚC 3: Confidence (với recovery nhanh hơn cho boss fights dài)
     if entry.LastExpectedPos then
         local errDist = (basePos - entry.LastExpectedPos).Magnitude
-        -- Nếu LastExpectedPos quá cũ (>2 giây) → bỏ qua penalty
-        local expectedAge = now - (entry.LastExpectedTime or now)
-        if expectedAge > 2 then
-            entry.Confidence = math.clamp(entry.Confidence + 0.15, 0.4, 1)
-        else
-            local errPenalty = math.clamp(errDist / 8, 0, 0.3)
-            -- Recovery nhanh hơn: +0.15 thay vì +0.1
-            entry.Confidence = math.clamp(entry.Confidence - errPenalty + 0.15, 0.4, 1)
-        end
+        local errPenalty = math.clamp(errDist / 8, 0, 0.3)
+        -- Recovery rate tăng lên 0.15 (từ 0.1) để confidence không bị stuck ở 0.4
+        local recovery = 0.15
+        entry.Confidence = math.clamp(entry.Confidence - errPenalty + recovery, 0.4, 1)
     else
         entry.Confidence = 1
     end
-    entry.LastExpectedTime = now
 
-    -- BƯỚC 4: Acceleration
+    -- BƯỚC 4: Acceleration (với magnitude clamp tránh drift)
     if entry.LastFilteredVelocity then
         local rawAcc = (filtVel - entry.LastFilteredVelocity) / dt
+        -- Clamp acceleration magnitude để tránh tích lũy sai số
+        if rawAcc.Magnitude > 500 then rawAcc = rawAcc.Unit * 500 end
         local accSmooth = (rawAcc - entry.Acceleration).Magnitude > 80 and 0.8 or 0.2
         entry.Acceleration = entry.Acceleration:Lerp(rawAcc, accSmooth)
+        -- Clamp kết quả cuối
+        if entry.Acceleration.Magnitude > 400 then
+            entry.Acceleration = entry.Acceleration.Unit * 400
+        end
     end
     entry.LastFilteredVelocity = filtVel
 
