@@ -1,19 +1,20 @@
 --[[
     ╔═══════════════════════════════════════════════════════════════╗
-    ║     Boss Aim Assist — Modular OOP Loader v2 (Main.lua)       ║
+    ║     Boss Aim Assist — Modular OOP Loader v3 (Main.lua)       ║
     ║                                                               ║
     ║  PERF FIXES:                                                  ║
     ║    • Target scan on Heartbeat (throttled, off render thread)  ║
     ║    • Prediction only for current target on RenderStepped      ║
     ║    • NPC/PvP prediction auto-dispatched (zero branch)         ║
     ║    • Reusable brain context table (zero alloc per frame)      ║
+    ║    • Stable origin from HumanoidRootPart (no camera dependency)║
     ╚═══════════════════════════════════════════════════════════════╝
 ]]
 
 -- ═══════════════════════════════════════════════════
 -- CONFIGURATION
 -- ═══════════════════════════════════════════════════
-local USE_GITHUB = true -- Bật chế độ GitHub
+local USE_GITHUB = true
 local GITHUB_CONFIG = {
     User = "Ahlstarr-Mayjishan",
     Repo = "Scripting-Roblox-",
@@ -40,11 +41,11 @@ local function loadModule(path)
             if content == "404: Not Found" then error("File not found on GitHub") end
             return loadstring(content)()
         end)
-        
-        if ok then 
-            return res 
+
+        if ok then
+            return res
         end
-        
+
         warn("⚠️ [Loader] Load thất bại: " .. path)
         warn("   Lỗi: " .. tostring(res))
         warn("   URL: " .. url)
@@ -64,6 +65,7 @@ end
 -- ═══════════════════════════════════════════════════
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local Camera = Workspace.CurrentCamera
 
@@ -80,8 +82,8 @@ local InputHandler     = loadModule("Modules/InputHandler.lua")
 local Visuals          = loadModule("Modules/Visuals.lua")
 local NPCTracker       = loadModule("Modules/NPCTracker.lua")
 local PredictionCore   = loadModule("Modules/PredictionCore.lua")
-local NPCPrediction    = loadModule("Modules/NPCPrediction.lua")  -- returns factory fn
-local PvPPrediction    = loadModule("Modules/PvPPrediction.lua")  -- returns factory fn
+local NPCPrediction    = loadModule("Modules/NPCPrediction.lua")
+local PvPPrediction    = loadModule("Modules/PvPPrediction.lua")
 local TargetSelector   = loadModule("Modules/TargetSelector.lua")
 local SilentAim        = loadModule("Modules/SilentAim.lua")
 
@@ -105,9 +107,9 @@ local Options = Config.Options
 local input      = InputHandler.new(Config)
 local visuals    = Visuals.new(Config)
 local tracker    = NPCTracker.new(Config)
-local npcPred    = NPCPredClass.new(Config, tracker)     -- Predictor cho NPC/Boss
-local pvpPred    = PvPPredClass.new(Config, tracker)     -- Predictor cho Player
-local selector   = TargetSelector.new(Config, tracker, npcPred) -- selector dùng npcPred cho scanning
+local npcPred    = NPCPredClass.new(Config, tracker)
+local pvpPred    = PvPPredClass.new(Config, tracker)
+local selector   = TargetSelector.new(Config, tracker, npcPred)
 local silentAim  = SilentAim.new(Config, visuals)
 
 -- ═══════════════════════════════════════════════════
@@ -143,6 +145,26 @@ SettingsTab(Window, Options)
 Rayfield:LoadConfiguration()
 
 -- ═══════════════════════════════════════════════════
+-- STABLE ORIGIN — Luôn dùng vị trí nhân vật
+-- Không bao giờ phụ thuộc vào Camera.CFrame.Position
+-- ═══════════════════════════════════════════════════
+local function getShooterOrigin()
+    local localPlayer = Players.LocalPlayer
+    local character = localPlayer and localPlayer.Character
+    local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        return rootPart.Position
+    end
+    return Camera.CFrame.Position -- Fallback khi nhân vật chưa load
+end
+
+-- Validate vị trí (không NaN, không Infinite)
+local function isValidPosition(v)
+    return v.X == v.X and v.Y == v.Y and v.Z == v.Z
+        and math.abs(v.X) < 1e6 and math.abs(v.Y) < 1e6 and math.abs(v.Z) < 1e6
+end
+
+-- ═══════════════════════════════════════════════════
 -- HEALTH TRACKING
 -- ═══════════════════════════════════════════════════
 local CurrentHitHumanoid = nil
@@ -161,11 +183,9 @@ end
 
 -- ═══════════════════════════════════════════════════
 -- PERF: Target scan trên Heartbeat (throttled)
--- Heartbeat chạy SAU physics, TRƯỚC render.
--- Quét mục tiêu ở đây giúp giải phóng RenderStepped.
 -- ═══════════════════════════════════════════════════
 local _scanFrame = 0
-local SCAN_INTERVAL = 2 -- Quét mỗi 2 frame (giảm 50% CPU cho scanning)
+local SCAN_INTERVAL = 2
 local _cachedMousePos = Vector2.new(0, 0)
 
 RunService.Heartbeat:Connect(function()
@@ -176,13 +196,14 @@ RunService.Heartbeat:Connect(function()
         _scanFrame = 0
 
         if input:ShouldAssist() then
-            tracker.CurrentTargetEntry = selector:GetClosestTarget(_cachedMousePos, Camera.CFrame.Position)
+            tracker.CurrentTargetEntry = selector:GetClosestTarget(_cachedMousePos, getShooterOrigin())
         end
     end
 end)
 
 -- ═══════════════════════════════════════════════════
--- MAIN RENDER LOOP (chỉ predict + visual cho 1 target)
+-- MAIN RENDER LOOP (Silent Aim + Highlight Only)
+-- Không can thiệp Camera — game không phải FPS
 -- ═══════════════════════════════════════════════════
 RunService.RenderStepped:Connect(function(deltaTime)
     local mousePos = _cachedMousePos
@@ -223,9 +244,25 @@ RunService.RenderStepped:Connect(function(deltaTime)
     -- Auto-dispatch: NPC hay PvP predictor
     local pred = getPredictor(entry)
 
+    -- Dùng vị trí nhân vật ổn định thay vì camera
+    local shooterOrigin = getShooterOrigin()
+
     -- Predict & stabilize
-    local targetPosition = pred:PredictWithStrafe(Camera.CFrame.Position, targetPart, entry)
+    local targetPosition = pred:PredictWithStrafe(shooterOrigin, targetPart, entry)
     targetPosition = pred:StabilizeTargetPosition(entry, targetPart, targetPosition, deltaTime)
+
+    -- Safety: nếu prediction trả về dữ liệu hỏng → reset state
+    if not isValidPosition(targetPosition) then
+        entry.LastPos = nil
+        entry.LastTime = nil
+        entry.KalmanV = Vector3.zero
+        entry.KalmanP = 1
+        entry.Confidence = 1
+        entry.Acceleration = Vector3.zero
+        entry.LastFilteredVelocity = nil
+        entry.SmoothedAimVelocity = nil
+        return
+    end
 
     local screenPos, onScreen = Camera:WorldToViewportPoint(targetPosition)
     if onScreen then
@@ -267,61 +304,4 @@ RunService.RenderStepped:Connect(function(deltaTime)
         local hp = humanoid.Health
         if hp > LastHealthValue then LastHealthValue = hp end
     end
-
-    -- ═══════════════════════════════════════════════════
-    -- CAMERA LOCK — KNOCKBACK-SAFE
-    -- ═══════════════════════════════════════════════════
-    if Options.AssistMode ~= "Camera Lock" then return end
-
-    -- ── Validate target position ──
-    local function isValid(v)
-        return v.X == v.X and v.Y == v.Y and v.Z == v.Z
-            and math.abs(v.X) < 1e6 and math.abs(v.Y) < 1e6 and math.abs(v.Z) < 1e6
-    end
-    if not isValid(targetPosition) then return end
-
-    -- ── Knockback Detection ──
-    -- Khi Boss hất nhân vật lên, RootPart.Velocity.Y sẽ rất lớn
-    -- Trong trạng thái này, camera lock sẽ bị tạm dừng hoàn toàn
-    local Players = game:GetService("Players")
-    local localPlayer = Players.LocalPlayer
-    local character = localPlayer and localPlayer.Character
-    local rootPart = character and (character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart)
-
-    if rootPart then
-        local rootVel = rootPart.AssemblyLinearVelocity
-        local verticalSpeed = math.abs(rootVel.Y)
-        local horizontalSpeed = Vector3.new(rootVel.X, 0, rootVel.Z).Magnitude
-
-        -- Nếu nhân vật đang bay lên/rơi xuống quá nhanh (bị hất) → bỏ qua camera lock
-        if verticalSpeed > 60 then return end
-
-        -- Nếu nhân vật bị đẩy đi quá nhanh (knockback ngang) → bỏ qua
-        if horizontalSpeed > 120 then return end
-    end
-
-    local camPos = Camera.CFrame.Position
-    local toTarget = targetPosition - camPos
-
-    -- Đảm bảo khoảng cách hợp lệ
-    if toTarget.Magnitude < 0.1 then return end
-
-    local desired = CFrame.lookAt(camPos, targetPosition)
-
-    -- ── Giới hạn góc xoay tối đa mỗi frame ──
-    -- Tránh camera quay loạn khi vị trí thay đổi đột ngột
-    local MAX_ANGLE_PER_FRAME = math.rad(15) -- Tối đa 15° mỗi frame
-    local currentLook = Camera.CFrame.LookVector
-    local desiredLook = desired.LookVector
-    local dotProduct = math.clamp(currentLook:Dot(desiredLook), -1, 1)
-    local angleBetween = math.acos(dotProduct)
-
-    -- Nếu góc xoay yêu cầu quá lớn → giảm alpha xuống để xoay từ từ
-    local alpha = 1 - math.pow(1 - math.clamp(Options.Smoothness, 0, 0.99), math.max(deltaTime * 60, 1))
-    if angleBetween > MAX_ANGLE_PER_FRAME then
-        -- Clamp alpha sao cho góc xoay thực tế không vượt quá MAX_ANGLE_PER_FRAME
-        alpha = math.min(alpha, MAX_ANGLE_PER_FRAME / math.max(angleBetween, 0.001))
-    end
-
-    Camera.CFrame = Camera.CFrame:Lerp(desired, alpha)
 end)
