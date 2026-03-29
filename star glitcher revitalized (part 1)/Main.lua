@@ -13,10 +13,10 @@
 -- ═══════════════════════════════════════════════════
 -- CONFIGURATION
 -- ═══════════════════════════════════════════════════
-local USE_GITHUB = false
-local GITHUB_BASE = "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/"
+local USE_GITHUB = true
+local GITHUB_BASE = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
 
--- ═══════════════════════════════════════════════════
+-- ═══════════════════════════════════════════════════  
 -- MODULE LOADER
 -- ═══════════════════════════════════════════════════
 local function loadModule(path)
