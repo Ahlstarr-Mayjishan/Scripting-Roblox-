@@ -1,14 +1,10 @@
 --[[
-    NoSlowdown.lua — Anti-Debuff Module
+    NoSlowdown.lua — Anti-Debuff & Player Enhancement Module
     ═══════════════════════════════════════════════════
-    Chống giảm tốc (WalkSpeed debuff) và giảm delay
-    khi bị Boss đánh hoặc hiệu ứng áp lên nhân vật.
-
-    Cơ chế:
-      • NoSlowdown: Giữ WalkSpeed luôn >= tốc độ gốc
-      • NoDelay: Xóa các debuff attribute/value phổ biến
-    
-    Tương thích: Hầu hết game Roblox RPG/Boss Fight
+    • No Slowdown: Giữ WalkSpeed >= tốc độ gốc
+    • No Delay: Xóa debuff Value/Attribute
+    • No Stun: Chống stun/ragdoll/freeze
+    • Custom Move Speed: Đặt WalkSpeed tùy chỉnh
 ]]
 
 local Players = game:GetService("Players")
@@ -22,7 +18,6 @@ function NoSlowdown.new(config)
     self.Config = config
     self.Options = config.Options
     self._connections = {}
-    self._active = false
     self._baseWalkSpeed = nil
     self._baseJumpPower = nil
     return self
@@ -37,8 +32,6 @@ end
 function NoSlowdown:CaptureBaseStats()
     local humanoid = self:GetHumanoid()
     if not humanoid then return end
-
-    -- Chỉ lưu 1 lần (tốc độ gốc lúc chưa bị debuff)
     if not self._baseWalkSpeed then
         self._baseWalkSpeed = humanoid.WalkSpeed
         self.Options.OriginalWalkSpeed = self._baseWalkSpeed
@@ -51,16 +44,22 @@ end
 function NoSlowdown:Init()
     local localPlayer = Players.LocalPlayer
 
-    -- Capture stats khi character spawn
     local function onCharacterAdded(char)
-        -- Đợi Humanoid load
         local humanoid = char:WaitForChild("Humanoid", 10)
         if humanoid then
-            -- Reset base stats khi respawn
             self._baseWalkSpeed = nil
             self._baseJumpPower = nil
-            task.wait(0.5) -- Đợi game set WalkSpeed gốc
+            task.wait(0.5)
             self:CaptureBaseStats()
+
+            -- Disable stun-related HumanoidStates
+            if self.Options.NoStun then
+                pcall(function()
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+                    humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
+                end)
+            end
         end
     end
 
@@ -71,26 +70,49 @@ function NoSlowdown:Init()
         localPlayer.CharacterAdded:Connect(onCharacterAdded)
     )
 
-    -- Main loop: kiểm tra và khôi phục mỗi frame
+    -- Main loop
     local conn = RunService.Heartbeat:Connect(function()
         local humanoid = self:GetHumanoid()
         if not humanoid then return end
 
-        -- Capture lần đầu nếu chưa có
         if not self._baseWalkSpeed then
             self:CaptureBaseStats()
             return
         end
 
+        -- ═══ CUSTOM MOVE SPEED ═══
+        if self.Options.CustomMoveSpeedEnabled then
+            humanoid.WalkSpeed = self.Options.CustomMoveSpeed
         -- ═══ NO SLOWDOWN ═══
-        if self.Options.NoSlowdown then
-            -- Nếu WalkSpeed bị giảm dưới mức gốc → khôi phục
+        elseif self.Options.NoSlowdown then
             if humanoid.WalkSpeed < self._baseWalkSpeed then
                 humanoid.WalkSpeed = self._baseWalkSpeed
             end
-            -- Bảo vệ JumpPower
-            if self._baseJumpPower and humanoid.JumpPower < self._baseJumpPower then
+        end
+
+        -- Bảo vệ JumpPower
+        if self.Options.NoSlowdown and self._baseJumpPower then
+            if humanoid.JumpPower < self._baseJumpPower then
                 humanoid.JumpPower = self._baseJumpPower
+            end
+        end
+
+        -- ═══ NO STUN ═══
+        if self.Options.NoStun then
+            local state = humanoid:GetState()
+            if state == Enum.HumanoidStateType.FallingDown
+                or state == Enum.HumanoidStateType.Ragdoll
+                or state == Enum.HumanoidStateType.PlatformStanding then
+                humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+
+            -- Unanchor nếu bị freeze
+            local character = humanoid.Parent
+            if character then
+                local rootPart = character:FindFirstChild("HumanoidRootPart")
+                if rootPart and rootPart.Anchored then
+                    rootPart.Anchored = false
+                end
             end
         end
 
@@ -99,52 +121,35 @@ function NoSlowdown:Init()
             local character = humanoid.Parent
             if not character then return end
 
-            -- Xóa các Value/Attribute debuff phổ biến
+            -- Xóa debuff Values
             for _, child in ipairs(character:GetChildren()) do
-                local name = child.Name:lower()
-                -- Tìm và xóa các debuff slowdown/stun/freeze
                 if child:IsA("NumberValue") or child:IsA("IntValue") or child:IsA("BoolValue") then
+                    local name = child.Name:lower()
                     if name:find("slow") or name:find("stun") or name:find("freeze")
-                        or name:find("root") or name:find("debuff") or name:find("delay") then
+                        or name:find("root") or name:find("debuff") or name:find("delay")
+                        or name:find("cooldown") then
                         child:Destroy()
                     end
                 end
             end
 
-            -- Xóa các Attribute debuff
-            for _, attrName in ipairs(character:GetAttributes() and {} or {}) do
-                -- GetAttributes trả về dictionary, duyệt qua keys
-            end
-            -- Safe attribute removal
+            -- Xóa debuff Attributes
             pcall(function()
                 local attrs = character:GetAttributes()
                 for attrName, _ in pairs(attrs) do
                     local lower = attrName:lower()
                     if lower:find("slow") or lower:find("stun") or lower:find("freeze")
-                        or lower:find("delay") or lower:find("debuff") then
+                        or lower:find("delay") or lower:find("debuff") or lower:find("cooldown") then
                         character:SetAttribute(attrName, nil)
                     end
                 end
             end)
-
-            -- Đảm bảo nhân vật không bị Anchored
-            local rootPart = character:FindFirstChild("HumanoidRootPart")
-            if rootPart and rootPart.Anchored then
-                rootPart.Anchored = false
-            end
-
-            -- Reset Humanoid state nếu bị stuck
-            if humanoid:GetState() == Enum.HumanoidStateType.FallingDown
-                or humanoid:GetState() == Enum.HumanoidStateType.Ragdoll then
-                humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-            end
         end
     end)
 
     table.insert(self._connections, conn)
 end
 
--- Cho phép user set WalkSpeed gốc thủ công
 function NoSlowdown:SetBaseWalkSpeed(speed)
     self._baseWalkSpeed = speed
     self.Options.OriginalWalkSpeed = speed

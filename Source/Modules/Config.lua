@@ -29,7 +29,10 @@ Config.Options = {
     SilentAim = true,
     NoSlowdown = false,
     NoDelay = false,
-    OriginalWalkSpeed = nil, -- Lưu WalkSpeed gốc để khôi phục
+    NoStun = false,
+    CustomMoveSpeedEnabled = false,
+    CustomMoveSpeed = 16, -- Mặc định WalkSpeed gốc Roblox
+    OriginalWalkSpeed = nil,
 }
 
 -- ═══════════════════════════════════════════════════

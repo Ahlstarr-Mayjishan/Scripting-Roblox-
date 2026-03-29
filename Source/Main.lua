@@ -91,6 +91,7 @@ local NoSlowdownModule = loadModule("Modules/NoSlowdown.lua")
 -- Tab Modules
 local AimbotTab      = loadModule("Tabs/AimbotTab.lua")
 local AdjustmentsTab = loadModule("Tabs/AdjustmentsTab.lua")
+local PlayerTab      = loadModule("Tabs/PlayerTab.lua")
 local MiscTab        = loadModule("Tabs/MiscTab.lua")
 local SettingsTab    = loadModule("Tabs/SettingsTab.lua")
 
@@ -142,7 +143,8 @@ local Window = Rayfield:CreateWindow({
 
 AimbotTab(Window, Options, visuals)
 AdjustmentsTab(Window, Options)
-MiscTab(Window, Options, tracker, noSlowdown)
+PlayerTab(Window, Options, noSlowdown)
+MiscTab(Window, Options, tracker)
 SettingsTab(Window, Options)
 
 Rayfield:LoadConfiguration()
