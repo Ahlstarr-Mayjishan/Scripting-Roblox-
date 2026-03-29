@@ -268,11 +268,24 @@ RunService.RenderStepped:Connect(function(deltaTime)
         if hp > LastHealthValue then LastHealthValue = hp end
     end
 
-    -- Camera Lock
+    -- ═══════════════════════════════════════════════════
+    -- CAMERA LOCK SAFETY CHECK
+    -- ═══════════════════════════════════════════════════
     if Options.AssistMode ~= "Camera Lock" then return end
 
+    -- Kiểm tra vị trí có hợp lệ không (tránh NaN/Infinite khiến camera văng)
+    local function isValid(v)
+        return v.X == v.X and v.Y == v.Y and v.Z == v.Z -- NaN check
+            and math.abs(v.X) < 1e6 and math.abs(v.Y) < 1e6 and math.abs(v.Z) < 1e6 -- Infinite check
+    end
+
+    if not isValid(targetPosition) then return end
+
     local camPos = Camera.CFrame.Position
+    -- Đảm bảo khoảng cách không quá gần (tránh lỗi lookAt trùng vị trí)
+    if (targetPosition - camPos).Magnitude < 0.1 then return end
+
     local desired = CFrame.lookAt(camPos, targetPosition)
-    local alpha = 1 - math.pow(1 - Options.Smoothness, math.max(deltaTime * 60, 1))
+    local alpha = 1 - math.pow(1 - math.clamp(Options.Smoothness, 0, 0.99), math.max(deltaTime * 60, 1))
     Camera.CFrame = Camera.CFrame:Lerp(desired, alpha)
 end)

@@ -207,8 +207,8 @@ function PredictionCore:SolveInterceptTime(shooterPos, targetPos, targetVel, pro
     local b = 2 * r:Dot(v)
     local c = r:Dot(r)
     if c <= 1e-6 then return 0 end
-    if math.abs(a) <= 1e-6 then
-        if math.abs(b) <= 1e-6 then return nil end
+    if math.abs(a) < 1e-5 then -- Tránh chia cho số gần bằng 0
+        if math.abs(b) < 1e-5 then return nil end
         local t = -c / b
         return t > 0 and t or nil
     end
@@ -499,14 +499,19 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.KalmanV = Vector3.zero
         entry.KalmanP = 1
     else
-        dt = now - entry.LastTime
+        dt = math.max(now - entry.LastTime, 0.001) -- Chốt chặn dt không được bằng 0
         if dt >= 0.015 then
-            rawVel = (basePos - entry.LastPos) / dt
+            local newVel = (basePos - entry.LastPos) / dt
+            -- Chốt chặn vận tốc quá ảo (do teleport hoặc lag cực nặng)
+            if newVel.Magnitude < 2000 then
+                rawVel = newVel
+            else
+                rawVel = entry.RealVelocity or Vector3.zero
+            end
             entry.LastPos = basePos
             entry.LastTime = now
         else
             rawVel = entry.RealVelocity or Vector3.zero
-            dt = 0.03
         end
     end
     entry.RealVelocity = rawVel
