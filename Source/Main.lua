@@ -149,13 +149,22 @@ Rayfield:LoadConfiguration()
 -- Không bao giờ phụ thuộc vào Camera.CFrame.Position
 -- ═══════════════════════════════════════════════════
 local function getShooterOrigin()
+    local camPos = Camera.CFrame.Position
     local localPlayer = Players.LocalPlayer
     local character = localPlayer and localPlayer.Character
     local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+
     if rootPart then
-        return rootPart.Position
+        local charPos = rootPart.Position
+        -- Camera trong khoảng hợp lệ → dùng Camera (chính xác cho 3rd person)
+        -- Camera bị hỏng/văng quá xa → fallback về character position
+        if (camPos - charPos).Magnitude < 200 then
+            return camPos
+        end
+        return charPos
     end
-    return Camera.CFrame.Position -- Fallback khi nhân vật chưa load
+
+    return camPos
 end
 
 -- Validate vị trí (không NaN, không Infinite)
