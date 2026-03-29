@@ -269,23 +269,59 @@ RunService.RenderStepped:Connect(function(deltaTime)
     end
 
     -- ═══════════════════════════════════════════════════
-    -- CAMERA LOCK SAFETY CHECK
+    -- CAMERA LOCK — KNOCKBACK-SAFE
     -- ═══════════════════════════════════════════════════
     if Options.AssistMode ~= "Camera Lock" then return end
 
-    -- Kiểm tra vị trí có hợp lệ không (tránh NaN/Infinite khiến camera văng)
+    -- ── Validate target position ──
     local function isValid(v)
-        return v.X == v.X and v.Y == v.Y and v.Z == v.Z -- NaN check
-            and math.abs(v.X) < 1e6 and math.abs(v.Y) < 1e6 and math.abs(v.Z) < 1e6 -- Infinite check
+        return v.X == v.X and v.Y == v.Y and v.Z == v.Z
+            and math.abs(v.X) < 1e6 and math.abs(v.Y) < 1e6 and math.abs(v.Z) < 1e6
     end
-
     if not isValid(targetPosition) then return end
 
+    -- ── Knockback Detection ──
+    -- Khi Boss hất nhân vật lên, RootPart.Velocity.Y sẽ rất lớn
+    -- Trong trạng thái này, camera lock sẽ bị tạm dừng hoàn toàn
+    local Players = game:GetService("Players")
+    local localPlayer = Players.LocalPlayer
+    local character = localPlayer and localPlayer.Character
+    local rootPart = character and (character:FindFirstChild("HumanoidRootPart") or character.PrimaryPart)
+
+    if rootPart then
+        local rootVel = rootPart.AssemblyLinearVelocity
+        local verticalSpeed = math.abs(rootVel.Y)
+        local horizontalSpeed = Vector3.new(rootVel.X, 0, rootVel.Z).Magnitude
+
+        -- Nếu nhân vật đang bay lên/rơi xuống quá nhanh (bị hất) → bỏ qua camera lock
+        if verticalSpeed > 60 then return end
+
+        -- Nếu nhân vật bị đẩy đi quá nhanh (knockback ngang) → bỏ qua
+        if horizontalSpeed > 120 then return end
+    end
+
     local camPos = Camera.CFrame.Position
-    -- Đảm bảo khoảng cách không quá gần (tránh lỗi lookAt trùng vị trí)
-    if (targetPosition - camPos).Magnitude < 0.1 then return end
+    local toTarget = targetPosition - camPos
+
+    -- Đảm bảo khoảng cách hợp lệ
+    if toTarget.Magnitude < 0.1 then return end
 
     local desired = CFrame.lookAt(camPos, targetPosition)
+
+    -- ── Giới hạn góc xoay tối đa mỗi frame ──
+    -- Tránh camera quay loạn khi vị trí thay đổi đột ngột
+    local MAX_ANGLE_PER_FRAME = math.rad(15) -- Tối đa 15° mỗi frame
+    local currentLook = Camera.CFrame.LookVector
+    local desiredLook = desired.LookVector
+    local dotProduct = math.clamp(currentLook:Dot(desiredLook), -1, 1)
+    local angleBetween = math.acos(dotProduct)
+
+    -- Nếu góc xoay yêu cầu quá lớn → giảm alpha xuống để xoay từ từ
     local alpha = 1 - math.pow(1 - math.clamp(Options.Smoothness, 0, 0.99), math.max(deltaTime * 60, 1))
+    if angleBetween > MAX_ANGLE_PER_FRAME then
+        -- Clamp alpha sao cho góc xoay thực tế không vượt quá MAX_ANGLE_PER_FRAME
+        alpha = math.min(alpha, MAX_ANGLE_PER_FRAME / math.max(angleBetween, 0.001))
+    end
+
     Camera.CFrame = Camera.CFrame:Lerp(desired, alpha)
 end)
