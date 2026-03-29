@@ -86,6 +86,7 @@ local NPCPrediction    = loadModule("Modules/NPCPrediction.lua")
 local PvPPrediction    = loadModule("Modules/PvPPrediction.lua")
 local TargetSelector   = loadModule("Modules/TargetSelector.lua")
 local SilentAim        = loadModule("Modules/SilentAim.lua")
+local NoSlowdownModule = loadModule("Modules/NoSlowdown.lua")
 
 -- Tab Modules
 local AimbotTab      = loadModule("Tabs/AimbotTab.lua")
@@ -111,6 +112,7 @@ local npcPred    = NPCPredClass.new(Config, tracker)
 local pvpPred    = PvPPredClass.new(Config, tracker)
 local selector   = TargetSelector.new(Config, tracker, npcPred)
 local silentAim  = SilentAim.new(Config, visuals)
+local noSlowdown = NoSlowdownModule.new(Config)
 
 -- ═══════════════════════════════════════════════════
 -- INITIALIZE
@@ -118,6 +120,7 @@ local silentAim  = SilentAim.new(Config, visuals)
 input:Init()
 tracker:Init()
 silentAim:Init()
+noSlowdown:Init()
 
 -- ═══════════════════════════════════════════════════
 -- RAYFIELD UI
@@ -139,7 +142,7 @@ local Window = Rayfield:CreateWindow({
 
 AimbotTab(Window, Options, visuals)
 AdjustmentsTab(Window, Options)
-MiscTab(Window, Options, tracker)
+MiscTab(Window, Options, tracker, noSlowdown)
 SettingsTab(Window, Options)
 
 Rayfield:LoadConfiguration()

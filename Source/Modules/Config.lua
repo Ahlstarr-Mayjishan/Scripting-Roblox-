@@ -27,6 +27,9 @@ Config.Options = {
     HomingStrength = 0.85,
     ProjectileVelocity = 250,
     SilentAim = true,
+    NoSlowdown = false,
+    NoDelay = false,
+    OriginalWalkSpeed = nil, -- Lưu WalkSpeed gốc để khôi phục
 }
 
 -- ═══════════════════════════════════════════════════
