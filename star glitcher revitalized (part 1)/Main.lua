@@ -13,27 +13,48 @@
 -- ═══════════════════════════════════════════════════
 -- CONFIGURATION
 -- ═══════════════════════════════════════════════════
-local USE_GITHUB = true
-local GITHUB_BASE = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
+local USE_GITHUB = true -- Bật chế độ GitHub
+local GITHUB_CONFIG = {
+    User = "Zlota",
+    Repo = "Scripting-Roblox-",
+    Branch = "main",
+    Folder = "star glitcher revitalized (part 1)"
+}
 
--- ═══════════════════════════════════════════════════  
--- MODULE LOADER
 -- ═══════════════════════════════════════════════════
+-- MODULE LOADER (GitHub Optimized)
+-- ═══════════════════════════════════════════════════
+local GITHUB_BASE = string.format(
+    "https://raw.githubusercontent.com/%s/%s/%s/%s/",
+    GITHUB_CONFIG.User,
+    GITHUB_CONFIG.Repo,
+    GITHUB_CONFIG.Branch,
+    GITHUB_CONFIG.Folder:gsub(" ", "%%20")
+)
+
 local function loadModule(path)
     if USE_GITHUB then
         local url = GITHUB_BASE .. path
         local ok, res = pcall(function()
-            return loadstring(game:HttpGet(url))()
+            local content = game:HttpGet(url)
+            if content == "404: Not Found" then error("File not found on GitHub") end
+            return loadstring(content)()
         end)
-        if ok then return res end
-        warn("[Loader] GitHub load failed: " .. path .. " — " .. tostring(res))
+        
+        if ok then 
+            return res 
+        end
+        
+        warn("⚠️ [Loader] Load thất bại: " .. path)
+        warn("   Lỗi: " .. tostring(res))
+        warn("   URL: " .. url)
         return nil
     else
         local ok, res = pcall(function()
             return loadstring(readfile(path))()
         end)
         if ok then return res end
-        warn("[Loader] Local load failed: " .. path .. " — " .. tostring(res))
+        warn("❌ [Loader] Local load failed: " .. path .. " — " .. tostring(res))
         return nil
     end
 end
