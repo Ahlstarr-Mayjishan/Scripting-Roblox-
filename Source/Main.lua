@@ -87,6 +87,7 @@ local PvPPrediction    = loadModule("Modules/PvPPrediction.lua")
 local TargetSelector   = loadModule("Modules/TargetSelector.lua")
 local SilentAim        = loadModule("Modules/SilentAim.lua")
 local NoSlowdownModule = loadModule("Modules/NoSlowdown.lua")
+local BossClassifier   = loadModule("Modules/BossClassifier.lua")
 
 -- Tab Modules
 local AimbotTab      = loadModule("Tabs/AimbotTab.lua")
@@ -108,7 +109,7 @@ local Options = Config.Options
 
 local input      = InputHandler.new(Config)
 local visuals    = Visuals.new(Config)
-local tracker    = NPCTracker.new(Config)
+local tracker    = NPCTracker.new(Config, BossClassifier)
 local npcPred    = NPCPredClass.new(Config, tracker)
 local pvpPred    = PvPPredClass.new(Config, tracker)
 local selector   = TargetSelector.new(Config, tracker, npcPred)

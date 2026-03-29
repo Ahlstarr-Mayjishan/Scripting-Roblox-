@@ -11,15 +11,16 @@ local LocalPlayer = Players.LocalPlayer
 local NPCTracker = {}
 NPCTracker.__index = NPCTracker
 
-function NPCTracker.new(config)
+function NPCTracker.new(config, bossClassifier)
     local self = setmetatable({}, NPCTracker)
     self.Config = config
     self.Options = config.Options
     self.Blacklist = config.Blacklist
+    self.BossClassifier = bossClassifier
 
     self.TargetFolder = Workspace:WaitForChild("Entities", 10) or Workspace
-    self.Entries = {}     -- Array: {Model, Humanoid, RootPart}
-    self.Lookup = {}      -- Map: Model → Entry
+    self.Entries = {}
+    self.Lookup = {}
     self.CurrentTargetEntry = nil
 
     self._connections = {}
@@ -93,7 +94,17 @@ function NPCTracker:Add(model)
         Model = model,
         Humanoid = humanoid,
         RootPart = rootPart,
+        BossType = "humanoid",
+        BossProfile = nil,
     }
+
+    -- Auto-classify boss
+    if self.BossClassifier then
+        local bossType, height = self.BossClassifier.Classify(model)
+        entry.BossType = bossType
+        entry.BossProfile = self.BossClassifier.GetProfile(bossType)
+        entry.ModelHeight = height
+    end
 
     table.insert(self.Entries, entry)
     self.Lookup[model] = entry
@@ -137,6 +148,12 @@ function NPCTracker:GetTargetPart(entry)
 
     local model = entry.Model
     if not model or not model.Parent then return nil end
+
+    -- Uưu tiên PreferredPart từ BossProfile
+    if entry.BossProfile and entry.BossProfile.PreferredPart then
+        local preferred = model:FindFirstChild(entry.BossProfile.PreferredPart)
+        if preferred then return preferred end
+    end
 
     local partName = self.Options.TargetPart
     local target = model:FindFirstChild(partName)

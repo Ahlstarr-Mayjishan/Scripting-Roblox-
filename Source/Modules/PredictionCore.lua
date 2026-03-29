@@ -481,8 +481,13 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
     if att and att:IsA("Attachment") then basePos = att.WorldPosition end
 
     if not self.Options.PredictionEnabled then
-        if self.Options.AimOffset ~= 0 then
-            basePos = basePos + Vector3.new(0, self.Options.AimOffset, 0)
+        local totalOffset = self.Options.AimOffset
+        -- Cộng thêm AimOffset từ BossProfile
+        if entry and entry.BossProfile then
+            totalOffset = totalOffset + (entry.BossProfile.AimOffset or 0)
+        end
+        if totalOffset ~= 0 then
+            basePos = basePos + Vector3.new(0, totalOffset, 0)
         end
         return basePos
     end
@@ -895,12 +900,19 @@ function PredictionCore:StabilizeTargetPosition(entry, part, rawPos, deltaTime)
         if not cur then entry.StabilizedTargetPos = rawPos; return rawPos end
         local d = rawPos - cur
         local dm = d.Magnitude
-        -- Snap ngay nếu thay đổi quá lớn (target mới hoặc teleport)
-        if dm > 50 then entry.StabilizedTargetPos = rawPos; return rawPos end
-        -- Deadzone: bỏ qua rung nhỏ hơn 1.2 studs
-        if dm < 1.2 then return cur end
-        -- Smoothing mạnh (0.08) để giảm rung đáng kể
-        local a = 1 - math.pow(0.08, math.max((deltaTime or (1/60)) * 60, 1))
+
+        -- Lấy tham số từ BossProfile (nếu có)
+        local bpDeadzone = 1.2
+        local bpAlpha = 0.08
+        local bpSnap = 50
+        if entry.BossProfile then
+            bpDeadzone = entry.BossProfile.Deadzone or bpDeadzone
+            bpAlpha = entry.BossProfile.StabilizeAlpha or bpAlpha
+        end
+
+        if dm > bpSnap then entry.StabilizedTargetPos = rawPos; return rawPos end
+        if dm < bpDeadzone then return cur end
+        local a = 1 - math.pow(bpAlpha, math.max((deltaTime or (1/60)) * 60, 1))
         local r = cur:Lerp(rawPos, a)
         entry.StabilizedTargetPos = r
         return r
