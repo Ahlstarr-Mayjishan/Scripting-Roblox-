@@ -18,7 +18,7 @@ local GITHUB_CONFIG = {
     User = "Zlota",
     Repo = "Scripting-Roblox-",
     Branch = "main",
-    Folder = "star glitcher revitalized (part 1)"
+    Folder = "Source"
 }
 
 -- ═══════════════════════════════════════════════════
