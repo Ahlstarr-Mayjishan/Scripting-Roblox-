@@ -15,7 +15,7 @@
 -- ═══════════════════════════════════════════════════
 local USE_GITHUB = true -- Bật chế độ GitHub
 local GITHUB_CONFIG = {
-    User = "Zlota",
+    User = "Ahlstarr-Mayjishan",
     Repo = "Scripting-Roblox-",
     Branch = "main",
     Folder = "Source"
