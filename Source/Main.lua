@@ -151,8 +151,78 @@ SettingsTab(Window, Options)
 Rayfield:LoadConfiguration()
 
 -- ═══════════════════════════════════════════════════
--- STABLE ORIGIN — Luôn dùng vị trí nhân vật
--- Không bao giờ phụ thuộc vào Camera.CFrame.Position
+-- MULTI-INSTANCE PROTECTION
+-- ═══════════════════════════════════════════════════
+local SESSION_ID = os.time()
+if _G.BossAimAssist_Cleanup then
+    warn("⚠️ [Main] Đang xóa phiên làm việc cũ...")
+    _G.BossAimAssist_Cleanup()
+end
+_G.BossAimAssist_SessionID = SESSION_ID
+
+-- ═══════════════════════════════════════════════════
+-- CLEANUP SYSTEM
+-- ═══════════════════════════════════════════════════
+local _allConnections = {}
+local TargetHealthConnection = nil
+local function registerConn(conn) table.insert(_allConnections, conn) end
+
+_G.BossAimAssist_Cleanup = function()
+    warn("🔥 [Main] Khởi động tiến trình tự hủy...")
+    
+    -- Xóa UI
+    pcall(function() Rayfield:Destroy() end)
+    
+    -- Disconnect signals
+    for _, conn in ipairs(_allConnections) do
+        if conn and conn.Disconnect then pcall(function() conn:Disconnect() end) end
+    end
+    table.clear(_allConnections)
+
+    -- Destroy objects
+    local objs = {input, visuals, tracker, silentAim, noSlowdown}
+    for _, obj in ipairs(objs) do
+        if obj and obj.Destroy then pcall(function() obj:Destroy() end) end
+    end
+
+    if TargetHealthConnection then pcall(function() TargetHealthConnection:Disconnect() end) end
+    
+    _G.BossAimAssist_Cleanup = nil
+    _G.BossAimAssist_Loaded = nil
+    warn("✅ [Main] Đã ngừng mọi tiến trình.")
+end
+
+-- ═══════════════════════════════════════════════════
+-- VERSION & UPDATE CHECKER
+-- ═══════════════════════════════════════════════════
+local CURRENT_VERSION = loadModule("Modules/Version.lua") or 0
+warn("🚀 [Main] Phiên bản hiện tại: " .. tostring(CURRENT_VERSION))
+
+local function checkForUpdates()
+    while _G.BossAimAssist_SessionID == SESSION_ID do
+        task.wait(45) -- Kiểm tra mỗi 45 giây
+        
+        local success, latestVer = pcall(function()
+            local url = GITHUB_BASE .. "Modules/Version.lua"
+            return loadstring(game:HttpGet(url))()
+        end)
+
+        if success and latestVer and latestVer > CURRENT_VERSION then
+            warn("✨ [Main] Phát hiện phiên bản mới: " .. tostring(latestVer))
+            warn("   Đang tự động cập nhật...")
+            
+            _G.BossAimAssist_Cleanup()
+            
+            task.wait(1)
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/Source/Main.lua"))()
+            break
+        end
+    end
+end
+task.spawn(checkForUpdates)
+
+-- ═══════════════════════════════════════════════════
+-- UTILITIES
 -- ═══════════════════════════════════════════════════
 local function getShooterOrigin()
     local camPos = Camera.CFrame.Position
@@ -162,33 +232,19 @@ local function getShooterOrigin()
 
     if rootPart then
         local charPos = rootPart.Position
-        -- Camera trong khoảng hợp lệ → dùng Camera (chính xác cho 3rd person)
-        -- Camera bị hỏng/văng quá xa → fallback về character position
         if (camPos - charPos).Magnitude < 200 then
             return camPos
         end
         return charPos
     end
-
     return camPos
 end
 
--- Validate vị trí (không NaN, không Infinite)
 local function isValidPosition(v)
     return v.X == v.X and v.Y == v.Y and v.Z == v.Z
         and math.abs(v.X) < 1e6 and math.abs(v.Y) < 1e6 and math.abs(v.Z) < 1e6
 end
 
--- ═══════════════════════════════════════════════════
--- HEALTH TRACKING
--- ═══════════════════════════════════════════════════
-local CurrentHitHumanoid = nil
-local LastHealthValue = 0
-local TargetHealthConnection = nil
-
--- ═══════════════════════════════════════════════════
--- AUTO-DISPATCH: Chọn predictor phù hợp cho entry
--- ═══════════════════════════════════════════════════
 local function getPredictor(entry)
     if entry and tracker:IsTargetPlayer(entry) then
         return pvpPred
@@ -197,13 +253,19 @@ local function getPredictor(entry)
 end
 
 -- ═══════════════════════════════════════════════════
+-- HEALTH TRACKING
+-- ═══════════════════════════════════════════════════
+local CurrentHitHumanoid = nil
+local LastHealthValue = 0
+
+-- ═══════════════════════════════════════════════════
 -- PERF: Target scan trên Heartbeat (throttled)
 -- ═══════════════════════════════════════════════════
 local _scanFrame = 0
 local SCAN_INTERVAL = 2
 local _cachedMousePos = Vector2.new(0, 0)
 
-RunService.Heartbeat:Connect(function()
+registerConn(RunService.Heartbeat:Connect(function()
     _scanFrame = _scanFrame + 1
     _cachedMousePos = UserInputService:GetMouseLocation()
 
@@ -214,13 +276,12 @@ RunService.Heartbeat:Connect(function()
             tracker.CurrentTargetEntry = selector:GetClosestTarget(_cachedMousePos, getShooterOrigin())
         end
     end
-end)
+end))
 
 -- ═══════════════════════════════════════════════════
 -- MAIN RENDER LOOP (Silent Aim + Highlight Only)
--- Không can thiệp Camera — game không phải FPS
 -- ═══════════════════════════════════════════════════
-RunService.RenderStepped:Connect(function(deltaTime)
+registerConn(RunService.RenderStepped:Connect(function(deltaTime)
     local mousePos = _cachedMousePos
 
     -- FOV Circle
@@ -258,8 +319,6 @@ RunService.RenderStepped:Connect(function(deltaTime)
 
     -- Auto-dispatch: NPC hay PvP predictor
     local pred = getPredictor(entry)
-
-    -- Dùng vị trí nhân vật ổn định thay vì camera
     local shooterOrigin = getShooterOrigin()
 
     -- Predict & stabilize
@@ -285,7 +344,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
     end
 
     -- Silent Aim state
-    silentAim:SetState(false, targetPart, targetPosition, entry)
+    silentAim:SetState(Options.AssistMode == "Silent Aim", targetPart, targetPosition, entry)
 
     if Options.AssistMode == "Silent Aim" then
         silentAim.Active = true
@@ -319,4 +378,5 @@ RunService.RenderStepped:Connect(function(deltaTime)
         local hp = humanoid.Health
         if hp > LastHealthValue then LastHealthValue = hp end
     end
-end)
+end))
+
