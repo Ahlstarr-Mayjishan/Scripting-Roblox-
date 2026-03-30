@@ -1,7 +1,6 @@
 --[[
     NPCTracker.lua — NPC/Entity Tracking Class
-    Quản lý quét, thêm, xóa NPC/Boss trong folder Entities.
-    Hỗ trợ cả Player tracking khi bật PvP mode.
+    Quản lý quét, thêm, xóa NPC/Boss trong folder Entities hoặc folder tự tìm được.
 ]]
 
 local Players = game:GetService("Players")
@@ -21,12 +20,23 @@ function NPCTracker.new(config, bossClassifier)
     self.Blacklist = config.Blacklist
     self.BossClassifier = bossClassifier
 
-    self.TargetFolder = Workspace:WaitForChild("Entities", 10) or Workspace
+    -- Tìm folder chứa Boss/NPC (tự động phát hiện nhiều tên phổ biến)
+    local commonFolders = {"Entities", "Enemies", "Monsters", "NPCs", "MobFolder", "Mobs", "NPC_Folder", "Living"}
+    local targetFolder = Workspace
+    for _, name in ipairs(commonFolders) do
+        local folder = Workspace:FindFirstChild(name)
+        if folder and (folder:IsA("Folder") or folder:IsA("Model")) then
+            targetFolder = folder
+            break
+        end
+    end
+    self.TargetFolder = targetFolder
+    
     self.Entries = {}
     self.Lookup = {}
     self.CurrentTargetEntry = nil
-
     self._connections = {}
+    
     return self
 end
 
@@ -46,7 +56,7 @@ function NPCTracker:_isNPCModel(model)
         return self.Options.TargetPlayersToggle == true
     end
 
-    if not model:IsDescendantOf(self.TargetFolder) then
+    if not model:IsDescendantOf(self.TargetFolder) and self.TargetFolder ~= Workspace then
         return false
     end
 
@@ -86,10 +96,9 @@ function NPCTracker:Add(model)
         RootPart = rootPart,
         BossType = "humanoid",
         BossProfile = nil,
-        LowerName = string_lower(model.Name) -- Cache for PERF
+        LowerName = string_lower(model.Name)
     }
 
-    -- Auto-classify boss
     if self.BossClassifier then
         local bossType, height = self.BossClassifier.Classify(model)
         entry.BossType = bossType
@@ -105,7 +114,6 @@ function NPCTracker:Remove(model)
     local entry = self.Lookup[model]
     if not entry then return end
 
-    -- Fast removal (swap with last)
     local index = table.find(self.Entries, entry)
     if index then
         local lastIndex = #self.Entries
@@ -127,11 +135,9 @@ end
 
 function NPCTracker:GetTargetPart(entry)
     if not entry then return nil end
-
     local model = entry.Model
     if not model or not model.Parent then return nil end
 
-    -- Uưu tiên PreferredPart từ BossProfile
     local profile = entry.BossProfile
     if profile and profile.PreferredPart then
         local preferred = model:FindFirstChild(profile.PreferredPart)
@@ -158,21 +164,18 @@ function NPCTracker:RescanFolder()
     self.CurrentTargetEntry = nil
 
     for _, obj in ipairs(self.TargetFolder:GetChildren()) do
-        if obj:IsA("Model") then
-            self:Add(obj)
-        end
+        if obj:IsA("Model") then self:Add(obj) end
     end
 end
 
 function NPCTracker:Init()
-    -- Initial scan
+    -- Scan folder and subfolders (if not workspace)
     for _, obj in ipairs(self.TargetFolder:GetChildren()) do
         if obj:IsA("Model") then self:Add(obj) end
     end
 
-    -- Global listeners (Optimization: avoids 1 connection per NPC)
     table.insert(self._connections, self.TargetFolder.ChildAdded:Connect(function(child)
-        task.wait(0.1) -- Wait for children to load
+        task.wait(0.2)
         if child:IsA("Model") then self:Add(child) end
     end))
 
