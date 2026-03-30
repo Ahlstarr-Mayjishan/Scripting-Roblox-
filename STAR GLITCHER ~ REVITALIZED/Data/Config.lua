@@ -1,14 +1,10 @@
 --[[
-    Config.lua — Shared Configuration Module
-    Chứa toàn bộ Options, Constants, Blacklist, và PvP Profile.
-    Mọi module khác đều đọc/ghi vào đây.
+    Config.lua - Shared configuration
+    Central options, prediction constants, and blacklist entries.
 ]]
 
 local Config = {}
 
--- ═══════════════════════════════════════════════════
--- OPTIONS: Cấu hình người dùng (Rayfield sẽ ghi đè qua UI)
--- ═══════════════════════════════════════════════════
 Config.Options = {
     AssistMode = "Off",
     HoldMouse2ToAssist = true,
@@ -21,27 +17,18 @@ Config.Options = {
     ShowFOV = true,
     Smoothness = 0.18,
     MaxDistance = 1500,
-    TargetRefreshInterval = 0.015,
-    HomingProjectiles = false,
-    InstantBullet = false,
-    HomingStrength = 0.85,
     ProjectileVelocity = 250,
-    SilentAim = true,
-    SilentAimSmoothness = 1.0, -- 1.0 là lập tức, < 1.0 là mượt
     ToggleUIKey = "RightControl",
     NoSlowdown = false,
     NoDelay = false,
     NoStun = false,
     CustomMoveSpeedEnabled = false,
-    CustomMoveSpeed = 16, 
+    CustomMoveSpeed = 16,
     SpeedMultiplierEnabled = false,
     SpeedMultiplier = 1.0,
-    SpeedSpoofEnabled = false, 
+    SpeedSpoofEnabled = false,
 }
 
--- ═══════════════════════════════════════════════════
--- PREDICTION CONSTANTS
--- ═══════════════════════════════════════════════════
 Config.Prediction = {
     TELEPORT_THRESHOLD = 350,
     MAX_LEAD_DIST = 340,
@@ -81,9 +68,6 @@ Config.Prediction = {
     GRACE_PERIOD = 0.5,
 }
 
--- ═══════════════════════════════════════════════════
--- PVP PREDICTION PROFILE
--- ═══════════════════════════════════════════════════
 Config.PvP = {
     PING_MULTIPLIER = 2.0,
     MAX_LEAD_DIST = 180,
@@ -94,9 +78,6 @@ Config.PvP = {
     ACCEL_CORRECTION_CAP = 0.25,
 }
 
--- ═══════════════════════════════════════════════════
--- TARGET BLACKLIST
--- ═══════════════════════════════════════════════════
 Config.Blacklist = {
     "statue", "tuong", "monument", "altar", "dummy",
     "bomb", "seed", "projectile", "effect", "particle",

@@ -26,6 +26,18 @@ return function(Window, Options)
         end,
     })
 
+    Tab:CreateSlider({
+        Name = "Projectile Velocity",
+        Range = {50, 5000},
+        Increment = 25,
+        Suffix = " studs/s",
+        CurrentValue = Options.ProjectileVelocity,
+        Flag = "ProjectileVelocitySlider",
+        Callback = function(Value)
+            Options.ProjectileVelocity = Value
+        end,
+    })
+
     Tab:CreateSection("Target Response")
 
     Tab:CreateSlider({

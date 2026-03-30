@@ -1,12 +1,12 @@
 --[[
-    BlatantTab.lua — Tab Blatant & Bypass
-    Hitbox Expander (Removed), Speed Spoof, Speed Multiplier.
+    BlatantTab.lua - Tab Blatant & Bypass
+    Contains only explicit bypass-style options.
 ]]
 
-return function(Window, Options, visuals)
+return function(Window, Options)
     local Tab = Window:CreateTab("Blatant & Bypass", 4483362458)
 
-    Tab:CreateSection("Movement Bypass")
+    Tab:CreateSection("Client Masking")
 
     Tab:CreateToggle({
         Name = "Speed Spoof (Bypass)",
@@ -24,31 +24,6 @@ return function(Window, Options, visuals)
             end
         end,
     })
-
-    Tab:CreateToggle({
-        Name = "Enable Speed Multiplier",
-        CurrentValue = Options.SpeedMultiplierEnabled,
-        Flag = "SpeedMultiFlag",
-        Callback = function(Value)
-            Options.SpeedMultiplierEnabled = Value
-        end,
-    })
-
-    Tab:CreateSlider({
-        Name = "Speed Multiplier Value",
-        Range = {1, 10},
-        Increment = 0.1,
-        Suffix = "x Speed",
-        CurrentValue = Options.SpeedMultiplier,
-        Flag = "SpeedMultiVal",
-        Callback = function(Value)
-            Options.SpeedMultiplier = Value
-        end,
-    })
-
-    Tab:CreateSection("Combat Cheats")
-    
-    Tab:CreateLabel("Notice: Use Hyper Silent Aim for 100% Hitrate.")
 
     return Tab
 end

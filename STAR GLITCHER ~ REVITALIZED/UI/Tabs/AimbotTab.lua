@@ -28,7 +28,7 @@ return function(Window, Options, Visuals)
         end,
     })
 
-    Tab:CreateSection("Response")
+    Tab:CreateSection("Camera Lock")
 
     Tab:CreateSlider({
         Name = "Camera Lock Smoothness",
@@ -39,18 +39,6 @@ return function(Window, Options, Visuals)
         Flag = "SmoothnessSlider",
         Callback = function(Value)
             Options.Smoothness = math.clamp(Value / 100, 0.01, 1)
-        end,
-    })
-
-    Tab:CreateSlider({
-        Name = "Silent Aim Smoothness",
-        Range = {0.01, 1},
-        Increment = 0.05,
-        Suffix = " speed (1=Instant)",
-        CurrentValue = Options.SilentAimSmoothness,
-        Flag = "SilentAimSmoothnessSlider",
-        Callback = function(Value)
-            Options.SilentAimSmoothness = Value
         end,
     })
 
