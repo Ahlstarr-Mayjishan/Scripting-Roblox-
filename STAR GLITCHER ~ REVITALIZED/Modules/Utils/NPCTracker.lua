@@ -31,6 +31,10 @@ function NPCTracker:Init()
     -- Systematic startup if needed
 end
 
+function NPCTracker:IsLocalCharacterModel(model)
+    return model ~= nil and model == Players.LocalPlayer.Character
+end
+
 function NPCTracker:GetTargets()
     local now = os.clock()
     
@@ -49,7 +53,7 @@ function NPCTracker:GetTargets()
         if f then
             foldersFound = true
             for _, model in ipairs(f:GetChildren()) do
-                if model:IsA("Model") then
+                if model:IsA("Model") and not self:IsLocalCharacterModel(model) then
                     local entry = self:_GetOrCreateEntry(model)
                     -- Clean up dead/invalid entries in the final list
                     if entry and (not entry.Humanoid or entry.Humanoid.Health > 0) then 
@@ -79,7 +83,12 @@ end
 function NPCTracker:_GetOrCreateEntry(model)
     -- ORTHOGONAL DECOUPLING: Tracker entries NO LONGER store prediction results (Velocity/Accel).
     -- They only store raw kinematic memory (LastPos/LastTime).
-    
+
+    if self:IsLocalCharacterModel(model) then
+        self._entries[model] = nil
+        return nil
+    end
+
     if self._entries[model] and not model.Parent then
         self._entries[model] = nil
         return nil
@@ -109,7 +118,7 @@ end
 
 function NPCTracker:GetTargetPart(entry)
     local model = entry.Model
-    if not model or not model.Parent then return nil end
+    if not model or not model.Parent or self:IsLocalCharacterModel(model) then return nil end
     
     local targetPart = model:FindFirstChild(self.Options.TargetPart)
     return targetPart or entry.PrimaryPart or model.PrimaryPart or model:FindFirstChild("Head")

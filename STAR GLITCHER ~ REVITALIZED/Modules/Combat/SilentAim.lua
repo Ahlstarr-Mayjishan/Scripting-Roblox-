@@ -114,6 +114,15 @@ function SilentAim:Init()
 end
 
 function SilentAim:SetState(active, targetPart, targetPos, currentEntry, dt)
+    local localCharacter = Players.LocalPlayer.Character
+    if localCharacter then
+        local targetModel = currentEntry and currentEntry.Model
+        if targetModel == localCharacter or (targetPart and targetPart:IsDescendantOf(localCharacter)) then
+            self:Clear()
+            return
+        end
+    end
+
     self.Active = active
     self.TargetPartCache = targetPart
     self.CurrentTargetEntry = currentEntry

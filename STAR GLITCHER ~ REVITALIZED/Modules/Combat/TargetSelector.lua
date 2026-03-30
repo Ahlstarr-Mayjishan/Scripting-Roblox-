@@ -5,6 +5,7 @@
 ]]
 
 local Camera = workspace.CurrentCamera
+local Players = game:GetService("Players")
 
 local TargetSelector = {}
 TargetSelector.__index = TargetSelector
@@ -20,11 +21,18 @@ end
 function TargetSelector:GetClosestTarget(mousePos, originPos)
     local bestTarget = nil
     local shortestDist = self.Options.FOV or 150
+    local localCharacter = Players.LocalPlayer.Character
     
     local entries = self.Tracker:GetTargets()
     for _, entry in pairs(entries) do
+        if not entry or not entry.Model or entry.Model == localCharacter then
+            continue
+        end
+
         local part = self.Tracker:GetTargetPart(entry)
-        if not part then continue end
+        if not part or (localCharacter and part:IsDescendantOf(localCharacter)) then
+            continue
+        end
         
         -- Physical Distance check (Bail early if too far)
         local distToOrigin = (part.Position - originPos).Magnitude
