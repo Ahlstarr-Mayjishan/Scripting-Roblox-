@@ -27,6 +27,7 @@ Config.Options = {
     HomingStrength = 0.85,
     ProjectileVelocity = 250,
     SilentAim = true,
+    SilentAimSmoothness = 1.0, -- 1.0 là lập tức, < 1.0 là mượt
     NoSlowdown = false,
     NoDelay = false,
     NoStun = false,

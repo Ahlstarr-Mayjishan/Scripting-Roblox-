@@ -104,8 +104,31 @@ end
 function SilentAim:SetState(active, targetPart, targetPos, currentEntry)
     self.Active = active
     self.TargetPartCache = targetPart
-    self.TargetPosCache = targetPos
     self.CurrentTargetEntry = currentEntry
+
+    if active and targetPos then
+        -- Lấy vị trí đích (Prediction đã tính)
+        local desiredPos = targetPos
+        
+        -- Nếu có Smoothness < 1 thì Lerp
+        if self.Options.SilentAimSmoothness < 1 then
+            -- Nếu chưa có Cache cũ thì dùng vị trí tâm màn hình (raycast từ camera) làm mốc
+            if not self.TargetPosCache then
+                local cam = Workspace.CurrentCamera
+                self.TargetPosCache = cam.CFrame.Position + (cam.CFrame.LookVector * 100)
+            end
+            
+            -- Lerp từ vị trí ảo hiện tại sang đích
+            -- Công thức: Current = Current + (Target - Current) * Alpha
+            local alpha = math.clamp(self.Options.SilentAimSmoothness, 0.01, 1)
+            self.TargetPosCache = self.TargetPosCache:Lerp(desiredPos, alpha)
+        else
+            -- Không mượt (Lập tức)
+            self.TargetPosCache = desiredPos
+        end
+    else
+        self.TargetPosCache = nil
+    end
 end
 
 function SilentAim:Clear()

@@ -13,10 +13,19 @@ return function(Window, Options, Visuals)
         Flag = "AssistModeDropdown",
         Callback = function(Value)
             local selected = type(Value) == "table" and Value[1] or Value
-            if selected == "Silent Aim (Highlight)" then
-                selected = "Silent Aim"
-            end
             Options.AssistMode = selected
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Silent Aim Smoothness",
+        Range = {0.01, 1},
+        Increment = 0.05,
+        Suffix = " speed (1=Instant)",
+        CurrentValue = Options.SilentAimSmoothness,
+        Flag = "SilentAimSmoothnessSlider",
+        Callback = function(Value)
+            Options.SilentAimSmoothness = Value
         end,
     })
 
