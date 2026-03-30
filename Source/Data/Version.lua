@@ -1,1 +1,1 @@
-return 117 -- Version 1.1.7 (Full Scientific OOP Refactor)
+return 118 -- Version 1.1.8 (Smart Scientific Prediction Active)
