@@ -90,7 +90,7 @@ local tracker    = Tracker.new(Config, detector)
 local aimbot     = Aimbot.new(Config)
 local silentAim  = SilentAim.new(Config, synapse) 
 
-local pred       = Predictor.new(Config, BasePred, Kalman)
+local pred       = Predictor.new(Config, loadModule, Kalman)
 local selector   = Selector.new(Config, tracker, pred)
 
 local visuals = {
