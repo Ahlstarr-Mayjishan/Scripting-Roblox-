@@ -1,7 +1,6 @@
 --[[
-    NPCTracker.lua — Universal Entity Tracking
-    Quản lý việc tìm kiếm và theo dõi BOSS/NPC trong toàn bộ Workspace.
-    Đã tối ưu hóa để không bỏ lỡ mục tiêu dù chúng nằm trong folder lạ.
+    NPCTracker.lua — NPC/Entity Tracking Class
+    Quản lý quét, thêm, xóa NPC/Boss trong folder Entities hoặc folder tự tìm được.
 ]]
 
 local Players = game:GetService("Players")
@@ -21,6 +20,15 @@ function NPCTracker.new(config, bossClassifier)
     self.Blacklist = config.Blacklist
     self.BossClassifier = bossClassifier
 
+    -- Trả lại cách tìm folder cũ: Chỉ quét trong Entities hoặc Enemies
+    local targetFolder = Workspace:FindFirstChild("Entities") or Workspace:FindFirstChild("Enemies") or Workspace:FindFirstChild("Monsters")
+    
+    if not targetFolder then
+        -- Nếu không tìm thấy folder đặc thù, mặc định là Workspace nhưng sẽ cực kỳ cẩn thận
+        targetFolder = Workspace
+    end
+
+    self.TargetFolder = targetFolder
     self.Entries = {}
     self.Lookup = {}
     self.CurrentTargetEntry = nil
@@ -35,36 +43,46 @@ function NPCTracker:_isLocalCharacter(model)
     return LocalPlayer.Character and model == LocalPlayer.Character
 end
 
-function NPCTracker:_isValidNPC(model)
+function NPCTracker:_isNPCModel(model)
     if not model or not model:IsA("Model") or self:_isLocalCharacter(model) then
         return false
     end
 
-    -- Nếu là Player, chỉ track nếu bật PvP mode
-    local player = Players:GetPlayerFromCharacter(model)
-    if player then
+    local isPlayer = Players:GetPlayerFromCharacter(model)
+    if isPlayer then
         return self.Options.TargetPlayersToggle == true
     end
 
-    -- Kiểm tra Blacklist (Tên rác: Bomb, Trap, Bullet...)
-    local name = string_lower(model.Name)
-    for _, word in ipairs(self.Blacklist) do
-        if name:find(word, 1, true) then return false end
+    if not model:IsDescendantOf(self.TargetFolder) and self.TargetFolder ~= Workspace then
+        return false
     end
 
-    -- Phải có Humanoid hoặc RootPart
-    return model:FindFirstChildOfClass("Humanoid") ~= nil or model:FindFirstChild("HumanoidRootPart") ~= nil
+    -- Pre-screen keyword check (PERF)
+    local modelName = string_lower(model.Name)
+    for _, keyword in ipairs(self.Blacklist) do
+        if modelName:find(keyword, 1, true) then
+            return false
+        end
+    end
+
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    if humanoid then return true end
+
+    local rootPart = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
+    if rootPart then return true end
+
+    return false
 end
 
 -- ═══ PUBLIC API ═══
 
 function NPCTracker:Add(model)
     if not model or self.Lookup[model] then return end
-    if not self:_isValidNPC(model) then return end
+    if not self:_isNPCModel(model) then return end
 
     local humanoid = model:FindFirstChildOfClass("Humanoid")
-    local rootPart = model:FindFirstChild("HumanoidRootPart") 
-        or model.PrimaryPart 
+    local rootPart = model:FindFirstChild("HumanoidRootPart")
+        or model.PrimaryPart
         or model:FindFirstChildWhichIsA("BasePart")
 
     if not rootPart then return end
@@ -79,9 +97,9 @@ function NPCTracker:Add(model)
     }
 
     if self.BossClassifier then
-        local bType, height = self.BossClassifier.Classify(model)
-        entry.BossType = bType
-        entry.BossProfile = self.BossClassifier.GetProfile(bType)
+        local bossType, height = self.BossClassifier.Classify(model)
+        entry.BossType = bossType
+        entry.BossProfile = self.BossClassifier.GetProfile(bossType)
         entry.ModelHeight = height
     end
 
@@ -95,69 +113,79 @@ function NPCTracker:Remove(model)
 
     local index = table.find(self.Entries, entry)
     if index then
-        local last = #self.Entries
-        self.Entries[index] = self.Entries[last]
-        self.Entries[last] = nil
+        local lastIndex = #self.Entries
+        self.Entries[index] = self.Entries[lastIndex]
+        self.Entries[lastIndex] = nil
     end
+    
     self.Lookup[model] = nil
+
+    if self.CurrentTargetEntry and self.CurrentTargetEntry.Model == model then
+        self.CurrentTargetEntry = nil
+    end
 end
 
 function NPCTracker:IsTargetPlayer(entry)
-    return entry and entry.Model and Players:GetPlayerFromCharacter(entry.Model) ~= nil
+    if not entry or not entry.Model then return false end
+    return Players:GetPlayerFromCharacter(entry.Model) ~= nil
 end
 
 function NPCTracker:GetTargetPart(entry)
-    if not entry or not entry.Model or not entry.Model.Parent then return nil end
-    
+    if not entry then return nil end
+    local model = entry.Model
+    if not model or not model.Parent then return nil end
+
     local profile = entry.BossProfile
     if profile and profile.PreferredPart then
-        local p = entry.Model:FindFirstChild(profile.PreferredPart)
-        if p then return p end
+        local preferred = model:FindFirstChild(profile.PreferredPart)
+        if preferred then return preferred end
     end
 
-    local target = entry.Model:FindFirstChild(self.Options.TargetPart)
+    local partName = self.Options.TargetPart
+    local target = model:FindFirstChild(partName)
+
+    if not target then
+        if partName == "Torso" then
+            target = model:FindFirstChild("UpperTorso") or model:FindFirstChild("HumanoidRootPart")
+        elseif partName == "Head" then
+            target = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Torso")
+        end
+    end
+
     return target or entry.RootPart
 end
 
--- Quét toàn bộ Workspace (Recursive) để tìm NPC
-function NPCTracker:FullScan()
+function NPCTracker:RescanFolder()
     table.clear(self.Entries)
     table.clear(self.Lookup)
-    
-    -- Chỉ quét các con của Workspace để tránh lag nặng
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("Model") then
-            -- Giới hạn độ sâu để tránh quét vô tận
-            self:Add(obj)
-        end
+    self.CurrentTargetEntry = nil
+
+    for _, obj in ipairs(self.TargetFolder:GetChildren()) do
+        if obj:IsA("Model") then self:Add(obj) end
     end
 end
 
 function NPCTracker:Init()
-    -- Cú hích đầu tiên
-    self:FullScan()
+    -- Scan folder and subfolders (if not workspace)
+    for _, obj in ipairs(self.TargetFolder:GetChildren()) do
+        if obj:IsA("Model") then self:Add(obj) end
+    end
 
-    -- Lắng nghe mọi Model mới xuất hiện trong Workspace (Bao gồm cả folder sâu)
-    table.insert(self._connections, Workspace.DescendantAdded:Connect(function(desc)
-        if desc:IsA("Model") then
-            task.wait(0.3) -- Đợi load con của Model
-            self:Add(desc)
-        end
+    table.insert(self._connections, self.TargetFolder.ChildAdded:Connect(function(child)
+        task.wait(0.2)
+        if child:IsA("Model") then self:Add(child) end
     end))
 
-    table.insert(self._connections, Workspace.DescendantRemoving:Connect(function(desc)
-        if desc:IsA("Model") then
-            self:Remove(desc)
-        end
+    table.insert(self._connections, self.TargetFolder.ChildRemoved:Connect(function(child)
+        self:Remove(child)
     end))
 
-    -- Heartbeat check cho các target đã chết hoặc nil
+    -- Fallback safety check (throttled)
     task.spawn(function()
         while task.wait(5) do
-            for i = #self.Entries, 1, -1 do
-                local e = self.Entries[i]
-                if not e.Model or not e.Model.Parent or (e.Humanoid and e.Humanoid.Health <= 0) then
-                    self:Remove(e.Model)
+            for _, obj in ipairs(self.TargetFolder:GetChildren()) do
+                if obj:IsA("Model") and not self.Lookup[obj] then
+                    self:Add(obj)
                 end
             end
         end
@@ -165,7 +193,9 @@ function NPCTracker:Init()
 end
 
 function NPCTracker:Destroy()
-    for _, c in ipairs(self._connections) do c:Disconnect() end
+    for _, conn in ipairs(self._connections) do
+        conn:Disconnect()
+    end
     table.clear(self._connections)
     table.clear(self.Entries)
     table.clear(self.Lookup)

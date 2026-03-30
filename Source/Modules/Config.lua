@@ -103,6 +103,8 @@ Config.Blacklist = {
     "statue", "tuong", "monument", "altar", "dummy",
     "bomb", "seed", "projectile", "effect", "particle",
     "bullet", "mine", "trap", "spawn", "debris",
+    "decoration", "sculpture", "deco", "prop", "marker", "part",
+    "object", "model", "tree", "rock", "stone", "grass",
 }
 
 return Config
