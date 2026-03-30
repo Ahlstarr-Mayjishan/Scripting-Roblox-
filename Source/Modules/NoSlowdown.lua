@@ -82,17 +82,20 @@ function NoSlowdown:Init()
             return
         end
 
-        -- 1. No Slowdown / Custom Speed (Khi không có Hook)
-        if not selfRef._isHookActive then
-            if selfRef.Options.SpeedMultiplierEnabled then
-                local base = selfRef._baseWalkSpeed or 16
-                humanoid.WalkSpeed = base * selfRef.Options.SpeedMultiplier
-            elseif selfRef.Options.CustomMoveSpeedEnabled then
+        -- 1. No Slowdown / Speed Multiplier / Custom Speed (Always active)
+        if selfRef.Options.SpeedMultiplierEnabled then
+            local base = selfRef._baseWalkSpeed or 16
+            local target = base * selfRef.Options.SpeedMultiplier
+            if math.abs(humanoid.WalkSpeed - target) > 0.1 then
+                humanoid.WalkSpeed = target
+            end
+        elseif selfRef.Options.CustomMoveSpeedEnabled then
+            if math.abs(humanoid.WalkSpeed - selfRef.Options.CustomMoveSpeed) > 0.1 then
                 humanoid.WalkSpeed = selfRef.Options.CustomMoveSpeed
-            elseif selfRef.Options.NoSlowdown then
-                if humanoid.WalkSpeed < selfRef._baseWalkSpeed then
-                    humanoid.WalkSpeed = selfRef._baseWalkSpeed
-                end
+            end
+        elseif selfRef.Options.NoSlowdown then
+            if humanoid.WalkSpeed < selfRef._baseWalkSpeed then
+                humanoid.WalkSpeed = selfRef._baseWalkSpeed
             end
         end
 
