@@ -11,6 +11,22 @@ function AttributeCleaner.new(options, localCharacter)
     return self
 end
 
+local function shouldClearName(lowerName)
+    if not lowerName or lowerName == "" then
+        return false
+    end
+
+    -- Only clear explicit movement-impairing debuffs.
+    -- Avoid generic names like "delay", "cooldown", or "root" because
+    -- many games use them for legitimate form-switch / ability logic.
+    return lowerName:find("slow", 1, true)
+        or lowerName:find("stun", 1, true)
+        or lowerName:find("freeze", 1, true)
+        or lowerName:find("ragdoll", 1, true)
+        or lowerName:find("snare", 1, true)
+        or lowerName:find("immobile", 1, true)
+end
+
 function AttributeCleaner:Init()
     self.Connection = RunService.Heartbeat:Connect(function()
         if not self.Options.NoDelay then
@@ -25,9 +41,7 @@ function AttributeCleaner:Init()
         for _, child in ipairs(char:GetChildren()) do
             if child:IsA("ValueBase") then
                 local n = child.Name:lower()
-                if n:find("slow") or n:find("stun") or n:find("freeze")
-                    or n:find("root") or n:find("debuff") or n:find("delay")
-                    or n:find("cooldown") then
+                if shouldClearName(n) then
                     child:Destroy()
                 end
             end
@@ -35,8 +49,7 @@ function AttributeCleaner:Init()
 
         for attr, _ in pairs(char:GetAttributes()) do
             local lower = attr:lower()
-            if lower:find("slow") or lower:find("stun") or lower:find("freeze")
-                or lower:find("delay") or lower:find("debuff") then
+            if shouldClearName(lower) then
                 char:SetAttribute(attr, nil)
             end
         end
