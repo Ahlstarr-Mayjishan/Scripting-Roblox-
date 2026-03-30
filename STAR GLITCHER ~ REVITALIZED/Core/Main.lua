@@ -39,6 +39,21 @@ local Config  = loadModule("Data/Config.lua")
 local Version = loadModule("Data/Version.lua")
 local Options = Config.Options
 
+local function resolveToggleUIKeybind(value)
+    if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
+        return value
+    end
+
+    if type(value) == "string" then
+        local keyCode = Enum.KeyCode[value]
+        if keyCode then
+            return keyCode
+        end
+    end
+
+    return Enum.KeyCode.RightControl
+end
+
 -- UI initialization
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
@@ -47,7 +62,7 @@ local Window = Rayfield:CreateWindow({
     Name = "STAR GLITCHER ~ REVITALIZED",
     LoadingTitle = "Neural Interface Initializing...",
     LoadingSubtitle = "Scientific Neural Network Active",
-    ToggleUIKeybind = Options.ToggleUIKey or "RightControl",
+    ToggleUIKeybind = resolveToggleUIKeybind(Options.ToggleUIKey),
     ConfigurationSaving = { Enabled = true, FolderName = "Boss_AimAssist", FileName = "Config" },
     Discord = { Enabled = false },
     KeySystem = false,

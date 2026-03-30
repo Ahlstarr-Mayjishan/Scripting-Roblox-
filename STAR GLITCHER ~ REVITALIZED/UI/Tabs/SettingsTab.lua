@@ -9,7 +9,7 @@ return function(Window, Options)
     Tab:CreateSection("UI & Safety")
 
     Tab:CreateDropdown({
-        Name = "UI Toggle Key (applies on reload)",
+        Name = "UI Toggle Key (saved for next reload)",
         Options = {
             "RightControl", "LeftControl", "RightShift", "LeftShift",
             "RightAlt", "LeftAlt", "Backquote", "Insert",
@@ -24,7 +24,7 @@ return function(Window, Options)
             if Rayfield and Rayfield.Notify then
                 Rayfield:Notify({
                     Title = "UI Key Updated",
-                    Content = "Rayfield toggle key will switch to " .. tostring(selected) .. " after the next reload.",
+                    Content = "Rayfield toggle key saved as " .. tostring(selected) .. ". Reload the script to apply it.",
                     Duration = 4,
                     Image = 4483362458,
                 })
