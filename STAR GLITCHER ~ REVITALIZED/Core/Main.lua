@@ -127,7 +127,7 @@ visuals.hit:Init()
 for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
 loadModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing})
-loadModule("UI/Tabs/AdjustmentsTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
+loadModule("UI/Tabs/TargetingTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 loadModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 loadModule("UI/Tabs/PlayerTab.lua")(Window, Options, nil)
 loadModule("UI/Tabs/BlatantTab.lua")(Window, Options)

@@ -1,6 +1,6 @@
 --[[
-    SettingsTab.lua — OOP Configuration Management
-    Includes Auto-Execute install/uninstall functionality.
+    SettingsTab.lua - Settings and script management
+    UI toggle key, config actions, and maintenance tools.
 ]]
 
 return function(Window, Options)

@@ -1,6 +1,6 @@
 --[[
-    AdjustmentsTab.lua — Tab Adjustments
-    Smoothness, Distance, Target Part, Prediction settings.
+    TargetingTab.lua - Tab Targeting
+    FOV, target source, and target point controls.
 ]]
 
 return function(Window, Options, Visuals, NPCTracker)

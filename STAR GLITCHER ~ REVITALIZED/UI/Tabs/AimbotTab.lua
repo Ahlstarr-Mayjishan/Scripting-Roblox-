@@ -1,6 +1,6 @@
 --[[
-    AimbotTab.lua — Tab Aimbot & FOV
-    Tạo tab Aim Assist & FOV trên Rayfield UI.
+    AimbotTab.lua - Tab Aim
+    Core assist mode and response controls.
 ]]
 
 return function(Window, Options, Visuals)

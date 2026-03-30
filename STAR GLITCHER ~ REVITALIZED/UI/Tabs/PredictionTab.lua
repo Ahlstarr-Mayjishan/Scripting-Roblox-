@@ -1,3 +1,8 @@
+--[[
+    PredictionTab.lua - Tab Prediction
+    Prediction engine switches and range controls.
+]]
+
 return function(Window, Options)
     local Tab = Window:CreateTab("Prediction", 4483362458)
 

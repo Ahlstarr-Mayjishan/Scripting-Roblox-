@@ -1,6 +1,6 @@
 --[[
-    MiscTab.lua — Tab Misc
-    Rejoin, PvP mode toggle.
+    MiscTab.lua - Tab Misc
+    Utility actions that do not affect combat logic.
 ]]
 
 local Players = game:GetService("Players")
