@@ -1,8 +1,10 @@
 --[[
     SilentAim.lua — Universal Silent Aim Hook Class
-    Hook metamethods for Mouse.Hit, Mouse.Target, Camera ray functions.
-    Super-lite, 0% Lag, dedicated to Magic/Beams.
-    Enhanced Hitmarker Logic to reduce false positives.
+    Analogy: The Neural Network's Motor Path.
+    Logic:
+    • Hook metamethods for Mouse.Hit, Mouse.Target.
+    • Synapse Integration: Fires 'ShotFired' when shooting, 'DamageApplied' when remote hits target.
+    • Enhanced Hitmarker logic with confirmation queue Support.
 ]]
 
 local Workspace = game:GetService("Workspace")
@@ -11,11 +13,11 @@ local Players = game:GetService("Players")
 local SilentAim = {}
 SilentAim.__index = SilentAim
 
-function SilentAim.new(config, visuals)
+function SilentAim.new(config, synapse)
     local self = setmetatable({}, SilentAim)
     self.Config = config
     self.Options = config.Options
-    self.Visuals = visuals
+    self.Synapse = synapse
     self.Active = false
     self.TargetPartCache = nil
     self.TargetPosCache = nil
@@ -27,6 +29,7 @@ function SilentAim:Init()
     if not hookmetamethod then return end
 
     local selfRef = self
+    local Synapse = self.Synapse
     local LocalPlayer = Players.LocalPlayer
 
     -- ═══════════════════════════════════════════════════
@@ -52,7 +55,7 @@ function SilentAim:Init()
     end))
 
     -- ═══════════════════════════════════════════════════
-    -- 2. NAMECALL HOOK (Raycast & RemoteEvents)
+    -- 2. NAMECALL HOOK (WeaponController Simulation)
     -- ═══════════════════════════════════════════════════
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(inst, ...)
@@ -62,12 +65,7 @@ function SilentAim:Init()
         if not checkcaller() then
             -- A. RAYCAST REDIRECTION
             if selfRef.Active and selfRef.TargetPosCache then
-                if method == "ViewportPointToRay" or method == "ScreenPointToRay" then
-                    if typeof(inst) == "Instance" and inst:IsA("Camera") then
-                        local camPos = inst.CFrame.Position
-                        return Ray.new(camPos, (selfRef.TargetPosCache - camPos).Unit)
-                    end
-                elseif method == "Raycast" and inst == Workspace then
+                if method == "Raycast" and inst == Workspace then
                     local origin = args[1]
                     local direction = args[2]
                     if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" then
@@ -77,34 +75,30 @@ function SilentAim:Init()
                 end
             end
 
-            -- B. HYPER SPOOF & HITMARKER (RemoteEvents)
+            -- B. COMMUNICATION REFINEMENT (WeaponController & CombatService simulation)
             if (method == "FireServer" or method == "InvokeServer") then
-                -- Target redirection for Vector3 args (Guaranteed Hitrate)
-                if selfRef.Active and selfRef.TargetPosCache then
-                    for i = 1, args.n do
-                        local arg = args[i]
-                        if typeof(arg) == "Vector3" then
-                            local char = LocalPlayer.Character
-                            local myPos = char and char:GetPivot().Position or Vector3.new(0, 0, 0)
-                            if (arg - myPos).Magnitude > 4 then
-                                args[i] = selfRef.TargetPosCache
-                            end
-                        end
+                local mName = tostring(inst):lower()
+                local meth = method:lower()
+                
+                -- WEAPON CONTROLLER: Register a SHOT
+                -- We detect fire remotes (Shoot, Fire, Attack)
+                if meth:find("fire") or meth:find("shoot") or meth:find("attack") then
+                    if selfRef.Active and selfRef.CurrentTargetEntry then
+                        -- Register the shot with Synapse
+                        local muzzlePos = LocalPlayer.Character and LocalPlayer.Character:GetPivot().Position or Vector3.zero
+                        Synapse.fire("ShotFired", selfRef.CurrentTargetEntry.Model, os.clock(), muzzlePos)
                     end
                 end
 
-                -- HITMARKER REFINEMENT Logic
-                -- Only show hitmarkers for methods likely carrying damage (Hit, Attack, Damage, Deal)
-                -- This resolves the "False Positive" identified in the findings.
-                local mName = tostring(inst):lower()
-                local meth = method:lower()
-                if meth:find("hit") or meth:find("attack") or meth:find("damage") or mName:find("hit") then
-                    if selfRef.Active and selfRef.CurrentTargetEntry then
+                -- COMBAT SERVICE: Register a HIT (DamageApplied)
+                if meth:find("hit") or meth:find("damage") or mName:find("hit") then
+                    if selfRef.CurrentTargetEntry then
                         for i = 1, args.n do
                             local arg = args[i]
-                            if typeof(arg) == "Instance" and (arg == selfRef.CurrentTargetEntry.Model or arg:IsDescendantOf(selfRef.CurrentTargetEntry.Model)) then
-                                task.spawn(function() selfRef.Visuals:ShowHitmarker() end)
-                                break
+                            local targetModel = selfRef.CurrentTargetEntry.Model
+                            if typeof(arg) == "Instance" and (arg == targetModel or arg:IsDescendantOf(targetModel)) then
+                                -- Fire event for HitConfirmController
+                                Synapse.fire("DamageApplied", targetModel, os.clock())
                             end
                         end
                     end
@@ -120,7 +114,7 @@ function SilentAim:SetState(active, targetPart, targetPos, currentEntry, dt)
     self.Active = active
     self.TargetPartCache = targetPart
     self.CurrentTargetEntry = currentEntry
-    self.TargetPosCache = targetPos -- We take the prediction directly from Brain
+    self.TargetPosCache = targetPos 
 end
 
 function SilentAim:Clear()

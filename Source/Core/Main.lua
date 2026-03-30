@@ -59,13 +59,14 @@ local Brain          = loadModule("Modules/Core/Brain.lua")
 local InputHandler   = loadModule("Modules/Utils/Input.lua")
 local Tracker        = loadModule("Modules/Utils/NPCTracker.lua")
 local Detector       = loadModule("Modules/Utils/BossDetector.lua")
-local Kalman         = loadModule("Modules/Utils/Math/Kalman.lua")
+local Synapse         = loadModule("Modules/Utils/Synapse.lua")
+local Kalman          = loadModule("Modules/Utils/Math/Kalman.lua")
 
-local BasePred       = loadModule("Modules/Combat/Prediction/Base.lua")
-local Predictor      = loadModule("Modules/Combat/Predictor.lua")
-local Selector       = loadModule("Modules/Combat/TargetSelector.lua")
-local Aimbot         = loadModule("Modules/Combat/Aimbot.lua")
-local SilentAim      = loadModule("Modules/Combat/SilentAim.lua")
+local BasePred        = loadModule("Modules/Combat/Prediction/Base.lua")
+local Predictor       = loadModule("Modules/Combat/Predictor.lua")
+local Selector        = loadModule("Modules/Combat/TargetSelector.lua")
+local Aimbot          = loadModule("Modules/Combat/Aimbot.lua")
+local SilentAim       = loadModule("Modules/Combat/SilentAim.lua")
 
 local SpeedSpoof      = loadModule("Modules/Movement/SpeedSpoof.lua")
 local SpeedMultiplier = loadModule("Modules/Movement/SpeedMultiplier.lua")
@@ -74,26 +75,27 @@ local AntiSlowdown    = loadModule("Modules/Movement/AntiSlowdown.lua")
 local AntiStun        = loadModule("Modules/Movement/AntiStun.lua")
 local Cleaner         = loadModule("Modules/Movement/AttributeCleaner.lua")
 
-local FOVCircle      = loadModule("Modules/Visuals/FOVCircle.lua")
-local Hitmarker      = loadModule("Modules/Visuals/Hitmarker.lua")
-local Highlight      = loadModule("Modules/Visuals/Highlight.lua")
-local TargetDot      = loadModule("Modules/Visuals/TargetDot.lua")
+local FOVCircle       = loadModule("Modules/Visuals/FOVCircle.lua")
+local Hitmarker       = loadModule("Modules/Visuals/Hitmarker.lua")
+local Highlight       = loadModule("Modules/Visuals/Highlight.lua")
+local TargetDot       = loadModule("Modules/Visuals/TargetDot.lua")
 
 -- ═══════════════════════════════════════════════════
 -- INSTANTIATE (OOP Injection)
 -- ═══════════════════════════════════════════════════
+local synapse    = Synapse
 local input      = InputHandler.new(Config)
 local detector   = Detector.new()
 local tracker    = Tracker.new(Config, detector)
 local aimbot     = Aimbot.new(Config)
-local silentAim  = SilentAim.new(Config, nil) 
+local silentAim  = SilentAim.new(Config, synapse) 
 
 local pred       = Predictor.new(Config, BasePred, Kalman)
 local selector   = Selector.new(Config, tracker, pred)
 
 local visuals = {
     fov = FOVCircle.new(Options),
-    hit = Hitmarker.new(),
+    hit = Hitmarker.new(synapse),
     highlight = Highlight.new(),
     dot = TargetDot.new()
 }
@@ -119,7 +121,7 @@ local brain = Brain.new(Config, {
 input:Init()
 tracker:Init()
 silentAim:Init()
-silentAim.Visuals = { ShowHitmarker = function() visuals.hit:Show() end }
+visuals.hit:Init()
 
 for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
