@@ -11,6 +11,9 @@ local LocalPlayer = Players.LocalPlayer
 local NPCTracker = {}
 NPCTracker.__index = NPCTracker
 
+-- Localize for PERF
+local string_lower = string.lower
+
 function NPCTracker.new(config, bossClassifier)
     local self = setmetatable({}, NPCTracker)
     self.Config = config
@@ -47,7 +50,8 @@ function NPCTracker:_isNPCModel(model)
         return false
     end
 
-    local modelName = string.lower(model.Name)
+    -- Pre-screen keyword check (PERF)
+    local modelName = string_lower(model.Name)
     for _, keyword in ipairs(self.Blacklist) do
         if modelName:find(keyword, 1, true) then
             return false
@@ -55,14 +59,10 @@ function NPCTracker:_isNPCModel(model)
     end
 
     local humanoid = model:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        return true
-    end
+    if humanoid then return true end
 
     local rootPart = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
-    if rootPart then
-        return true
-    end
+    if rootPart then return true end
 
     return false
 end
@@ -70,25 +70,15 @@ end
 -- ═══ PUBLIC API ═══
 
 function NPCTracker:Add(model)
-    if not model or not model.Parent or self.Lookup[model] then
-        return
-    end
-
-    if not self:_isNPCModel(model) then
-        return
-    end
+    if not model or self.Lookup[model] then return end
+    if not self:_isNPCModel(model) then return end
 
     local humanoid = model:FindFirstChildOfClass("Humanoid")
     local rootPart = model:FindFirstChild("HumanoidRootPart")
         or model.PrimaryPart
-        or model:FindFirstChild("Torso")
-        or model:FindFirstChild("UpperTorso")
-        or model:FindFirstChild("Head")
         or model:FindFirstChildWhichIsA("BasePart")
 
-    if not rootPart then
-        return
-    end
+    if not rootPart then return end
 
     local entry = {
         Model = model,
@@ -96,6 +86,7 @@ function NPCTracker:Add(model)
         RootPart = rootPart,
         BossType = "humanoid",
         BossProfile = nil,
+        LowerName = string_lower(model.Name) -- Cache for PERF
     }
 
     -- Auto-classify boss
@@ -108,29 +99,20 @@ function NPCTracker:Add(model)
 
     table.insert(self.Entries, entry)
     self.Lookup[model] = entry
-
-    local connection
-    connection = model.AncestryChanged:Connect(function(_, parent)
-        if not parent then
-            connection:Disconnect()
-            self:Remove(model)
-        end
-    end)
-    table.insert(self._connections, connection)
 end
 
 function NPCTracker:Remove(model)
     local entry = self.Lookup[model]
-    if not entry then
-        return
-    end
+    if not entry then return end
 
+    -- Fast removal (swap with last)
     local index = table.find(self.Entries, entry)
-    local lastIndex = #self.Entries
-    local lastEntry = self.Entries[lastIndex]
-
-    self.Entries[index] = lastEntry
-    self.Entries[lastIndex] = nil
+    if index then
+        local lastIndex = #self.Entries
+        self.Entries[index] = self.Entries[lastIndex]
+        self.Entries[lastIndex] = nil
+    end
+    
     self.Lookup[model] = nil
 
     if self.CurrentTargetEntry and self.CurrentTargetEntry.Model == model then
@@ -150,8 +132,9 @@ function NPCTracker:GetTargetPart(entry)
     if not model or not model.Parent then return nil end
 
     -- Uưu tiên PreferredPart từ BossProfile
-    if entry.BossProfile and entry.BossProfile.PreferredPart then
-        local preferred = model:FindFirstChild(entry.BossProfile.PreferredPart)
+    local profile = entry.BossProfile
+    if profile and profile.PreferredPart then
+        local preferred = model:FindFirstChild(profile.PreferredPart)
         if preferred then return preferred end
     end
 
@@ -182,19 +165,22 @@ function NPCTracker:RescanFolder()
 end
 
 function NPCTracker:Init()
-    -- 1. Quét những con đang đứng sẵn
+    -- Initial scan
     for _, obj in ipairs(self.TargetFolder:GetChildren()) do
         if obj:IsA("Model") then self:Add(obj) end
     end
 
-    -- 2. Nghe ngóng những con mới spawn
-    local conn = self.TargetFolder.ChildAdded:Connect(function(child)
-        task.wait(0.1)
+    -- Global listeners (Optimization: avoids 1 connection per NPC)
+    table.insert(self._connections, self.TargetFolder.ChildAdded:Connect(function(child)
+        task.wait(0.1) -- Wait for children to load
         if child:IsA("Model") then self:Add(child) end
-    end)
-    table.insert(self._connections, conn)
+    end))
 
-    -- 3. Quét lại định kỳ phòng sót
+    table.insert(self._connections, self.TargetFolder.ChildRemoved:Connect(function(child)
+        self:Remove(child)
+    end))
+
+    -- Fallback safety check (throttled)
     task.spawn(function()
         while task.wait(5) do
             for _, obj in ipairs(self.TargetFolder:GetChildren()) do

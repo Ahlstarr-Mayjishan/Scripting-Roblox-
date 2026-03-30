@@ -232,7 +232,8 @@ local function getShooterOrigin()
 
     if rootPart then
         local charPos = rootPart.Position
-        if (camPos - charPos).Magnitude < 200 then
+        local offset = camPos - charPos
+        if (offset.X*offset.X + offset.Y*offset.Y + offset.Z*offset.Z) < 40000 then
             return camPos
         end
         return charPos

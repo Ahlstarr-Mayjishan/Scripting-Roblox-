@@ -4,10 +4,16 @@
 ]]
 
 local Workspace = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
 
 local TargetSelector = {}
 TargetSelector.__index = TargetSelector
+
+-- Localize functions for PERF
+local math_sqrt = math.sqrt
+local math_log10 = math.log10
+local math_huge = math.huge
+local os_clock = os.clock
+local Vector2_new = Vector2.new
 
 function TargetSelector.new(config, npcTracker, predictionEngine)
     local self = setmetatable({}, TargetSelector)
@@ -24,12 +30,17 @@ function TargetSelector.new(config, npcTracker, predictionEngine)
 end
 
 function TargetSelector:GetClosestTarget(mousePos, cameraPosition)
-    local closestScore = math.huge
+    local closestScore = math_huge
     local closestEntry = nil
-    local now = os.clock()
+    
+    local now = os_clock()
     local entries = self.NPCTracker.Entries
     local currentTarget = self.NPCTracker.CurrentTargetEntry
     local Camera = Workspace.CurrentCamera
+    
+    local maxDistSq = self.Options.MaxDistance * self.Options.MaxDistance
+    local fovLimit = self.Options.FOV
+    local fovLimitSq = fovLimit * fovLimit
 
     for i = #entries, 1, -1 do
         local entry = entries[i]
@@ -39,33 +50,40 @@ function TargetSelector:GetClosestTarget(mousePos, cameraPosition)
 
         if not model or not model.Parent then
             self.NPCTracker:Remove(model)
-        elseif humanoid and rootPart and rootPart.Parent then
-            if humanoid.Health > 0 then
-                local targetPart = self.NPCTracker:GetTargetPart(entry)
-                if targetPart and targetPart.Parent then
-                    local isCurrentTarget = currentTarget and entry.Model == currentTarget.Model
-                    local targetPosition = self.Prediction:GetSelectionTargetPosition(cameraPosition, targetPart, entry, isCurrentTarget)
-                    local worldDistance = (targetPosition - cameraPosition).Magnitude
-                    local screenPos, onScreen = Camera:WorldToViewportPoint(targetPosition)
+            continue
+        end
 
-                    if onScreen and worldDistance <= self.Options.MaxDistance then
-                        local dx = screenPos.X - mousePos.X
-                        local dy = screenPos.Y - mousePos.Y
-                        local screenDistance = math.sqrt(dx * dx + dy * dy)
+        if humanoid and rootPart and humanoid.Health > 0 then
+            local targetPart = self.NPCTracker:GetTargetPart(entry)
+            if not targetPart or not targetPart.Parent then continue end
 
-                        if screenDistance <= self.Options.FOV then
-                            local maxHP = humanoid.MaxHealth
-                            local hpWeight = 1 + (math.log10(maxHP + 1) * 2)
-                            local score = screenDistance / hpWeight
+            local isCurrentTarget = (currentTarget and entry.Model == currentTarget.Model)
+            local targetPosition = self.Prediction:GetSelectionTargetPosition(cameraPosition, targetPart, entry, isCurrentTarget)
+            
+            -- PERF: Use MagnitudeSquared instead of Magnitude
+            local offset = targetPosition - cameraPosition
+            local worldDistSq = offset.X*offset.X + offset.Y*offset.Y + offset.Z*offset.Z
+            
+            if worldDistSq <= maxDistSq then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPosition)
+                
+                if onScreen then
+                    local dx = screenPos.X - mousePos.X
+                    local dy = screenPos.Y - mousePos.Y
+                    local screenDistSq = dx*dx + dy*dy
 
-                            if isCurrentTarget then
-                                score = score * 0.2
-                            end
+                    if screenDistSq <= fovLimitSq then
+                        -- Optimization: Simpler score weights
+                        local hpFactor = 1 + (math_log10(humanoid.MaxHealth + 1) * 2)
+                        local score = math_sqrt(screenDistSq) / hpFactor
 
-                            if score < closestScore then
-                                closestScore = score
-                                closestEntry = entry
-                            end
+                        if isCurrentTarget then
+                            score = score * 0.25 -- Sticky target bonus
+                        end
+
+                        if score < closestScore then
+                            closestScore = score
+                            closestEntry = entry
                         end
                     end
                 end
@@ -73,20 +91,18 @@ function TargetSelector:GetClosestTarget(mousePos, cameraPosition)
         end
     end
 
-    -- Grace Period
     if closestEntry then
         self.LastValidTargetTime = now
         self.LastValidTargetEntry = closestEntry
         return closestEntry
     end
 
-    if self.LastValidTargetEntry
-        and self.LastValidTargetEntry.Model
-        and self.LastValidTargetEntry.Model.Parent
-        and self.LastValidTargetEntry.Humanoid
-        and self.LastValidTargetEntry.Humanoid.Health > 0
-        and (now - self.LastValidTargetTime) < self.C.GRACE_PERIOD then
-        return self.LastValidTargetEntry
+    -- Grace Period logic
+    local last = self.LastValidTargetEntry
+    if last and last.Model and last.Model.Parent and last.Humanoid and last.Humanoid.Health > 0 then
+        if (now - self.LastValidTargetTime) < self.C.GRACE_PERIOD then
+            return last
+        end
     end
 
     self.LastValidTargetEntry = nil
