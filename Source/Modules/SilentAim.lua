@@ -84,13 +84,34 @@ function SilentAim:Init()
             end
         end
 
-        if (method == "FireServer" or method == "InvokeServer") and selfRef.CurrentTargetEntry then
-            if not checkcaller() and typeof(inst) == "Instance" then
+        -- 🔥 HYPER SPOOF: Can thiệp RemoteEvent để ép Beam phải trúng
+        if (method == "FireServer" or method == "InvokeServer") and not checkcaller() then
+            if selfRef.Active and selfRef.TargetPosCache then
+                local modified = false
+                for i, arg in ipairs(args) do
+                    -- Nếu argument là Vector3 và ở xa Player (khả năng cao là vị trí target)
+                    if typeof(arg) == "Vector3" then
+                        local localCharacter = game:GetService("Players").LocalPlayer.Character
+                        local myPos = localCharacter and localCharacter:GetPivot().Position or Vector3.zero
+                        
+                        -- Nếu điểm hit cách mình > 5 units (tránh spoofing chính mình hoặc effect gần)
+                        if (arg - myPos).Magnitude > 5 then
+                            args[i] = selfRef.TargetPosCache
+                            modified = true
+                        end
+                    end
+                end
+                
+                if modified then
+                    return oldNamecall(inst, unpack(args))
+                end
+            end
+
+            -- Hitmarker detection (Xác nhận trúng trên server)
+            if selfRef.CurrentTargetEntry then
                 for _, arg in ipairs(args) do
                     if typeof(arg) == "Instance" and (arg == selfRef.CurrentTargetEntry.Model or arg:IsDescendantOf(selfRef.CurrentTargetEntry.Model)) then
-                        task.spawn(function()
-                            selfRef.Visuals:ShowHitmarker()
-                        end)
+                        task.spawn(function() selfRef.Visuals:ShowHitmarker() end)
                         break
                     end
                 end
