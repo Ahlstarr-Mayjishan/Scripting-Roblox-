@@ -1,1 +1,1 @@
-return 105 -- Version 1.0.5
+return 106 -- Version 1.0.6

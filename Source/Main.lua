@@ -73,6 +73,7 @@ local Camera = Workspace.CurrentCamera
 -- LOAD RAYFIELD
 -- ═══════════════════════════════════════════════════
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+getgenv().Rayfield = Rayfield
 
 -- ═══════════════════════════════════════════════════
 -- LOAD MODULES

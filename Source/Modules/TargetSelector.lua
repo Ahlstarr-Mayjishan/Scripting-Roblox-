@@ -50,40 +50,39 @@ function TargetSelector:GetClosestTarget(mousePos, cameraPosition)
 
         if not model or not model.Parent then
             self.NPCTracker:Remove(model)
-            continue
-        end
+        else
+            if humanoid and rootPart and humanoid.Health > 0 then
+                local targetPart = self.NPCTracker:GetTargetPart(entry)
+                if targetPart and targetPart.Parent then
+                    local isCurrentTarget = (currentTarget and entry.Model == currentTarget.Model)
+                    local targetPosition = self.Prediction:GetSelectionTargetPosition(cameraPosition, targetPart, entry, isCurrentTarget)
+                    
+                    -- PERF: Use MagnitudeSquared instead of Magnitude
+                    local offset = targetPosition - cameraPosition
+                    local worldDistSq = offset.X*offset.X + offset.Y*offset.Y + offset.Z*offset.Z
+                    
+                    if worldDistSq <= maxDistSq then
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(targetPosition)
+                        
+                        if onScreen then
+                            local dx = screenPos.X - mousePos.X
+                            local dy = screenPos.Y - mousePos.Y
+                            local screenDistSq = dx*dx + dy*dy
 
-        if humanoid and rootPart and humanoid.Health > 0 then
-            local targetPart = self.NPCTracker:GetTargetPart(entry)
-            if not targetPart or not targetPart.Parent then continue end
+                            if screenDistSq <= fovLimitSq then
+                                -- Optimization: Simpler score weights
+                                local hpFactor = 1 + (math_log10(humanoid.MaxHealth + 1) * 2)
+                                local score = math_sqrt(screenDistSq) / hpFactor
 
-            local isCurrentTarget = (currentTarget and entry.Model == currentTarget.Model)
-            local targetPosition = self.Prediction:GetSelectionTargetPosition(cameraPosition, targetPart, entry, isCurrentTarget)
-            
-            -- PERF: Use MagnitudeSquared instead of Magnitude
-            local offset = targetPosition - cameraPosition
-            local worldDistSq = offset.X*offset.X + offset.Y*offset.Y + offset.Z*offset.Z
-            
-            if worldDistSq <= maxDistSq then
-                local screenPos, onScreen = Camera:WorldToViewportPoint(targetPosition)
-                
-                if onScreen then
-                    local dx = screenPos.X - mousePos.X
-                    local dy = screenPos.Y - mousePos.Y
-                    local screenDistSq = dx*dx + dy*dy
+                                if isCurrentTarget then
+                                    score = score * 0.25 -- Sticky target bonus
+                                end
 
-                    if screenDistSq <= fovLimitSq then
-                        -- Optimization: Simpler score weights
-                        local hpFactor = 1 + (math_log10(humanoid.MaxHealth + 1) * 2)
-                        local score = math_sqrt(screenDistSq) / hpFactor
-
-                        if isCurrentTarget then
-                            score = score * 0.25 -- Sticky target bonus
-                        end
-
-                        if score < closestScore then
-                            closestScore = score
-                            closestEntry = entry
+                                if score < closestScore then
+                                    closestScore = score
+                                    closestEntry = entry
+                                end
+                            end
                         end
                     end
                 end
