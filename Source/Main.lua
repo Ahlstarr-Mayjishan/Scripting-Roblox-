@@ -95,6 +95,7 @@ local AdjustmentsTab = loadModule("Tabs/AdjustmentsTab.lua")
 local PlayerTab      = loadModule("Tabs/PlayerTab.lua")
 local MiscTab        = loadModule("Tabs/MiscTab.lua")
 local SettingsTab    = loadModule("Tabs/SettingsTab.lua")
+local BlatantTab     = loadModule("Tabs/BlatantTab.lua")
 
 -- ═══════════════════════════════════════════════════
 -- BUILD NPC/PVP PREDICTION CLASSES FROM CORE
@@ -144,6 +145,7 @@ local Window = Rayfield:CreateWindow({
 
 AimbotTab(Window, Options, visuals)
 AdjustmentsTab(Window, Options)
+BlatantTab(Window, Options, visuals)
 PlayerTab(Window, Options, noSlowdown)
 MiscTab(Window, Options, tracker)
 SettingsTab(Window, Options)
@@ -273,8 +275,30 @@ registerConn(RunService.Heartbeat:Connect(function()
     if _scanFrame >= SCAN_INTERVAL then
         _scanFrame = 0
 
+        -- 🎯 Target Scanning
         if input:ShouldAssist() then
             tracker.CurrentTargetEntry = selector:GetClosestTarget(_cachedMousePos, getShooterOrigin())
+        end
+
+        -- 🔥 BLATANT: HITBOX EXPANDER (Run every 2 frames for PERF)
+        for _, entry in ipairs(tracker.Entries) do
+            local root = entry.RootPart
+            if root and root.Parent then
+                if Options.HitboxExpander then
+                    if not entry.OriginalSize then
+                        entry.OriginalSize = root.Size
+                        entry.OriginalTransparency = root.Transparency
+                    end
+                    root.Size = Vector3.new(Options.HitboxSize, Options.HitboxSize, Options.HitboxSize)
+                    root.Transparency = 0.5 -- Visual Feedback
+                    root.CanCollide = false 
+                elseif entry.OriginalSize then
+                    root.Size = entry.OriginalSize
+                    root.Transparency = entry.OriginalTransparency or 0
+                    root.CanCollide = true
+                    entry.OriginalSize = nil
+                end
+            end
         end
     end
 end))

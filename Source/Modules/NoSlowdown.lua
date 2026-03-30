@@ -5,6 +5,8 @@
     • No Delay: Xóa debuff Value/Attribute
     • No Stun: Chống stun/ragdoll/freeze
     • Custom Move Speed: Đặt WalkSpeed tùy chỉnh
+    • Speed Multiplier (Legit): Nhân tốc độ nhân vật
+    • Speed Spoof (Bypass): Giả mạo WalkSpeed về 16 khi game kiểm tra
 ]]
 
 local Players = game:GetService("Players")
@@ -20,6 +22,7 @@ function NoSlowdown.new(config)
     self._connections = {}
     self._baseWalkSpeed = nil
     self._baseJumpPower = nil
+    self._isHookActive = false
     return self
 end
 
@@ -43,17 +46,18 @@ end
 
 function NoSlowdown:Init()
     local localPlayer = Players.LocalPlayer
+    local selfRef = self
 
     local function onCharacterAdded(char)
         local humanoid = char:WaitForChild("Humanoid", 10)
         if humanoid then
-            self._baseWalkSpeed = nil
-            self._baseJumpPower = nil
+            selfRef._baseWalkSpeed = nil
+            selfRef._baseJumpPower = nil
             task.wait(0.5)
-            self:CaptureBaseStats()
+            selfRef:CaptureBaseStats()
 
             -- Disable stun-related HumanoidStates
-            if self.Options.NoStun then
+            if selfRef.Options.NoStun then
                 pcall(function()
                     humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
                     humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
@@ -66,45 +70,41 @@ function NoSlowdown:Init()
     if localPlayer.Character then
         task.spawn(function() onCharacterAdded(localPlayer.Character) end)
     end
-    table.insert(self._connections,
-        localPlayer.CharacterAdded:Connect(onCharacterAdded)
-    )
+    table.insert(self._connections, localPlayer.CharacterAdded:Connect(onCharacterAdded))
 
-    -- Main loop
-    local conn = RunService.Heartbeat:Connect(function()
-        local humanoid = self:GetHumanoid()
+    -- ═══ MAIN LOOP ═══
+    local heartConn = RunService.Heartbeat:Connect(function()
+        local humanoid = selfRef:GetHumanoid()
         if not humanoid then return end
 
-        if not self._baseWalkSpeed then
-            self:CaptureBaseStats()
+        if not selfRef._baseWalkSpeed then
+            selfRef:CaptureBaseStats()
             return
         end
 
-        -- ═══ SPEED MULTIPLIER (Legit Mode) ═══
-        if self.Options.SpeedMultiplierEnabled then
-            -- Note: Logic handled by hook in Init() or can be checked here
-            -- But we want to ensure it stays scaled if game doesn't update it
-        else
-            -- ═══ CUSTOM MOVE SPEED ═══
-            if self.Options.CustomMoveSpeedEnabled then
-                humanoid.WalkSpeed = self.Options.CustomMoveSpeed
-            -- ═══ NO SLOWDOWN ═══
-            elseif self.Options.NoSlowdown then
-                if humanoid.WalkSpeed < self._baseWalkSpeed then
-                    humanoid.WalkSpeed = self._baseWalkSpeed
+        -- 1. No Slowdown / Custom Speed (Khi không có Hook)
+        if not selfRef._isHookActive then
+            if selfRef.Options.SpeedMultiplierEnabled then
+                local base = selfRef._baseWalkSpeed or 16
+                humanoid.WalkSpeed = base * selfRef.Options.SpeedMultiplier
+            elseif selfRef.Options.CustomMoveSpeedEnabled then
+                humanoid.WalkSpeed = selfRef.Options.CustomMoveSpeed
+            elseif selfRef.Options.NoSlowdown then
+                if humanoid.WalkSpeed < selfRef._baseWalkSpeed then
+                    humanoid.WalkSpeed = selfRef._baseWalkSpeed
                 end
             end
         end
 
-        -- Bảo vệ JumpPower
-        if self.Options.NoSlowdown and self._baseJumpPower then
-            if humanoid.JumpPower < self._baseJumpPower then
-                humanoid.JumpPower = self._baseJumpPower
+        -- 2. JumpPower Protection
+        if selfRef.Options.NoSlowdown and selfRef._baseJumpPower then
+            if humanoid.JumpPower < selfRef._baseJumpPower then
+                humanoid.JumpPower = selfRef._baseJumpPower
             end
         end
 
-        -- ═══ NO STUN ═══
-        if self.Options.NoStun then
+        -- 3. No Stun / Ragdoll
+        if selfRef.Options.NoStun then
             local state = humanoid:GetState()
             if state == Enum.HumanoidStateType.FallingDown
                 or state == Enum.HumanoidStateType.Ragdoll
@@ -112,77 +112,77 @@ function NoSlowdown:Init()
                 humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
             end
 
-            -- Unanchor nếu bị freeze
             local character = humanoid.Parent
             if character then
                 local rootPart = character:FindFirstChild("HumanoidRootPart")
-                if rootPart and rootPart.Anchored then
-                    rootPart.Anchored = false
-                end
+                if rootPart and rootPart.Anchored then rootPart.Anchored = false end
             end
         end
 
-        -- ═══ NO DELAY ═══
-        if self.Options.NoDelay then
+        -- 4. No Delay / Attributes
+        if selfRef.Options.NoDelay then
             local character = humanoid.Parent
-            if not character then return end
-
-            -- Xóa debuff Values
-            for _, child in ipairs(character:GetChildren()) do
-                if child:IsA("NumberValue") or child:IsA("IntValue") or child:IsA("BoolValue") then
-                    local name = child.Name:lower()
-                    if name:find("slow") or name:find("stun") or name:find("freeze")
-                        or name:find("root") or name:find("debuff") or name:find("delay")
-                        or name:find("cooldown") then
-                        child:Destroy()
+            if character then
+                -- Values
+                for _, child in ipairs(character:GetChildren()) do
+                    if child:IsA("ValueBase") then
+                        local name = child.Name:lower()
+                        if name:find("slow") or name:find("stun") or name:find("freeze")
+                           or name:find("root") or name:find("debuff") or name:find("delay")
+                           or name:find("cooldown") then
+                            child:Destroy()
+                        end
                     end
                 end
-            end
-
-            -- Xóa debuff Attributes
-            pcall(function()
-                local attrs = character:GetAttributes()
-                for attrName, _ in pairs(attrs) do
+                -- Attributes
+                for attrName, _ in pairs(character:GetAttributes()) do
                     local lower = attrName:lower()
                     if lower:find("slow") or lower:find("stun") or lower:find("freeze")
-                        or lower:find("delay") or lower:find("debuff") or lower:find("cooldown") then
+                       or lower:find("delay") or lower:find("debuff") then
                         character:SetAttribute(attrName, nil)
                     end
                 end
-            end)
-        end
-
-        -- Maintain Multiplier if active
-        if self.Options.SpeedMultiplierEnabled and not self._isHookActive then
-            -- Fallback if hook not supported, but hook is preferred
-            local base = self._wantedSpeed or self._baseWalkSpeed or 16
-            humanoid.WalkSpeed = base * self.Options.SpeedMultiplier
+            end
         end
     end)
+    table.insert(self._connections, heartConn)
 
-    -- ═══ PROPERTY HOOK ═══
-    -- This handles "Legit" multiplier by intercepting game's speed changes
+    -- ═══ METAMETHOD HOOKS (Bypass & Control) ═══
     if hookmetamethod and not self._isHookActive then
-        local selfRef = self
-        local oldNewIndex
-        oldNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(inst, index, value)
-            if not checkcaller() and typeof(inst) == "Instance" and inst:IsA("Humanoid") then
-                if index == "WalkSpeed" and selfRef.Options.SpeedMultiplierEnabled then
-                    selfRef._wantedSpeed = value -- Save what the game wanted
-                    return oldNewIndex(inst, index, value * selfRef.Options.SpeedMultiplier)
+        local Options = self.Options
+        
+        -- Hook __index: Giả mạo chỉ số cho các script của Game (Bypass)
+        local oldIndex
+        oldIndex = hookmetamethod(game, "__index", newcclosure(function(obj, index)
+            if not checkcaller() and typeof(obj) == "Instance" and obj:IsA("Humanoid") then
+                if Options.SpeedSpoofEnabled then
+                    if index == "WalkSpeed" then return 16 end
+                    if index == "JumpPower" then return 50 end
                 end
             end
-            return oldNewIndex(inst, index, value)
+            return oldIndex(obj, index)
         end))
+
+        -- Hook __newindex: Can thiệp khi game nhân vật thay đổi WalkSpeed
+        local oldNewIndex
+        oldNewIndex = hookmetamethod(game, "__newindex", newcclosure(function(obj, index, value)
+            if not checkcaller() and typeof(obj) == "Instance" and obj:IsA("Humanoid") then
+                -- Multiplier cho Legit speed
+                if index == "WalkSpeed" and Options.SpeedMultiplierEnabled then
+                    return oldNewIndex(obj, index, value * Options.SpeedMultiplier)
+                end
+                
+                -- No Slowdown
+                if Options.NoSlowdown then
+                    if index == "WalkSpeed" and value < 16 then return end
+                    if index == "JumpPower" and value < 50 then return end
+                end
+            end
+            return oldNewIndex(obj, index, value)
+        end))
+        
         self._isHookActive = true
     end
-
-    table.insert(self._connections, conn)
-end
-
-function NoSlowdown:SetBaseWalkSpeed(speed)
-    self._baseWalkSpeed = speed
-    self.Options.OriginalWalkSpeed = speed
 end
 
 function NoSlowdown:Destroy()
