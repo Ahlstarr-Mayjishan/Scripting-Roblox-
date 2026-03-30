@@ -101,32 +101,43 @@ function SilentAim:Init()
     end))
 end
 
-function SilentAim:SetState(active, targetPart, targetPos, currentEntry)
+function SilentAim:SetState(active, targetPart, targetPos, currentEntry, dt)
     self.Active = active
     self.TargetPartCache = targetPart
     self.CurrentTargetEntry = currentEntry
 
     if active and targetPos then
-        -- Lấy vị trí đích (Prediction đã tính)
-        local desiredPos = targetPos
+        -- Ổn định DeltaTime (mặc định 60fps nếu dt bị hỏng)
+        local deltaTime = dt or (1/60)
         
-        -- Nếu có Smoothness < 1 thì Lerp
+        -- Nếu có Smoothness < 1 thì Lerp theo DeltaTime
         if self.Options.SilentAimSmoothness < 1 then
-            -- Nếu chưa có Cache cũ thì dùng vị trí tâm màn hình (raycast từ camera) làm mốc
+            -- Khởi tạo cache nếu chưa có (lấy từ tâm camera)
             if not self.TargetPosCache then
                 local cam = Workspace.CurrentCamera
-                self.TargetPosCache = cam.CFrame.Position + (cam.CFrame.LookVector * 100)
+                self.TargetPosCache = cam.CFrame.Position + (cam.CFrame.LookVector * 10)
             end
             
-            -- Lerp từ vị trí ảo hiện tại sang đích
-            -- Công thức: Current = Current + (Target - Current) * Alpha
-            local alpha = math.clamp(self.Options.SilentAimSmoothness, 0.01, 1)
-            self.TargetPosCache = self.TargetPosCache:Lerp(desiredPos, alpha)
+            -- Alpha dựa trên DeltaTime để mượt trên mọi máy (FPS-independent)
+            -- Alpha = 1 - (1 - smoothness)^(dt * scale)
+            local speedScale = 15 -- Hệ số tốc độ
+            local alpha = 1 - math.pow(1 - self.Options.SilentAimSmoothness, deltaTime * speedScale)
+            alpha = math.clamp(alpha, 0, 1)
+            
+            -- Lerp
+            local newPos = self.TargetPosCache:Lerp(targetPos, alpha)
+            
+            -- Safety: Tránh NaN
+            if newPos.X == newPos.X then
+                self.TargetPosCache = newPos
+            end
         else
             -- Không mượt (Lập tức)
-            self.TargetPosCache = desiredPos
+            self.TargetPosCache = targetPos
         end
     else
+        -- Không active thì xóa cache từ từ hoặc reset ngay? 
+        -- Reset ngay giúp lần sau khóa mục tiêu mới sẽ bắt đầu mượt từ tâm.
         self.TargetPosCache = nil
     end
 end

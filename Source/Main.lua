@@ -344,7 +344,7 @@ registerConn(RunService.RenderStepped:Connect(function(deltaTime)
     end
 
     -- Silent Aim state
-    silentAim:SetState(Options.AssistMode == "Silent Aim", targetPart, targetPosition, entry)
+    silentAim:SetState(Options.AssistMode == "Silent Aim", targetPart, targetPosition, entry, deltaTime)
 
     if Options.AssistMode == "Silent Aim" then
         silentAim.Active = true
