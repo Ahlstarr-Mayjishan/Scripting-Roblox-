@@ -31,7 +31,7 @@ return function(Window, Options, NPCTracker)
         Flag = "TargetPlayersFlag",
         Callback = function(Value)
             Options.TargetPlayersToggle = Value
-            NPCTracker:RescanFolder()
+            NPCTracker:ClearCache()
         end,
     })
 

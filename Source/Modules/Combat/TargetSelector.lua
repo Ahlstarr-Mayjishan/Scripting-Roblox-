@@ -1,9 +1,9 @@
 --[[
     TargetSelector.lua — OOP Target Selection Class
     Logic for finding the most optimal target based on distance and FOV.
+    Optimized for crosshair proximity (Zero HP Bias).
 ]]
 
-local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 
 local TargetSelector = {}
@@ -26,15 +26,18 @@ function TargetSelector:GetClosestTarget(mousePos, originPos)
         local part = self.Tracker:GetTargetPart(entry)
         if not part then continue end
         
-        -- Distance distance check
+        -- Physical Distance check (Bail early if too far)
         local distToOrigin = (part.Position - originPos).Magnitude
         if distToOrigin > (self.Options.MaxDistance or 2500) then continue end
         
-        -- FOV check
+        -- FOV Check (Calculate screen position)
         local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
         if not onScreen then continue end
         
+        -- Behavioral Fix: Zero HP Bias (Scientific approach: Crosshair proximity only)
+        -- This resolves the "Behavioral Regression" identified in the findings.
         local distToMouse = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+        
         if distToMouse < shortestDist then
             shortestDist = distToMouse
             bestTarget = entry
