@@ -54,15 +54,38 @@ function SilentAim:Init()
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(inst, ...)
         local method = getnamecallmethod()
+        local args = {...}
 
-        if method == "ViewportPointToRay" or method == "ScreenPointToRay" then
-            if selfRef.Active and selfRef.TargetPosCache and not checkcaller() and typeof(inst) == "Instance" and inst:IsA("Camera") then
-                local camPos = inst.CFrame.Position
-                return Ray.new(camPos, (selfRef.TargetPosCache - camPos).Unit)
+        if selfRef.Active and selfRef.TargetPosCache and not checkcaller() then
+            if method == "ViewportPointToRay" or method == "ScreenPointToRay" then
+                if typeof(inst) == "Instance" and inst:IsA("Camera") then
+                    local camPos = inst.CFrame.Position
+                    return Ray.new(camPos, (selfRef.TargetPosCache - camPos).Unit)
+                end
+            elseif method == "Raycast" then
+                if inst == Workspace then
+                    local origin = args[1]
+                    local direction = args[2]
+                    if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" then
+                        -- Redirect direction to target
+                        args[2] = (selfRef.TargetPosCache - origin).Unit * direction.Magnitude
+                        return oldNamecall(inst, unpack(args))
+                    end
+                end
+            elseif method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist" then
+                if inst == Workspace then
+                    local ray = args[1]
+                    if typeof(ray) == "Ray" then
+                        -- Redirect ray
+                        args[1] = Ray.new(ray.Origin, (selfRef.TargetPosCache - ray.Origin).Unit * ray.Direction.Magnitude)
+                        return oldNamecall(inst, unpack(args))
+                    end
+                end
             end
-        elseif (method == "FireServer" or method == "InvokeServer") and selfRef.CurrentTargetEntry then
+        end
+
+        if (method == "FireServer" or method == "InvokeServer") and selfRef.CurrentTargetEntry then
             if not checkcaller() and typeof(inst) == "Instance" then
-                local args = {...}
                 for _, arg in ipairs(args) do
                     if typeof(arg) == "Instance" and (arg == selfRef.CurrentTargetEntry.Model or arg:IsDescendantOf(selfRef.CurrentTargetEntry.Model)) then
                         task.spawn(function()
@@ -74,7 +97,7 @@ function SilentAim:Init()
             end
         end
 
-        return oldNamecall(inst, ...)
+        return oldNamecall(inst, unpack(args))
     end))
 end
 
