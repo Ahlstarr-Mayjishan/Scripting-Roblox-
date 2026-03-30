@@ -1,7 +1,7 @@
 --[[
     SilentAim.lua - Universal silent aim hook class.
-    Hooks mouse/raycast reads, but only during a short shot window so
-    non-combat systems like form switching are left alone.
+    Keeps redirection scoped to brief left-click combat windows and avoids
+    global Raycast hijacking so non-combat keybinds keep working.
 ]]
 
 local Workspace = game:GetService("Workspace")
@@ -11,8 +11,7 @@ local UserInputService = game:GetService("UserInputService")
 local SilentAim = {}
 SilentAim.__index = SilentAim
 
-local SHOT_HOOK_WINDOW = 0.18
-local ATTACK_NAME_TOKENS = {"shoot", "fire", "attack", "spell", "ability", "magic", "cast"}
+local CLICK_REDIRECT_WINDOW = 0.08
 local DAMAGE_NAME_TOKENS = {"hit", "damage"}
 
 local function containsToken(value, tokens)
@@ -38,19 +37,29 @@ function SilentAim.new(config, synapse)
     self.TargetPartCache = nil
     self.TargetPosCache = nil
     self.CurrentTargetEntry = nil
-    self.LastShotRequest = 0
+    self.LastClickTime = 0
     return self
 end
 
-function SilentAim:MarkShotRequest()
-    self.LastShotRequest = os.clock()
+function SilentAim:MarkClick()
+    self.LastClickTime = os.clock()
+
+    if self.Active and self.CurrentTargetEntry then
+        local muzzlePos = Players.LocalPlayer.Character and Players.LocalPlayer.Character:GetPivot().Position or Vector3.zero
+        self.Synapse.fire("ShotFired", self.CurrentTargetEntry.Model, self.LastClickTime, muzzlePos)
+    end
 end
 
 function SilentAim:CanRedirect()
-    return self.Active
-        and self.TargetPosCache ~= nil
-        and self.TargetPartCache ~= nil
-        and (os.clock() - self.LastShotRequest) <= SHOT_HOOK_WINDOW
+    if not self.Active or not self.TargetPosCache or not self.TargetPartCache then
+        return false
+    end
+
+    if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+        return true
+    end
+
+    return (os.clock() - self.LastClickTime) <= CLICK_REDIRECT_WINDOW
 end
 
 function SilentAim:Init()
@@ -59,8 +68,6 @@ function SilentAim:Init()
     end
 
     local selfRef = self
-    local synapse = self.Synapse
-    local localPlayer = Players.LocalPlayer
 
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
         if gameProcessed then
@@ -68,13 +75,13 @@ function SilentAim:Init()
         end
 
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            selfRef:MarkShotRequest()
+            selfRef:MarkClick()
         end
     end)
 
     local oldIndex
     oldIndex = hookmetamethod(game, "__index", newcclosure(function(inst, index)
-        if (index == "Hit" or index == "Target" or index == "UnitRay")
+        if (index == "Hit" or index == "UnitRay")
             and not checkcaller()
             and selfRef:CanRedirect()
             and typeof(inst) == "Instance"
@@ -83,8 +90,6 @@ function SilentAim:Init()
                 local camPos = Workspace.CurrentCamera.CFrame.Position
                 local lookDir = (selfRef.TargetPosCache - camPos).Unit
                 return CFrame.lookAt(selfRef.TargetPosCache, selfRef.TargetPosCache + lookDir)
-            elseif index == "Target" then
-                return selfRef.TargetPartCache
             elseif index == "UnitRay" then
                 local camPos = Workspace.CurrentCamera.CFrame.Position
                 return Ray.new(camPos, (selfRef.TargetPosCache - camPos).Unit)
@@ -99,36 +104,15 @@ function SilentAim:Init()
         local method = getnamecallmethod()
         local args = table.pack(...)
 
-        if not checkcaller() then
-            if selfRef:CanRedirect() and method == "Raycast" and inst == Workspace then
-                local origin = args[1]
-                local direction = args[2]
-                if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" then
-                    args[2] = (selfRef.TargetPosCache - origin).Unit * direction.Magnitude
-                    return oldNamecall(inst, unpack(args, 1, args.n))
-                end
-            end
-
-            if method == "FireServer" or method == "InvokeServer" then
-                local remoteName = typeof(inst) == "Instance" and string.lower(inst.Name) or string.lower(tostring(inst))
-
-                if containsToken(remoteName, ATTACK_NAME_TOKENS) then
-                    selfRef:MarkShotRequest()
-
-                    if selfRef.Active and selfRef.CurrentTargetEntry then
-                        local muzzlePos = localPlayer.Character and localPlayer.Character:GetPivot().Position or Vector3.zero
-                        synapse.fire("ShotFired", selfRef.CurrentTargetEntry.Model, os.clock(), muzzlePos)
-                    end
-                end
-
-                if containsToken(remoteName, DAMAGE_NAME_TOKENS) and selfRef.CurrentTargetEntry then
-                    local targetModel = selfRef.CurrentTargetEntry.Model
-                    for i = 1, args.n do
-                        local arg = args[i]
-                        if typeof(arg) == "Instance" and (arg == targetModel or arg:IsDescendantOf(targetModel)) then
-                            synapse.fire("DamageApplied", targetModel, os.clock())
-                            break
-                        end
+        if not checkcaller() and (method == "FireServer" or method == "InvokeServer") and selfRef.CurrentTargetEntry then
+            local remoteName = typeof(inst) == "Instance" and string.lower(inst.Name) or string.lower(tostring(inst))
+            if containsToken(remoteName, DAMAGE_NAME_TOKENS) then
+                local targetModel = selfRef.CurrentTargetEntry.Model
+                for i = 1, args.n do
+                    local arg = args[i]
+                    if typeof(arg) == "Instance" and (arg == targetModel or arg:IsDescendantOf(targetModel)) then
+                        selfRef.Synapse.fire("DamageApplied", targetModel, os.clock())
+                        break
                     end
                 end
             end
