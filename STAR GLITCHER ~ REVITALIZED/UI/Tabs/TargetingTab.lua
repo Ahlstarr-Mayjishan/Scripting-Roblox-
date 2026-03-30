@@ -31,15 +31,6 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    Tab:CreateToggle({
-        Name = "Ignore Players Inside FOV",
-        CurrentValue = Options.IgnorePlayersInFOV,
-        Flag = "IgnorePlayersToggle",
-        Callback = function(Value)
-            Options.IgnorePlayersInFOV = Value
-        end,
-    })
-
     Tab:CreateSection("Target Part")
 
     Tab:CreateDropdown({
