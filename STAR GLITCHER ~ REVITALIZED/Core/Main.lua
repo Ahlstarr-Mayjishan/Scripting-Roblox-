@@ -10,10 +10,10 @@ local GITHUB_CONFIG = {
     User = "Ahlstarr-Mayjishan",
     Repo = "Scripting-Roblox-",
     Branch = "main",
-    Folder = "Source"
+    Folder = "STAR GLITCHER ~ REVITALIZED"
 }
 
-local GITHUB_BASE = string.format("https://raw.githubusercontent.com/%s/%s/%s/%s/", GITHUB_CONFIG.User, GITHUB_CONFIG.Repo, GITHUB_CONFIG.Branch, GITHUB_CONFIG.Folder:gsub(" ", "%%20"))
+local GITHUB_BASE = string.format("https://raw.githubusercontent.com/%s/%s/%s/%s/", GITHUB_CONFIG.User, GITHUB_CONFIG.Repo, GITHUB_CONFIG.Branch, GITHUB_CONFIG.Folder:gsub(" ", "%%20"):gsub("~", "%%7E"))
 
 local function loadModule(path)
     local url = GITHUB_BASE .. path
@@ -44,8 +44,8 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
 
 local Window = Rayfield:CreateWindow({
-    Name = "Boss Aim Assist v"..tostring(Version),
-    LoadingTitle = "Awakening Brain...",
+    Name = "STAR GLITCHER ~ REVITALIZED",
+    LoadingTitle = "Neural Interface Initializing...",
     LoadingSubtitle = "Scientific Neural Network Active",
     ConfigurationSaving = { Enabled = true, FolderName = "Boss_AimAssist", FileName = "Config" },
     Discord = { Enabled = false },
