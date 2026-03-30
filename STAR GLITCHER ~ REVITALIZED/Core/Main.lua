@@ -75,6 +75,7 @@ local Brain          = loadModule("Modules/Core/Brain.lua")
 local InputHandler   = loadModule("Modules/Utils/Input.lua")
 local Tracker        = loadModule("Modules/Utils/NPCTracker.lua")
 local Detector       = loadModule("Modules/Utils/BossDetector.lua")
+local LocalCharacter = loadModule("Modules/Utils/LocalCharacter.lua")
 local Synapse         = loadModule("Modules/Utils/Synapse.lua")
 local Kalman          = loadModule("Modules/Utils/Math/Kalman.lua")
 
@@ -101,6 +102,7 @@ local TargetDot       = loadModule("Modules/Visuals/TargetDot.lua")
 -- ═══════════════════════════════════════════════════
 local synapse    = Synapse
 local input      = InputHandler.new(Config)
+local localCharacter = LocalCharacter.new()
 local detector   = Detector.new()
 local tracker    = Tracker.new(Config, detector)
 local aimbot     = Aimbot.new(Config)
@@ -117,12 +119,12 @@ local visuals = {
 }
 
 local movementSuite = {
-    spoof = SpeedSpoof.new(Options),
-    multi = SpeedMultiplier.new(Options),
-    fixed = CustomSpeed.new(Options),
-    slow  = AntiSlowdown.new(Options),
-    stun  = AntiStun.new(Options),
-    clean = Cleaner.new(Options)
+    spoof = SpeedSpoof.new(Options, localCharacter),
+    multi = SpeedMultiplier.new(Options, localCharacter),
+    fixed = CustomSpeed.new(Options, localCharacter),
+    slow  = AntiSlowdown.new(Options, localCharacter),
+    stun  = AntiStun.new(Options, localCharacter),
+    clean = Cleaner.new(Options, localCharacter)
 }
 
 -- THE CENTRAL BRAIN (CNS)
@@ -135,6 +137,7 @@ local brain = Brain.new(Config, {
 -- INITIALIZE & SETUP UI
 -- ═══════════════════════════════════════════════════
 input:Init()
+localCharacter:Init()
 tracker:Init()
 silentAim:Init()
 visuals.hit:Init()
@@ -144,7 +147,7 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 loadModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing})
 loadModule("UI/Tabs/TargetingTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 loadModule("UI/Tabs/PredictionTab.lua")(Window, Options)
-loadModule("UI/Tabs/PlayerTab.lua")(Window, Options, nil)
+loadModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow)
 loadModule("UI/Tabs/BlatantTab.lua")(Window, Options)
 loadModule("UI/Tabs/SettingsTab.lua")(Window, Options)
 loadModule("UI/Tabs/MiscTab.lua")(Window)
@@ -164,7 +167,7 @@ local function reg(c) table.insert(_conns, c) end
 _G.BossAimAssist_Cleanup = function()
     pcall(function() Rayfield:Destroy() end)
     for _, c in ipairs(_conns) do pcall(function() c:Disconnect() end) end
-    local objs = {input, tracker, aimbot, silentAim, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain}
+    local objs = {input, localCharacter, tracker, aimbot, silentAim, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain}
     for _, o in pairs(movementSuite) do table.insert(objs, o) end
     for _, o in ipairs(objs) do if o.Destroy then pcall(function() o:Destroy() end) end end
     _G.BossAimAssist_Cleanup = nil

@@ -1,10 +1,4 @@
---[[
-    Aimbot.lua — Pure OOP Camera Lock Class
-    Handles smooth camera manipulation for tracking targets.
-]]
-
 local Workspace = game:GetService("Workspace")
-local Camera = Workspace.CurrentCamera
 
 local Aimbot = {}
 Aimbot.__index = Aimbot
@@ -18,14 +12,20 @@ function Aimbot.new(config)
 end
 
 function Aimbot:Update(targetPosition, smoothness)
-    if not targetPosition then return end
-    
+    if not targetPosition then
+        return
+    end
+
+    local camera = Workspace.CurrentCamera
+    if not camera then
+        return
+    end
+
     local alpha = smoothness or self.Options.Smoothness or 0.15
-    local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPosition)
-    
-    -- Safety check for NaN
+    local targetCFrame = CFrame.lookAt(camera.CFrame.Position, targetPosition)
+
     if targetPosition.X == targetPosition.X then
-        Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, alpha)
+        camera.CFrame = camera.CFrame:Lerp(targetCFrame, alpha)
     end
 end
 
