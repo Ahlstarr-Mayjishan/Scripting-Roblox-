@@ -36,8 +36,9 @@ return function(Window, Options, visuals)
 
     Tab:CreateSlider({
         Name = "Speed Multiplier Value",
-        Min = 1,
-        Max = 10,
+        Range = {1, 10},
+        Increment = 0.1,
+        Suffix = "x Speed",
         CurrentValue = Options.SpeedMultiplier,
         Flag = "SpeedMultiVal",
         Callback = function(Value)
