@@ -430,7 +430,7 @@ function PredictionCore:SmoothAimVelocity(entry, velocity)
     if self.Options.AssistMode == "Silent Aim" then
         local cur = entry.SmoothedAimVelocity
         -- Alpha thấp (0.12) cho Silent Aim: ưu tiên độ mượt hơn độ nhạy
-        local a = 1 - math.pow(0.12, math.max(dt * 60, 1))
+        local a = 1 - math.pow(1 - 0.12, math.max(dt * 60, 1))
         local s = cur + ((velocity - cur) * a)
         entry.SmoothedAimVelocity = s
         return s
@@ -912,7 +912,7 @@ function PredictionCore:StabilizeTargetPosition(entry, part, rawPos, deltaTime)
 
         if dm > bpSnap then entry.StabilizedTargetPos = rawPos; return rawPos end
         if dm < bpDeadzone then return cur end
-        local a = 1 - math.pow(bpAlpha, math.max((deltaTime or (1/60)) * 60, 1))
+        local a = 1 - math.pow(1 - bpAlpha, math.max((deltaTime or (1/60)) * 60, 1))
         local r = cur:Lerp(rawPos, a)
         entry.StabilizedTargetPos = r
         return r
