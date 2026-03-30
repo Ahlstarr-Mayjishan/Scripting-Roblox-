@@ -37,7 +37,6 @@ function NoSlowdown:CaptureBaseStats()
     if not humanoid then return end
     if not self._baseWalkSpeed then
         self._baseWalkSpeed = humanoid.WalkSpeed
-        self.Options.OriginalWalkSpeed = self._baseWalkSpeed
     end
     if not self._baseJumpPower then
         self._baseJumpPower = humanoid.JumpPower
