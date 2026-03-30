@@ -3,36 +3,44 @@
     Smoothness, Distance, Target Part, Prediction settings.
 ]]
 
-return function(Window, Options)
-    local Tab = Window:CreateTab("Adjustments", 4483362458)
+return function(Window, Options, Visuals, NPCTracker)
+    local Tab = Window:CreateTab("Targeting", 4483362458)
 
-    Tab:CreateSection("Aim Behaviours")
+    Tab:CreateSection("FOV")
 
-    Tab:CreateSlider({
-        Name = "Lock-On Smoothness",
-        Range = {1, 100},
-        Increment = 1,
-        Suffix = "%",
-        CurrentValue = math.floor(Options.Smoothness * 100),
-        Flag = "SmoothnessSlider",
+    Tab:CreateToggle({
+        Name = "Show FOV Circle",
+        CurrentValue = Options.ShowFOV,
+        Flag = "FOVToggle",
         Callback = function(Value)
-            Options.Smoothness = math.clamp(Value / 100, 0.01, 1)
+            Options.ShowFOV = Value
+            Visuals.FOVCircle.Visible = Value
         end,
     })
 
     Tab:CreateSlider({
-        Name = "Maximum Distance",
-        Range = {100, 5000},
-        Increment = 50,
-        Suffix = " Studs",
-        CurrentValue = Options.MaxDistance,
-        Flag = "DistanceSlider",
+        Name = "FOV Circle Size (Radius)",
+        Range = {0, 1000},
+        Increment = 10,
+        Suffix = " Pixels",
+        CurrentValue = Options.FOV,
+        Flag = "FOVSlider",
         Callback = function(Value)
-            Options.MaxDistance = Value
+            Options.FOV = Value
+            Visuals.FOVCircle.Radius = Value
         end,
     })
 
-    Tab:CreateSection("Target Offsets")
+    Tab:CreateToggle({
+        Name = "Ignore Players Inside FOV",
+        CurrentValue = Options.IgnorePlayersInFOV,
+        Flag = "IgnorePlayersToggle",
+        Callback = function(Value)
+            Options.IgnorePlayersInFOV = Value
+        end,
+    })
+
+    Tab:CreateSection("Target Part")
 
     Tab:CreateDropdown({
         Name = "Lock Onto Body Part",
@@ -43,6 +51,8 @@ return function(Window, Options)
             Options.TargetPart = type(Value) == "table" and Value[1] or Value
         end,
     })
+
+    Tab:CreateSection("Target Offset")
 
     Tab:CreateSlider({
         Name = "Raise/Lower Aim Point (Y Offset)",
@@ -56,23 +66,17 @@ return function(Window, Options)
         end,
     })
 
-    Tab:CreateSection("Aim Prediction")
+    Tab:CreateSection("Target Source")
 
     Tab:CreateToggle({
-        Name = "Enable Aim Prediction",
-        CurrentValue = Options.PredictionEnabled,
-        Flag = "PredictToggle",
+        Name = "Target Other Players (PvP Mode)",
+        CurrentValue = Options.TargetPlayersToggle,
+        Flag = "TargetPlayersFlag",
         Callback = function(Value)
-            Options.PredictionEnabled = Value
-        end,
-    })
-
-    Tab:CreateToggle({
-        Name = "Smart Prediction (Auto)",
-        CurrentValue = Options.SmartPrediction,
-        Flag = "SmartPredictToggle",
-        Callback = function(Value)
-            Options.SmartPrediction = Value
+            Options.TargetPlayersToggle = Value
+            if NPCTracker and NPCTracker.ClearCache then
+                NPCTracker:ClearCache()
+            end
         end,
     })
 

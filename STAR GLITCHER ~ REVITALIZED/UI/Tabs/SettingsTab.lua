@@ -6,6 +6,50 @@
 return function(Window, Options)
     local Tab = Window:CreateTab("Settings", 4483362458)
 
+    Tab:CreateSection("UI & Safety")
+
+    Tab:CreateDropdown({
+        Name = "UI Toggle Key (applies on reload)",
+        Options = {
+            "RightControl", "LeftControl", "RightShift", "LeftShift",
+            "RightAlt", "LeftAlt", "Backquote", "Insert",
+            "Home", "End", "PageUp", "PageDown",
+            "F1", "F2", "F3", "F4", "F6", "F7", "F8", "F9", "F10"
+        },
+        CurrentOption = {Options.ToggleUIKey or "RightControl"},
+        Flag = "ToggleUIKey",
+        Callback = function(Value)
+            local selected = type(Value) == "table" and Value[1] or Value
+            Options.ToggleUIKey = selected
+            if Rayfield and Rayfield.Notify then
+                Rayfield:Notify({
+                    Title = "UI Key Updated",
+                    Content = "Rayfield toggle key will switch to " .. tostring(selected) .. " after the next reload.",
+                    Duration = 4,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
+
+    Tab:CreateButton({
+        Name = "Destroy Script (Emergency Stop)",
+        Callback = function()
+            if _G.BossAimAssist_Cleanup then
+                _G.BossAimAssist_Cleanup()
+            end
+        end,
+    })
+
+    Tab:CreateSection("Configuration")
+
+    Tab:CreateButton({
+        Name = "Save Current Config",
+        Callback = function()
+            Rayfield:SaveConfiguration()
+        end,
+    })
+
     Tab:CreateSection("Script Management")
 
     Tab:CreateButton({
@@ -30,26 +74,6 @@ return function(Window, Options)
                     Image = 4483362458,
                 })
             end
-        end,
-    })
-
-    Tab:CreateSection("UI Settings")
-
-    Tab:CreateButton({
-        Name = "Destroy Script (Emergency Stop)",
-        Callback = function()
-            if _G.BossAimAssist_Cleanup then
-                _G.BossAimAssist_Cleanup()
-            end
-        end,
-    })
-
-    Tab:CreateSection("Configuration")
-
-    Tab:CreateButton({
-        Name = "Save Current Config",
-        Callback = function()
-            Rayfield:SaveConfiguration()
         end,
     })
 

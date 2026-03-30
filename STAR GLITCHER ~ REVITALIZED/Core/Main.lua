@@ -47,6 +47,7 @@ local Window = Rayfield:CreateWindow({
     Name = "STAR GLITCHER ~ REVITALIZED",
     LoadingTitle = "Neural Interface Initializing...",
     LoadingSubtitle = "Scientific Neural Network Active",
+    ToggleUIKeybind = Options.ToggleUIKey or "RightControl",
     ConfigurationSaving = { Enabled = true, FolderName = "Boss_AimAssist", FileName = "Config" },
     Discord = { Enabled = false },
     KeySystem = false,
@@ -125,12 +126,13 @@ visuals.hit:Init()
 
 for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
-loadModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}) 
-loadModule("UI/Tabs/AdjustmentsTab.lua")(Window, Options)
-loadModule("UI/Tabs/BlatantTab.lua")(Window, Options)
+loadModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing})
+loadModule("UI/Tabs/AdjustmentsTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
+loadModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 loadModule("UI/Tabs/PlayerTab.lua")(Window, Options, nil)
-loadModule("UI/Tabs/MiscTab.lua")(Window, Options, tracker)
+loadModule("UI/Tabs/BlatantTab.lua")(Window, Options)
 loadModule("UI/Tabs/SettingsTab.lua")(Window, Options)
+loadModule("UI/Tabs/MiscTab.lua")(Window)
 
 Rayfield:LoadConfiguration()
 

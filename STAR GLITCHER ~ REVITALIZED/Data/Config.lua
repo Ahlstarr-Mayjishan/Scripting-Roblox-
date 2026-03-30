@@ -28,6 +28,7 @@ Config.Options = {
     ProjectileVelocity = 250,
     SilentAim = true,
     SilentAimSmoothness = 1.0, -- 1.0 là lập tức, < 1.0 là mượt
+    ToggleUIKey = "RightControl",
     NoSlowdown = false,
     NoDelay = false,
     NoStun = false,
