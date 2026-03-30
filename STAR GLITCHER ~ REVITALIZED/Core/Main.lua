@@ -32,6 +32,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local CoreGui = game:GetService("CoreGui")
 local Camera = Workspace.CurrentCamera
 
 -- Core Data
@@ -39,7 +40,7 @@ local Config  = loadModule("Data/Config.lua")
 local Version = loadModule("Data/Version.lua")
 local Options = Config.Options
 
-local function resolveToggleUIKeybind(value)
+local function resolveToggleUIKeyCode(value)
     if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
         return value
     end
@@ -54,19 +55,76 @@ local function resolveToggleUIKeybind(value)
     return Enum.KeyCode.RightControl
 end
 
+local function normalizeToggleUIKey(value)
+    if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
+        return value.Name
+    end
+
+    if type(value) == "string" and Enum.KeyCode[value] then
+        return value
+    end
+
+    return "RightControl"
+end
+
 -- UI initialization
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
+
+Options.ToggleUIKey = normalizeToggleUIKey(Options.ToggleUIKey)
 
 local Window = Rayfield:CreateWindow({
     Name = "STAR GLITCHER ~ REVITALIZED",
     LoadingTitle = "Neural Interface Initializing...",
     LoadingSubtitle = "Scientific Neural Network Active",
-    ToggleUIKeybind = resolveToggleUIKeybind(Options.ToggleUIKey),
     ConfigurationSaving = { Enabled = true, FolderName = "Boss_AimAssist", FileName = "Config" },
     Discord = { Enabled = false },
     KeySystem = false,
 })
+
+local function isRayfieldScreenGui(screenGui)
+    if not screenGui or not screenGui:IsA("ScreenGui") then
+        return false
+    end
+
+    local guiName = string.lower(screenGui.Name)
+    if guiName:find("rayfield", 1, true) or guiName:find("sirius", 1, true) then
+        return true
+    end
+
+    for _, descendant in ipairs(screenGui:GetDescendants()) do
+        if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
+            local text = descendant.Text
+            if text == "STAR GLITCHER ~ REVITALIZED" or text == "Neural Interface Initializing..." then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function getRayfieldScreenGuis()
+    local matches = {}
+    local seen = {}
+    local containers = {CoreGui}
+
+    local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if playerGui then
+        table.insert(containers, playerGui)
+    end
+
+    for _, container in ipairs(containers) do
+        for _, descendant in ipairs(container:GetDescendants()) do
+            if descendant:IsA("ScreenGui") and not seen[descendant] and isRayfieldScreenGui(descendant) then
+                seen[descendant] = true
+                matches[#matches + 1] = descendant
+            end
+        end
+    end
+
+    return matches
+end
 
 -- ═══════════════════════════════════════════════════
 -- LOAD ALL MODULES (Scientific Order)
@@ -176,6 +234,37 @@ end
 -- Scanning (Heartbeat, Off render)
 reg(RunService.Heartbeat:Connect(function()
     brain:Scan(UserInputService:GetMouseLocation(), Camera.CFrame.Position)
+end))
+
+reg(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then
+        return
+    end
+
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then
+        return
+    end
+
+    if input.KeyCode ~= resolveToggleUIKeyCode(Options.ToggleUIKey) then
+        return
+    end
+
+    local screenGuis = getRayfieldScreenGuis()
+    if #screenGuis == 0 then
+        return
+    end
+
+    local nextEnabledState = true
+    for _, ui in ipairs(screenGuis) do
+        if ui.Enabled then
+            nextEnabledState = false
+            break
+        end
+    end
+
+    for _, ui in ipairs(screenGuis) do
+        ui.Enabled = nextEnabledState
+    end
 end))
 
 -- Execution (RenderStepped)

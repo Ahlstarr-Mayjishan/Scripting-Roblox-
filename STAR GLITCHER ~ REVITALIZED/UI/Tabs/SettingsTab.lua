@@ -24,7 +24,7 @@ return function(Window, Options)
             if Rayfield and Rayfield.Notify then
                 Rayfield:Notify({
                     Title = "UI Key Updated",
-                    Content = "Rayfield toggle key saved as " .. tostring(selected) .. ". Reload the script to apply it.",
+                    Content = "UI toggle key saved as " .. tostring(selected) .. ". It applies immediately and will persist after reload.",
                     Duration = 4,
                     Image = 4483362458,
                 })
