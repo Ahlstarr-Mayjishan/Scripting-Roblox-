@@ -69,6 +69,7 @@ local SilentAim      = loadModule("Modules/Combat/SilentAim.lua")
 
 local SpeedSpoof      = loadModule("Modules/Movement/SpeedSpoof.lua")
 local SpeedMultiplier = loadModule("Modules/Movement/SpeedMultiplier.lua")
+local CustomSpeed     = loadModule("Modules/Movement/CustomSpeed.lua")
 local AntiSlowdown    = loadModule("Modules/Movement/AntiSlowdown.lua")
 local AntiStun        = loadModule("Modules/Movement/AntiStun.lua")
 local Cleaner         = loadModule("Modules/Movement/AttributeCleaner.lua")
@@ -100,16 +101,17 @@ local visuals = {
 local movementSuite = {
     spoof = SpeedSpoof.new(Options),
     multi = SpeedMultiplier.new(Options),
+    fixed = CustomSpeed.new(Options),
     slow  = AntiSlowdown.new(Options),
     stun  = AntiStun.new(Options),
     clean = Cleaner.new(Options)
 }
 
--- THE CENTRAL BRAIN
+-- THE CENTRAL BRAIN (CNS)
 local brain = Brain.new(Config, {
     Input = input, Tracker = tracker, Predictor = pred, Selector = selector,
     Aimbot = aimbot, SilentAim = silentAim, Visuals = visuals
-})
+}, loadModule)
 
 -- ═══════════════════════════════════════════════════
 -- INITIALIZE & SETUP UI

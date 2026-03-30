@@ -1,87 +1,67 @@
 --[[
-    Brain.lua — Central Decision Engine (Orchestrator)
-    The "Scientific Mind" of the script. 
-    Manages the relationship between Targeting, Prediction, and Execution.
+    Brain.lua — Central Nervous System (Orchestrator)
+    Analogy: The Spinal Cord/CNS connecting all Brain Lobes.
+    Script Job: Coordinates input, thought, and motor execution.
 ]]
+
+local BrainFolder = "Modules/Core/Brain/"
 
 local Brain = {}
 Brain.__index = Brain
 
-function Brain.new(config, modules)
+function Brain.new(config, modules, loader)
     local self = setmetatable({}, Brain)
     self.Options = config.Options
     self.Config = config
     
-    -- Injected dependencies
-    self.Input = modules.Input
-    self.Tracker = modules.Tracker
-    self.Predictor = modules.Predictor
-    self.Selector = modules.Selector
+    -- Instantiate Human-like Lobes
+    local Parietal  = loader(BrainFolder.."Parietal.lua")
+    local Temporal   = loader(BrainFolder.."Temporal.lua")
+    local Occipital  = loader(BrainFolder.."Occipital.lua")
+    local Frontal    = loader(BrainFolder.."Frontal.lua")
     
-    -- Execution modules
-    self.Aimbot = modules.Aimbot
-    self.SilentAim = modules.SilentAim
-    self.Visuals = modules.Visuals -- (FOVCircle, TargetDot, Highlight, Hitmarker)
+    self.Parietal  = Parietal.new(modules.Input, modules.Tracker)
+    self.Temporal   = Temporal.new(modules.Selector, modules.Predictor)
+    self.Occipital  = Occipital.new(modules.Visuals)
+    self.Frontal    = Frontal.new(modules.Aimbot, modules.SilentAim, self.Options)
     
-    self.CurrentTarget = nil
     return self
 end
 
+function Brain:Scan(mousePos, originPos)
+    local shouldAssist, _ = self.Parietal:Process()
+    if shouldAssist then
+        self.Parietal.Tracker.CurrentTargetEntry = self.Temporal:Scan(mousePos, originPos)
+    end
+end
+
 function Brain:Update(dt, mousePos, camCFrame)
-    local visuals = self.Visuals
-    visuals.fov:Update(mousePos)
-    visuals.dot:Set(nil, false)
-    
-    -- 1. Decision: Should we assist?
-    if not self.Input:ShouldAssist() then
-        self:Reset()
+    local entry = self.Parietal.Tracker.CurrentTargetEntry
+    local shouldAssist, _ = self.Parietal:Process()
+
+    if not shouldAssist or not entry then
+        self.Occipital:Clear()
+        self.Frontal:Rest()
         return
     end
 
-    -- 2. Targeting Logic
-    -- Scan for closest target periodically (handled by Heartbeat in Main)
-    local entry = self.Tracker.CurrentTargetEntry
-    if not entry then
-        self:Reset()
-        return 
-    end
-
-    -- 3. Part Selection
-    local part = self.Tracker:GetTargetPart(entry)
+    -- 1. Sensory Info: Get Part
+    local part = self.Parietal.Tracker:GetTargetPart(entry)
     if not part then return end
 
-    -- 4. Scientific Prediction
-    local targetPos = self.Predictor:Predict(camCFrame.Position, part, entry, dt)
+    -- 2. Temporal Processing: Calculate Prediction
+    local targetPos = self.Temporal:Calculate(camCFrame.Position, part, entry, dt)
     
-    -- 5. Visual Feedback
+    -- 3. Visual Rendering
     local sPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(targetPos)
-    visuals.dot:Set(sPos, onScreen)
-    visuals.highlight:Set(part, true)
+    self.Occipital:Process(mousePos, sPos, part, onScreen)
 
-    -- 6. Action Execution Dispatch
-    local mode = self.Options.AssistMode
-    if mode == "Camera Lock" then
-        self.SilentAim:Clear()
-        self.Aimbot:Update(targetPos, self.Options.Smoothness)
-    elseif mode == "Silent Aim" then
-        self.SilentAim:SetState(true, part, targetPos, entry, dt)
-    elseif mode == "Highlight Only" then
-        self.SilentAim:Clear()
-    else
-        self:Reset()
-    end
+    -- 4. Motor Execution
+    self.Frontal:Execute(targetPos, part, entry, dt)
 end
 
-function Brain:Scan(mousePos, originPos)
-    if self.Input:ShouldAssist() then
-        self.Tracker.CurrentTargetEntry = self.Selector:GetClosestTarget(mousePos, originPos)
-    end
-end
-
-function Brain:Reset()
-    self.Tracker.CurrentTargetEntry = nil
-    self.SilentAim:Clear()
-    self.Visuals.highlight:Clear()
+function Brain:Destroy()
+    -- Logic to clean up everything
 end
 
 return Brain
