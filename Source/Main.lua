@@ -348,15 +348,24 @@ registerConn(RunService.RenderStepped:Connect(function(deltaTime)
         visuals:SetTargetDot(screenPos, true)
     end
 
-    -- Silent Aim state
-    silentAim:SetState(Options.AssistMode == "Silent Aim", targetPart, targetPosition, entry, deltaTime)
-
-    if Options.AssistMode == "Silent Aim" then
-        silentAim.Active = true
+    -- State management
+    if Options.AssistMode == "Camera Lock" then
+        silentAim:Clear()
+        visuals:SetHighlight(targetPart, true)
+        
+        -- 🔥 CAMERA LOCK (AIMBOT)
+        -- Vì game không có Anti-Cheat Camera, chúng ta có thể Lerp CFrame trực tiếp
+        local targetCFrame = CFrame.lookAt(Camera.CFrame.Position, targetPosition)
+        Camera.CFrame = Camera.CFrame:Lerp(targetCFrame, Options.Smoothness)
+        
+    elseif Options.AssistMode == "Silent Aim" then
+        silentAim:SetState(true, targetPart, targetPosition, entry, deltaTime)
         visuals:SetHighlight(targetPart, true)
     elseif Options.AssistMode == "Highlight Only" then
+        silentAim:Clear()
         visuals:SetHighlight(targetPart, true)
     else
+        silentAim:Clear()
         visuals:ClearHighlight()
     end
 
