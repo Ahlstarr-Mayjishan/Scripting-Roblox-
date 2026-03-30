@@ -16,7 +16,10 @@ function Estimator.new(kalman)
 end
 
 function Estimator:Estimate(raw, dt)
-    local filteredVel = self.Kalman:Filter(raw.Velocity)
+    local filteredVel = raw.Velocity
+    if self.Kalman and self.Kalman.Update then
+        filteredVel = self.Kalman:Update(raw.Velocity)
+    end
     
     local accel = Vector3.zero
     if dt > 0 then

@@ -21,7 +21,7 @@ function Predictor.new(config, loader, kalman)
     
     -- Instantiate Layers (Isolated State)
     self.Sampler    = Sampler.new()
-    self.Estimator  = Estimator.new(kalman)
+    self.Estimator  = Estimator.new(kalman and kalman.new and kalman.new() or nil)
     self.Engine     = Engine.new(config)
     self.Stabilizer = Stabilizer.new()
     

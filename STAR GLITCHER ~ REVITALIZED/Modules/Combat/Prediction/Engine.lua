@@ -24,7 +24,7 @@ function Engine:Calculate(origin, targetPos, est, dt)
     
     -- Calculate Latency/Travel Compensation
     local distance = (targetPos - origin).Magnitude
-    local projectileSpeed = Options.ProjectileSpeed or 1000
+    local projectileSpeed = Options.ProjectileVelocity or Options.ProjectileSpeed or 1000
     local travelTime = distance / (projectileSpeed > 0 and projectileSpeed or 1)
     local latency = 0.05 -- Static latency (50ms)
     
