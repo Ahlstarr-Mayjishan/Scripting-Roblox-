@@ -31,7 +31,9 @@ Config.Options = {
     NoDelay = false,
     NoStun = false,
     CustomMoveSpeedEnabled = false,
-    CustomMoveSpeed = 16, -- Mặc định WalkSpeed gốc Roblox
+    CustomMoveSpeed = 16, 
+    SpeedMultiplierEnabled = false,
+    SpeedMultiplier = 1.0,
     OriginalWalkSpeed = nil,
 }
 

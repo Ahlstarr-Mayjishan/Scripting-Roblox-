@@ -9,23 +9,48 @@ return function(Window, Options, noSlowdown)
     Tab:CreateSection("Movement")
 
     Tab:CreateToggle({
-        Name = "Custom Move Speed",
+        Name = "Fixed Move Speed",
         CurrentValue = Options.CustomMoveSpeedEnabled,
         Flag = "CustomMoveSpeedEnabledFlag",
         Callback = function(Value)
             Options.CustomMoveSpeedEnabled = Value
+            if Value then Options.SpeedMultiplierEnabled = false end
         end,
     })
 
     Tab:CreateSlider({
-        Name = "Walk Speed",
-        Range = {1, 200},
+        Name = "Walk Speed (Fixed)",
+        Range = {1, 250},
         Increment = 1,
         CurrentValue = Options.CustomMoveSpeed,
         Flag = "CustomMoveSpeedFlag",
         Suffix = " studs/s",
         Callback = function(Value)
             Options.CustomMoveSpeed = Value
+        end,
+    })
+
+    Tab:CreateSection("Legit Multiplier")
+
+    Tab:CreateToggle({
+        Name = "Speed Multiplier",
+        CurrentValue = Options.SpeedMultiplierEnabled,
+        Flag = "SpeedMultiplierEnabledFlag",
+        Callback = function(Value)
+            Options.SpeedMultiplierEnabled = Value
+            if Value then Options.CustomMoveSpeedEnabled = false end
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Multiplier Factor",
+        Range = {1, 5},
+        Increment = 0.1,
+        CurrentValue = Options.SpeedMultiplier,
+        Flag = "SpeedMultiplierFlag",
+        Suffix = "x",
+        Callback = function(Value)
+            Options.SpeedMultiplier = Value
         end,
     })
 
