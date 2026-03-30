@@ -1,1 +1,1 @@
-return 111 -- Version 1.1.1
+return 112 -- Version 1.1.2
