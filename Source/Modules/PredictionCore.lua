@@ -605,7 +605,9 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
     local speed = filtVel.Magnitude
     if speed < 3.5 then
         filtVel = Vector3.zero
+        rawVel = Vector3.zero
         entry.Acceleration = Vector3.zero
+        speed = 0
     end
 
     local jerkA = self:JerkAlpha(entry, entry.Acceleration, dt)
