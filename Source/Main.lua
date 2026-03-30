@@ -280,31 +280,6 @@ registerConn(RunService.Heartbeat:Connect(function()
         if input:ShouldAssist() then
             tracker.CurrentTargetEntry = selector:GetClosestTarget(_cachedMousePos, getShooterOrigin())
         end
-
-        -- 🔥 BLATANT: HITBOX EXPANDER (Run every 2 frames for PERF)
-        if Options.HitboxExpander then
-            for _, entry in ipairs(tracker.Entries) do
-                local root = entry.RootPart
-                if root and root.Parent then
-                    if not entry.OriginalSize then
-                        entry.OriginalSize = root.Size
-                        entry.OriginalTransparency = root.Transparency
-                    end
-                    root.Size = Vector3.new(Options.HitboxSize, Options.HitboxSize, Options.HitboxSize)
-                    root.Transparency = 0.6
-                    root.CanCollide = true -- Quan trọng: Tránh lọt sàn
-                end
-            end
-        else
-            -- Tự động khôi phục khi tắt
-            for _, entry in ipairs(tracker.Entries) do
-                if entry.OriginalSize and entry.RootPart then
-                    entry.RootPart.Size = entry.OriginalSize
-                    entry.RootPart.Transparency = entry.OriginalTransparency or 0
-                    entry.OriginalSize = nil
-                end
-            end
-        end
     end
 end))
 

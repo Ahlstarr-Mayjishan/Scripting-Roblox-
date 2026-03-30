@@ -35,10 +35,7 @@ Config.Options = {
     CustomMoveSpeed = 16, 
     SpeedMultiplierEnabled = false,
     SpeedMultiplier = 1.0,
-    SpeedSpoofEnabled = false, -- Trả về 16 khi game đọc WalkSpeed
-    HitboxExpander = false,
-    HitboxSize = 5,
-    OriginalWalkSpeed = nil,
+    SpeedSpoofEnabled = false, 
 }
 
 -- ═══════════════════════════════════════════════════

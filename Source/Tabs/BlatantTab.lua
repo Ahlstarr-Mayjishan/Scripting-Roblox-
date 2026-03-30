@@ -1,58 +1,53 @@
 --[[
-    BlatantTab.lua — High Risk & Bypass Features
-    Tạo tab Blatant & Anticheat Bypass trên Rayfield UI.
+    BlatantTab.lua — Tab Blatant & Bypass
+    Hitbox Expander (Removed), Speed Spoof, Speed Multiplier.
 ]]
 
-return function(Window, Options, Visuals)
+return function(Window, Options, visuals)
     local Tab = Window:CreateTab("Blatant & Bypass", 4483362458)
 
-    Tab:CreateSection("🛡️ Anticheat Bypass")
+    Tab:CreateSection("Movement Bypass")
 
     Tab:CreateToggle({
-        Name = "Speed & Jump Spoof (Bypass)",
+        Name = "Speed Spoof (Bypass)",
         CurrentValue = Options.SpeedSpoofEnabled,
-        Flag = "SpeedSpoofToggle",
+        Flag = "SpeedSpoofFlag",
         Callback = function(Value)
             Options.SpeedSpoofEnabled = Value
-            Rayfield:Notify({
-                Title = "Bypass Mode",
-                Content = Value and "Speed Spoofing: Active. Game scripts will read 16/50 stats." or "Speed Spoofing: Disabled.",
-                Duration = 3,
-                Image = 4483362458,
-            })
-        end,
-    })
-
-    Tab:CreateSection("🔥 Blatant Cheats")
-
-    Tab:CreateToggle({
-        Name = "Hitbox Expander",
-        CurrentValue = Options.HitboxExpander,
-        Flag = "HitboxExpanderToggle",
-        Callback = function(Value)
-            Options.HitboxExpander = Value
-            if not Value then
-                -- Reset hitboxes when disabled
-                -- (Logic managed in Main or a separate module)
+            if Value then
+                Rayfield:Notify({
+                    Title = "Bypass Active",
+                    Content = "Client-side WalkSpeed is now masked from server checks.",
+                    Duration = 3,
+                    Image = 4483362458,
+                })
             end
         end,
     })
 
-    Tab:CreateSlider({
-        Name = "Hitbox Size",
-        Range = {1, 25},
-        Increment = 1,
-        Suffix = " studs",
-        CurrentValue = Options.HitboxSize,
-        Flag = "HitboxSizeSlider",
+    Tab:CreateToggle({
+        Name = "Enable Speed Multiplier",
+        CurrentValue = Options.SpeedMultiplierEnabled,
+        Flag = "SpeedMultiFlag",
         Callback = function(Value)
-            Options.HitboxSize = Value
+            Options.SpeedMultiplierEnabled = Value
         end,
     })
 
-    Tab:CreateSection("💡 Info")
-    Tab:CreateLabel("Bypass features attempt to hide your cheats from game scripts.")
-    Tab:CreateLabel("Speed Multiplier in Player Tab is safer when used with Spoof.")
+    Tab:CreateSlider({
+        Name = "Speed Multiplier Value",
+        Min = 1,
+        Max = 10,
+        CurrentValue = Options.SpeedMultiplier,
+        Flag = "SpeedMultiVal",
+        Callback = function(Value)
+            Options.SpeedMultiplier = Value
+        end,
+    })
+
+    Tab:CreateSection("Combat Cheats")
+    
+    Tab:CreateLabel("Notice: Use Hyper Silent Aim for 100% Hitrate.")
 
     return Tab
 end
