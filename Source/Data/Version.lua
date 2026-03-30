@@ -1,1 +1,1 @@
-return 123 -- Version 1.1.13 (Synapse Architecture / Hit Confirmation Queue)
+return 124 -- Version 1.1.14 (Spell-Aware Hit Confirmation / Magic Combat Logic)

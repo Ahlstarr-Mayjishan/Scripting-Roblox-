@@ -75,23 +75,23 @@ function SilentAim:Init()
                 end
             end
 
-            -- B. COMMUNICATION REFINEMENT (WeaponController & CombatService simulation)
+            -- B. COMMUNICATION REFINEMENT (Spell/Combat Service simulation)
             if (method == "FireServer" or method == "InvokeServer") then
                 local mName = tostring(inst):lower()
                 local meth = method:lower()
                 
-                -- WEAPON CONTROLLER: Register a SHOT
-                -- We detect fire remotes (Shoot, Fire, Attack)
-                if meth:find("fire") or meth:find("shoot") or meth:find("attack") then
+                -- MAGIC CONTROLLER: Register a Spell/Ability Cast
+                -- Detects magic/spell remotes (Cast, Spell, Fire, Magic, Use)
+                if meth:find("fire") or meth:find("cast") or meth:find("spell") or meth:find("magic") or meth:find("use") or meth:find("ability") then
                     if selfRef.Active and selfRef.CurrentTargetEntry then
-                        -- Register the shot with Synapse
+                        -- Register the cast with Synapse
                         local muzzlePos = LocalPlayer.Character and LocalPlayer.Character:GetPivot().Position or Vector3.zero
                         Synapse.fire("ShotFired", selfRef.CurrentTargetEntry.Model, os.clock(), muzzlePos)
                     end
                 end
 
-                -- COMBAT SERVICE: Register a HIT (DamageApplied)
-                if meth:find("hit") or meth:find("damage") or mName:find("hit") then
+                -- COMBAT SERVICE: Register a HIT (Damage/Impact)
+                if meth:find("hit") or meth:find("damage") or meth:find("impact") or mName:find("hit") or mName:find("damage") then
                     if selfRef.CurrentTargetEntry then
                         for i = 1, args.n do
                             local arg = args[i]
