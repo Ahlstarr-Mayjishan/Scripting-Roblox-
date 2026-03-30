@@ -1,7 +1,7 @@
 --[[
     NPCTracker.lua — OOP World Entity Management Class
     Track, categorize, and filter game entities (NPCs/Mobs/Bosses).
-    Optimized for high-performance and zero redundancy.
+    Optimized for high-performance with adaptive polling.
 ]]
 
 local Workspace = game:GetService("Workspace")
@@ -18,15 +18,28 @@ function NPCTracker.new(config, detector)
     self.CurrentTargetEntry = nil
     self._entries = {}
     self._folders = {"Entities", "Enemies", "Monsters"}
+    
+    -- Performance: Polling Strategy
+    self._lastScan = 0
+    self._scanInterval = 0.1 -- Scan every 100ms instead of every frame
+    self._cachedTargets = {}
+    
     return self
 end
 
 function NPCTracker:Init()
-    -- Simplify: We rely on periodical systematic polling in GetTargets
-    -- This avoids the "signal overlapping" and "Workspace fallback" debt.
+    -- Systematic startup if needed
 end
 
 function NPCTracker:GetTargets()
+    local now = os.clock()
+    
+    -- Adaptive Polling Strategy: Resolving frame-rate dependency
+    if (now - self._lastScan) < self._scanInterval then
+        return self._cachedTargets
+    end
+    
+    self._lastScan = now
     local result = {}
     local foldersFound = false
     
@@ -38,6 +51,7 @@ function NPCTracker:GetTargets()
             for _, model in ipairs(f:GetChildren()) do
                 if model:IsA("Model") then
                     local entry = self:_GetOrCreateEntry(model)
+                    -- Clean up dead/invalid entries in the final list
                     if entry and (not entry.Humanoid or entry.Humanoid.Health > 0) then 
                         table.insert(result, entry) 
                     end
@@ -58,18 +72,14 @@ function NPCTracker:GetTargets()
         end
     end
     
-    -- Safety: If NO folders found, we do NOT fallback to Workspace to avoid false targets.
-    -- Instead, we return empty list and warn once.
-    if not foldersFound and not self._warnedFolders then
-        self._warnedFolders = true
-        warn("⚠️ [NPCTracker] Targeting folders not found. Ensure models are in: "..table.concat(self._folders, ", "))
-    end
-    
+    self._cachedTargets = result
     return result
 end
 
 function NPCTracker:_GetOrCreateEntry(model)
-    -- Cleanup entry if model is destroyed
+    -- ORTHOGONAL DECOUPLING: Tracker entries NO LONGER store prediction results (Velocity/Accel).
+    -- They only store raw kinematic memory (LastPos/LastTime).
+    
     if self._entries[model] and not model.Parent then
         self._entries[model] = nil
         return nil
@@ -77,25 +87,20 @@ function NPCTracker:_GetOrCreateEntry(model)
 
     if self._entries[model] then return self._entries[model] end
     
-    -- Support for Non-Humanoid bosses/models if they have a PrimaryPart
     local hum = model:FindFirstChildOfClass("Humanoid")
     local primary = model.PrimaryPart or model:FindFirstChild("HumanoidRootPart") or model:FindFirstChildWhichIsA("BasePart")
     
     if not primary then return nil end
     
-    local isBoss = self.Detector:IsBoss(model, hum)
-    
     local entry = {
         Model = model,
         Humanoid = hum,
         PrimaryPart = primary,
-        IsBoss = isBoss,
+        IsBoss = self.Detector:IsBoss(model, hum),
         Name = model.Name,
-        Velocity = Vector3.zero,
-        Acceleration = Vector3.zero,
+        -- Pure kinematic state memory
         LastPos = primary.Position,
-        LastTime = os.clock(),
-        Confidence = 1
+        LastTime = os.clock()
     }
     
     self._entries[model] = entry
@@ -106,17 +111,13 @@ function NPCTracker:GetTargetPart(entry)
     local model = entry.Model
     if not model or not model.Parent then return nil end
     
-    -- Advanced selection: custom part -> Primary -> Head
     local targetPart = model:FindFirstChild(self.Options.TargetPart)
-    if not targetPart then
-        targetPart = entry.PrimaryPart or model:PrimaryPart or model:FindFirstChild("Head")
-    end
-    
-    return targetPart
+    return targetPart or entry.PrimaryPart or model.PrimaryPart or model:FindFirstChild("Head")
 end
 
 function NPCTracker:ClearCache()
     table.clear(self._entries)
+    table.clear(self._cachedTargets)
     self.CurrentTargetEntry = nil
 end
 

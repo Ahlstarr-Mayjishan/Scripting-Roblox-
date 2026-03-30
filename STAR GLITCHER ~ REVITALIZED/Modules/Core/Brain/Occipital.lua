@@ -1,7 +1,7 @@
 --[[
     OccipitalLobe.lua — Visual Processing
     Analogy: Primary visual cortex.
-    Script Job: Manages FOV, Highlight, and Target feedback dots.
+    Job: Manages FOV, Highlight, and Target feedback dots.
 ]]
 
 local OccipitalLobe = {}
@@ -17,12 +17,21 @@ function OccipitalLobe.new(visuals)
 end
 
 function OccipitalLobe:Process(mousePos, targetPos, targetPart, onScreen)
+    -- GUARD: FOV Update should always happen to ensure crosshair feedback
     self.fov:Update(mousePos)
-    self.dot:Set(targetPos, onScreen)
-    self.highlight:Set(targetPart, true)
+    
+    -- GUARD: Resolution findings (Fragility fixes)
+    -- Only set dot/highlight if we have a valid onscreen target
+    if targetPos and targetPart and onScreen then
+        self.dot:Set(targetPos, true)
+        self.highlight:Set(targetPart, true)
+    else
+        self:Clear()
+    end
 end
 
 function OccipitalLobe:Clear()
+    -- Safe cleanup: Ensure no trailing highlights or disconnected dots
     self.highlight:Clear()
     self.dot:Set(nil, false)
 end

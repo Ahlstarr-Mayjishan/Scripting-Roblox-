@@ -75,23 +75,26 @@ function SilentAim:Init()
                 end
             end
 
-            -- B. COMMUNICATION REFINEMENT (Spell/Combat Service simulation)
+            -- B. COMMUNICATION REFINEMENT (WeaponController & CombatService simulation)
             if (method == "FireServer" or method == "InvokeServer") then
                 local mName = tostring(inst):lower()
                 local meth = method:lower()
                 
-                -- MAGIC CONTROLLER: Register a Spell/Ability Cast
-                -- Detects magic/spell remotes (Cast, Spell, Fire, Magic, Use)
-                if meth:find("fire") or meth:find("cast") or meth:find("spell") or meth:find("magic") or meth:find("use") or meth:find("ability") then
+                -- WEAPON CONTROLLER: Register a SHOT (Spell / Ability / Projectile)
+                -- We detect fire remotes (Shoot, Fire, Attack, Spell, Ability, Magic)
+                local isAttack = meth:find("fire") or meth:find("shoot") or meth:find("attack") 
+                local isMagic  = meth:find("spell") or meth:find("ability") or meth:find("magic") or meth:find("effect")
+
+                if (isAttack or isMagic) then
                     if selfRef.Active and selfRef.CurrentTargetEntry then
-                        -- Register the cast with Synapse
+                        -- Register the cast/shot with Synapse
                         local muzzlePos = LocalPlayer.Character and LocalPlayer.Character:GetPivot().Position or Vector3.zero
                         Synapse.fire("ShotFired", selfRef.CurrentTargetEntry.Model, os.clock(), muzzlePos)
                     end
                 end
 
-                -- COMBAT SERVICE: Register a HIT (Damage/Impact)
-                if meth:find("hit") or meth:find("damage") or meth:find("impact") or mName:find("hit") or mName:find("damage") then
+                -- COMBAT SERVICE: Register a HIT (DamageApplied)
+                if meth:find("hit") or meth:find("damage") or mName:find("hit") then
                     if selfRef.CurrentTargetEntry then
                         for i = 1, args.n do
                             local arg = args[i]
