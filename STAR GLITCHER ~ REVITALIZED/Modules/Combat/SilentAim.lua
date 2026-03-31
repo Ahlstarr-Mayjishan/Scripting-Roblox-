@@ -1,7 +1,7 @@
 --[[
     SilentAim.lua - Universal silent aim hook class.
     Keeps redirection scoped to brief left-click combat windows and avoids
-    global Raycast hijacking so non-combat keybinds keep working.
+    broad input interception so non-combat keybinds keep working.
 ]]
 
 local Workspace = game:GetService("Workspace")
@@ -12,21 +12,6 @@ local SilentAim = {}
 SilentAim.__index = SilentAim
 
 local CLICK_REDIRECT_WINDOW = 0.08
-local DAMAGE_NAME_TOKENS = {"hit", "damage"}
-
-local function containsToken(value, tokens)
-    if not value or value == "" then
-        return false
-    end
-
-    for _, token in ipairs(tokens) do
-        if value:find(token, 1, true) then
-            return true
-        end
-    end
-
-    return false
-end
 
 function SilentAim.new(config, synapse)
     local self = setmetatable({}, SilentAim)
@@ -81,44 +66,17 @@ function SilentAim:Init()
 
     local oldIndex
     oldIndex = hookmetamethod(game, "__index", newcclosure(function(inst, index)
-        if (index == "Hit" or index == "UnitRay")
+        if index == "Hit"
             and not checkcaller()
             and selfRef:CanRedirect()
             and typeof(inst) == "Instance"
             and inst:IsA("Mouse") then
-            if index == "Hit" then
-                local camPos = Workspace.CurrentCamera.CFrame.Position
-                local lookDir = (selfRef.TargetPosCache - camPos).Unit
-                return CFrame.lookAt(selfRef.TargetPosCache, selfRef.TargetPosCache + lookDir)
-            elseif index == "UnitRay" then
-                local camPos = Workspace.CurrentCamera.CFrame.Position
-                return Ray.new(camPos, (selfRef.TargetPosCache - camPos).Unit)
-            end
+            local camPos = Workspace.CurrentCamera.CFrame.Position
+            local lookDir = (selfRef.TargetPosCache - camPos).Unit
+            return CFrame.lookAt(selfRef.TargetPosCache, selfRef.TargetPosCache + lookDir)
         end
 
         return oldIndex(inst, index)
-    end))
-
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(inst, ...)
-        local method = getnamecallmethod()
-        local args = table.pack(...)
-
-        if not checkcaller() and (method == "FireServer" or method == "InvokeServer") and selfRef.CurrentTargetEntry then
-            local remoteName = typeof(inst) == "Instance" and string.lower(inst.Name) or string.lower(tostring(inst))
-            if containsToken(remoteName, DAMAGE_NAME_TOKENS) then
-                local targetModel = selfRef.CurrentTargetEntry.Model
-                for i = 1, args.n do
-                    local arg = args[i]
-                    if typeof(arg) == "Instance" and (arg == targetModel or arg:IsDescendantOf(targetModel)) then
-                        selfRef.Synapse.fire("DamageApplied", targetModel, os.clock())
-                        break
-                    end
-                end
-            end
-        end
-
-        return oldNamecall(inst, unpack(args, 1, args.n))
     end))
 end
 
