@@ -50,12 +50,21 @@ return function(Window, Options)
         end,
     })
 
+    Tab:CreateButton({
+        Name = "Rejoin Server (Place Refresh)",
+        Callback = function()
+            local ts = game:GetService("TeleportService")
+            local p = game:GetService("Players").LocalPlayer
+            ts:Teleport(game.PlaceId, p)
+        end,
+    })
+
     Tab:CreateSection("Script Management")
 
     Tab:CreateButton({
         Name = "Install Auto-Execute",
         Callback = function()
-            local command = [[loadstring(game:HttpGet("https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/Source/Main.lua"))()]]
+            local command = [[loadstring(game:HttpGet("https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Core/Main.lua"))()]]
             if writefile then
                 pcall(function()
                     writefile("BossAimAssist_Loader.lua", command)
