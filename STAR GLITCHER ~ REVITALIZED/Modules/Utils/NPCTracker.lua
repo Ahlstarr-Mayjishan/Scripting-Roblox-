@@ -1,7 +1,7 @@
 --[[
-    NPCTracker.lua — OOP World Entity Management Class
+    NPCTracker.lua — Neural Entity Management Class
     Track, categorize, and filter game entities (NPCs/Mobs/Bosses).
-    Optimized for high-performance with adaptive polling.
+    Fixes: Non-humanoid boss support and performance bottlenecks.
 ]]
 
 local Workspace = game:GetService("Workspace")
@@ -18,7 +18,7 @@ function NPCTracker.new(config, detector)
     
     self.CurrentTargetEntry = nil
     self._entries = {}
-    self._folders = {"Entities", "Enemies", "Monsters"}
+    self._folders = {"Entities", "Enemies", "Monsters", "NPCs", "Bosses"} -- Expanded folder list
     
     -- Performance: Polling Strategy
     self._lastScan = 0
@@ -29,7 +29,6 @@ function NPCTracker.new(config, detector)
 end
 
 function NPCTracker:Init()
-    -- Systematic startup if needed
 end
 
 function NPCTracker:IsLocalCharacterModel(model)
@@ -37,77 +36,71 @@ function NPCTracker:IsLocalCharacterModel(model)
 end
 
 function NPCTracker:_HasBlacklistedName(model)
-    if not model then
-        return false
-    end
-
+    if not model then return false end
     local modelName = string.lower(model.Name)
     for _, keyword in ipairs(self.Blacklist) do
         if modelName:find(string.lower(keyword), 1, true) then
             return true
         end
     end
-
     return false
 end
 
 function NPCTracker:_GetPrimaryPart(model)
-    if not model then
-        return nil
-    end
-
+    if not model then return nil end
     return model:FindFirstChild("HumanoidRootPart")
         or model.PrimaryPart
         or model:FindFirstChild("Torso")
-        or model:FindFirstChild("UpperTorso")
         or model:FindFirstChild("Head")
         or model:FindFirstChildWhichIsA("BasePart")
 end
 
 function NPCTracker:_IsTargetCandidate(model)
-    if not model or not model:IsA("Model") or self:IsLocalCharacterModel(model) then
+    -- GUARD: Ensure model validity
+    if not model or not model:IsA("Model") or self:IsLocalCharacterModel(model) or not model.Parent then
         return false
     end
 
+    -- PVP Check
     local isPlayerCharacter = Players:GetPlayerFromCharacter(model) ~= nil
     if isPlayerCharacter then
         return self.Options.TargetPlayersToggle == true
     end
 
+    -- Blacklist/Sanity
     if self:_HasBlacklistedName(model) then
         return false
     end
 
+    -- UNIVERSAL TARGETING: Support both Humanoid và Non-Humanoid (Bosses)
     local humanoid = model:FindFirstChildOfClass("Humanoid")
-    if not humanoid then
-        return false
-    end
-
-    return self:_GetPrimaryPart(model) ~= nil
+    local primary = self:_GetPrimaryPart(model)
+    
+    -- Candidate if it has a primary part (Essential for position tracking)
+    return primary ~= nil
 end
 
 function NPCTracker:GetTargets()
     local now = os.clock()
     
-    -- Adaptive Polling Strategy: Resolving frame-rate dependency
     if (now - self._lastScan) < self._scanInterval then
         return self._cachedTargets
     end
     
     self._lastScan = now
     local result = {}
-    local foldersFound = false
     local seenModels = {}
 
     local function trackModel(model)
-        if not model or seenModels[model] then
-            return
-        end
-
+        if not model or seenModels[model] then return end
         seenModels[model] = true
+        
         local entry = self:_GetOrCreateEntry(model)
-        if entry and (not entry.Humanoid or entry.Humanoid.Health > 0) then
-            table.insert(result, entry)
+        if entry then
+            -- Only include alive targets
+            if not entry.Humanoid or entry.Humanoid.Health > 0 then
+                table.insert(result, entry)
+            end
         end
     end
     
@@ -115,24 +108,21 @@ function NPCTracker:GetTargets()
     for _, name in ipairs(self._folders) do
         local f = Workspace:FindFirstChild(name)
         if f then
-            foldersFound = true
-            for _, model in ipairs(f:GetDescendants()) do
-                if model:IsA("Model") then
-                    trackModel(model)
-                end
+            for _, model in ipairs(f:GetChildren()) do
+                if model:IsA("Model") then trackModel(model) end
             end
         end
     end
 
-    if not foldersFound then
-        for _, model in ipairs(Workspace:GetDescendants()) do
-            if model:IsA("Model") then
-                trackModel(model)
-            end
+    -- 2. Fallback Scan (Entities directly in Workspace)
+    -- Avoid GetDescendants() which is catastrophic for performance.
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj:IsA("Model") and self:_IsTargetCandidate(obj) then
+            trackModel(obj)
         end
     end
     
-    -- 2. Scan Players (PvP Mode)
+    -- 3. Scan Players (PvP Mode)
     if self.Options.TargetPlayersToggle then
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= Players.LocalPlayer and p.Character then
@@ -146,15 +136,7 @@ function NPCTracker:GetTargets()
 end
 
 function NPCTracker:_GetOrCreateEntry(model)
-    -- ORTHOGONAL DECOUPLING: Tracker entries NO LONGER store prediction results (Velocity/Accel).
-    -- They only store raw kinematic memory (LastPos/LastTime).
-
     if not self:_IsTargetCandidate(model) then
-        self._entries[model] = nil
-        return nil
-    end
-
-    if self._entries[model] and not model.Parent then
         self._entries[model] = nil
         return nil
     end
@@ -172,7 +154,6 @@ function NPCTracker:_GetOrCreateEntry(model)
         PrimaryPart = primary,
         IsBoss = self.Detector:IsBoss(model, hum),
         Name = model.Name,
-        -- Pure kinematic state memory
         LastPos = primary.Position,
         LastTime = os.clock()
     }
@@ -194,7 +175,7 @@ function NPCTracker:GetTargetPart(entry)
         end
     end
 
-    return targetPart or entry.PrimaryPart or self:_GetPrimaryPart(model)
+    return targetPart or entry.PrimaryPart or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
 end
 
 function NPCTracker:ClearCache()
