@@ -27,6 +27,7 @@ Config.Options = {
     SpeedMultiplierEnabled = false,
     SpeedMultiplier = 1.0,
     SpeedSpoofEnabled = false,
+    ApocalypseEnabled = false,
 }
 
 Config.Prediction = {
