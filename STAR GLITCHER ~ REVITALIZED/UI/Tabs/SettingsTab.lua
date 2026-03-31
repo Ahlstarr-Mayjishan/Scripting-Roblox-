@@ -3,10 +3,36 @@
     UI toggle key, config actions, and maintenance tools.
 ]]
 
-return function(Window, Options)
+return function(Window, Options, cleaner)
     local Tab = Window:CreateTab("Settings", 4483362458)
 
-    Tab:CreateSection("UI & Safety")
+    Tab:CreateSection("Optimization & Safety")
+
+    Tab:CreateToggle({
+        Name = "Auto-Clean Debris (60s interval)",
+        CurrentValue = Options.AutoCleanEnabled,
+        Flag = "AutoCleanFlag",
+        Callback = function(Value)
+            Options.AutoCleanEnabled = Value
+        end,
+    })
+
+    Tab:CreateButton({
+        Name = "Clean Memory & Debris Now",
+        Callback = function()
+            if cleaner then
+                local count = cleaner:Clean()
+                Rayfield:Notify({
+                    Title = "Cleanup Complete",
+                    Content = string.format("Destroyed %d debris objects và flushed Lua memory.", count),
+                    Duration = 4,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
+
+    Tab:CreateSection("UI & Controls")
 
     Tab:CreateDropdown({
         Name = "UI Toggle Key (saved for next reload)",
@@ -51,11 +77,40 @@ return function(Window, Options)
     })
 
     Tab:CreateButton({
-        Name = "Rejoin Server (Place Refresh)",
+        Name = "Rejoin Server (Same Instance)",
         Callback = function()
             local ts = game:GetService("TeleportService")
             local p = game:GetService("Players").LocalPlayer
-            ts:Teleport(game.PlaceId, p)
+            ts:TeleportToPlaceInstance(game.PlaceId, game.JobId, p)
+        end,
+    })
+
+    Tab:CreateButton({
+        Name = "Server Hop (Join New Instance)",
+        Callback = function()
+            local ts = game:GetService("TeleportService")
+            local p = game:GetService("Players").LocalPlayer
+            local http = game:GetService("HttpService")
+            
+            pcall(function()
+                local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+                local content = game:HttpGet(url)
+                local data = http:JSONDecode(content)
+                
+                for _, s in ipairs(data.data) do
+                    if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                        ts:TeleportToPlaceInstance(game.PlaceId, s.id, p)
+                        return
+                    end
+                end
+
+                Rayfield:Notify({
+                    Title = "Server Hop Failed",
+                    Content = "No suitable new servers found at this time.",
+                    Duration = 4,
+                    Image = 4483362458,
+                })
+            end)
         end,
     })
 

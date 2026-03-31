@@ -140,6 +140,7 @@ local Kalman          = loadModule("Modules/Utils/Math/Kalman.lua")
 local BasePred        = loadModule("Modules/Combat/Prediction/Base.lua")
 local Predictor       = loadModule("Modules/Combat/Predictor.lua")
 local Apocalypse      = loadModule("Modules/Combat/Hijackers/Apocalypse.lua")
+local GarbageCollector = loadModule("Modules/Utils/GarbageCollector.lua")
 local Selector        = loadModule("Modules/Combat/TargetSelector.lua")
 local Aimbot          = loadModule("Modules/Combat/Aimbot.lua")
 local SilentAim       = loadModule("Modules/Combat/SilentAim.lua")
@@ -167,6 +168,7 @@ local tracker    = Tracker.new(Config, detector)
 local aimbot     = Aimbot.new(Config)
 local silentAim  = SilentAim.new(Config, synapse) 
 local apocalypse = Apocalypse.new(Config)
+local cleaner    = GarbageCollector.new(Options)
 
 local pred       = Predictor.new(Config, loadModule, Kalman)
 local selector   = Selector.new(Config, tracker, pred)
@@ -201,6 +203,7 @@ localCharacter:Init()
 tracker:Init()
 silentAim:Init()
 apocalypse:Init()
+cleaner:Init()
 visuals.hit:Init()
 
 for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
@@ -209,7 +212,7 @@ loadModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Dr
 loadModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 loadModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun)
 loadModule("UI/Tabs/BlatantTab.lua")(Window, Options, apocalypse)
-loadModule("UI/Tabs/SettingsTab.lua")(Window, Options)
+loadModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner)
 
 Rayfield:LoadConfiguration()
 
