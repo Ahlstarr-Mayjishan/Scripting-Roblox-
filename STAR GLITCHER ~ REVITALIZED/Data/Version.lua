@@ -1,1 +1,1 @@
-return 125 -- Version 1.1.15 (Operational Continuity / Multi-Redirection / Boss Fix)
+return 126 -- Version 1.1.16 (Static Filter / Anti-Spawnboard)

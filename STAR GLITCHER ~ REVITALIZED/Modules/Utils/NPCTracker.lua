@@ -13,7 +13,7 @@ NPCTracker.__index = NPCTracker
 function NPCTracker.new(config, detector)
     local self = setmetatable({}, NPCTracker)
     self.Options = config.Options
-    self.Blacklist = config.Blacklist or {"statue", "tuong", "monument", "altar", "dummy"}
+    self.Blacklist = config.Blacklist or {"statue", "tuong", "monument", "altar", "dummy", "board", "spawn", "shop", "gui", "display", "map", "portal"}
     self.Detector = detector
     
     self.CurrentTargetEntry = nil
@@ -76,8 +76,16 @@ function NPCTracker:_IsTargetCandidate(model)
     local humanoid = model:FindFirstChildOfClass("Humanoid")
     local primary = self:_GetPrimaryPart(model)
     
-    -- Candidate if it has a primary part (Essential for position tracking)
-    return primary ~= nil
+    if not primary then return false end
+
+    -- STATIC OBJECT FILTER: Boss boards, shops, etc.
+    -- Mobs/Bosses (even custom ones) usually have unanchored root parts.
+    if not humanoid and primary.Anchored and not model:FindFirstChild("Health") then
+        -- Only ignore if it has no health indicators và is anchored
+        return false
+    end
+
+    return true
 end
 
 function NPCTracker:GetTargets()
