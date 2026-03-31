@@ -40,6 +40,10 @@ local Config  = loadModule("Data/Config.lua")
 local Version = loadModule("Data/Version.lua")
 local Options = Config.Options
 
+if _G.BossAimAssist_Cleanup then
+    _G.BossAimAssist_Cleanup()
+end
+
 local function resolveToggleUIKeyCode(value)
     if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
         return value
@@ -220,7 +224,6 @@ Rayfield:LoadConfiguration()
 -- MAIN ORCHESTRATION LOOP (Brain Powered)
 -- ═══════════════════════════════════════════════════
 local SESSION_ID = os.time()
-if _G.BossAimAssist_Cleanup then _G.BossAimAssist_Cleanup() end
 _G.BossAimAssist_SessionID = SESSION_ID
 
 local _conns = {}
@@ -229,7 +232,7 @@ local function reg(c) table.insert(_conns, c) end
 _G.BossAimAssist_Cleanup = function()
     pcall(function() Rayfield:Destroy() end)
     for _, c in ipairs(_conns) do pcall(function() c:Disconnect() end) end
-    local objs = {input, localCharacter, tracker, aimbot, silentAim, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain}
+    local objs = {input, localCharacter, tracker, aimbot, silentAim, apocalypse, cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain}
     for _, o in pairs(movementSuite) do table.insert(objs, o) end
     for _, o in ipairs(objs) do if o.Destroy then pcall(function() o:Destroy() end) end end
     _G.BossAimAssist_Cleanup = nil

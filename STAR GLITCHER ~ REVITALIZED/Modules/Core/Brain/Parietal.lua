@@ -16,8 +16,10 @@ end
 
 function ParietalLobe:Process()
     local shouldAssist = self.Input:ShouldAssist()
-    local targets = self.Tracker:GetTargets()
-    return shouldAssist, targets
+    if not shouldAssist then
+        return false, nil
+    end
+    return true, self.Tracker:GetTargets()
 end
 
 return ParietalLobe

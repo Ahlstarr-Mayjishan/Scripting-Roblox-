@@ -22,6 +22,8 @@ function SilentAim.new(config, synapse)
     self.TargetPosCache = nil
     self.CurrentTargetEntry = nil
     self._lastClickTime = 0
+    self._connections = {}
+    self._destroyed = false
     return self
 end
 
@@ -33,7 +35,7 @@ function SilentAim:Init()
     local Mouse = LocalPlayer:GetMouse()
     
     -- COMBAT SENSOR: Update last click time
-    UserInputService.InputBegan:Connect(function(input, gpe)
+    table.insert(self._connections, UserInputService.InputBegan:Connect(function(input, gpe)
         if gpe then return end
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             selfRef._lastClickTime = os.clock()
@@ -43,14 +45,14 @@ function SilentAim:Init()
                 selfRef.Synapse.fire("ShotFired", selfRef.CurrentTargetEntry.Model, os.clock(), muzzlePos)
             end
         end
-    end)
+    end))
 
     -- ═══════════════════════════════════════════════════
     -- 1. INDEX HOOK (Redirection)
     -- ═══════════════════════════════════════════════════
     local oldIndex
     oldIndex = hookmetamethod(game, "__index", newcclosure(function(inst, index)
-        if not checkcaller() and selfRef.Active and selfRef.TargetPosCache then
+        if not selfRef._destroyed and not checkcaller() and selfRef.Active and selfRef.TargetPosCache then
             -- BROAD MOUSE PROTECTION: Only act on the actual Mouse instance
             if inst == Mouse or (typeof(inst) == "Instance" and inst:IsA("Mouse")) then
                 if index == "Hit" then
@@ -76,7 +78,7 @@ function SilentAim:Init()
         local method = getnamecallmethod()
         local args = table.pack(...)
         
-        if not checkcaller() and selfRef.Active and selfRef.TargetPosCache then
+        if not selfRef._destroyed and not checkcaller() and selfRef.Active and selfRef.TargetPosCache then
             -- A. RAYCAST REDIRECTION
             if method == "Raycast" and inst == Workspace then
                 local origin = args[1]
@@ -135,6 +137,15 @@ function SilentAim:Clear()
     self.TargetPartCache = nil
     self.TargetPosCache = nil
     self.CurrentTargetEntry = nil
+end
+
+function SilentAim:Destroy()
+    self._destroyed = true
+    self:Clear()
+    for _, connection in ipairs(self._connections) do
+        connection:Disconnect()
+    end
+    table.clear(self._connections)
 end
 
 return SilentAim

@@ -62,8 +62,9 @@ function GarbageCollector:Clean()
             end
         end
 
-        -- 2. Lua Memory Flush
-        collectgarbage("collect")
+        -- Full collections are notorious for causing visible hitches.
+        -- Use a small incremental step to avoid periodic frame spikes.
+        collectgarbage("step", 64)
     end)
     
     return count

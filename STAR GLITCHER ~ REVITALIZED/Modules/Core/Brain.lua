@@ -36,11 +36,13 @@ function Brain:Scan(mousePos, originPos)
         -- Sensory acquisition
         local target = self.Temporal:Scan(mousePos, originPos)
         self.Parietal.Tracker.CurrentTargetEntry = target
+    else
+        self.Parietal.Tracker.CurrentTargetEntry = nil
     end
 end
 
 function Brain:Update(dt, mousePos, camCFrame)
-    local shouldAssist, _ = self.Parietal:Process()
+    local shouldAssist = self.Parietal.Input:ShouldAssist()
     local entry = self.Parietal.Tracker.CurrentTargetEntry
 
     if not shouldAssist or not entry then

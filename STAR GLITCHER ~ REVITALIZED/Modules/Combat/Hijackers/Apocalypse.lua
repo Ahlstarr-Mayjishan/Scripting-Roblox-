@@ -16,13 +16,15 @@ Apocalypse.__index = Apocalypse
 function Apocalypse.new(config)
     local self = setmetatable({}, Apocalypse)
     self.Options = config.Options
-    self.Active = true
+    self.Active = config.Options.ApocalypseEnabled == true
     
     -- Optimized State (Anti-Recursion)
     self._bossPos = Vector3.new()
     self._bossModel = nil
     self._bossExists = false
     self._mouse = LocalPlayer:GetMouse()
+    self._connections = {}
+    self._destroyed = false
     
     return self
 end
@@ -37,8 +39,8 @@ function Apocalypse:Init()
     local lastTrackerUpdate = 0
     local lastFullScan = 0
     
-    RunService.Heartbeat:Connect(function()
-        if not selfRef.Active then selfRef._bossExists = false return end
+    table.insert(self._connections, RunService.Heartbeat:Connect(function()
+        if selfRef._destroyed or not selfRef.Active then selfRef._bossExists = false return end
         
         local now = os.clock()
         -- THROTTLE: Only run tracker every 2 frames
@@ -81,7 +83,7 @@ function Apocalypse:Init()
         else
             selfRef._bossExists = false
         end
-    end)
+    end))
 
     -- ═══════════════════════════════════════════════════
     -- 2. ENGINE HOOKS (Silent Hijacking)
@@ -91,7 +93,7 @@ function Apocalypse:Init()
         local method = getnamecallmethod()
         local args = table.pack(...)
         
-        if not checkcaller() and selfRef._bossExists then
+        if not selfRef._destroyed and not checkcaller() and selfRef._bossExists then
             if (method == "FireServer" or method == "InvokeServer") then
                 for i = 1, args.n do
                     local v = args[i]
@@ -110,7 +112,7 @@ function Apocalypse:Init()
 
     local oldIndex
     oldIndex = hookmetamethod(game, "__index", newcclosure(function(inst, index)
-        if not checkcaller() and selfRef._bossExists and inst == selfRef._mouse then
+        if not selfRef._destroyed and not checkcaller() and selfRef._bossExists and inst == selfRef._mouse then
             if index == "Hit" then return CFrame.new(selfRef._bossPos) end
             if index == "Target" then return selfRef._bossModel end
         end
@@ -124,9 +126,9 @@ function Apocalypse:Init()
     local effectCache = {}
     local lastBossPos = Vector3.new()
     
-    Workspace.ChildAdded:Connect(function(child)
+    table.insert(self._connections, Workspace.ChildAdded:Connect(function(child)
         if child.Name == "BallOfLight" then table.insert(activeProjectiles, child) end
-    end)
+    end))
 
     local function updateEffectCache()
         table.clear(effectCache)
@@ -138,11 +140,16 @@ function Apocalypse:Init()
         end
     end
     
-    LocalPlayer.CharacterAdded:Connect(function() task.wait(0.5) updateEffectCache() end)
+    table.insert(self._connections, LocalPlayer.CharacterAdded:Connect(function()
+        task.wait(0.5)
+        if not selfRef._destroyed then
+            updateEffectCache()
+        end
+    end))
     updateEffectCache()
 
-    RunService.RenderStepped:Connect(function()
-        if not selfRef._bossExists then return end
+    table.insert(self._connections, RunService.RenderStepped:Connect(function()
+        if selfRef._destroyed or not selfRef._bossExists then return end
         local p = selfRef._bossPos
         
         -- SYNC PROJECTILES
@@ -166,11 +173,21 @@ function Apocalypse:Init()
                 if v.Attachment1 then v.Attachment1.WorldPosition = p end
             end)
         end
-    end)
+    end))
 end
 
 function Apocalypse:SetState(active)
     self.Active = active
+end
+
+function Apocalypse:Destroy()
+    self._destroyed = true
+    self.Active = false
+    self._bossExists = false
+    for _, connection in ipairs(self._connections) do
+        connection:Disconnect()
+    end
+    table.clear(self._connections)
 end
 
 return Apocalypse

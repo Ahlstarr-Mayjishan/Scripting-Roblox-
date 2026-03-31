@@ -13,29 +13,30 @@ function Input.new(config)
     self.Options = config.Options
     self.Holding = false
     self._lastShot = 0
+    self._connections = {}
     return self
 end
 
 function Input:Init()
-    UserInputService.InputBegan:Connect(function(input, gpe)
+    table.insert(self._connections, UserInputService.InputBegan:Connect(function(input, gpe)
         if gpe then return end
         if input.UserInputType == Enum.UserInputType.MouseButton2 then
             self.Holding = true
         end
-    end)
+    end))
     
-    UserInputService.InputEnded:Connect(function(input, gpe)
+    table.insert(self._connections, UserInputService.InputEnded:Connect(function(input, gpe)
         if input.UserInputType == Enum.UserInputType.MouseButton2 then
             self.Holding = false
         end
-    end)
+    end))
     
     -- Hitmarker tracking (Register a shot)
-    UserInputService.InputBegan:Connect(function(input, gpe)
+    table.insert(self._connections, UserInputService.InputBegan:Connect(function(input, gpe)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             self._lastShot = os.clock()
         end
-    end)
+    end))
 end
 
 function Input:ShouldAssist()
@@ -47,6 +48,13 @@ end
 
 function Input:WasShotRecently(seconds)
     return (os.clock() - self._lastShot) < (seconds or 1.5)
+end
+
+function Input:Destroy()
+    for _, connection in ipairs(self._connections) do
+        connection:Disconnect()
+    end
+    table.clear(self._connections)
 end
 
 return Input
