@@ -15,6 +15,15 @@ function Estimator.new(kalman)
     return self
 end
 
+function Estimator:Reset()
+    self._prevVelocity = Vector3.zero
+    self._prevAcceleration = Vector3.zero
+    if self.Kalman then
+        self.Kalman.Value = nil
+        self.Kalman.P = 1
+    end
+end
+
 function Estimator:Estimate(raw, dt)
     local filteredVel = raw.Velocity
     if self.Kalman and self.Kalman.Update then

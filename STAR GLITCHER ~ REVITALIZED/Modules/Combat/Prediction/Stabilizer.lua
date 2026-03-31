@@ -14,6 +14,10 @@ function Stabilizer.new()
     return self
 end
 
+function Stabilizer:Reset(targetPos)
+    self._lastTarget = targetPos or Vector3.zero
+end
+
 function Stabilizer:Smooth(targetPos, dt)
     if self._lastTarget == Vector3.zero then self._lastTarget = targetPos end
     
