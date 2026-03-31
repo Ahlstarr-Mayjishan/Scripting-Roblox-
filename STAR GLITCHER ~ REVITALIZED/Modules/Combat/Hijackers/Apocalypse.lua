@@ -1,7 +1,7 @@
 --[[
-    Apocalypse.lua — The Ultimate Neural Hijacker v1.1.64
+    Apocalypse.lua — The Ultimate Neural Hijacker v1.1.66
     Job: Parasitic locking of game projectiles and beams to boss entities.
-    Fixes: Visual lag, Damage misalignment, C-Stack overflow, and Out-of-FOV targeting.
+    Fixes: Visual lag, Damage misalignment, C-Stack overflow, Performance, and Teleport Flick.
 ]]
 
 local RunService = game:GetService("RunService")
@@ -32,17 +32,23 @@ function Apocalypse:Init()
     local selfRef = self
 
     -- ═══════════════════════════════════════════════════
-    -- 1. OPTIMIZED TRACKER (Frequency: Heartbeat)
+    -- 1. EXTREME OPTIMIZED TRACKER (Throttled)
     -- ═══════════════════════════════════════════════════
+    local lastTrackerUpdate = 0
     local lastFullScan = 0
+    
     RunService.Heartbeat:Connect(function()
         if not selfRef.Active then selfRef._bossExists = false return end
         
         local now = os.clock()
-        local found = nil
+        -- THROTTLE: Only run tracker every 2 frames
+        if now - lastTrackerUpdate < 0.03 then return end
+        lastTrackerUpdate = now
         
-        -- 1. FAST SCAN (GetChildren) - Low CPU
+        local found = nil
         local entities = Workspace:FindFirstChild("Entities")
+        
+        -- FAST SCAN (Children only)
         if entities then
             for _, model in ipairs(entities:GetChildren()) do
                 if model:IsA("Model") and model:FindFirstChildOfClass("Humanoid") then
@@ -55,8 +61,8 @@ function Apocalypse:Init()
             end
         end
         
-        -- 2. DEEP SCAN (GetDescendants) - Only every 1 second
-        if not found and (now - lastFullScan > 1) then
+        -- DEEP SCAN (Descendants) - Only Every 1.5 Seconds
+        if not found and (now - lastFullScan > 1.5) then
             lastFullScan = now
             if entities then
                 for _, v in ipairs(entities:GetDescendants()) do
@@ -68,16 +74,6 @@ function Apocalypse:Init()
             end
         end
         
-        -- 3. FALLBACK (Workspace Root)
-        if not found then
-            for _, obj in ipairs(Workspace:GetChildren()) do
-                if (obj.Name == "Cube" or obj.Name == "Boss") and not obj:IsA("Folder") then
-                    found = (obj:IsA("Model") and (obj.PrimaryPart or obj:FindFirstChildOfClass("BasePart"))) or (obj:IsA("BasePart") and obj)
-                    if found then break end
-                end
-            end
-        end
-
         if found then
             selfRef._bossPos = found.Position
             selfRef._bossModel = found.Parent
@@ -90,15 +86,12 @@ function Apocalypse:Init()
     -- ═══════════════════════════════════════════════════
     -- 2. ENGINE HOOKS (Silent Hijacking)
     -- ═══════════════════════════════════════════════════
-    
-    -- A. NAMECALL (Network & Viewport)
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(inst, ...)
         local method = getnamecallmethod()
         local args = table.pack(...)
         
         if not checkcaller() and selfRef._bossExists then
-            -- Combat Packet Redirection
             if (method == "FireServer" or method == "InvokeServer") then
                 for i = 1, args.n do
                     local v = args[i]
@@ -108,7 +101,6 @@ function Apocalypse:Init()
                 return oldNamecall(inst, unpack(args, 1, args.n))
             end
             
-            -- Visual Ray Redirection (Fixes beam pointing)
             if (method == "ViewportPointToRay" or method == "ScreenPointToRay") and inst == Camera then
                 return Ray.new(Camera.CFrame.Position, (selfRef._bossPos - Camera.CFrame.Position).Unit)
             end
@@ -116,7 +108,6 @@ function Apocalypse:Init()
         return oldNamecall(inst, unpack(args, 1, args.n))
     end))
 
-    -- B. INDEX (Mouse Hijacking)
     local oldIndex
     oldIndex = hookmetamethod(game, "__index", newcclosure(function(inst, index)
         if not checkcaller() and selfRef._bossExists and inst == selfRef._mouse then
@@ -127,22 +118,34 @@ function Apocalypse:Init()
     end))
 
     -- ═══════════════════════════════════════════════════
-    -- 3. OPTIMIZED VISUAL LOCK (FPS Fix)
+    -- 3. NEURAL VISUAL SYNC (Zero-Search Cache)
     -- ═══════════════════════════════════════════════════
     local activeProjectiles = {}
+    local effectCache = {}
+    local lastBossPos = Vector3.new()
     
-    -- Cache newly added projectiles instantly
     Workspace.ChildAdded:Connect(function(child)
-        if child.Name == "BallOfLight" then
-            table.insert(activeProjectiles, child)
-        end
+        if child.Name == "BallOfLight" then table.insert(activeProjectiles, child) end
     end)
+
+    local function updateEffectCache()
+        table.clear(effectCache)
+        local char = LocalPlayer.Character
+        if char then
+            for _, v in ipairs(char:GetDescendants()) do
+                if v:IsA("Beam") or v:IsA("Trail") then table.insert(effectCache, v) end
+            end
+        end
+    end
+    
+    LocalPlayer.CharacterAdded:Connect(function() task.wait(0.5) updateEffectCache() end)
+    updateEffectCache()
 
     RunService.RenderStepped:Connect(function()
         if not selfRef._bossExists then return end
-        
         local p = selfRef._bossPos
-        -- Fast Sync for Cached Projectiles
+        
+        -- SYNC PROJECTILES
         for i = #activeProjectiles, 1, -1 do
             local v = activeProjectiles[i]
             if v and v.Parent then
@@ -157,16 +160,11 @@ function Apocalypse:Init()
             end
         end
         
-        -- Optimized Beam/Effect Sync (Skip full scan, target local character only)
-        local char = LocalPlayer.Character
-        if char then
-            for _, v in ipairs(char:GetDescendants()) do
-                if v:IsA("Beam") or v:IsA("Trail") then
-                    pcall(function()
-                         if v.Attachment1 then v.Attachment1.WorldPosition = p end
-                    end)
-                end
-            end
+        -- SYNC BEAMS
+        for _, v in ipairs(effectCache) do
+            pcall(function()
+                if v.Attachment1 then v.Attachment1.WorldPosition = p end
+            end)
         end
     end)
 end
