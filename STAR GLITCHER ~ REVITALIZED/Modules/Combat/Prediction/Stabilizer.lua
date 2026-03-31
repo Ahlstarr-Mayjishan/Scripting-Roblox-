@@ -9,7 +9,7 @@ Stabilizer.__index = Stabilizer
 
 function Stabilizer.new()
     local self = setmetatable({}, Stabilizer)
-    self.Smoothing = 0.5 -- Default micro-smoothing
+    self.Smoothing = 0.25 -- Increased for micro-jitter (Lower = Smoother)
     self._lastTarget = Vector3.zero
     return self
 end

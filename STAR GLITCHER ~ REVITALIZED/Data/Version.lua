@@ -1,1 +1,1 @@
-return 126 -- Version 1.1.16 (Static Filter / Anti-Spawnboard)
+return 127 -- Version 1.1.17 (Kinematic Brake / Adaptive Damping)

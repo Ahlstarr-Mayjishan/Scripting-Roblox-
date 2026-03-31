@@ -30,15 +30,20 @@ function Engine:Calculate(origin, targetPos, est, dt)
     
     local totalTime = travelTime + latency
     
+    -- PREDICTION SENSITIVITY BRAKES (Adaptive)
+    -- We dampen higher order terms (Accel/Jerk) to prevent "Flying Predictions"
+    local accelWeight = math.clamp(1.0 - (totalTime / 2), 0.2, 0.8)
+    local jerkWeight  = math.clamp(0.5 - totalTime, 0.1, 0.3)
+    
     -- ONE ORTHOGONAL STRATEGY: Select one, don't stack.
     local predictedPos = targetPos
     
     if Options.SmartPrediction and est.Stable then
-        -- KINEMATIC INTERCEPT (Scientific)
-        -- s = vt + 0.5at^2 + (1/6)jt^3
+        -- KINEMATIC INTERCEPT (Scientific with Adaptive Braking)
+        -- s = vt + (0.5at^2 * damping) + (jt^3 * damping)
         local linear = velocity * totalTime
-        local accelerated = 0.5 * accel * (totalTime ^ 2)
-        local jerked = (1/6) * jerk * (totalTime ^ 3)
+        local accelerated = (0.5 * accel * (totalTime ^ 2)) * accelWeight
+        local jerked = ((1/6) * jerk * (totalTime ^ 3)) * jerkWeight
         
         predictedPos = targetPos + linear + accelerated + jerked
     else
@@ -46,8 +51,16 @@ function Engine:Calculate(origin, targetPos, est, dt)
         predictedPos = targetPos + (velocity * totalTime)
     end
     
-    -- High Confidence weight: Fade back to raw position if confidence is low
-    return targetPos:Lerp(predictedPos, math.clamp(confidence, 0, 1))
+    -- Global Confidence Brake: 
+    -- Ensure prediction doesn't exceed a realistic offset from the target
+    local maxOffset = math.max(distance * 0.2, 10)
+    local actualOffset = (predictedPos - targetPos)
+    if actualOffset.Magnitude > maxOffset then
+        predictedPos = targetPos + (actualOffset.Unit * maxOffset)
+    end
+
+    -- High Confidence weight: Fade back if confidence is low
+    return targetPos:Lerp(predictedPos, math.clamp(confidence * 0.8, 0, 1))
 end
 
 return Engine
