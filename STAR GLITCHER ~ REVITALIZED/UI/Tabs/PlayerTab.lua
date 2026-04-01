@@ -4,7 +4,7 @@
     Updated: Active status monitoring for anti-debuffs.
 ]]
 
-return function(Window, Options, noSlowdown, noStun)
+return function(Window, Options, noSlowdown, noStun, speedMultiplier)
     local Tab = Window:CreateTab("Player", 4483362458)
 
     -- ═══════════════════════════════════════════════════
@@ -58,6 +58,8 @@ return function(Window, Options, noSlowdown, noStun)
         end,
     })
 
+    local speedMultiplierLabel = Tab:CreateLabel("Multi Speed Status: Idle")
+
     -- ═══════════════════════════════════════════════════
     -- SECTION: ANTI-DEBUFF
     -- ═══════════════════════════════════════════════════
@@ -100,6 +102,9 @@ return function(Window, Options, noSlowdown, noStun)
             end
             if noStun then
                 stunLabel:Set("Stun Status: " .. tostring(noStun.Status))
+            end
+            if speedMultiplier then
+                speedMultiplierLabel:Set("Multi Speed Status: " .. tostring(speedMultiplier.Status))
             end
             task.wait(0.5)
         end

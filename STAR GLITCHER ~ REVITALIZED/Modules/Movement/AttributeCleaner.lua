@@ -8,6 +8,8 @@ function AttributeCleaner.new(options, localCharacter)
     self.Options = options
     self.LocalCharacter = localCharacter
     self.Connection = nil
+    self._lastSweep = 0
+    self._sweepInterval = 0.12
     return self
 end
 
@@ -32,6 +34,12 @@ function AttributeCleaner:Init()
         if not self.Options.NoDelay then
             return
         end
+
+        local now = os.clock()
+        if (now - self._lastSweep) < self._sweepInterval then
+            return
+        end
+        self._lastSweep = now
 
         local char = self.LocalCharacter and self.LocalCharacter:GetCharacter()
         if not char then

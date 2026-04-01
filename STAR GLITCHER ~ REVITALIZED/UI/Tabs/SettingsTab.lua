@@ -17,14 +17,21 @@ return function(Window, Options, cleaner)
         end,
     })
 
+    local cleanerLabel = Tab:CreateLabel("Cleanup Status: Idle")
+
     Tab:CreateButton({
         Name = "Clean Memory & Debris Now",
         Callback = function()
             if cleaner then
-                local count = cleaner:Clean()
+                local destroyed, queued, pending = cleaner:Clean()
                 Rayfield:Notify({
-                    Title = "Cleanup Complete",
-                    Content = string.format("Destroyed %d debris objects và flushed Lua memory.", count),
+                    Title = "Cleanup Scheduled",
+                    Content = string.format(
+                        "Destroyed %d now, queued %d, pending %d for smoother cleanup.",
+                        destroyed or 0,
+                        queued or 0,
+                        pending or 0
+                    ),
                     Duration = 4,
                     Image = 4483362458,
                 })
@@ -91,12 +98,12 @@ return function(Window, Options, cleaner)
             local ts = game:GetService("TeleportService")
             local p = game:GetService("Players").LocalPlayer
             local http = game:GetService("HttpService")
-            
+
             pcall(function()
                 local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
                 local content = game:HttpGet(url)
                 local data = http:JSONDecode(content)
-                
+
                 for _, s in ipairs(data.data) do
                     if s.playing < s.maxPlayers and s.id ~= game.JobId then
                         ts:TeleportToPlaceInstance(game.PlaceId, s.id, p)
@@ -115,6 +122,15 @@ return function(Window, Options, cleaner)
     })
 
     Tab:CreateSection("Script Management")
+
+    task.spawn(function()
+        while true do
+            if cleaner then
+                cleanerLabel:Set("Cleanup Status: " .. tostring(cleaner.Status))
+            end
+            task.wait(0.5)
+        end
+    end)
 
     Tab:CreateButton({
         Name = "Install Auto-Execute",

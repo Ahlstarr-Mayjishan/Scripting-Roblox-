@@ -70,7 +70,25 @@ function Brain:Update(dt, mousePos, camCFrame)
 end
 
 function Brain:Destroy()
-    -- Logic to clean up everything
+    local lobes = {
+        self.Parietal,
+        self.Temporal,
+        self.Occipital,
+        self.Frontal,
+    }
+
+    for _, lobe in ipairs(lobes) do
+        if lobe and lobe.Destroy then
+            pcall(function()
+                lobe:Destroy()
+            end)
+        end
+    end
+
+    self.Parietal = nil
+    self.Temporal = nil
+    self.Occipital = nil
+    self.Frontal = nil
 end
 
 return Brain

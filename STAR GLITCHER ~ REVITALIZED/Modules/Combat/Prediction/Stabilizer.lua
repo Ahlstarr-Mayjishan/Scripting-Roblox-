@@ -7,25 +7,35 @@
 local Stabilizer = {}
 Stabilizer.__index = Stabilizer
 
+local DEFAULT_DT = 1 / 60
+local ZERO = Vector3.zero
+
 function Stabilizer.new()
     local self = setmetatable({}, Stabilizer)
-    self.Smoothing = 0.25 -- Increased for micro-jitter (Lower = Smoother)
-    self._lastTarget = Vector3.zero
+    self.BaseSmoothing = 0.28
+    self.CatchupSmoothing = 0.95
+    self._lastTarget = ZERO
     return self
 end
 
 function Stabilizer:Reset(targetPos)
-    self._lastTarget = targetPos or Vector3.zero
+    self._lastTarget = targetPos or ZERO
 end
 
 function Stabilizer:Smooth(targetPos, dt)
-    if self._lastTarget == Vector3.zero then self._lastTarget = targetPos end
-    
-    -- Exponential smoothing (Post-process only)
-    -- This resolving the jitter identified in the findings.
-    local alpha = 1 - math.exp(-self.Smoothing * (dt * 60))
-    local result = self._lastTarget:Lerp(targetPos, alpha)
-    
+    local lastTarget = self._lastTarget
+    if lastTarget == ZERO then
+        self._lastTarget = targetPos
+        return targetPos
+    end
+
+    -- Catch up faster on meaningful target movement while keeping micro-jitter soft.
+    local delta = targetPos - lastTarget
+    local catchupAlpha = math.clamp((delta.Magnitude - 1.5) / 18, 0, 1)
+    local smoothing = self.BaseSmoothing + ((self.CatchupSmoothing - self.BaseSmoothing) * catchupAlpha)
+    local alpha = 1 - math.exp(-smoothing * math.max((dt or DEFAULT_DT) * 60, 1))
+    local result = lastTarget:Lerp(targetPos, alpha)
+
     self._lastTarget = result
     return result
 end

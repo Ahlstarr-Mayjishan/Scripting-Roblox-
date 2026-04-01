@@ -8,62 +8,125 @@
 local Estimator = {}
 Estimator.__index = Estimator
 
-function Estimator.new(kalman)
+local ZERO = Vector3.zero
+local DEFAULT_DT = 1 / 60
+local MIN_DT = 1 / 240
+local MAX_DT = 0.25
+
+function Estimator.new(kalman, config)
     local self = setmetatable({}, Estimator)
     self.Kalman = kalman
-    self._prevVelocity = Vector3.zero
-    self._prevAcceleration = Vector3.zero
-    self._prevJerk = Vector3.zero
+    self.Config = config
+    self._prevVelocity = ZERO
+    self._prevAcceleration = ZERO
+    self._prevJerk = ZERO
+    self._kalmanContext = {
+        Confidence = 0.95,
+        Shock = 0,
+        IsTeleport = false,
+    }
+    self._result = {
+        Velocity = ZERO,
+        Acceleration = ZERO,
+        Jerk = ZERO,
+        Confidence = 1,
+        Stable = true,
+        MotionShock = 0,
+        RawVelocity = ZERO,
+        PhysicsVelocity = ZERO,
+        TimeDelta = DEFAULT_DT,
+    }
     return self
 end
 
 function Estimator:Reset()
-    self._prevVelocity = Vector3.zero
-    self._prevAcceleration = Vector3.zero
-    self._prevJerk = Vector3.zero
+    self._prevVelocity = ZERO
+    self._prevAcceleration = ZERO
+    self._prevJerk = ZERO
     if self.Kalman then
-        self.Kalman.Value = nil
-        self.Kalman.P = 1
+        if self.Kalman.Reset then
+            self.Kalman:Reset()
+        else
+            self.Kalman.Value = nil
+            self.Kalman.P = 1
+        end
     end
 end
 
 function Estimator:Estimate(raw, dt)
-    local filteredVel = raw.Velocity
+    local sampleDt = math.clamp((raw and raw.TimeDelta) or dt or DEFAULT_DT, MIN_DT, MAX_DT)
+    local measurement = raw.Velocity or ZERO
+    local sampleVelocity = raw.RawVelocity or measurement
+    local physicsVelocity = raw.PhysicsVelocity or measurement
+
+    local motionShock = (measurement - self._prevVelocity).Magnitude
+    if raw.IsTeleport then
+        motionShock = math.max(motionShock, 220)
+    end
+
+    local filteredVel = measurement
     if self.Kalman and self.Kalman.Update then
-        filteredVel = self.Kalman:Update(raw.Velocity)
+        local kalmanContext = self._kalmanContext
+        kalmanContext.Confidence = raw.IsTeleport and 0.05 or 0.95
+        kalmanContext.Shock = motionShock
+        kalmanContext.IsTeleport = raw.IsTeleport
+        filteredVel = self.Kalman:Update(measurement, sampleDt, kalmanContext)
     end
-    
-    local accel = Vector3.zero
-    if dt > 0 then
-        local rawAccel = (filteredVel - self._prevVelocity) / dt
-        -- Damping: Micro-jitters in velocity create massive spikes in accel.
-        -- We lerp the acceleration to bridge the noise (Linear Mix).
-        accel = self._prevAcceleration:Lerp(rawAccel, math.clamp(dt * 10, 0, 1))
+
+    if not raw.IsTeleport and physicsVelocity.Magnitude > 0.01 then
+        local agreement = 1 - math.clamp((sampleVelocity - physicsVelocity).Magnitude / math.max(40, physicsVelocity.Magnitude * 0.8), 0, 1)
+        local physicsBlend = math.clamp(0.18 + (agreement * 0.32), 0.08, 0.5)
+        filteredVel = filteredVel:Lerp(physicsVelocity, physicsBlend)
     end
-    
-    -- Jerk calculation (rate of accel change with damping)
-    local jerk = Vector3.zero
-    if dt > 0 then
-        local rawJerk = (accel - self._prevAcceleration) / dt
-        jerk = self._prevJerk:Lerp(rawJerk, math.clamp(dt * 5, 0, 1))
+
+    local accel = ZERO
+    local jerk = ZERO
+
+    if raw.IsTeleport then
+        filteredVel = physicsVelocity.Magnitude > 0.01 and physicsVelocity or filteredVel
+    else
+        local rawAccel = (filteredVel - self._prevVelocity) / sampleDt
+        local accelResponse = math.clamp(sampleDt * (12 + math.min(motionShock / 12, 18)), 0.08, 0.95)
+        accel = self._prevAcceleration:Lerp(rawAccel, accelResponse)
+
+        local rawJerk = (accel - self._prevAcceleration) / sampleDt
+        local jerkResponse = math.clamp(sampleDt * (8 + math.min(motionShock / 20, 12)), 0.05, 0.85)
+        jerk = self._prevJerk:Lerp(rawJerk, jerkResponse)
     end
-    
-    -- Confidence scoring (Higher confidence if stable motion)
+
+    local filterLag = (measurement - filteredVel).Magnitude
+    local physicsDisagreement = 0
+    if physicsVelocity.Magnitude > 0.01 and sampleVelocity.Magnitude > 0.01 then
+        physicsDisagreement = (sampleVelocity - physicsVelocity).Magnitude
+    end
+
     local score = 1.0
-    if raw.IsTeleport then score = 0.1 end
-    if accel.Magnitude > 120 then score = 0.4 end -- If acceleration is too noisy, lower confidence
-    
+    if raw.IsTeleport then
+        score = 0.05
+    else
+        score = score - math.clamp(filterLag / 160, 0, 0.32)
+        score = score - math.clamp(accel.Magnitude / 260, 0, 0.28)
+        score = score - math.clamp(jerk.Magnitude / 2200, 0, 0.18)
+        score = score - math.clamp(motionShock / 200, 0, 0.22)
+        score = score - math.clamp(physicsDisagreement / 220, 0, 0.12)
+        score = math.clamp(score, 0.18, 1)
+    end
+
     self._prevVelocity = filteredVel
     self._prevAcceleration = accel
     self._prevJerk = jerk
-    
-    return {
-        Velocity = filteredVel,
-        Acceleration = accel,
-        Jerk = jerk,
-        Confidence = score,
-        Stable = score > 0.8
-    }
+
+    local result = self._result
+    result.Velocity = filteredVel
+    result.Acceleration = accel
+    result.Jerk = jerk
+    result.Confidence = score
+    result.Stable = score > 0.72 and motionShock < 110
+    result.MotionShock = motionShock
+    result.RawVelocity = measurement
+    result.PhysicsVelocity = physicsVelocity
+    result.TimeDelta = sampleDt
+    return result
 end
 
 return Estimator

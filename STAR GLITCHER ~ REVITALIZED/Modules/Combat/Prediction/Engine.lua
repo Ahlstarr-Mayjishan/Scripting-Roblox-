@@ -7,60 +7,90 @@
 local Engine = {}
 Engine.__index = Engine
 
+local Stats = game:GetService("Stats")
+local DEFAULT_PROJECTILE_SPEED = 1000
+local ZERO = Vector3.zero
+
 function Engine.new(config)
     local self = setmetatable({}, Engine)
+    self.Config = config
     self.Options = config.Options
+    self.Prediction = config.Prediction or {}
+    self.PvP = config.PvP or {}
+    self._cachedPing = 50
+    self._lastPingCheck = 0
     return self
+end
+
+function Engine:_GetLatency()
+    local now = os.clock()
+    if now - self._lastPingCheck >= 1 then
+        self._lastPingCheck = now
+        pcall(function()
+            local raw = Stats.Network.ServerStatsItem("Data Ping"):GetValueString()
+            self._cachedPing = tonumber((raw:gsub("[^%d%.]", ""))) or self._cachedPing
+        end)
+    end
+    return math.clamp(self._cachedPing / 2000, 0, 0.2)
+end
+
+function Engine:_GetPingMultiplier()
+    if self.Options.TargetPlayersToggle then
+        return math.clamp(self.PvP.PING_MULTIPLIER or 1.5, 1, 2.25)
+    end
+    return 1
 end
 
 function Engine:Calculate(origin, targetPos, est, dt)
     local Options = self.Options
     if not Options.PredictionEnabled then return targetPos end
-    
-    local velocity = est.Velocity
-    local accel = est.Acceleration
-    local jerk = est.Jerk
-    local confidence = est.Confidence
-    
-    -- Calculate Latency/Travel Compensation
+
+    local velocity = est.Velocity or ZERO
+    local accel = est.Acceleration or ZERO
+    local jerk = est.Jerk or ZERO
+    local confidence = math.clamp(est.Confidence or 0, 0, 1)
+    local motionShock = est.MotionShock or 0
+    local speed = velocity.Magnitude
+
+    -- Calculate latency and projectile travel using live ping when available.
     local distance = (targetPos - origin).Magnitude
-    local projectileSpeed = Options.ProjectileVelocity or Options.ProjectileSpeed or 1000
-    local travelTime = distance / (projectileSpeed > 0 and projectileSpeed or 1)
-    local latency = 0.05 -- Static latency (50ms)
-    
-    local totalTime = travelTime + latency
-    
-    -- PREDICTION SENSITIVITY BRAKES (Adaptive)
-    -- We dampen higher order terms (Accel/Jerk) to prevent "Flying Predictions"
-    local accelWeight = math.clamp(1.0 - (totalTime / 2), 0.2, 0.8)
-    local jerkWeight  = math.clamp(0.5 - totalTime, 0.1, 0.3)
-    
-    -- ONE ORTHOGONAL STRATEGY: Select one, don't stack.
-    local predictedPos = targetPos
-    
-    if Options.SmartPrediction and est.Stable then
-        -- KINEMATIC INTERCEPT (Scientific with Adaptive Braking)
-        -- s = vt + (0.5at^2 * damping) + (jt^3 * damping)
-        local linear = velocity * totalTime
-        local accelerated = (0.5 * accel * (totalTime ^ 2)) * accelWeight
-        local jerked = ((1/6) * jerk * (totalTime ^ 3)) * jerkWeight
-        
-        predictedPos = targetPos + linear + accelerated + jerked
-    else
-        -- LINEAR EXTRAPOLATION (Fallback)
-        predictedPos = targetPos + (velocity * totalTime)
-    end
-    
-    -- Global Confidence Brake: 
-    -- Ensure prediction doesn't exceed a realistic offset from the target
-    local maxOffset = math.max(distance * 0.2, 10)
-    local actualOffset = (predictedPos - targetPos)
-    if actualOffset.Magnitude > maxOffset then
-        predictedPos = targetPos + (actualOffset.Unit * maxOffset)
+    local projectileSpeed = Options.ProjectileVelocity or Options.ProjectileSpeed or DEFAULT_PROJECTILE_SPEED
+    projectileSpeed = math.max(projectileSpeed, 1)
+
+    local travelTime = distance / projectileSpeed
+    local latency = self:_GetLatency() * self:_GetPingMultiplier()
+    local frameComp = math.min(math.max(est.TimeDelta or dt or 0, 0), 1 / 20) * 0.5
+    local totalTime = travelTime + latency + frameComp
+
+    local shockAlpha = math.clamp(motionShock / 180, 0, 1)
+    local speedAlpha = math.clamp(speed / 140, 0, 1)
+
+    local predictedOffset = velocity * totalTime
+    if Options.SmartPrediction and (est.Stable or speed > 65) then
+        local accelTrust = math.clamp(confidence * (1 - shockAlpha * 0.7), 0, 1)
+        local jerkTrust = math.clamp(accelTrust * (1 - shockAlpha * 0.45), 0, 1)
+
+        local accelWeight = math.clamp((1.05 - (totalTime * 0.35)) * (0.65 + (speedAlpha * 0.45)), 0.2, 1.25) * accelTrust
+        local jerkWeight = math.clamp((0.55 - totalTime) * (0.45 + (speedAlpha * 0.35)), 0.05, 0.55) * jerkTrust
+
+        predictedOffset = predictedOffset + ((0.5 * accel * (totalTime ^ 2)) * accelWeight)
+        predictedOffset = predictedOffset + (((1 / 6) * jerk * (totalTime ^ 3)) * jerkWeight)
     end
 
-    -- High Confidence weight: Fade back if confidence is low
-    return targetPos:Lerp(predictedPos, math.clamp(confidence * 0.8, 0, 1))
+    local leadCap = self.Prediction.MAX_LEAD_DIST or math.huge
+    if self.Options.TargetPlayersToggle then
+        leadCap = self.PvP.MAX_LEAD_DIST or leadCap
+    end
+
+    local maxOffset = math.max(18 + (speed * (0.14 + (confidence * 0.18))), distance * (0.22 + (speedAlpha * 0.18)))
+    maxOffset = math.min(maxOffset, leadCap)
+    if predictedOffset.Magnitude > maxOffset then
+        predictedOffset = predictedOffset.Unit * maxOffset
+    end
+
+    local predictedPos = targetPos + predictedOffset
+    local trustFactor = math.clamp((confidence * 0.75) + ((est.Stable and 0.15) or 0) + (speedAlpha * 0.15) - (shockAlpha * 0.2), 0.1, 1)
+    return targetPos:Lerp(predictedPos, trustFactor)
 end
 
 return Engine

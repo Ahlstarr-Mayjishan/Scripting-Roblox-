@@ -22,9 +22,12 @@ function TargetSelector:GetClosestTarget(mousePos, originPos)
     local bestTarget = nil
     local shortestDist = self.Options.FOV or 150
     local localCharacter = Players.LocalPlayer.Character
+    local mouseX = mousePos.X
+    local mouseY = mousePos.Y
     
     local entries = self.Tracker:GetTargets()
-    for _, entry in pairs(entries) do
+    for i = 1, #entries do
+        local entry = entries[i]
         if not entry or not entry.Model or entry.Model == localCharacter then
             continue
         end
@@ -44,7 +47,9 @@ function TargetSelector:GetClosestTarget(mousePos, originPos)
         
         -- Behavioral Fix: Zero HP Bias (Scientific approach: Crosshair proximity only)
         -- This resolves the "Behavioral Regression" identified in the findings.
-        local distToMouse = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+        local dx = screenPos.X - mouseX
+        local dy = screenPos.Y - mouseY
+        local distToMouse = math.sqrt((dx * dx) + (dy * dy))
         
         if distToMouse < shortestDist then
             shortestDist = distToMouse

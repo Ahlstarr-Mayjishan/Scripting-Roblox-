@@ -14,6 +14,7 @@ function NPCTracker.new(config, detector)
     local self = setmetatable({}, NPCTracker)
     self.Options = config.Options
     self.Blacklist = config.Blacklist or {"statue", "tuong", "monument", "altar", "dummy", "board", "spawn", "shop", "gui", "display", "map", "portal"}
+    self._blacklistLower = {}
     self.Detector = detector
     
     self.CurrentTargetEntry = nil
@@ -24,6 +25,10 @@ function NPCTracker.new(config, detector)
     self._lastScan = 0
     self._scanInterval = 0.1 -- Scan every 100ms instead of every frame
     self._cachedTargets = {}
+
+    for i, keyword in ipairs(self.Blacklist) do
+        self._blacklistLower[i] = string.lower(keyword)
+    end
     
     return self
 end
@@ -38,8 +43,8 @@ end
 function NPCTracker:_HasBlacklistedName(model)
     if not model then return false end
     local modelName = string.lower(model.Name)
-    for _, keyword in ipairs(self.Blacklist) do
-        if modelName:find(string.lower(keyword), 1, true) then
+    for _, keyword in ipairs(self._blacklistLower) do
+        if modelName:find(keyword, 1, true) then
             return true
         end
     end
@@ -96,7 +101,8 @@ function NPCTracker:GetTargets()
     end
     
     self._lastScan = now
-    local result = {}
+    local result = self._cachedTargets
+    table.clear(result)
     local seenModels = {}
 
     local function trackModel(model)
@@ -107,26 +113,34 @@ function NPCTracker:GetTargets()
         if entry then
             -- Only include alive targets
             if not entry.Humanoid or entry.Humanoid.Health > 0 then
-                table.insert(result, entry)
+                result[#result + 1] = entry
+                return true
             end
         end
+        return false
     end
     
     -- 1. Scan Folders (Entities)
+    local foundFolderTarget = false
     for _, name in ipairs(self._folders) do
         local f = Workspace:FindFirstChild(name)
         if f then
             for _, model in ipairs(f:GetChildren()) do
-                if model:IsA("Model") then trackModel(model) end
+                if model:IsA("Model") and trackModel(model) then
+                    foundFolderTarget = true
+                end
             end
         end
     end
 
     -- 2. Fallback Scan (Entities directly in Workspace)
-    -- Avoid GetDescendants() which is catastrophic for performance.
-    for _, obj in ipairs(Workspace:GetChildren()) do
-        if obj:IsA("Model") and self:_IsTargetCandidate(obj) then
-            trackModel(obj)
+    -- Skip this broad scan if dedicated entity folders already yielded targets.
+    if not foundFolderTarget then
+        -- Avoid GetDescendants() which is catastrophic for performance.
+        for _, obj in ipairs(Workspace:GetChildren()) do
+            if obj:IsA("Model") then
+                trackModel(obj)
+            end
         end
     end
     
@@ -139,7 +153,6 @@ function NPCTracker:GetTargets()
         end
     end
     
-    self._cachedTargets = result
     return result
 end
 

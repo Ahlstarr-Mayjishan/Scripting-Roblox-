@@ -27,6 +27,14 @@ local function loadModule(path)
     return nil
 end
 
+local function requireModule(path)
+    local module = loadModule(path)
+    if not module then
+        error("Required module failed to load: " .. tostring(path))
+    end
+    return module
+end
+
 -- Services
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -36,8 +44,8 @@ local CoreGui = game:GetService("CoreGui")
 local Camera = Workspace.CurrentCamera
 
 -- Core Data
-local Config  = loadModule("Data/Config.lua")
-local Version = loadModule("Data/Version.lua")
+local Config  = requireModule("Data/Config.lua")
+local Version = requireModule("Data/Version.lua")
 local Options = Config.Options
 
 if _G.BossAimAssist_Cleanup then
@@ -133,33 +141,33 @@ end
 -- ═══════════════════════════════════════════════════
 -- LOAD ALL MODULES (Scientific Order)
 -- ═══════════════════════════════════════════════════
-local Brain          = loadModule("Modules/Core/Brain.lua")
-local InputHandler   = loadModule("Modules/Utils/Input.lua")
-local Tracker        = loadModule("Modules/Utils/NPCTracker.lua")
-local Detector       = loadModule("Modules/Utils/BossDetector.lua")
-local LocalCharacter = loadModule("Modules/Utils/LocalCharacter.lua")
-local Synapse         = loadModule("Modules/Utils/Synapse.lua")
-local Kalman          = loadModule("Modules/Utils/Math/Kalman.lua")
+local Brain          = requireModule("Modules/Core/Brain.lua")
+local InputHandler   = requireModule("Modules/Utils/Input.lua")
+local Tracker        = requireModule("Modules/Utils/NPCTracker.lua")
+local Detector       = requireModule("Modules/Utils/BossDetector.lua")
+local LocalCharacter = requireModule("Modules/Utils/LocalCharacter.lua")
+local Synapse         = requireModule("Modules/Utils/Synapse.lua")
+local Kalman          = requireModule("Modules/Utils/Math/Kalman.lua")
 
-local BasePred        = loadModule("Modules/Combat/Prediction/Base.lua")
-local Predictor       = loadModule("Modules/Combat/Predictor.lua")
-local Apocalypse      = loadModule("Modules/Combat/Hijackers/Apocalypse.lua")
-local GarbageCollector = loadModule("Modules/Utils/GarbageCollector.lua")
-local Selector        = loadModule("Modules/Combat/TargetSelector.lua")
-local Aimbot          = loadModule("Modules/Combat/Aimbot.lua")
-local SilentAim       = loadModule("Modules/Combat/SilentAim.lua")
+local BasePred        = requireModule("Modules/Combat/Prediction/Base.lua")
+local Predictor       = requireModule("Modules/Combat/Predictor.lua")
+local Apocalypse      = requireModule("Modules/Combat/Hijackers/Apocalypse.lua")
+local GarbageCollector = requireModule("Modules/Utils/GarbageCollector.lua")
+local Selector        = requireModule("Modules/Combat/TargetSelector.lua")
+local Aimbot          = requireModule("Modules/Combat/Aimbot.lua")
+local SilentAim       = requireModule("Modules/Combat/SilentAim.lua")
 
-local SpeedSpoof      = loadModule("Modules/Movement/SpeedSpoof.lua")
-local SpeedMultiplier = loadModule("Modules/Movement/SpeedMultiplier.lua")
-local CustomSpeed     = loadModule("Modules/Movement/CustomSpeed.lua")
-local AntiSlowdown    = loadModule("Modules/Movement/AntiSlowdown.lua")
-local AntiStun        = loadModule("Modules/Movement/AntiStun.lua")
-local Cleaner         = loadModule("Modules/Movement/AttributeCleaner.lua")
+local SpeedSpoof      = requireModule("Modules/Movement/SpeedSpoof.lua")
+local SpeedMultiplier = requireModule("Modules/Movement/SpeedMultiplier.lua")
+local CustomSpeed     = requireModule("Modules/Movement/CustomSpeed.lua")
+local AntiSlowdown    = requireModule("Modules/Movement/AntiSlowdown.lua")
+local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
+local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
 
-local FOVCircle       = loadModule("Modules/Visuals/FOVCircle.lua")
-local Hitmarker       = loadModule("Modules/Visuals/Hitmarker.lua")
-local Highlight       = loadModule("Modules/Visuals/Highlight.lua")
-local TargetDot       = loadModule("Modules/Visuals/TargetDot.lua")
+local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
+local Hitmarker       = requireModule("Modules/Visuals/Hitmarker.lua")
+local Highlight       = requireModule("Modules/Visuals/Highlight.lua")
+local TargetDot       = requireModule("Modules/Visuals/TargetDot.lua")
 
 -- ═══════════════════════════════════════════════════
 -- INSTANTIATE (OOP Injection)
@@ -212,11 +220,11 @@ visuals.hit:Init()
 
 for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
-loadModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
-loadModule("UI/Tabs/PredictionTab.lua")(Window, Options)
-loadModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun)
-loadModule("UI/Tabs/BlatantTab.lua")(Window, Options, apocalypse)
-loadModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner)
+requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
+requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
+requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi)
+requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, apocalypse)
+requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner)
 
 Rayfield:LoadConfiguration()
 

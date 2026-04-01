@@ -10,6 +10,7 @@ Predictor.__index = Predictor
 
 function Predictor.new(config, loader, kalman)
     local self = setmetatable({}, Predictor)
+    self.Config = config
     self.Options = config.Options
     
     -- Load Layer Modules
@@ -20,7 +21,7 @@ function Predictor.new(config, loader, kalman)
     local Stabilizer = loader(Path.."Stabilizer.lua")
     
     -- Instantiate shared stateless layers
-    self.Sampler = Sampler.new()
+    self.Sampler = Sampler.new(config)
     self.Engine = Engine.new(config)
 
     -- Keep stateful layers isolated per target so target switching does not
@@ -29,8 +30,6 @@ function Predictor.new(config, loader, kalman)
     self._StabilizerClass = Stabilizer
     self._KalmanFactory = kalman and kalman.new or nil
     self._EntryStates = setmetatable({}, { __mode = "k" })
-    self._ActiveEntry = nil
-    
     return self
 end
 
@@ -40,9 +39,9 @@ function Predictor:_GetState(entry)
         return state
     end
 
-    local kalman = self._KalmanFactory and self._KalmanFactory() or nil
+    local kalman = self._KalmanFactory and self._KalmanFactory(self.Config) or nil
     state = {
-        Estimator = self._EstimatorClass.new(kalman),
+        Estimator = self._EstimatorClass.new(kalman, self.Config),
         Stabilizer = self._StabilizerClass.new(),
     }
     self._EntryStates[entry] = state
@@ -50,7 +49,6 @@ function Predictor:_GetState(entry)
 end
 
 function Predictor:NotifyTargetChanged(entry, part)
-    self._ActiveEntry = entry
     if not entry then
         return
     end
