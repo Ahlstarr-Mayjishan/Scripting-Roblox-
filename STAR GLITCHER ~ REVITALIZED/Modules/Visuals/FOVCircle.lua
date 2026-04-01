@@ -1,5 +1,5 @@
 --[[
-    FOVCircle.lua — OOP FOV Visualization Class
+    FOVCircle.lua - OOP FOV Visualization Class
 ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -10,30 +10,47 @@ FOVCircle.__index = FOVCircle
 function FOVCircle.new(options)
     local self = setmetatable({}, FOVCircle)
     self.Options = options
-    
+    self._visible = options.ShowFOV
+    self._radius = options.FOV or 150
+    self._x = nil
+    self._y = nil
+
     self.Drawing = Drawing.new("Circle")
     self.Drawing.Position = UserInputService:GetMouseLocation()
-    self.Drawing.Radius = options.FOV or 150
+    self.Drawing.Radius = self._radius
     self.Drawing.Filled = false
     self.Drawing.Color = Color3.fromRGB(255, 255, 255)
-    self.Drawing.Visible = options.ShowFOV
+    self.Drawing.Visible = self._visible
     self.Drawing.Thickness = 1.5
-    
+
     return self
 end
 
 function FOVCircle:Update(mousePos)
     if self.Options.ShowFOV then
-        self.Drawing.Position = mousePos
-        self.Drawing.Visible = true
-        self.Drawing.Radius = self.Options.FOV
-    else
+        if self._x ~= mousePos.X or self._y ~= mousePos.Y then
+            self.Drawing.Position = mousePos
+            self._x = mousePos.X
+            self._y = mousePos.Y
+        end
+        if not self._visible then
+            self.Drawing.Visible = true
+            self._visible = true
+        end
+        if self._radius ~= self.Options.FOV then
+            self.Drawing.Radius = self.Options.FOV
+            self._radius = self.Options.FOV
+        end
+    elseif self._visible then
         self.Drawing.Visible = false
+        self._visible = false
     end
 end
 
 function FOVCircle:Destroy()
-    pcall(function() self.Drawing:Remove() end)
+    pcall(function()
+        self.Drawing:Remove()
+    end)
 end
 
 return FOVCircle

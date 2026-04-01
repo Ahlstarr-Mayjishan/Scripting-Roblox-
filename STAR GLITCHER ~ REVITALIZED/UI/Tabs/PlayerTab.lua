@@ -1,5 +1,5 @@
 --[[
-    PlayerTab.lua — Tab Player
+    PlayerTab.lua - Tab Player
     No Slowdown, No Delay, No Stun, Custom Move Speed.
     Updated: Active status monitoring for anti-debuffs.
 ]]
@@ -7,9 +7,6 @@
 return function(Window, Options, noSlowdown, noStun, speedMultiplier)
     local Tab = Window:CreateTab("Player", 4483362458)
 
-    -- ═══════════════════════════════════════════════════
-    -- SECTION: MOVEMENT
-    -- ═══════════════════════════════════════════════════
     Tab:CreateSection("Movement")
 
     Tab:CreateToggle({
@@ -18,13 +15,15 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier)
         Flag = "CustomMoveSpeedEnabledFlag",
         Callback = function(Value)
             Options.CustomMoveSpeedEnabled = Value
-            if Value then Options.SpeedMultiplierEnabled = false end
+            if Value then
+                Options.SpeedMultiplierEnabled = false
+            end
         end,
     })
 
     Tab:CreateSlider({
         Name = "Walk Speed (Fixed)",
-        Range = {1, 250},
+        Range = { 1, 250 },
         Increment = 1,
         CurrentValue = Options.CustomMoveSpeed or 16,
         Flag = "CustomMoveSpeedFlag",
@@ -42,13 +41,15 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier)
         Flag = "SpeedMultiplierEnabledFlag",
         Callback = function(Value)
             Options.SpeedMultiplierEnabled = Value
-            if Value then Options.CustomMoveSpeedEnabled = false end
+            if Value then
+                Options.CustomMoveSpeedEnabled = false
+            end
         end,
     })
 
     Tab:CreateSlider({
         Name = "Multiplier Factor",
-        Range = {1, 5},
+        Range = { 1, 5 },
         Increment = 0.1,
         CurrentValue = Options.SpeedMultiplier or 1.0,
         Flag = "SpeedMultiplierFlag",
@@ -60,9 +61,6 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier)
 
     local speedMultiplierLabel = Tab:CreateLabel("Multi Speed Status: Idle")
 
-    -- ═══════════════════════════════════════════════════
-    -- SECTION: ANTI-DEBUFF
-    -- ═══════════════════════════════════════════════════
     Tab:CreateSection("Anti-Debuff")
 
     local slowdownLabel = Tab:CreateLabel("No Slowdown: Idle")
@@ -94,25 +92,40 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier)
         end,
     })
 
-    -- STATUS REFRESHER
     task.spawn(function()
+        local lastSlowdownText
+        local lastStunText
+        local lastSpeedText
+
         while true do
             if noSlowdown then
-                slowdownLabel:Set("Slowdown Status: " .. tostring(noSlowdown.Status))
+                local nextText = "Slowdown Status: " .. tostring(noSlowdown.Status)
+                if nextText ~= lastSlowdownText then
+                    slowdownLabel:Set(nextText)
+                    lastSlowdownText = nextText
+                end
             end
+
             if noStun then
-                stunLabel:Set("Stun Status: " .. tostring(noStun.Status))
+                local nextText = "Stun Status: " .. tostring(noStun.Status)
+                if nextText ~= lastStunText then
+                    stunLabel:Set(nextText)
+                    lastStunText = nextText
+                end
             end
+
             if speedMultiplier then
-                speedMultiplierLabel:Set("Multi Speed Status: " .. tostring(speedMultiplier.Status))
+                local nextText = "Multi Speed Status: " .. tostring(speedMultiplier.Status)
+                if nextText ~= lastSpeedText then
+                    speedMultiplierLabel:Set(nextText)
+                    lastSpeedText = nextText
+                end
             end
+
             task.wait(0.5)
         end
     end)
 
-    -- ═══════════════════════════════════════════════════
-    -- SECTION: UTILITIES
-    -- ═══════════════════════════════════════════════════
     Tab:CreateSection("Maintenance")
 
     if noSlowdown then

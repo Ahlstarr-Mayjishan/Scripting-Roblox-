@@ -1,10 +1,11 @@
 --[[
-    AntiSlowdown.lua — Neuro-Motor Defense Module
+    AntiSlowdown.lua - Neuro-Motor Defense Module
     Job: Preventing speed-related debuffs (Slows).
     Status: Decoupled with active walkspeed/jump monitoring.
 ]]
 
 local RunService = game:GetService("RunService")
+local clock = os.clock
 
 local AntiSlowdown = {}
 AntiSlowdown.__index = AntiSlowdown
@@ -17,18 +18,25 @@ function AntiSlowdown.new(options, localCharacter)
     self.BaseWalkSpeed = 16
     self.BaseJumpPower = 50
     self.TrackedHumanoid = nil
-    
+
     self.Status = "Idle"
-    self._lastAction = 0 
+    self._lastAction = 0
     return self
+end
+
+function AntiSlowdown:_setStatus(status)
+    if self.Status ~= status then
+        self.Status = status
+    end
 end
 
 function AntiSlowdown:CaptureBaseStats(humanoid)
     local hum = humanoid or (self.LocalCharacter and self.LocalCharacter:GetHumanoid())
-    if not hum then return end
+    if not hum then
+        return
+    end
 
     self.TrackedHumanoid = hum
-    -- Ensure we capture a valid base stat (not a slow value)
     self.BaseWalkSpeed = math.max(hum.WalkSpeed, 16)
     self.BaseJumpPower = math.max(hum.JumpPower, 50)
 end
@@ -36,17 +44,17 @@ end
 function AntiSlowdown:Init()
     self.Connection = RunService.Heartbeat:Connect(function()
         if not self.Options.NoSlowdown then
-            self.Status = "Disabled"
+            self:_setStatus("Disabled")
             return
         end
 
         local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
         if not hum then
-            self.Status = "Hum Missing"
+            self:_setStatus("Hum Missing")
             return
         end
-        
-        self.Status = "Monitoring Speed"
+
+        self:_setStatus("Monitoring Speed")
 
         if hum ~= self.TrackedHumanoid then
             self:CaptureBaseStats(hum)
@@ -62,13 +70,13 @@ function AntiSlowdown:Init()
             hum.JumpPower = self.BaseJumpPower
             actionTaken = true
         end
-        
+
         if actionTaken then
-            self._lastAction = os.clock()
+            self._lastAction = clock()
         end
-        
-        if (os.clock() - self._lastAction) < 1.0 then
-            self.Status = "Active: SPEED PROTECTED ✅"
+
+        if (clock() - self._lastAction) < 1.0 then
+            self:_setStatus("Active: SPEED PROTECTED")
         end
     end)
 end

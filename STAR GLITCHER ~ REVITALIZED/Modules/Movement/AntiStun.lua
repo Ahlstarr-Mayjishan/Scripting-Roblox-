@@ -1,10 +1,11 @@
 --[[
-    AntiStun.lua — Neurological Defense Module
+    AntiStun.lua - Neurological Defense Module
     Job: Preventing character CC (Stun, Ragdoll, Sit, Fall).
     Status: Fully decoupled with active monitoring.
 ]]
 
 local RunService = game:GetService("RunService")
+local clock = os.clock
 
 local AntiStun = {}
 AntiStun.__index = AntiStun
@@ -15,14 +16,22 @@ function AntiStun.new(options, localCharacter)
     self.LocalCharacter = localCharacter
     self.Connection = nil
     self.TrackedHumanoid = nil
-    
+
     self.Status = "Idle"
     self._lastAction = 0
     return self
 end
 
+function AntiStun:_setStatus(status)
+    if self.Status ~= status then
+        self.Status = status
+    end
+end
+
 function AntiStun:_restoreStateGuards(humanoid)
-    if not humanoid then return end
+    if not humanoid then
+        return
+    end
     pcall(function()
         humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
@@ -30,7 +39,9 @@ function AntiStun:_restoreStateGuards(humanoid)
 end
 
 function AntiStun:_applyStateGuards(humanoid)
-    if not humanoid then return end
+    if not humanoid then
+        return
+    end
     pcall(function()
         humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
         humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
@@ -44,7 +55,7 @@ function AntiStun:Init()
         local _, hum = self.LocalCharacter and self.LocalCharacter:GetState()
 
         if not self.Options.NoStun then
-            self.Status = "Disabled"
+            self:_setStatus("Disabled")
             if hum == self.TrackedHumanoid then
                 self:_restoreStateGuards(hum)
                 self.TrackedHumanoid = nil
@@ -53,44 +64,44 @@ function AntiStun:Init()
         end
 
         if not hum then
-            self.Status = "Hum Missing"
+            self:_setStatus("Hum Missing")
             return
         end
-        
-        self.Status = "Active: Monitoring"
+
+        self:_setStatus("Active: Monitoring")
 
         if hum ~= self.TrackedHumanoid then
-            if self.TrackedHumanoid then self:_restoreStateGuards(self.TrackedHumanoid) end
+            if self.TrackedHumanoid then
+                self:_restoreStateGuards(self.TrackedHumanoid)
+            end
             self.TrackedHumanoid = hum
             self:_applyStateGuards(hum)
         end
 
-        -- Aggressive CC Cleanup
         local state = hum:GetState()
         local actionTaken = false
-        
+
         if state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.Ragdoll then
             hum:ChangeState(Enum.HumanoidStateType.GettingUp)
             actionTaken = true
         end
-        
+
         if hum.PlatformStand then
             hum.PlatformStand = false
             actionTaken = true
         end
-        
+
         if hum.Sit then
             hum.Sit = false
             actionTaken = true
         end
-        
+
         if actionTaken then
-            self._lastAction = os.clock()
+            self._lastAction = clock()
         end
-        
-        -- Update UI status if action was recent
-        if (os.clock() - self._lastAction) < 1.0 then
-            self.Status = "Active: CC PROTECTED ✅"
+
+        if (clock() - self._lastAction) < 1.0 then
+            self:_setStatus("Active: CC PROTECTED")
         end
     end)
 end

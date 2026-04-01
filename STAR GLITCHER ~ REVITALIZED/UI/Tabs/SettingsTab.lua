@@ -47,9 +47,9 @@ return function(Window, Options, cleaner)
             "RightControl", "LeftControl", "RightShift", "LeftShift",
             "RightAlt", "LeftAlt", "Backquote", "Insert",
             "Home", "End", "PageUp", "PageDown",
-            "F1", "F2", "F3", "F4", "F6", "F7", "F8", "F9", "F10"
+            "F1", "F2", "F3", "F4", "F6", "F7", "F8", "F9", "F10",
         },
-        CurrentOption = {Options.ToggleUIKey or "RightControl"},
+        CurrentOption = { Options.ToggleUIKey or "RightControl" },
         Flag = "ToggleUIKey",
         Callback = function(Value)
             local selected = type(Value) == "table" and Value[1] or Value
@@ -124,9 +124,15 @@ return function(Window, Options, cleaner)
     Tab:CreateSection("Script Management")
 
     task.spawn(function()
+        local lastCleanerText
+
         while true do
             if cleaner then
-                cleanerLabel:Set("Cleanup Status: " .. tostring(cleaner.Status))
+                local nextText = "Cleanup Status: " .. tostring(cleaner.Status)
+                if nextText ~= lastCleanerText then
+                    cleanerLabel:Set(nextText)
+                    lastCleanerText = nextText
+                end
             end
             task.wait(0.5)
         end
