@@ -1,5 +1,5 @@
 --[[
-    Engine.lua — Orthogonal Prediction Strategies
+    Engine.lua - Orthogonal Prediction Strategies
     Analogy: The Cognitive Decision Process.
     Job: Select exactly ONE strategy per frame: Intercept or Linear Extrapolation.
 ]]
@@ -43,7 +43,9 @@ end
 
 function Engine:Calculate(origin, targetPos, est, dt)
     local Options = self.Options
-    if not Options.PredictionEnabled then return targetPos end
+    if not Options.PredictionEnabled then
+        return targetPos
+    end
 
     local velocity = est.Velocity or ZERO
     local accel = est.Acceleration or ZERO
@@ -52,8 +54,12 @@ function Engine:Calculate(origin, targetPos, est, dt)
     local motionShock = est.MotionShock or 0
     local speed = velocity.Magnitude
 
-    -- Calculate latency and projectile travel using live ping when available.
-    local distance = (targetPos - origin).Magnitude
+    local toTarget = targetPos - origin
+    local distance = toTarget.Magnitude
+    if distance <= 0.001 then
+        return targetPos
+    end
+
     local projectileSpeed = Options.ProjectileVelocity or Options.ProjectileSpeed or DEFAULT_PROJECTILE_SPEED
     projectileSpeed = math.max(projectileSpeed, 1)
 
@@ -62,16 +68,30 @@ function Engine:Calculate(origin, targetPos, est, dt)
     local frameComp = math.min(math.max(est.TimeDelta or dt or 0, 0), 1 / 20) * 0.5
     local totalTime = travelTime + latency + frameComp
 
+    local shotDir = toTarget.Unit
+    local forwardSpeed = velocity:Dot(shotDir)
+    local lateralVelocity = velocity - (shotDir * forwardSpeed)
+    local lateralSpeed = lateralVelocity.Magnitude
+
     local shockAlpha = math.clamp(motionShock / 180, 0, 1)
     local speedAlpha = math.clamp(speed / 140, 0, 1)
+    local lateralAlpha = math.clamp(lateralSpeed / 110, 0, 1)
 
     local predictedOffset = velocity * totalTime
+
+    -- Strafing targets often miss because lateral movement needs slightly more
+    -- aggressive lead than front/back motion under frame + ping delay.
+    if lateralSpeed > 0.01 then
+        local lateralTrust = math.clamp((0.16 + (confidence * 0.22) + (lateralAlpha * 0.18)) * (1 - shockAlpha * 0.35), 0.08, 0.42)
+        predictedOffset = predictedOffset + (lateralVelocity * totalTime * lateralTrust)
+    end
+
     if Options.SmartPrediction and (est.Stable or speed > 65) then
         local accelTrust = math.clamp(confidence * (1 - shockAlpha * 0.7), 0, 1)
         local jerkTrust = math.clamp(accelTrust * (1 - shockAlpha * 0.45), 0, 1)
 
-        local accelWeight = math.clamp((1.05 - (totalTime * 0.35)) * (0.65 + (speedAlpha * 0.45)), 0.2, 1.25) * accelTrust
-        local jerkWeight = math.clamp((0.55 - totalTime) * (0.45 + (speedAlpha * 0.35)), 0.05, 0.55) * jerkTrust
+        local accelWeight = math.clamp((1.08 - (totalTime * 0.3)) * (0.65 + (speedAlpha * 0.45) + (lateralAlpha * 0.2)), 0.24, 1.3) * accelTrust
+        local jerkWeight = math.clamp((0.58 - totalTime) * (0.45 + (speedAlpha * 0.35) + (lateralAlpha * 0.15)), 0.05, 0.58) * jerkTrust
 
         predictedOffset = predictedOffset + ((0.5 * accel * (totalTime ^ 2)) * accelWeight)
         predictedOffset = predictedOffset + (((1 / 6) * jerk * (totalTime ^ 3)) * jerkWeight)
@@ -82,14 +102,21 @@ function Engine:Calculate(origin, targetPos, est, dt)
         leadCap = self.PvP.MAX_LEAD_DIST or leadCap
     end
 
-    local maxOffset = math.max(18 + (speed * (0.14 + (confidence * 0.18))), distance * (0.22 + (speedAlpha * 0.18)))
+    local maxOffset = math.max(
+        18 + (speed * (0.14 + (confidence * 0.18))),
+        distance * (0.22 + (speedAlpha * 0.18) + (lateralAlpha * 0.06))
+    )
     maxOffset = math.min(maxOffset, leadCap)
     if predictedOffset.Magnitude > maxOffset then
         predictedOffset = predictedOffset.Unit * maxOffset
     end
 
     local predictedPos = targetPos + predictedOffset
-    local trustFactor = math.clamp((confidence * 0.75) + ((est.Stable and 0.15) or 0) + (speedAlpha * 0.15) - (shockAlpha * 0.2), 0.1, 1)
+    local trustFactor = math.clamp(
+        (confidence * 0.75) + ((est.Stable and 0.15) or 0) + (speedAlpha * 0.12) + (lateralAlpha * 0.12) - (shockAlpha * 0.2),
+        0.12,
+        1
+    )
     return targetPos:Lerp(predictedPos, trustFactor)
 end
 

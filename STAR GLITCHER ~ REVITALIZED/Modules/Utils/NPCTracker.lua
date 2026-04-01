@@ -25,6 +25,9 @@ function NPCTracker.new(config, detector)
     self._lastScan = 0
     self._scanInterval = 0.1 -- Scan every 100ms instead of every frame
     self._cachedTargets = {}
+    self._folderRefs = {}
+    self._lastFolderRefresh = 0
+    self._folderRefreshInterval = 2
 
     for i, keyword in ipairs(self.Blacklist) do
         self._blacklistLower[i] = string.lower(keyword)
@@ -105,6 +108,13 @@ function NPCTracker:GetTargets()
     table.clear(result)
     local seenModels = {}
 
+    if (now - self._lastFolderRefresh) >= self._folderRefreshInterval then
+        self._lastFolderRefresh = now
+        for i = 1, #self._folders do
+            self._folderRefs[i] = Workspace:FindFirstChild(self._folders[i])
+        end
+    end
+
     local function trackModel(model)
         if not model or seenModels[model] then return end
         seenModels[model] = true
@@ -122,8 +132,8 @@ function NPCTracker:GetTargets()
     
     -- 1. Scan Folders (Entities)
     local foundFolderTarget = false
-    for _, name in ipairs(self._folders) do
-        local f = Workspace:FindFirstChild(name)
+    for i = 1, #self._folderRefs do
+        local f = self._folderRefs[i]
         if f then
             for _, model in ipairs(f:GetChildren()) do
                 if model:IsA("Model") and trackModel(model) then
