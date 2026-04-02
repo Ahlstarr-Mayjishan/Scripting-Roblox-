@@ -1,6 +1,9 @@
 local SpeedSpoof = {}
 SpeedSpoof.__index = SpeedSpoof
 
+local DEFAULT_WALK_SPEED = 16
+local DEFAULT_JUMP_POWER = 50
+
 function SpeedSpoof.new(options, localCharacter)
     local self = setmetatable({}, SpeedSpoof)
     self.Options = options
@@ -38,8 +41,30 @@ function SpeedSpoof:Init()
             and localCharacter
             and localCharacter:IsLocalHumanoid(obj) then
             if options and options.SpeedSpoofEnabled then
-                if index == "WalkSpeed" then return 16 end
-                if index == "JumpPower" then return 50 end
+                local realValue = oldIndex(obj, index)
+                if type(realValue) ~= "number" then
+                    return realValue
+                end
+
+                -- Let the game finish rebuilding sprint/state controllers after respawn.
+                if localCharacter.IsRespawning and localCharacter:IsRespawning() then
+                    return realValue
+                end
+
+                if index == "WalkSpeed" then
+                    -- Preserve legitimate sprint or game-side boosts instead of forcing 16 forever.
+                    if realValue > (DEFAULT_WALK_SPEED + 0.75) then
+                        return realValue
+                    end
+                    return DEFAULT_WALK_SPEED
+                end
+
+                if index == "JumpPower" then
+                    if realValue > (DEFAULT_JUMP_POWER + 1) then
+                        return realValue
+                    end
+                    return DEFAULT_JUMP_POWER
+                end
             end
         end
         return oldIndex(obj, index)
