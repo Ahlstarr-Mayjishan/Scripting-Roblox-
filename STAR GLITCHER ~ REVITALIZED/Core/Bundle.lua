@@ -6395,14 +6395,7 @@ _G.BossAimAssist_Update = function()
 end
 
 _G.BossAimAssist_CheckForUpdates = function(manual)
-    local ok, remoteVersion = pcall(function()
-        local content = game:HttpGet(VERSION_URL .. "?check=" .. tostring(os.time()))
-        local parsedVersion = parseRemoteVersion(content)
-        if not parsedVersion then
-            error("Could not parse remote version value")
-        end
-        return parsedVersion
-    end)
+    local ok, remoteVersion = pcall(fetchRemoteVersion)
 
     if not ok then
         if manual and Rayfield and Rayfield.Notify then

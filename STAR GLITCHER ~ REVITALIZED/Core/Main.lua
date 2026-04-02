@@ -15,6 +15,7 @@ local GITHUB_CONFIG = {
 local GITHUB_BASE = string.format("https://raw.githubusercontent.com/%s/%s/%s/%s/", GITHUB_CONFIG.User, GITHUB_CONFIG.Repo, GITHUB_CONFIG.Branch, GITHUB_CONFIG.Folder:gsub(" ", "%%20"):gsub("~", "%%7E"))
 local UPDATE_ENTRY_URL = GITHUB_BASE .. "Main.lua"
 local VERSION_URL = GITHUB_BASE .. "Data/Version.lua"
+local BUNDLE_URL = GITHUB_BASE .. "Core/Bundle.lua"
 local loaderSession = tostring(os.time())
 local runtimeModuleCache = {}
 
@@ -35,13 +36,51 @@ end
 local function parseRemoteVersion(content)
     content = tostring(content or ""):gsub("^\239\187\191", ""):gsub("^﻿", "")
 
-    local directNumber = content:match("%f[%d](%d+)%f[%D]")
-    if directNumber then
-        return tonumber(directNumber)
+    local directReturn = content:match("^%s*return%s+(%d+)")
+    if directReturn then
+        return tonumber(directReturn)
+    end
+
+    local bundledReturn = content:match('%["Data/Version%.lua"%]%s*=%s*%[====%[return%s+(%d+)')
+    if bundledReturn then
+        return tonumber(bundledReturn)
+    end
+
+    local genericReturn = content:match("return%s+(%d+)")
+    if genericReturn then
+        return tonumber(genericReturn)
     end
 
     local chunk = compileChunk(content, "=remote-version")
     return tonumber(chunk())
+end
+
+local function fetchRemoteVersion()
+    local timestamp = tostring(os.time())
+    local sources = {
+        VERSION_URL .. "?check=" .. timestamp,
+        BUNDLE_URL .. "?check=" .. timestamp,
+    }
+
+    local lastError = nil
+    for _, url in ipairs(sources) do
+        local ok, result = pcall(function()
+            local content = game:HttpGet(url)
+            local parsedVersion = parseRemoteVersion(content)
+            if not parsedVersion then
+                error("Could not parse version from " .. url)
+            end
+            return parsedVersion
+        end)
+
+        if ok and result then
+            return result
+        end
+
+        lastError = result
+    end
+
+    error(lastError or "Remote version sources exhausted")
 end
 
 local function loadModule(path)
@@ -424,14 +463,7 @@ _G.BossAimAssist_Update = function()
 end
 
 _G.BossAimAssist_CheckForUpdates = function(manual)
-    local ok, remoteVersion = pcall(function()
-        local content = game:HttpGet(VERSION_URL .. "?check=" .. tostring(os.time()))
-        local parsedVersion = parseRemoteVersion(content)
-        if not parsedVersion then
-            error("Could not parse remote version value")
-        end
-        return parsedVersion
-    end)
+    local ok, remoteVersion = pcall(fetchRemoteVersion)
 
     if not ok then
         if manual and Rayfield and Rayfield.Notify then
