@@ -7,6 +7,28 @@
 return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost)
     local Tab = Window:CreateTab("Player", 4483362458)
 
+    local function setLabelText(label, text)
+        if not label then
+            return
+        end
+
+        if type(label) == "table" and type(label.Set) == "function" then
+            local ok = pcall(function()
+                label:Set(text)
+            end)
+            if ok then
+                return
+            end
+        end
+
+        if typeof(label) == "Instance" then
+            local textLabel = label:IsA("TextLabel") and label or label:FindFirstChildWhichIsA("TextLabel", true)
+            if textLabel then
+                textLabel.Text = text
+            end
+        end
+    end
+
     Tab:CreateSection("Movement")
 
     Tab:CreateToggle({
@@ -171,7 +193,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if noSlowdown then
                 local nextText = "Slowdown Status: " .. tostring(noSlowdown.Status)
                 if nextText ~= lastSlowdownText then
-                    slowdownLabel:Set(nextText)
+                    setLabelText(slowdownLabel, nextText)
                     lastSlowdownText = nextText
                 end
             end
@@ -179,7 +201,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if noStun then
                 local nextText = "Stun Status: " .. tostring(noStun.Status)
                 if nextText ~= lastStunText then
-                    stunLabel:Set(nextText)
+                    setLabelText(stunLabel, nextText)
                     lastStunText = nextText
                 end
             end
@@ -187,7 +209,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if speedMultiplier then
                 local nextText = "Multi Speed Status: " .. tostring(speedMultiplier.Status)
                 if nextText ~= lastSpeedText then
-                    speedMultiplierLabel:Set(nextText)
+                    setLabelText(speedMultiplierLabel, nextText)
                     lastSpeedText = nextText
                 end
             end
@@ -195,7 +217,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if jumpBoost then
                 local nextText = "Jump Boost Status: " .. tostring(jumpBoost.Status)
                 if nextText ~= lastJumpText then
-                    jumpBoostLabel:Set(nextText)
+                    setLabelText(jumpBoostLabel, nextText)
                     lastJumpText = nextText
                 end
             end
@@ -203,7 +225,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if floatController then
                 local nextText = "Float Status: " .. tostring(floatController.Status)
                 if nextText ~= lastFloatText then
-                    floatLabel:Set(nextText)
+                    setLabelText(floatLabel, nextText)
                     lastFloatText = nextText
                 end
             end
@@ -211,7 +233,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if gravityController then
                 local nextText = "Gravity Status: " .. tostring(gravityController.Status)
                 if nextText ~= lastGravityText then
-                    gravityLabel:Set(nextText)
+                    setLabelText(gravityLabel, nextText)
                     lastGravityText = nextText
                 end
             end

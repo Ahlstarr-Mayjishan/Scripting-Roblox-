@@ -6,6 +6,28 @@
 return function(Window, Options, cleaner, resourceManager)
     local Tab = Window:CreateTab("Settings", 4483362458)
 
+    local function setLabelText(label, text)
+        if not label then
+            return
+        end
+
+        if type(label) == "table" and type(label.Set) == "function" then
+            local ok = pcall(function()
+                label:Set(text)
+            end)
+            if ok then
+                return
+            end
+        end
+
+        if typeof(label) == "Instance" then
+            local textLabel = label:IsA("TextLabel") and label or label:FindFirstChildWhichIsA("TextLabel", true)
+            if textLabel then
+                textLabel.Text = text
+            end
+        end
+    end
+
     Tab:CreateSection("Optimization & Safety")
 
     local cleanerLabel = Tab:CreateLabel("Cleanup Status: Idle")
@@ -168,7 +190,7 @@ return function(Window, Options, cleaner, resourceManager)
             if cleaner then
                 local nextText = "Cleanup Status: " .. tostring(cleaner.Status)
                 if nextText ~= lastCleanerText then
-                    cleanerLabel:Set(nextText)
+                    setLabelText(cleanerLabel, nextText)
                     lastCleanerText = nextText
                 end
             end
@@ -178,7 +200,7 @@ return function(Window, Options, cleaner, resourceManager)
                     tostring(resourceManager.Status)
                 )
                 if nextText ~= lastResourceText then
-                    resourceLabel:Set(nextText)
+                    setLabelText(resourceLabel, nextText)
                     lastResourceText = nextText
                 end
             end

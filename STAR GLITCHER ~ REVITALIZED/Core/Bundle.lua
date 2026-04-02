@@ -1048,19 +1048,21 @@ local GLOBAL_HOOK_KEY = "__STAR_GLITCHER_SILENT_AIM_HOOK"
 local REDIRECT_WINDOW = 0.35
 local clock = os.clock
 
+local REMOTE_BLACKLIST = {
+    "sprint", "speed", "walk", "jump", "action", "interact", "dialogue", "inventory", "tab"
+}
+
 local function isCombatRemote(remote)
     local mName = tostring(remote):lower()
+    for _, word in ipairs(REMOTE_BLACKLIST) do
+        if mName:find(word) then return false end
+    end
     return mName:find("shoot")
         or mName:find("fire")
         or mName:find("attack")
-        or mName:find("magic")
-        or mName:find("spell")
-        or mName:find("skill")
-        or mName:find("ability")
-        or mName:find("target")
-        or mName:find("input")
         or mName:find("hit")
         or mName:find("damage")
+        or mName:find("impact")
 end
 
 local function buildTargetCFrame(targetPos)
@@ -1096,7 +1098,8 @@ local function ensureHookState()
         if selfRef
             and not selfRef._destroyed
             and not checkcaller()
-            and selfRef:_hasTargetLock() then
+            and selfRef:_hasTargetLock()
+            and selfRef:_isRedirectActive() then -- FIX: Only redirect mouse during firing window
             if inst == Mouse or (typeof(inst) == "Instance" and inst:IsA("Mouse")) then
                 if index == "Hit" then
                     return buildTargetCFrame(selfRef.TargetPosCache)
@@ -1144,18 +1147,22 @@ local function ensureHookState()
                         if typeof(arg) == "Vector3" then
                             args[i] = selfRef.TargetPosCache
                             modified = true
+                            break -- FIX: Only modify the first Vector3 (Primary Target) to avoid breaking skills
                         elseif typeof(arg) == "Instance" and (arg:IsA("BasePart") or arg:IsA("Model")) then
                             local localCharacter = LocalPlayer.Character
                             if not (localCharacter and arg:IsDescendantOf(localCharacter)) then
                                 args[i] = selfRef.TargetPartCache
                                 modified = true
+                                break -- FIX: Same for Instances
                             end
                         elseif typeof(arg) == "CFrame" then
                             args[i] = buildTargetCFrame(selfRef.TargetPosCache)
                             modified = true
+                            break -- FIX: Same for CFrames
                         elseif typeof(arg) == "Ray" then
                             args[i] = buildTargetRay(arg.Origin, selfRef.TargetPosCache, arg.Direction.Magnitude)
                             modified = true
+                            break
                         end
                     end
 
@@ -5367,6 +5374,28 @@ end
 return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost)
     local Tab = Window:CreateTab("Player", 4483362458)
 
+    local function setLabelText(label, text)
+        if not label then
+            return
+        end
+
+        if type(label) == "table" and type(label.Set) == "function" then
+            local ok = pcall(function()
+                label:Set(text)
+            end)
+            if ok then
+                return
+            end
+        end
+
+        if typeof(label) == "Instance" then
+            local textLabel = label:IsA("TextLabel") and label or label:FindFirstChildWhichIsA("TextLabel", true)
+            if textLabel then
+                textLabel.Text = text
+            end
+        end
+    end
+
     Tab:CreateSection("Movement")
 
     Tab:CreateToggle({
@@ -5531,7 +5560,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if noSlowdown then
                 local nextText = "Slowdown Status: " .. tostring(noSlowdown.Status)
                 if nextText ~= lastSlowdownText then
-                    slowdownLabel:Set(nextText)
+                    setLabelText(slowdownLabel, nextText)
                     lastSlowdownText = nextText
                 end
             end
@@ -5539,7 +5568,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if noStun then
                 local nextText = "Stun Status: " .. tostring(noStun.Status)
                 if nextText ~= lastStunText then
-                    stunLabel:Set(nextText)
+                    setLabelText(stunLabel, nextText)
                     lastStunText = nextText
                 end
             end
@@ -5547,7 +5576,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if speedMultiplier then
                 local nextText = "Multi Speed Status: " .. tostring(speedMultiplier.Status)
                 if nextText ~= lastSpeedText then
-                    speedMultiplierLabel:Set(nextText)
+                    setLabelText(speedMultiplierLabel, nextText)
                     lastSpeedText = nextText
                 end
             end
@@ -5555,7 +5584,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if jumpBoost then
                 local nextText = "Jump Boost Status: " .. tostring(jumpBoost.Status)
                 if nextText ~= lastJumpText then
-                    jumpBoostLabel:Set(nextText)
+                    setLabelText(jumpBoostLabel, nextText)
                     lastJumpText = nextText
                 end
             end
@@ -5563,7 +5592,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if floatController then
                 local nextText = "Float Status: " .. tostring(floatController.Status)
                 if nextText ~= lastFloatText then
-                    floatLabel:Set(nextText)
+                    setLabelText(floatLabel, nextText)
                     lastFloatText = nextText
                 end
             end
@@ -5571,7 +5600,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if gravityController then
                 local nextText = "Gravity Status: " .. tostring(gravityController.Status)
                 if nextText ~= lastGravityText then
-                    gravityLabel:Set(nextText)
+                    setLabelText(gravityLabel, nextText)
                     lastGravityText = nextText
                 end
             end
@@ -5658,6 +5687,28 @@ end
 
 return function(Window, Options, cleaner, resourceManager)
     local Tab = Window:CreateTab("Settings", 4483362458)
+
+    local function setLabelText(label, text)
+        if not label then
+            return
+        end
+
+        if type(label) == "table" and type(label.Set) == "function" then
+            local ok = pcall(function()
+                label:Set(text)
+            end)
+            if ok then
+                return
+            end
+        end
+
+        if typeof(label) == "Instance" then
+            local textLabel = label:IsA("TextLabel") and label or label:FindFirstChildWhichIsA("TextLabel", true)
+            if textLabel then
+                textLabel.Text = text
+            end
+        end
+    end
 
     Tab:CreateSection("Optimization & Safety")
 
@@ -5821,7 +5872,7 @@ return function(Window, Options, cleaner, resourceManager)
             if cleaner then
                 local nextText = "Cleanup Status: " .. tostring(cleaner.Status)
                 if nextText ~= lastCleanerText then
-                    cleanerLabel:Set(nextText)
+                    setLabelText(cleanerLabel, nextText)
                     lastCleanerText = nextText
                 end
             end
@@ -5831,7 +5882,7 @@ return function(Window, Options, cleaner, resourceManager)
                     tostring(resourceManager.Status)
                 )
                 if nextText ~= lastResourceText then
-                    resourceLabel:Set(nextText)
+                    setLabelText(resourceLabel, nextText)
                     lastResourceText = nextText
                 end
             end
