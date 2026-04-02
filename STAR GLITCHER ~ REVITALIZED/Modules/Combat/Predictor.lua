@@ -78,7 +78,7 @@ function Predictor:Predict(origin, part, entry, dt)
     entry.LastTime = raw.Time
     
     -- 3. PREDICTION (Exactly one strategy)
-    local predicted = self.Engine:Calculate(origin, raw.Position, est, dt)
+    local predicted = self.Engine:Calculate(origin, raw.Position, est, dt, entry, part)
     
     -- 4. PRESENTATION (Smoothing)
     return state.Stabilizer:Smooth(predicted, dt)

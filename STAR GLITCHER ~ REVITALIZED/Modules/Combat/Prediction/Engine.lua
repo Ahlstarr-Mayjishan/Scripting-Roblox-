@@ -11,6 +11,11 @@ local Stats = game:GetService("Stats")
 local DEFAULT_PROJECTILE_SPEED = 1000
 local ZERO = Vector3.zero
 
+local TARGET_PROFILE_BOX = "box"
+local TARGET_PROFILE_SPHERE = "sphere"
+local TARGET_PROFILE_MINI_HUMANOID = "mini_humanoid"
+local TARGET_PROFILE_HUMANOID = "humanoid"
+
 function Engine.new(config)
     local self = setmetatable({}, Engine)
     self.Config = config
@@ -41,7 +46,73 @@ function Engine:_GetPingMultiplier()
     return 1
 end
 
-function Engine:Calculate(origin, targetPos, est, dt)
+function Engine:_ResolveTargetProfile(entry, part)
+    if not part then
+        return TARGET_PROFILE_BOX, 0
+    end
+
+    local size = part.Size
+    local model = entry and entry.Model
+    local humanoid = entry and entry.Humanoid
+
+    if humanoid then
+        local modelHeight = 0
+        if model then
+            local extents = model:GetExtentsSize()
+            modelHeight = extents.Y
+        end
+
+        local isMiniHumanoid = size.Y <= 2.6
+            or size.X <= 2.6
+            or modelHeight > 0 and modelHeight <= 4.25
+            or humanoid.HipHeight <= 1.5
+
+        if isMiniHumanoid then
+            return TARGET_PROFILE_MINI_HUMANOID, math.clamp(math.max(size.Y * 0.3, modelHeight * 0.12), 0.35, 0.85)
+        end
+
+        return TARGET_PROFILE_HUMANOID, math.clamp(size.Y * 0.08, 0.08, 0.3)
+    end
+
+    if part.Shape == Enum.PartType.Ball then
+        return TARGET_PROFILE_SPHERE, 0
+    end
+
+    return TARGET_PROFILE_BOX, 0
+end
+
+function Engine:_GetLateralTrust(profile, confidence, lateralAlpha, shockAlpha)
+    local base
+    local confGain
+    local lateralGain
+    local cap
+
+    if profile == TARGET_PROFILE_MINI_HUMANOID then
+        base = 0.24
+        confGain = 0.28
+        lateralGain = 0.24
+        cap = 0.56
+    elseif profile == TARGET_PROFILE_HUMANOID then
+        base = 0.18
+        confGain = 0.22
+        lateralGain = 0.18
+        cap = 0.42
+    elseif profile == TARGET_PROFILE_SPHERE then
+        base = 0.14
+        confGain = 0.18
+        lateralGain = 0.16
+        cap = 0.36
+    else
+        base = 0.2
+        confGain = 0.2
+        lateralGain = 0.18
+        cap = 0.4
+    end
+
+    return math.clamp((base + (confidence * confGain) + (lateralAlpha * lateralGain)) * (1 - shockAlpha * 0.35), 0.08, cap)
+end
+
+function Engine:Calculate(origin, targetPos, est, dt, entry, part)
     local Options = self.Options
     if not Options.PredictionEnabled then
         return targetPos
@@ -53,6 +124,11 @@ function Engine:Calculate(origin, targetPos, est, dt)
     local confidence = math.clamp(est.Confidence or 0, 0, 1)
     local motionShock = est.MotionShock or 0
     local speed = velocity.Magnitude
+    local targetProfile, aimBiasY = self:_ResolveTargetProfile(entry, part)
+
+    if aimBiasY ~= 0 then
+        targetPos = targetPos + Vector3.new(0, aimBiasY, 0)
+    end
 
     local toTarget = targetPos - origin
     local distance = toTarget.Magnitude
@@ -82,7 +158,7 @@ function Engine:Calculate(origin, targetPos, est, dt)
     -- Strafing targets often miss because lateral movement needs slightly more
     -- aggressive lead than front/back motion under frame + ping delay.
     if lateralSpeed > 0.01 then
-        local lateralTrust = math.clamp((0.16 + (confidence * 0.22) + (lateralAlpha * 0.18)) * (1 - shockAlpha * 0.35), 0.08, 0.42)
+        local lateralTrust = self:_GetLateralTrust(targetProfile, confidence, lateralAlpha, shockAlpha)
         predictedOffset = predictedOffset + (lateralVelocity * totalTime * lateralTrust)
     end
 
@@ -90,8 +166,9 @@ function Engine:Calculate(origin, targetPos, est, dt)
         local accelTrust = math.clamp(confidence * (1 - shockAlpha * 0.7), 0, 1)
         local jerkTrust = math.clamp(accelTrust * (1 - shockAlpha * 0.45), 0, 1)
 
-        local accelWeight = math.clamp((1.08 - (totalTime * 0.3)) * (0.65 + (speedAlpha * 0.45) + (lateralAlpha * 0.2)), 0.24, 1.3) * accelTrust
-        local jerkWeight = math.clamp((0.58 - totalTime) * (0.45 + (speedAlpha * 0.35) + (lateralAlpha * 0.15)), 0.05, 0.58) * jerkTrust
+        local profileBonus = targetProfile == TARGET_PROFILE_MINI_HUMANOID and 0.08 or (targetProfile == TARGET_PROFILE_BOX and 0.04 or 0)
+        local accelWeight = math.clamp((1.08 - (totalTime * 0.3)) * (0.65 + (speedAlpha * 0.45) + (lateralAlpha * 0.2) + profileBonus), 0.24, 1.34) * accelTrust
+        local jerkWeight = math.clamp((0.58 - totalTime) * (0.45 + (speedAlpha * 0.35) + (lateralAlpha * 0.15) + (profileBonus * 0.5)), 0.05, 0.6) * jerkTrust
 
         predictedOffset = predictedOffset + ((0.5 * accel * (totalTime ^ 2)) * accelWeight)
         predictedOffset = predictedOffset + (((1 / 6) * jerk * (totalTime ^ 3)) * jerkWeight)
@@ -106,6 +183,11 @@ function Engine:Calculate(origin, targetPos, est, dt)
         18 + (speed * (0.14 + (confidence * 0.18))),
         distance * (0.22 + (speedAlpha * 0.18) + (lateralAlpha * 0.06))
     )
+    if targetProfile == TARGET_PROFILE_MINI_HUMANOID then
+        maxOffset = maxOffset * 1.08
+    elseif targetProfile == TARGET_PROFILE_SPHERE then
+        maxOffset = maxOffset * 0.96
+    end
     maxOffset = math.min(maxOffset, leadCap)
     if predictedOffset.Magnitude > maxOffset then
         predictedOffset = predictedOffset.Unit * maxOffset
