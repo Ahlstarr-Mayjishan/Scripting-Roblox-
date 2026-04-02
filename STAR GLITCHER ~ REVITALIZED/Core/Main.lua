@@ -35,6 +35,61 @@ local function requireModule(path)
     return module
 end
 
+do
+    local loaderSession = tostring(os.time())
+    local runtimeModuleCache = {}
+
+    local function compileChunk(content, chunkName)
+        local chunk, compileErr = loadstring(content, chunkName)
+        if not chunk then
+            error("[compile] " .. tostring(compileErr))
+        end
+        return chunk
+    end
+
+    loadModule = function(path)
+        local cached = runtimeModuleCache[path]
+        if cached ~= nil then
+            return cached
+        end
+
+        local url = GITHUB_BASE .. path
+        local finalError = nil
+
+        for attempt = 1, 3 do
+            local ok, res = pcall(function()
+                local content = game:HttpGet(url .. "?v=" .. loaderSession .. "&attempt=" .. attempt)
+                if content == "404: Not Found" then
+                    error("[http] 404: " .. path)
+                end
+
+                local chunk = compileChunk(content, "=" .. path)
+                local value = chunk()
+                runtimeModuleCache[path] = value
+                return value
+            end)
+
+            if ok then
+                return res
+            end
+
+            finalError = res
+            task.wait(0.15 * attempt)
+        end
+
+        warn("[Loader] Failed: " .. path .. " | Error: " .. tostring(finalError))
+        return nil
+    end
+
+    requireModule = function(path)
+        local module = loadModule(path)
+        if not module then
+            error("Required module failed to load: " .. tostring(path), 2)
+        end
+        return module
+    end
+end
+
 -- Services
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
