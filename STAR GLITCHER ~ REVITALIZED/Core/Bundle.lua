@@ -3952,7 +3952,7 @@ function GarbageCollector:_drainQueue(destroyBudget, gcStepSize)
     end
 
     if destroyed > 0 and not self.ResourceManager then
-        collectgarbage("step", gcStepSize)
+        -- collectgarbage("step", gcStepSize) -- Restricted environment fix
     end
 
     return destroyed
@@ -4758,7 +4758,7 @@ function ResourceManager:_step(dt)
     end
 
     if processed > 0 then
-        collectgarbage("step", self._gcStep)
+        -- collectgarbage("step", self._gcStep) -- Restricted environment fix
     end
 
     local pending = self:GetPendingCount()
@@ -6025,6 +6025,84 @@ end
 ]====]
 }
 
+local GITHUB_CONFIG = {
+    User = "Ahlstarr-Mayjishan",
+    Repo = "Scripting-Roblox-",
+    Branch = "main",
+    Folder = "STAR GLITCHER ~ REVITALIZED"
+}
+
+local GITHUB_BASE = string.format("https://raw.githubusercontent.com/%s/%s/%s/%s/", GITHUB_CONFIG.User, GITHUB_CONFIG.Repo, GITHUB_CONFIG.Branch, GITHUB_CONFIG.Folder:gsub(" ", "%%20"):gsub("~", "%%7E"))
+local UPDATE_ENTRY_URL = GITHUB_BASE .. "Main.lua"
+local VERSION_URL = GITHUB_BASE .. "Data/Version.lua"
+local BUNDLE_URL = GITHUB_BASE .. "Core/Bundle.lua"
+local loaderSession = tostring(os.time())
+local runtimeModuleCache = {}
+
+local function compileChunk(content, chunkName)
+    local compiler = loadstring or load
+    if not compiler then
+        error("[compile] No Lua compiler available")
+    end
+
+    content = tostring(content):gsub("^\239\187\191", ""):gsub("^﻿", "")
+    local chunk, compileErr = compiler(content, chunkName)
+    if not chunk then
+        error("[compile] " .. tostring(compileErr))
+    end
+    return chunk
+end
+
+local function parseRemoteVersion(content)
+    content = tostring(content or ""):gsub("^\239\187\191", ""):gsub("^﻿", "")
+
+    local directReturn = content:match("^%s*return%s+(%d+)")
+    if directReturn then
+        return tonumber(directReturn)
+    end
+
+    local bundledReturn = content:match('%["Data/Version%.lua"%]%s*=%s*%[====%[return%s+(%d+)')
+    if bundledReturn then
+        return tonumber(bundledReturn)
+    end
+
+    local genericReturn = content:match("return%s+(%d+)")
+    if genericReturn then
+        return tonumber(genericReturn)
+    end
+
+    local chunk = compileChunk(content, "=remote-version")
+    return tonumber(chunk())
+end
+
+local function fetchRemoteVersion()
+    local timestamp = tostring(os.time())
+    local sources = {
+        VERSION_URL .. "?check=" .. timestamp,
+        BUNDLE_URL .. "?check=" .. timestamp,
+    }
+
+    local lastError = nil
+    for _, url in ipairs(sources) do
+        local ok, result = pcall(function()
+            local content = game:HttpGet(url)
+            local parsedVersion = parseRemoteVersion(content)
+            if not parsedVersion then
+                error("Could not parse version from " .. url)
+            end
+            return parsedVersion
+        end)
+
+        if ok and result then
+            return result
+        end
+
+        lastError = result
+    end
+
+    error(lastError or "Remote version sources exhausted")
+end
+
 local function loadBundledModule(path)
     local source = BUNDLED_SOURCES[path]
     if not source then
@@ -6358,8 +6436,8 @@ local function performCleanup(fullSweep)
             resourceManager:Flush(1.5)
         end
         pcall(function()
-            collectgarbage("collect")
-            collectgarbage("collect")
+            collectgarbage("count")
+            collectgarbage("count")
         end)
     end
 

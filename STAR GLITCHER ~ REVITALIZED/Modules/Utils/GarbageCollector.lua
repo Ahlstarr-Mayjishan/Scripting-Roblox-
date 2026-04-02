@@ -156,7 +156,7 @@ function GarbageCollector:_drainQueue(destroyBudget, gcStepSize)
     end
 
     if destroyed > 0 and not self.ResourceManager then
-        collectgarbage("step", gcStepSize)
+        -- collectgarbage("step", gcStepSize) -- Restricted in some environments
     end
 
     return destroyed

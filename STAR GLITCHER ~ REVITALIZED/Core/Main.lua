@@ -426,8 +426,8 @@ local function performCleanup(fullSweep)
             resourceManager:Flush(1.5)
         end
         pcall(function()
-            collectgarbage("collect")
-            collectgarbage("collect")
+            collectgarbage("count")
+            collectgarbage("count")
         end)
     end
 

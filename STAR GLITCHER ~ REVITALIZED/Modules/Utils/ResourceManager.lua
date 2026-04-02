@@ -156,7 +156,7 @@ function ResourceManager:_step(dt)
     end
 
     if processed > 0 then
-        collectgarbage("step", self._gcStep)
+        -- collectgarbage("step", self._gcStep) -- Restricted in some environments
     end
 
     local pending = self:GetPendingCount()
