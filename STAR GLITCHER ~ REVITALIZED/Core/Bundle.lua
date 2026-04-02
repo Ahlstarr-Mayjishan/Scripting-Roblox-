@@ -138,9 +138,9 @@ end
 return Aimbot
 ]====],
     ["Modules/Combat/Hijackers/Apocalypse.lua"] = [====[--[[
-    Apocalypse.lua — The Ultimate Neural Hijacker v1.1.66
+    Apocalypse.lua - The Ultimate Neural Hijacker
     Job: Parasitic locking of game projectiles and beams to boss entities.
-    Fixes: Visual lag, Damage misalignment, C-Stack overflow, Performance, and Teleport Flick.
+    Notes: Uses a singleton hook state to avoid stacking hooks across reloads.
 ]]
 
 local RunService = game:GetService("RunService")
@@ -152,133 +152,177 @@ local LocalPlayer = Players.LocalPlayer
 local Apocalypse = {}
 Apocalypse.__index = Apocalypse
 
+local GLOBAL_HOOK_KEY = "__STAR_GLITCHER_APOCALYPSE_HOOK"
+
+local function ensureHookState()
+    local hookState = getgenv()[GLOBAL_HOOK_KEY]
+    if hookState then
+        return hookState
+    end
+
+    local mouse = LocalPlayer:GetMouse()
+    hookState = {
+        Instance = nil,
+        Mouse = mouse,
+    }
+
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(inst, ...)
+        local selfRef = hookState.Instance
+        local method = getnamecallmethod()
+        local args = table.pack(...)
+
+        if selfRef
+            and not selfRef._destroyed
+            and not checkcaller()
+            and selfRef.Active
+            and selfRef._bossExists then
+            if method == "FireServer" or method == "InvokeServer" then
+                for i = 1, args.n do
+                    local value = args[i]
+                    if typeof(value) == "Vector3" then
+                        args[i] = selfRef._bossPos
+                    elseif typeof(value) == "CFrame" then
+                        args[i] = CFrame.new(selfRef._bossPos)
+                    end
+                end
+                return oldNamecall(inst, unpack(args, 1, args.n))
+            end
+
+            if (method == "ViewportPointToRay" or method == "ScreenPointToRay") and inst == Camera then
+                return Ray.new(Camera.CFrame.Position, (selfRef._bossPos - Camera.CFrame.Position).Unit)
+            end
+        end
+
+        return oldNamecall(inst, unpack(args, 1, args.n))
+    end))
+
+    local oldIndex
+    oldIndex = hookmetamethod(game, "__index", newcclosure(function(inst, index)
+        local selfRef = hookState.Instance
+        if selfRef
+            and not selfRef._destroyed
+            and not checkcaller()
+            and selfRef.Active
+            and selfRef._bossExists
+            and inst == hookState.Mouse then
+            if index == "Hit" then
+                return CFrame.new(selfRef._bossPos)
+            end
+            if index == "Target" then
+                return selfRef._bossModel
+            end
+        end
+
+        return oldIndex(inst, index)
+    end))
+
+    getgenv()[GLOBAL_HOOK_KEY] = hookState
+    return hookState
+end
+
 function Apocalypse.new(config)
     local self = setmetatable({}, Apocalypse)
     self.Options = config.Options
     self.Active = config.Options.ApocalypseEnabled == true
-    
-    -- Optimized State (Anti-Recursion)
-    self._bossPos = Vector3.new()
+
+    self._bossPos = Vector3.zero
     self._bossModel = nil
     self._bossExists = false
-    self._mouse = LocalPlayer:GetMouse()
     self._connections = {}
     self._destroyed = false
-    
+    self._hookState = nil
+
     return self
 end
 
 function Apocalypse:Init()
-    if not (hookmetamethod or hookfunction) then return end
-    local selfRef = self
+    if not (hookmetamethod or hookfunction) then
+        return
+    end
 
-    -- ═══════════════════════════════════════════════════
-    -- 1. EXTREME OPTIMIZED TRACKER (Throttled)
-    -- ═══════════════════════════════════════════════════
+    self._destroyed = false
+    self._hookState = ensureHookState()
+    self._hookState.Instance = self
+
+    local selfRef = self
     local lastTrackerUpdate = 0
     local lastFullScan = 0
-    
+
     table.insert(self._connections, RunService.Heartbeat:Connect(function()
-        if selfRef._destroyed or not selfRef.Active then selfRef._bossExists = false return end
-        
+        if selfRef._destroyed or not selfRef.Active then
+            selfRef._bossExists = false
+            return
+        end
+
         local now = os.clock()
-        -- THROTTLE: Only run tracker every 2 frames
-        if now - lastTrackerUpdate < 0.03 then return end
+        if now - lastTrackerUpdate < 0.03 then
+            return
+        end
         lastTrackerUpdate = now
-        
+
         local found = nil
         local entities = Workspace:FindFirstChild("Entities")
-        
-        -- FAST SCAN (Children only)
+
         if entities then
             for _, model in ipairs(entities:GetChildren()) do
-                if model:IsA("Model") and model:FindFirstChildOfClass("Humanoid") then
+                if model:IsA("Model") then
                     local hum = model:FindFirstChildOfClass("Humanoid")
-                    if hum.Health > 0 and model ~= LocalPlayer.Character then
+                    if hum and hum.Health > 0 and model ~= LocalPlayer.Character then
                         found = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
-                        if found then break end
+                        if found then
+                            break
+                        end
                     end
                 end
             end
         end
-        
-        -- DEEP SCAN (Descendants) - Only Every 1.5 Seconds
+
         if not found and (now - lastFullScan > 1.5) then
             lastFullScan = now
             if entities then
-                for _, v in ipairs(entities:GetDescendants()) do
-                    if v:IsA("Humanoid") and v.Parent ~= LocalPlayer.Character and v.Health > 0 then
-                        found = v.Parent:FindFirstChild("HumanoidRootPart") or v.Parent.PrimaryPart
-                        if found then break end
+                for _, descendant in ipairs(entities:GetDescendants()) do
+                    if descendant:IsA("Humanoid") and descendant.Parent ~= LocalPlayer.Character and descendant.Health > 0 then
+                        found = descendant.Parent:FindFirstChild("HumanoidRootPart") or descendant.Parent.PrimaryPart
+                        if found then
+                            break
+                        end
                     end
                 end
             end
         end
-        
+
         if found then
             selfRef._bossPos = found.Position
             selfRef._bossModel = found.Parent
             selfRef._bossExists = true
         else
             selfRef._bossExists = false
+            selfRef._bossModel = nil
         end
     end))
 
-    -- ═══════════════════════════════════════════════════
-    -- 2. ENGINE HOOKS (Silent Hijacking)
-    -- ═══════════════════════════════════════════════════
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(inst, ...)
-        local method = getnamecallmethod()
-        local args = table.pack(...)
-        
-        if not selfRef._destroyed and not checkcaller() and selfRef._bossExists then
-            if (method == "FireServer" or method == "InvokeServer") then
-                for i = 1, args.n do
-                    local v = args[i]
-                    if typeof(v) == "Vector3" then args[i] = selfRef._bossPos
-                    elseif typeof(v) == "CFrame" then args[i] = CFrame.new(selfRef._bossPos) end
-                end
-                return oldNamecall(inst, unpack(args, 1, args.n))
-            end
-            
-            if (method == "ViewportPointToRay" or method == "ScreenPointToRay") and inst == Camera then
-                return Ray.new(Camera.CFrame.Position, (selfRef._bossPos - Camera.CFrame.Position).Unit)
-            end
-        end
-        return oldNamecall(inst, unpack(args, 1, args.n))
-    end))
-
-    local oldIndex
-    oldIndex = hookmetamethod(game, "__index", newcclosure(function(inst, index)
-        if not selfRef._destroyed and not checkcaller() and selfRef._bossExists and inst == selfRef._mouse then
-            if index == "Hit" then return CFrame.new(selfRef._bossPos) end
-            if index == "Target" then return selfRef._bossModel end
-        end
-        return oldIndex(inst, index)
-    end))
-
-    -- ═══════════════════════════════════════════════════
-    -- 3. NEURAL VISUAL SYNC (Zero-Search Cache)
-    -- ═══════════════════════════════════════════════════
     local activeProjectiles = {}
     local effectCache = {}
-    local lastBossPos = Vector3.new()
-    
+
     table.insert(self._connections, Workspace.ChildAdded:Connect(function(child)
-        if child.Name == "BallOfLight" then table.insert(activeProjectiles, child) end
+        if child.Name == "BallOfLight" then
+            activeProjectiles[#activeProjectiles + 1] = child
+        end
     end))
 
     local function updateEffectCache()
         table.clear(effectCache)
         local char = LocalPlayer.Character
         if char then
-            for _, v in ipairs(char:GetDescendants()) do
-                if v:IsA("Beam") or v:IsA("Trail") then table.insert(effectCache, v) end
+            for _, descendant in ipairs(char:GetDescendants()) do
+                if descendant:IsA("Beam") or descendant:IsA("Trail") then
+                    effectCache[#effectCache + 1] = descendant
+                end
             end
         end
     end
-    
+
     table.insert(self._connections, LocalPlayer.CharacterAdded:Connect(function()
         task.wait(0.5)
         if not selfRef._destroyed then
@@ -288,28 +332,34 @@ function Apocalypse:Init()
     updateEffectCache()
 
     table.insert(self._connections, RunService.RenderStepped:Connect(function()
-        if selfRef._destroyed or not selfRef._bossExists then return end
-        local p = selfRef._bossPos
-        
-        -- SYNC PROJECTILES
+        if selfRef._destroyed or not selfRef.Active or not selfRef._bossExists then
+            return
+        end
+
+        local bossPos = selfRef._bossPos
         for i = #activeProjectiles, 1, -1 do
-            local v = activeProjectiles[i]
-            if v and v.Parent then
+            local projectile = activeProjectiles[i]
+            if projectile and projectile.Parent then
                 pcall(function()
-                    local a1 = v:FindFirstChild("Attachment1")
-                    if a1 then a1.WorldPosition = p end
-                    local tcf = v:FindFirstChild("TargCF")
-                    if tcf then tcf.Value = CFrame.new(p) end
+                    local attachment = projectile:FindFirstChild("Attachment1")
+                    if attachment then
+                        attachment.WorldPosition = bossPos
+                    end
+                    local targetCFrame = projectile:FindFirstChild("TargCF")
+                    if targetCFrame then
+                        targetCFrame.Value = CFrame.new(bossPos)
+                    end
                 end)
             else
                 table.remove(activeProjectiles, i)
             end
         end
-        
-        -- SYNC BEAMS
-        for _, v in ipairs(effectCache) do
+
+        for _, effect in ipairs(effectCache) do
             pcall(function()
-                if v.Attachment1 then v.Attachment1.WorldPosition = p end
+                if effect.Attachment1 then
+                    effect.Attachment1.WorldPosition = bossPos
+                end
             end)
         end
     end))
@@ -317,12 +367,22 @@ end
 
 function Apocalypse:SetState(active)
     self.Active = active
+    if not active then
+        self._bossExists = false
+        self._bossModel = nil
+    end
 end
 
 function Apocalypse:Destroy()
     self._destroyed = true
     self.Active = false
     self._bossExists = false
+    self._bossModel = nil
+
+    if self._hookState and self._hookState.Instance == self then
+        self._hookState.Instance = nil
+    end
+
     for _, connection in ipairs(self._connections) do
         connection:Disconnect()
     end
@@ -977,7 +1037,7 @@ local SilentAim = {}
 SilentAim.__index = SilentAim
 
 local GLOBAL_HOOK_KEY = "__STAR_GLITCHER_SILENT_AIM_HOOK"
-local REDIRECT_WINDOW = 0.18
+local REDIRECT_WINDOW = 0.35
 local clock = os.clock
 
 local function isCombatRemote(remote)
@@ -991,6 +1051,23 @@ local function isCombatRemote(remote)
         or mName:find("ability")
         or mName:find("target")
         or mName:find("input")
+        or mName:find("hit")
+        or mName:find("damage")
+end
+
+local function buildTargetCFrame(targetPos)
+    local camPos = Workspace.CurrentCamera.CFrame.Position
+    return CFrame.lookAt(camPos, targetPos)
+end
+
+local function buildTargetRay(origin, targetPos, length)
+    local direction = targetPos - origin
+    if direction.Magnitude <= 0.001 then
+        direction = Workspace.CurrentCamera.CFrame.LookVector
+    else
+        direction = direction.Unit * (length or (targetPos - origin).Magnitude)
+    end
+    return Ray.new(origin, direction)
 end
 
 local function ensureHookState()
@@ -1011,16 +1088,15 @@ local function ensureHookState()
         if selfRef
             and not selfRef._destroyed
             and not checkcaller()
-            and selfRef:_isRedirectActive() then
+            and selfRef:_hasTargetLock() then
             if inst == Mouse or (typeof(inst) == "Instance" and inst:IsA("Mouse")) then
                 if index == "Hit" then
-                    local camPos = Workspace.CurrentCamera.CFrame.Position
-                    return CFrame.lookAt(camPos, selfRef.TargetPosCache)
+                    return buildTargetCFrame(selfRef.TargetPosCache)
                 elseif index == "Target" then
                     return selfRef.TargetPartCache
                 elseif index == "UnitRay" then
                     local camPos = Workspace.CurrentCamera.CFrame.Position
-                    return Ray.new(camPos, (selfRef.TargetPosCache - camPos).Unit)
+                    return buildTargetRay(camPos, selfRef.TargetPosCache, 1)
                 end
             end
         end
@@ -1037,38 +1113,49 @@ local function ensureHookState()
         if selfRef
             and not selfRef._destroyed
             and not checkcaller()
-            and selfRef:_isRedirectActive()
-            and (method == "FireServer" or method == "InvokeServer")
-            and isCombatRemote(inst) then
-            local modified = false
-
-            for i = 1, args.n do
-                local arg = args[i]
-                if typeof(arg) == "Vector3" then
-                    args[i] = selfRef.TargetPosCache
-                    modified = true
-                elseif typeof(arg) == "Instance" and (arg:IsA("BasePart") or arg:IsA("Model")) then
-                    local localCharacter = LocalPlayer.Character
-                    if not (localCharacter and arg:IsDescendantOf(localCharacter)) then
-                        args[i] = selfRef.TargetPartCache
-                        modified = true
-                    end
-                elseif typeof(arg) == "CFrame" then
-                    local origin = arg.Position
-                    local direction = selfRef.TargetPosCache - origin
-                    if direction.Magnitude > 0.001 then
-                        args[i] = CFrame.lookAt(origin, selfRef.TargetPosCache)
-                        modified = true
-                    end
-                elseif typeof(arg) == "Ray" then
-                    args[i] = Ray.new(arg.Origin, (selfRef.TargetPosCache - arg.Origin).Unit * arg.Direction.Magnitude)
-                    modified = true
-                end
+            and selfRef:_hasTargetLock() then
+            if (method == "ViewportPointToRay" or method == "ScreenPointToRay") and inst == Workspace.CurrentCamera then
+                local camPos = Workspace.CurrentCamera.CFrame.Position
+                return buildTargetRay(camPos, selfRef.TargetPosCache, 1)
             end
 
-            if modified then
-                selfRef._lastRedirectTime = clock()
-                return oldNamecall(inst, unpack(args, 1, args.n))
+            if selfRef:_isRedirectActive() then
+                if (method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRayWithWhitelist") and inst == Workspace then
+                    local ray = args[1]
+                    if typeof(ray) == "Ray" then
+                        args[1] = buildTargetRay(ray.Origin, selfRef.TargetPosCache, ray.Direction.Magnitude)
+                        return oldNamecall(inst, unpack(args, 1, args.n))
+                    end
+                end
+
+                if (method == "FireServer" or method == "InvokeServer") and isCombatRemote(inst) then
+                    local modified = false
+
+                    for i = 1, args.n do
+                        local arg = args[i]
+                        if typeof(arg) == "Vector3" then
+                            args[i] = selfRef.TargetPosCache
+                            modified = true
+                        elseif typeof(arg) == "Instance" and (arg:IsA("BasePart") or arg:IsA("Model")) then
+                            local localCharacter = LocalPlayer.Character
+                            if not (localCharacter and arg:IsDescendantOf(localCharacter)) then
+                                args[i] = selfRef.TargetPartCache
+                                modified = true
+                            end
+                        elseif typeof(arg) == "CFrame" then
+                            args[i] = buildTargetCFrame(selfRef.TargetPosCache)
+                            modified = true
+                        elseif typeof(arg) == "Ray" then
+                            args[i] = buildTargetRay(arg.Origin, selfRef.TargetPosCache, arg.Direction.Magnitude)
+                            modified = true
+                        end
+                    end
+
+                    if modified then
+                        selfRef._lastRedirectTime = clock()
+                        return oldNamecall(inst, unpack(args, 1, args.n))
+                    end
+                end
             end
         end
 
@@ -1096,8 +1183,12 @@ function SilentAim.new(config, synapse)
     return self
 end
 
+function SilentAim:_hasTargetLock()
+    return self.Active and self.TargetPosCache ~= nil and self.TargetPartCache ~= nil
+end
+
 function SilentAim:_isRedirectActive()
-    if not (self.Active and self.TargetPosCache and self.TargetPartCache) then
+    if not self:_hasTargetLock() then
         return false
     end
 
@@ -1568,6 +1659,14 @@ function AntiSlowdown:Init()
             return
         end
 
+        if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            if hum ~= self.TrackedHumanoid then
+                self:CaptureBaseStats(hum)
+            end
+            self:_setStatus("Respawn Grace")
+            return
+        end
+
         self:_setStatus("Monitoring Speed")
 
         if hum ~= self.TrackedHumanoid then
@@ -1671,6 +1770,17 @@ function AntiStun:Init()
 
         if not hum then
             self:_setStatus("Hum Missing")
+            return
+        end
+
+        if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            if hum ~= self.TrackedHumanoid then
+                if self.TrackedHumanoid then
+                    self:_restoreStateGuards(self.TrackedHumanoid)
+                end
+                self.TrackedHumanoid = hum
+            end
+            self:_setStatus("Respawn Grace")
             return
         end
 
@@ -1819,6 +1929,10 @@ function CustomSpeed:Init()
             return
         end
 
+        if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            return
+        end
+
         local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
         if not hum then
             return
@@ -1891,6 +2005,14 @@ function SpeedMultiplier:Init()
         local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
         if not hum then
             self.Status = "Hum Missing"
+            return
+        end
+
+        if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            if hum ~= self.TrackedHumanoid then
+                self:_captureBaseSpeed(hum)
+            end
+            self.Status = "Respawn Grace"
             return
         end
 
@@ -3542,6 +3664,7 @@ end
 return InputHandler
 ]====],
     ["Modules/Utils/LocalCharacter.lua"] = [====[local Players = game:GetService("Players")
+local clock = os.clock
 
 local LocalCharacter = {}
 LocalCharacter.__index = LocalCharacter
@@ -3553,6 +3676,8 @@ function LocalCharacter.new()
     self.Humanoid = nil
     self.RootPart = nil
     self.PlayerGui = nil
+    self.LastSpawnTime = 0
+    self.RespawnGracePeriod = 1.25
     self._connections = {}
     return self
 end
@@ -3571,11 +3696,16 @@ end
 function LocalCharacter:Init()
     self:_refresh(self.Player and self.Player.Character or nil)
 
+    if self.Character then
+        self.LastSpawnTime = clock()
+    end
+
     if not self.Player then
         return
     end
 
     table.insert(self._connections, self.Player.CharacterAdded:Connect(function(character)
+        self.LastSpawnTime = clock()
         self:_refresh(character)
     end))
 
@@ -3590,6 +3720,9 @@ function LocalCharacter:GetCharacter()
     local character = self.Player and self.Player.Character or nil
     if character ~= self.Character then
         self:_refresh(character)
+        if character then
+            self.LastSpawnTime = clock()
+        end
     end
     return self.Character
 end
@@ -3623,6 +3756,13 @@ end
 function LocalCharacter:IsLocalHumanoid(instance)
     local humanoid = self:GetHumanoid()
     return humanoid ~= nil and instance == humanoid
+end
+
+function LocalCharacter:IsRespawning()
+    if not self.Character then
+        return false
+    end
+    return (clock() - (self.LastSpawnTime or 0)) < self.RespawnGracePeriod
 end
 
 function LocalCharacter:Destroy()
@@ -4837,7 +4977,18 @@ return function(Window, Options, cleaner)
         Name = "Destroy Script (Emergency Stop)",
         Callback = function()
             if _G.BossAimAssist_Cleanup then
-                _G.BossAimAssist_Cleanup()
+                _G.BossAimAssist_Cleanup(true)
+            end
+        end,
+    })
+
+    Tab:CreateButton({
+        Name = "Clean + Update Script",
+        Callback = function()
+            if _G.BossAimAssist_Update then
+                _G.BossAimAssist_Update()
+            elseif _G.BossAimAssist_Cleanup then
+                _G.BossAimAssist_Cleanup(true)
             end
         end,
     })
@@ -4909,7 +5060,7 @@ return function(Window, Options, cleaner)
     Tab:CreateButton({
         Name = "Install Auto-Execute",
         Callback = function()
-            local command = [[loadstring(game:HttpGet("https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Core/Main.lua"))()]]
+            local command = [[loadstring(game:HttpGet("https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Main.lua?v=" .. tostring(os.time())))()]]
             if writefile then
                 pcall(function()
                     writefile("BossAimAssist_Loader.lua", command)
@@ -5168,13 +5319,70 @@ _G.BossAimAssist_SessionID = SESSION_ID
 local _conns = {}
 local function reg(c) table.insert(_conns, c) end
 
-_G.BossAimAssist_Cleanup = function()
-    pcall(function() Rayfield:Destroy() end)
-    for _, c in ipairs(_conns) do pcall(function() c:Disconnect() end) end
-    local objs = {input, localCharacter, tracker, aimbot, silentAim, apocalypse, cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain}
-    for _, o in pairs(movementSuite) do table.insert(objs, o) end
-    for _, o in ipairs(objs) do if o.Destroy then pcall(function() o:Destroy() end) end end
+local function performCleanup(fullSweep)
+    pcall(function()
+        Rayfield:Destroy()
+    end)
+
+    for _, connection in ipairs(_conns) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+    table.clear(_conns)
+
+    local objs = {
+        input, localCharacter, tracker, aimbot, silentAim, apocalypse,
+        cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain
+    }
+    for _, obj in pairs(movementSuite) do
+        objs[#objs + 1] = obj
+    end
+
+    for _, obj in ipairs(objs) do
+        if obj and obj.Destroy then
+            pcall(function()
+                obj:Destroy()
+            end)
+        end
+    end
+
+    _G.BossAimAssist_SessionID = nil
+    _G.BossAimAssist_Update = nil
     _G.BossAimAssist_Cleanup = nil
+
+    local silentHook = getgenv and getgenv().__STAR_GLITCHER_SILENT_AIM_HOOK
+    if silentHook then
+        silentHook.Instance = nil
+    end
+
+    local apocalypseHook = getgenv and getgenv().__STAR_GLITCHER_APOCALYPSE_HOOK
+    if apocalypseHook then
+        apocalypseHook.Instance = nil
+    end
+
+    if fullSweep then
+        pcall(function()
+            if cleaner and cleaner.Clean then
+                cleaner:Clean()
+            end
+        end)
+        pcall(function()
+            collectgarbage("collect")
+            collectgarbage("collect")
+        end)
+    end
+end
+
+_G.BossAimAssist_Cleanup = function(fullSweep)
+    performCleanup(fullSweep == true)
+end
+
+_G.BossAimAssist_Update = function()
+    performCleanup(true)
+    task.wait(0.2)
+    local updateUrl = UPDATE_ENTRY_URL .. "?update=" .. tostring(os.time())
+    return loadstring(game:HttpGet(updateUrl))()
 end
 
 -- Scanning (Heartbeat, Off render)

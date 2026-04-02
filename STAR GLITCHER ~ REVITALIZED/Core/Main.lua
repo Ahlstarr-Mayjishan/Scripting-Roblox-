@@ -14,6 +14,7 @@ local GITHUB_CONFIG = {
 }
 
 local GITHUB_BASE = string.format("https://raw.githubusercontent.com/%s/%s/%s/%s/", GITHUB_CONFIG.User, GITHUB_CONFIG.Repo, GITHUB_CONFIG.Branch, GITHUB_CONFIG.Folder:gsub(" ", "%%20"):gsub("~", "%%7E"))
+local UPDATE_ENTRY_URL = GITHUB_BASE .. "Main.lua"
 
 local function loadModule(path)
     local url = GITHUB_BASE .. path
@@ -292,13 +293,70 @@ _G.BossAimAssist_SessionID = SESSION_ID
 local _conns = {}
 local function reg(c) table.insert(_conns, c) end
 
-_G.BossAimAssist_Cleanup = function()
-    pcall(function() Rayfield:Destroy() end)
-    for _, c in ipairs(_conns) do pcall(function() c:Disconnect() end) end
-    local objs = {input, localCharacter, tracker, aimbot, silentAim, apocalypse, cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain}
-    for _, o in pairs(movementSuite) do table.insert(objs, o) end
-    for _, o in ipairs(objs) do if o.Destroy then pcall(function() o:Destroy() end) end end
+local function performCleanup(fullSweep)
+    pcall(function()
+        Rayfield:Destroy()
+    end)
+
+    for _, connection in ipairs(_conns) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+    table.clear(_conns)
+
+    local objs = {
+        input, localCharacter, tracker, aimbot, silentAim, apocalypse,
+        cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain
+    }
+    for _, obj in pairs(movementSuite) do
+        objs[#objs + 1] = obj
+    end
+
+    for _, obj in ipairs(objs) do
+        if obj and obj.Destroy then
+            pcall(function()
+                obj:Destroy()
+            end)
+        end
+    end
+
+    _G.BossAimAssist_SessionID = nil
+    _G.BossAimAssist_Update = nil
     _G.BossAimAssist_Cleanup = nil
+
+    local silentHook = getgenv and getgenv().__STAR_GLITCHER_SILENT_AIM_HOOK
+    if silentHook then
+        silentHook.Instance = nil
+    end
+
+    local apocalypseHook = getgenv and getgenv().__STAR_GLITCHER_APOCALYPSE_HOOK
+    if apocalypseHook then
+        apocalypseHook.Instance = nil
+    end
+
+    if fullSweep then
+        pcall(function()
+            if cleaner and cleaner.Clean then
+                cleaner:Clean()
+            end
+        end)
+        pcall(function()
+            collectgarbage("collect")
+            collectgarbage("collect")
+        end)
+    end
+end
+
+_G.BossAimAssist_Cleanup = function(fullSweep)
+    performCleanup(fullSweep == true)
+end
+
+_G.BossAimAssist_Update = function()
+    performCleanup(true)
+    task.wait(0.2)
+    local updateUrl = UPDATE_ENTRY_URL .. "?update=" .. tostring(os.time())
+    return loadstring(game:HttpGet(updateUrl))()
 end
 
 -- Scanning (Heartbeat, Off render)

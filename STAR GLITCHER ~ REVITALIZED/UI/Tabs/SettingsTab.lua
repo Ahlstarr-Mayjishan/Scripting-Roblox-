@@ -69,7 +69,18 @@ return function(Window, Options, cleaner)
         Name = "Destroy Script (Emergency Stop)",
         Callback = function()
             if _G.BossAimAssist_Cleanup then
-                _G.BossAimAssist_Cleanup()
+                _G.BossAimAssist_Cleanup(true)
+            end
+        end,
+    })
+
+    Tab:CreateButton({
+        Name = "Clean + Update Script",
+        Callback = function()
+            if _G.BossAimAssist_Update then
+                _G.BossAimAssist_Update()
+            elseif _G.BossAimAssist_Cleanup then
+                _G.BossAimAssist_Cleanup(true)
             end
         end,
     })
@@ -141,7 +152,7 @@ return function(Window, Options, cleaner)
     Tab:CreateButton({
         Name = "Install Auto-Execute",
         Callback = function()
-            local command = [[loadstring(game:HttpGet("https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Core/Main.lua"))()]]
+            local command = [[loadstring(game:HttpGet("https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Main.lua?v=" .. tostring(os.time())))()]]
             if writefile then
                 pcall(function()
                     writefile("BossAimAssist_Loader.lua", command)
