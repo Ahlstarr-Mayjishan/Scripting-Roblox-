@@ -6383,19 +6383,19 @@ end
 _G.BossAimAssist_CheckForUpdates = function(manual)
     local ok, remoteVersion = pcall(function()
         local content = game:HttpGet(VERSION_URL .. "?check=" .. tostring(os.time()))
-        local chunk, compileErr = loadstring(content, "=remote-version")
-        if not chunk then
-            error(compileErr)
+        local parsedVersion = parseRemoteVersion(content)
+        if not parsedVersion then
+            error("Could not parse remote version value")
         end
-        return tonumber(chunk())
+        return parsedVersion
     end)
 
     if not ok then
         if manual and Rayfield and Rayfield.Notify then
             Rayfield:Notify({
                 Title = "Update Check Failed",
-                Content = "Could not reach the remote version file.",
-                Duration = 4,
+                Content = "Version check failed. The remote file responded, but parsing or access failed.",
+                Duration = 5,
                 Image = 4483362458,
             })
         end

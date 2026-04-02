@@ -19,11 +19,29 @@ local loaderSession = tostring(os.time())
 local runtimeModuleCache = {}
 
 local function compileChunk(content, chunkName)
-    local chunk, compileErr = loadstring(content, chunkName)
+    local compiler = loadstring or load
+    if not compiler then
+        error("[compile] No Lua compiler available")
+    end
+
+    content = tostring(content):gsub("^\239\187\191", ""):gsub("^﻿", "")
+    local chunk, compileErr = compiler(content, chunkName)
     if not chunk then
         error("[compile] " .. tostring(compileErr))
     end
     return chunk
+end
+
+local function parseRemoteVersion(content)
+    content = tostring(content or ""):gsub("^\239\187\191", ""):gsub("^﻿", "")
+
+    local directNumber = content:match("%f[%d](%d+)%f[%D]")
+    if directNumber then
+        return tonumber(directNumber)
+    end
+
+    local chunk = compileChunk(content, "=remote-version")
+    return tonumber(chunk())
 end
 
 local function loadModule(path)
@@ -395,19 +413,19 @@ end
 _G.BossAimAssist_CheckForUpdates = function(manual)
     local ok, remoteVersion = pcall(function()
         local content = game:HttpGet(VERSION_URL .. "?check=" .. tostring(os.time()))
-        local chunk, compileErr = loadstring(content, "=remote-version")
-        if not chunk then
-            error(compileErr)
+        local parsedVersion = parseRemoteVersion(content)
+        if not parsedVersion then
+            error("Could not parse remote version value")
         end
-        return tonumber(chunk())
+        return parsedVersion
     end)
 
     if not ok then
         if manual and Rayfield and Rayfield.Notify then
             Rayfield:Notify({
                 Title = "Update Check Failed",
-                Content = "Could not reach the remote version file.",
-                Duration = 4,
+                Content = "Version check failed. The remote file responded, but parsing or access failed.",
+                Duration = 5,
                 Image = 4483362458,
             })
         end
