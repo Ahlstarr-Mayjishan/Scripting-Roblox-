@@ -12,12 +12,31 @@ function SpeedMultiplier.new(options, localCharacter)
     self.TrackedHumanoid = nil
     self.Status = "Idle"
     self._lastBoostTime = 0
+    self._lastWalkWriteTime = 0
     return self
 end
 
 function SpeedMultiplier:_captureBaseSpeed(humanoid)
     self.TrackedHumanoid = humanoid
     self.BaseWalkSpeed = math.max(humanoid.WalkSpeed, 16)
+end
+
+function SpeedMultiplier:_learnLegitBaseSpeed(humanoid)
+    local multiplier = math.max(self.Options.SpeedMultiplier or 1, 1)
+    local now = os.clock()
+    if (now - self._lastWalkWriteTime) < 0.2 then
+        return
+    end
+
+    if not self.Options.SpeedMultiplierEnabled then
+        self.BaseWalkSpeed = math.max(humanoid.WalkSpeed, 16)
+        return
+    end
+
+    local observedBase = humanoid.WalkSpeed / multiplier
+    if observedBase > (self.BaseWalkSpeed + 0.75) then
+        self.BaseWalkSpeed = observedBase
+    end
 end
 
 function SpeedMultiplier:_applyVelocityFallback(humanoid, rootPart, desiredSpeed)
@@ -67,6 +86,8 @@ function SpeedMultiplier:Init()
             self.BaseWalkSpeed = math.max(hum.WalkSpeed, 16)
         end
 
+        self:_learnLegitBaseSpeed(hum)
+
         if not self.Options.SpeedMultiplierEnabled or self.Options.CustomMoveSpeedEnabled then
             self.Status = self.Options.CustomMoveSpeedEnabled and "Blocked by Fixed Speed" or "Disabled"
             return
@@ -78,6 +99,7 @@ function SpeedMultiplier:Init()
 
         if math.abs(hum.WalkSpeed - desiredSpeed) > 0.1 then
             hum.WalkSpeed = desiredSpeed
+            self._lastWalkWriteTime = os.clock()
         end
 
         -- Some games ignore WalkSpeed entirely and drive movement from custom controllers.

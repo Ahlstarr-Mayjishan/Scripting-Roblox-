@@ -21,6 +21,7 @@ function AntiSlowdown.new(options, localCharacter)
 
     self.Status = "Idle"
     self._lastAction = 0
+    self._lastWriteTime = 0
     return self
 end
 
@@ -39,6 +40,21 @@ function AntiSlowdown:CaptureBaseStats(humanoid)
     self.TrackedHumanoid = hum
     self.BaseWalkSpeed = math.max(hum.WalkSpeed, 16)
     self.BaseJumpPower = math.max(hum.JumpPower, 50)
+end
+
+function AntiSlowdown:_learnLegitMovement(humanoid)
+    local now = clock()
+    if (now - self._lastWriteTime) < 0.25 then
+        return
+    end
+
+    if humanoid.WalkSpeed > (self.BaseWalkSpeed + 1.5) then
+        self.BaseWalkSpeed = humanoid.WalkSpeed
+    end
+
+    if humanoid.JumpPower > (self.BaseJumpPower + 1.5) then
+        self.BaseJumpPower = humanoid.JumpPower
+    end
 end
 
 function AntiSlowdown:Init()
@@ -68,14 +84,18 @@ function AntiSlowdown:Init()
             self:CaptureBaseStats(hum)
         end
 
+        self:_learnLegitMovement(hum)
+
         local actionTaken = false
         if hum.WalkSpeed < self.BaseWalkSpeed then
             hum.WalkSpeed = self.BaseWalkSpeed
+            self._lastWriteTime = clock()
             actionTaken = true
         end
 
         if hum.JumpPower < self.BaseJumpPower then
             hum.JumpPower = self.BaseJumpPower
+            self._lastWriteTime = clock()
             actionTaken = true
         end
 
