@@ -1,4 +1,4 @@
-﻿--[[
+--[[
     â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
     â•‘     Boss Aim Assist â€” Centralized Brain Orchestration v6       â•‘
     â•‘  Scientifically Reorganized | Fully Decoupled | Brain Driven  â•‘
@@ -6383,4 +6383,3 @@ reg(RunService.RenderStepped:Connect(function(dt)
 end))
 
 warn("âœ… [Core] Brain Orchestration v6 Active.")
-

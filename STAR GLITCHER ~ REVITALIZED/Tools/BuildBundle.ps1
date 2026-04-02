@@ -70,6 +70,11 @@ $bundleContent = [regex]::Replace(
     $replacement,
     [System.Text.RegularExpressions.RegexOptions]::Singleline
 )
+$bundleContent = $bundleContent.TrimStart([char]0xFEFF)
 
-Set-Content -Path $bundlePath -Value $bundleContent -Encoding UTF8
+[System.IO.File]::WriteAllText(
+    $bundlePath,
+    $bundleContent,
+    (New-Object System.Text.UTF8Encoding($false))
+)
 Write-Host "Bundle rebuilt:" $bundlePath

@@ -4,8 +4,13 @@
 ]]
 
 local function compileRemoteChunk(url, chunkName)
+    local compiler = loadstring or load
+    if not compiler then
+        error("No Lua compiler available in this executor (loadstring/load missing)")
+    end
+
     local source = game:HttpGet(url)
-    local chunk, compileErr = loadstring(source, chunkName)
+    local chunk, compileErr = compiler(source, chunkName)
     if not chunk then
         error(string.format("Failed to compile %s: %s", chunkName, tostring(compileErr)))
     end
