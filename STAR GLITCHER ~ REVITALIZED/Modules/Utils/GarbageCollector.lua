@@ -12,9 +12,10 @@ local LocalPlayer = Players.LocalPlayer
 local GarbageCollector = {}
 GarbageCollector.__index = GarbageCollector
 
-function GarbageCollector.new(options)
+function GarbageCollector.new(options, resourceManager)
     local self = setmetatable({}, GarbageCollector)
     self.Options = options
+    self.ResourceManager = resourceManager
     self.Connection = nil
     self._lastClean = 0
     self._cleanInterval = 60 -- Default to every 60 seconds
@@ -26,6 +27,7 @@ function GarbageCollector.new(options)
     self._destroyBudget = 10
     self._collectStepSize = 24
     self._manualBoostUntil = 0
+    self._frameBudget = 0.0012
     self.Status = "Idle"
     return self
 end
@@ -123,23 +125,37 @@ end
 function GarbageCollector:_drainQueue(destroyBudget, gcStepSize)
     local destroyed = 0
     local processed = 0
+    local startTime = os.clock()
 
     while self._queueSize > 0 and processed < destroyBudget do
+        if (os.clock() - startTime) >= self._frameBudget then
+            break
+        end
+
         local instance = self._queued[self._queueSize]
         self._queued[self._queueSize] = nil
         self._queueSize = self._queueSize - 1
         processed = processed + 1
 
         if instance and instance.Parent then
-            pcall(function()
-                instance:SetAttribute("__SG_QueuedForCleanup", nil)
-                instance:Destroy()
-            end)
-            destroyed = destroyed + 1
+            if self.ResourceManager then
+                self.ResourceManager:DeferCleanup(function()
+                    if instance and instance.Parent then
+                        instance:SetAttribute("__SG_QueuedForCleanup", nil)
+                        instance:Destroy()
+                    end
+                end)
+            else
+                pcall(function()
+                    instance:SetAttribute("__SG_QueuedForCleanup", nil)
+                    instance:Destroy()
+                end)
+                destroyed = destroyed + 1
+            end
         end
     end
 
-    if destroyed > 0 then
+    if destroyed > 0 and not self.ResourceManager then
         collectgarbage("step", gcStepSize)
     end
 
@@ -190,7 +206,10 @@ function GarbageCollector:Init()
 end
 
 function GarbageCollector:Clean()
-    self._manualBoostUntil = os.clock() + 2
+    self._manualBoostUntil = os.clock() + 3
+    if self.ResourceManager then
+        self.ResourceManager:Boost(2.5)
+    end
     if not self._scanList then
         self._lastClean = 0
         self:_beginScan()
@@ -198,20 +217,28 @@ function GarbageCollector:Clean()
 
     local queued = 0
     local destroyed = 0
-    for _ = 1, 6 do
+    for _ = 1, 4 do
         local q = 0
         if self._scanList then
             q = select(1, self:_processScan(self._scanBatchSize * 2))
         end
         queued = queued + q
-        destroyed = destroyed + self:_drainQueue(self._destroyBudget * 2, self._collectStepSize * 2)
+        destroyed = destroyed + self:_drainQueue(self._destroyBudget, self._collectStepSize)
 
         if not self._scanList and self._queueSize == 0 then
             break
         end
     end
 
-    self.Status = self._queueSize > 0 and string.format("Cleaning (%d left)", self._queueSize) or "Cleanup Settled"
+    if self.ResourceManager and self.ResourceManager:GetPendingCount() > 0 then
+        self.Status = string.format(
+            "Smart Cleanup (%d local / %d deferred)",
+            self._queueSize,
+            self.ResourceManager:GetPendingCount()
+        )
+    else
+        self.Status = self._queueSize > 0 and string.format("Cleaning (%d left)", self._queueSize) or "Cleanup Settled"
+    end
     return destroyed, queued, self._queueSize
 end
 

@@ -1,8 +1,8 @@
---[[
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║     Boss Aim Assist — Centralized Brain Orchestration v6       ║
-    ║  Scientifically Reorganized | Fully Decoupled | Brain Driven  ║
-    ╚═══════════════════════════════════════════════════════════════╝
+﻿--[[
+    â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
+    â•‘     Boss Aim Assist â€” Centralized Brain Orchestration v6       â•‘
+    â•‘  Scientifically Reorganized | Fully Decoupled | Brain Driven  â•‘
+    â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 ]]
 
 local BUNDLED_SOURCES = {
@@ -20,6 +20,7 @@ Config.Options = {
     TargetPlayersToggle = false,
     SmartPrediction = true,
     TargetPart = "HumanoidRootPart",
+    TargetingMethod = "FOV",
     AimOffset = 0,
     FOV = 150,
     ShowFOV = true,
@@ -32,11 +33,18 @@ Config.Options = {
     NoStun = false,
     CustomMoveSpeedEnabled = false,
     CustomMoveSpeed = 16,
+    GravityEnabled = false,
+    GravityValue = 196.2,
+    FloatEnabled = false,
+    FloatFallSpeed = 8,
+    JumpBoostEnabled = false,
+    JumpBoostPower = 70,
     SpeedMultiplierEnabled = false,
     SpeedMultiplier = 1.0,
     SpeedSpoofEnabled = false,
     ApocalypseEnabled = false,
     AutoCleanEnabled = true,
+    SmartCleanupEnabled = true,
 }
 
 Config.Prediction = {
@@ -98,7 +106,7 @@ Config.Blacklist = {
 
 return Config
 ]====],
-    ["Data/Version.lua"] = [====[return 129 -- Version 1.1.19 (Unified UI / Anti-Stun Fix / Status Check)
+    ["Data/Version.lua"] = [====[return 130 -- Version 1.2.0 (Auto Update Runtime / Player Mobility Additions)
 ]====],
     ["Modules/Combat/Aimbot.lua"] = [====[local Workspace = game:GetService("Workspace")
 
@@ -392,12 +400,12 @@ end
 return Apocalypse
 ]====],
     ["Modules/Combat/Prediction/Base.lua"] = [====[--[[
-    Base.lua — Scientific Physics Core (Smart Prediction)
+    Base.lua â€” Scientific Physics Core (Smart Prediction)
     Implements advanced kinematic equations:
-    • Uniform Linear Motion: s = vt
-    • Uniformly Accelerated Motion: s = v0t + 0.5at^2
-    • Braking/Deceleration compensation
-    • Jerk-aware extrapolation
+    â€¢ Uniform Linear Motion: s = vt
+    â€¢ Uniformly Accelerated Motion: s = v0t + 0.5at^2
+    â€¢ Braking/Deceleration compensation
+    â€¢ Jerk-aware extrapolation
 ]]
 
 local Base = {}
@@ -415,15 +423,15 @@ function Base:Calculate(origin, part, velocity, acceleration, jerk, dt)
     local dist = (targetPos - origin).Magnitude
     
     -- 1. Travel Time Estimation (Projectile/Spell flight)
-    -- Nếu là Beam (tốc độ ánh sáng), travelTime ~ 0.
-    -- Với phép thuật có vận tốc, travelTime = dist / bulletSpeed.
+    -- Náº¿u lÃ  Beam (tá»‘c Ä‘á»™ Ã¡nh sÃ¡ng), travelTime ~ 0.
+    -- Vá»›i phÃ©p thuáº­t cÃ³ váº­n tá»‘c, travelTime = dist / bulletSpeed.
     local travelTime = (dist / 1000) * (self.Options.PredictionScale or 1)
     
     -- 2. Kinematic Equations Dispatch
     local predictedOffset = Vector3.zero
     
     if acceleration and acceleration.Magnitude > 0.05 then
-        -- Chuyển động có gia tốc đều: s = vt + 0.5at^2
+        -- Chuyá»ƒn Ä‘á»™ng cÃ³ gia tá»‘c Ä‘á»u: s = vt + 0.5at^2
         predictedOffset = (velocity * travelTime) + (0.5 * acceleration * travelTime * travelTime)
         
         -- Jerk compensation: s += (1/6) * j * t^3
@@ -431,21 +439,21 @@ function Base:Calculate(origin, part, velocity, acceleration, jerk, dt)
             predictedOffset = predictedOffset + ( (1/6) * jerk * math.pow(travelTime, 3) )
         end
     else
-        -- Chuyển động thẳng đều: s = vt
+        -- Chuyá»ƒn Ä‘á»™ng tháº³ng Ä‘á»u: s = vt
         predictedOffset = velocity * travelTime
     end
     
-    -- 3. Braking / Deceleration Logic (Quãng đường phanh)
-    -- Nếu vận tốc đang giảm mạnh (a ngược chiều v), chúng ta bù trừ quãng đường phanh
+    -- 3. Braking / Deceleration Logic (QuÃ£ng Ä‘Æ°á»ng phanh)
+    -- Náº¿u váº­n tá»‘c Ä‘ang giáº£m máº¡nh (a ngÆ°á»£c chiá»u v), chÃºng ta bÃ¹ trá»« quÃ£ng Ä‘Æ°á»ng phanh
     local speed = velocity.Magnitude
     if speed > 1 and acceleration then
         local dot = velocity.Unit:Dot(acceleration.Unit)
-        if dot < -0.7 then -- Đang phanh/hãm
+        if dot < -0.7 then -- Äang phanh/hÃ£m
             local deceleration = acceleration.Magnitude
-            -- s_phanh = v^2 / 2a (Công thức quãng đường hãm)
+            -- s_phanh = v^2 / 2a (CÃ´ng thá»©c quÃ£ng Ä‘Æ°á»ng hÃ£m)
             local brakingDist = (speed * speed) / (2 * deceleration)
             
-            -- Giới hạn bù trừ phanh để tránh jitter
+            -- Giá»›i háº¡n bÃ¹ trá»« phanh Ä‘á»ƒ trÃ¡nh jitter
             brakingDist = math.min(brakingDist, 5) 
             predictedOffset = predictedOffset + (acceleration.Unit * brakingDist * 0.5)
         end
@@ -663,7 +671,7 @@ end
 return Engine
 ]====],
     ["Modules/Combat/Prediction/Estimator.lua"] = [====[--[[
-    Estimator.lua — State Estimation & Noise Removal (Physics Damping v2)
+    Estimator.lua â€” State Estimation & Noise Removal (Physics Damping v2)
     Analogy: Inferior Colliculus (Auditory/Visual processing before perception).
     Job: Filtering raw velocity, detecting acceleration/jerk, and scoring confidence.
     Fixes: Jitter/Shakiness (rung) via progressive damping filters.
@@ -796,7 +804,7 @@ end
 return Estimator
 ]====],
     ["Modules/Combat/Prediction/Sampler.lua"] = [====[--[[
-    Sampler.lua — Pure Kinematic Data Extraction
+    Sampler.lua â€” Pure Kinematic Data Extraction
     Analogy: The sensory nerves (Afferent fibers).
     Job: Extract raw position, velocity, and teleportation data without modification.
 ]]
@@ -936,7 +944,7 @@ end
 return Stabilizer
 ]====],
     ["Modules/Combat/Predictor.lua"] = [====[--[[
-    Predictor.lua — High-Performance Layered Orchestrator
+    Predictor.lua â€” High-Performance Layered Orchestrator
     Analogy: The Neural Motor Network.
     Job: Orchestrates the 4 layers: Sampler -> Estimator -> Engine -> Stabilizer.
     Architecture: Orthogonal-First design (Zero feedback loop).
@@ -1277,19 +1285,41 @@ function TargetSelector.new(config, tracker, predictor)
     return self
 end
 
-function TargetSelector:_scoreEntry(entry, localCharacter, mouseX, mouseY, originPos, maxDistance)
+function TargetSelector:_getMethod()
+    local method = tostring(self.Options.TargetingMethod or "FOV")
+    if method == "Distance" or method == "Deadlock" then
+        return method
+    end
+    return "FOV"
+end
+
+function TargetSelector:_isEntryValid(entry, localCharacter, originPos, maxDistance)
     if not entry or not entry.Model or entry.Model == localCharacter then
-        return nil, nil
+        return nil, nil, nil
     end
 
     local part = self.Tracker:GetTargetPart(entry)
     if not part or (localCharacter and part:IsDescendantOf(localCharacter)) then
-        return nil, nil
+        return nil, nil, nil
     end
 
     local toTarget = part.Position - originPos
-    if toTarget.Magnitude > maxDistance then
+    local distance = toTarget.Magnitude
+    if distance > maxDistance then
+        return nil, nil, nil
+    end
+
+    return part, distance, toTarget
+end
+
+function TargetSelector:_scoreEntry(entry, localCharacter, mouseX, mouseY, originPos, maxDistance, method)
+    local part, distance = self:_isEntryValid(entry, localCharacter, originPos, maxDistance)
+    if not part then
         return nil, nil
+    end
+
+    if method == "Distance" then
+        return distance, part
     end
 
     local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
@@ -1308,13 +1338,21 @@ function TargetSelector:GetClosestTarget(mousePos, originPos, preferredEntry)
     local mouseX = mousePos.X
     local mouseY = mousePos.Y
     local maxDistance = self.Options.MaxDistance or 2500
+    local method = self:_getMethod()
     local fov = self.Options.FOV or 150
-    local bestScore = fov * fov
+    local bestScore = method == "Distance" and maxDistance or (fov * fov)
+
+    if method == "Deadlock" and preferredEntry then
+        local lockedPart = self:_isEntryValid(preferredEntry, localCharacter, originPos, maxDistance)
+        if lockedPart then
+            return preferredEntry
+        end
+    end
 
     -- Keep the current target when it is still meaningfully valid to avoid
     -- rescoring churn and target thrash in crowded scenes.
     if preferredEntry then
-        local preferredScore = self:_scoreEntry(preferredEntry, localCharacter, mouseX, mouseY, originPos, maxDistance)
+        local preferredScore = self:_scoreEntry(preferredEntry, localCharacter, mouseX, mouseY, originPos, maxDistance, method)
         if preferredScore and preferredScore <= (bestScore * self._stickyBias) then
             bestTarget = preferredEntry
             bestScore = preferredScore
@@ -1325,7 +1363,7 @@ function TargetSelector:GetClosestTarget(mousePos, originPos, preferredEntry)
     for i = 1, #entries do
         local entry = entries[i]
         if entry ~= preferredEntry then
-            local score = self:_scoreEntry(entry, localCharacter, mouseX, mouseY, originPos, maxDistance)
+            local score = self:_scoreEntry(entry, localCharacter, mouseX, mouseY, originPos, maxDistance, method)
             if score and score < bestScore then
                 bestScore = score
                 bestTarget = entry
@@ -1370,9 +1408,17 @@ function Brain.new(config, modules, loader)
     return self
 end
 
+function Brain:_isDeadlockMode()
+    return tostring(self.Options.TargetingMethod or "FOV") == "Deadlock"
+end
+
 function Brain:Scan(mousePos, originPos)
     local shouldAssist = self.Parietal.Input:ShouldAssist()
+    local deadlockMode = self:_isDeadlockMode()
     if not shouldAssist then
+        if deadlockMode and self.Options.AssistMode ~= "Off" then
+            return
+        end
         self.Parietal.Tracker.CurrentTargetEntry = nil
         return
     end
@@ -1390,8 +1436,10 @@ end
 function Brain:Update(dt, mousePos, camCFrame)
     local shouldAssist = self.Parietal.Input:ShouldAssist()
     local entry = self.Parietal.Tracker.CurrentTargetEntry
+    local maintainDeadlock = self:_isDeadlockMode() and self.Options.AssistMode ~= "Off" and entry ~= nil
+    local shouldTrack = shouldAssist or maintainDeadlock
 
-    if not shouldAssist or not entry then
+    if not shouldTrack or not entry then
         self.Occipital:Clear()
         self.Frontal:Rest()
         return
@@ -1435,7 +1483,7 @@ end
 return Brain
 ]====],
     ["Modules/Core/Brain/Frontal.lua"] = [====[--[[
-    FrontalLobe.lua — Executive Function & Motor Control
+    FrontalLobe.lua â€” Executive Function & Motor Control
     Analogy: Planning and executing movements (Aimbot/Silent Aim).
     Script Job: Dispatches actual aimbot actions based on brain decisions.
 ]]
@@ -1473,7 +1521,7 @@ end
 return FrontalLobe
 ]====],
     ["Modules/Core/Brain/Occipital.lua"] = [====[--[[
-    OccipitalLobe.lua — Visual Processing
+    OccipitalLobe.lua â€” Visual Processing
     Analogy: Primary visual cortex.
     Job: Manages FOV, Highlight, and Target feedback dots.
 ]]
@@ -1513,7 +1561,7 @@ end
 return OccipitalLobe
 ]====],
     ["Modules/Core/Brain/Parietal.lua"] = [====[--[[
-    ParietalLobe.lua — Sensory & Input Processing
+    ParietalLobe.lua â€” Sensory & Input Processing
     Analogy: Integrates sensory information from various parts of the body.
     Script Job: Monitors user input and world entity tracking.
 ]]
@@ -1584,9 +1632,27 @@ function TemporalLobe:Process(originPos, dt)
         return nil, nil
     end
 
+    if self._targetEntry.Humanoid and self._targetEntry.Humanoid.Health <= 0 then
+        self._targetEntry = nil
+        self._targetPart = nil
+        self._prediction = nil
+        if self._lastEntry then
+            self.Predictor:NotifyTargetChanged(nil)
+            self._lastEntry = nil
+            self._lastPart = nil
+        end
+        return nil, nil
+    end
+
     self._targetPart = self.Selector.Tracker:GetTargetPart(self._targetEntry)
     if not self._targetPart then
+        self._targetEntry = nil
         self._prediction = nil
+        if self._lastEntry then
+            self.Predictor:NotifyTargetChanged(nil)
+            self._lastEntry = nil
+            self._lastPart = nil
+        end
         return nil, nil
     end
 
@@ -1626,6 +1692,7 @@ function AntiSlowdown.new(options, localCharacter)
 
     self.Status = "Idle"
     self._lastAction = 0
+    self._lastWriteTime = 0
     return self
 end
 
@@ -1644,6 +1711,21 @@ function AntiSlowdown:CaptureBaseStats(humanoid)
     self.TrackedHumanoid = hum
     self.BaseWalkSpeed = math.max(hum.WalkSpeed, 16)
     self.BaseJumpPower = math.max(hum.JumpPower, 50)
+end
+
+function AntiSlowdown:_learnLegitMovement(humanoid)
+    local now = clock()
+    if (now - self._lastWriteTime) < 0.25 then
+        return
+    end
+
+    if humanoid.WalkSpeed > (self.BaseWalkSpeed + 1.5) then
+        self.BaseWalkSpeed = humanoid.WalkSpeed
+    end
+
+    if humanoid.JumpPower > (self.BaseJumpPower + 1.5) then
+        self.BaseJumpPower = humanoid.JumpPower
+    end
 end
 
 function AntiSlowdown:Init()
@@ -1673,14 +1755,18 @@ function AntiSlowdown:Init()
             self:CaptureBaseStats(hum)
         end
 
+        self:_learnLegitMovement(hum)
+
         local actionTaken = false
         if hum.WalkSpeed < self.BaseWalkSpeed then
             hum.WalkSpeed = self.BaseWalkSpeed
+            self._lastWriteTime = clock()
             actionTaken = true
         end
 
         if hum.JumpPower < self.BaseJumpPower then
             hum.JumpPower = self.BaseJumpPower
+            self._lastWriteTime = clock()
             actionTaken = true
         end
 
@@ -1953,6 +2039,228 @@ end
 
 return CustomSpeed
 ]====],
+    ["Modules/Movement/FloatController.lua"] = [====[local RunService = game:GetService("RunService")
+
+local FloatController = {}
+FloatController.__index = FloatController
+
+local AIR_STATES = {
+    [Enum.HumanoidStateType.Freefall] = true,
+    [Enum.HumanoidStateType.Jumping] = true,
+    [Enum.HumanoidStateType.FallingDown] = true,
+}
+
+function FloatController.new(options, localCharacter)
+    local self = setmetatable({}, FloatController)
+    self.Options = options
+    self.LocalCharacter = localCharacter
+    self.Status = "Idle"
+    self._connection = nil
+    return self
+end
+
+function FloatController:Init()
+    if self._connection then
+        return
+    end
+
+    self._connection = RunService.Heartbeat:Connect(function()
+        if not self.Options.FloatEnabled then
+            self.Status = "Idle"
+            return
+        end
+
+        if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            self.Status = "Respawn grace"
+            return
+        end
+
+        local _, humanoid, root = self.LocalCharacter:GetState()
+        if not humanoid or not root then
+            self.Status = "Waiting for character"
+            return
+        end
+
+        local state = humanoid:GetState()
+        if not AIR_STATES[state] then
+            self.Status = "Grounded"
+            return
+        end
+
+        local velocity = root.AssemblyLinearVelocity
+        local maxFallSpeed = -math.clamp(tonumber(self.Options.FloatFallSpeed) or 8, 0, 80)
+        if velocity.Y < maxFallSpeed then
+            root.AssemblyLinearVelocity = Vector3.new(velocity.X, maxFallSpeed, velocity.Z)
+            self.Status = string.format("Softening fall: %.1f", math.abs(maxFallSpeed))
+        else
+            self.Status = "Airborne hold"
+        end
+    end)
+end
+
+function FloatController:Destroy()
+    if self._connection then
+        self._connection:Disconnect()
+        self._connection = nil
+    end
+end
+
+return FloatController
+]====],
+    ["Modules/Movement/GravityController.lua"] = [====[local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local GravityController = {}
+GravityController.__index = GravityController
+
+local DEFAULT_GRAVITY = 196.2
+
+function GravityController.new(options)
+    local self = setmetatable({}, GravityController)
+    self.Options = options
+    self.Status = "Idle"
+    self.BaseGravity = Workspace.Gravity or DEFAULT_GRAVITY
+    self._connection = nil
+    self._applied = false
+    return self
+end
+
+function GravityController:_restore()
+    if self._applied and math.abs(Workspace.Gravity - self.BaseGravity) > 0.05 then
+        Workspace.Gravity = self.BaseGravity
+    end
+    self._applied = false
+end
+
+function GravityController:Init()
+    if self._connection then
+        return
+    end
+
+    self._connection = RunService.Heartbeat:Connect(function()
+        if self.Options.GravityEnabled then
+            local desired = math.clamp(tonumber(self.Options.GravityValue) or DEFAULT_GRAVITY, 0, 1000)
+            if math.abs(Workspace.Gravity - desired) > 0.05 then
+                Workspace.Gravity = desired
+            end
+            self._applied = true
+            self.Status = string.format("Active: %.1f", desired)
+            return
+        end
+
+        if not self._applied then
+            self.BaseGravity = Workspace.Gravity
+            self.Status = "Idle"
+            return
+        end
+
+        self:_restore()
+        self.Status = "Idle"
+    end)
+end
+
+function GravityController:Destroy()
+    if self._connection then
+        self._connection:Disconnect()
+        self._connection = nil
+    end
+    self:_restore()
+end
+
+return GravityController
+]====],
+    ["Modules/Movement/JumpBoost.lua"] = [====[local RunService = game:GetService("RunService")
+
+local JumpBoost = {}
+JumpBoost.__index = JumpBoost
+
+local DEFAULT_JUMP_POWER = 50
+
+function JumpBoost.new(options, localCharacter)
+    local self = setmetatable({}, JumpBoost)
+    self.Options = options
+    self.LocalCharacter = localCharacter
+    self.Status = "Idle"
+    self.TrackedHumanoid = nil
+    self.BaseJumpPower = DEFAULT_JUMP_POWER
+    self._connection = nil
+    self._applied = false
+    return self
+end
+
+function JumpBoost:_captureBaseJump(humanoid)
+    if humanoid then
+        self.BaseJumpPower = math.max(humanoid.JumpPower, DEFAULT_JUMP_POWER)
+    end
+end
+
+function JumpBoost:_restore()
+    local humanoid = self.TrackedHumanoid
+    if humanoid and humanoid.Parent and self._applied then
+        if math.abs(humanoid.JumpPower - self.BaseJumpPower) > 0.1 then
+            humanoid.JumpPower = self.BaseJumpPower
+        end
+    end
+    self._applied = false
+end
+
+function JumpBoost:Init()
+    if self._connection then
+        return
+    end
+
+    self._connection = RunService.Heartbeat:Connect(function()
+        local humanoid = self.LocalCharacter:GetHumanoid()
+        if humanoid ~= self.TrackedHumanoid then
+            self.TrackedHumanoid = humanoid
+            self:_captureBaseJump(humanoid)
+            self._applied = false
+        end
+
+        if not humanoid then
+            self.Status = "Waiting for humanoid"
+            return
+        end
+
+        if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            self.Status = "Respawn grace"
+            return
+        end
+
+        if not self.Options.JumpBoostEnabled then
+            if not self._applied then
+                self.BaseJumpPower = math.max(humanoid.JumpPower, DEFAULT_JUMP_POWER)
+                self.Status = "Idle"
+                return
+            end
+
+            self:_restore()
+            self.Status = "Idle"
+            return
+        end
+
+        local desired = math.clamp(tonumber(self.Options.JumpBoostPower) or DEFAULT_JUMP_POWER, 1, 300)
+        if not humanoid.UseJumpPower then
+            humanoid.UseJumpPower = true
+        end
+        if math.abs(humanoid.JumpPower - desired) > 0.1 then
+            humanoid.JumpPower = desired
+        end
+        self._applied = true
+        self.Status = string.format("Active: %.0f", desired)
+    end)
+end
+
+function JumpBoost:Destroy()
+    if self._connection then
+        self._connection:Disconnect()
+        self._connection = nil
+    end
+    self:_restore()
+end
+
+return JumpBoost
+]====],
     ["Modules/Movement/SpeedMultiplier.lua"] = [====[local RunService = game:GetService("RunService")
 
 local SpeedMultiplier = {}
@@ -1967,12 +2275,31 @@ function SpeedMultiplier.new(options, localCharacter)
     self.TrackedHumanoid = nil
     self.Status = "Idle"
     self._lastBoostTime = 0
+    self._lastWalkWriteTime = 0
     return self
 end
 
 function SpeedMultiplier:_captureBaseSpeed(humanoid)
     self.TrackedHumanoid = humanoid
     self.BaseWalkSpeed = math.max(humanoid.WalkSpeed, 16)
+end
+
+function SpeedMultiplier:_learnLegitBaseSpeed(humanoid)
+    local multiplier = math.max(self.Options.SpeedMultiplier or 1, 1)
+    local now = os.clock()
+    if (now - self._lastWalkWriteTime) < 0.2 then
+        return
+    end
+
+    if not self.Options.SpeedMultiplierEnabled then
+        self.BaseWalkSpeed = math.max(humanoid.WalkSpeed, 16)
+        return
+    end
+
+    local observedBase = humanoid.WalkSpeed / multiplier
+    if observedBase > (self.BaseWalkSpeed + 0.75) then
+        self.BaseWalkSpeed = observedBase
+    end
 end
 
 function SpeedMultiplier:_applyVelocityFallback(humanoid, rootPart, desiredSpeed)
@@ -2022,6 +2349,8 @@ function SpeedMultiplier:Init()
             self.BaseWalkSpeed = math.max(hum.WalkSpeed, 16)
         end
 
+        self:_learnLegitBaseSpeed(hum)
+
         if not self.Options.SpeedMultiplierEnabled or self.Options.CustomMoveSpeedEnabled then
             self.Status = self.Options.CustomMoveSpeedEnabled and "Blocked by Fixed Speed" or "Disabled"
             return
@@ -2033,6 +2362,7 @@ function SpeedMultiplier:Init()
 
         if math.abs(hum.WalkSpeed - desiredSpeed) > 0.1 then
             hum.WalkSpeed = desiredSpeed
+            self._lastWalkWriteTime = os.clock()
         end
 
         -- Some games ignore WalkSpeed entirely and drive movement from custom controllers.
@@ -2062,6 +2392,9 @@ return SpeedMultiplier
 ]====],
     ["Modules/Movement/SpeedSpoof.lua"] = [====[local SpeedSpoof = {}
 SpeedSpoof.__index = SpeedSpoof
+
+local DEFAULT_WALK_SPEED = 16
+local DEFAULT_JUMP_POWER = 50
 
 function SpeedSpoof.new(options, localCharacter)
     local self = setmetatable({}, SpeedSpoof)
@@ -2100,8 +2433,30 @@ function SpeedSpoof:Init()
             and localCharacter
             and localCharacter:IsLocalHumanoid(obj) then
             if options and options.SpeedSpoofEnabled then
-                if index == "WalkSpeed" then return 16 end
-                if index == "JumpPower" then return 50 end
+                local realValue = oldIndex(obj, index)
+                if type(realValue) ~= "number" then
+                    return realValue
+                end
+
+                -- Let the game finish rebuilding sprint/state controllers after respawn.
+                if localCharacter.IsRespawning and localCharacter:IsRespawning() then
+                    return realValue
+                end
+
+                if index == "WalkSpeed" then
+                    -- Preserve legitimate sprint or game-side boosts instead of forcing 16 forever.
+                    if realValue > (DEFAULT_WALK_SPEED + 0.75) then
+                        return realValue
+                    end
+                    return DEFAULT_WALK_SPEED
+                end
+
+                if index == "JumpPower" then
+                    if realValue > (DEFAULT_JUMP_POWER + 1) then
+                        return realValue
+                    end
+                    return DEFAULT_JUMP_POWER
+                end
             end
         end
         return oldIndex(obj, index)
@@ -2113,14 +2468,14 @@ end
 return SpeedSpoof
 ]====],
     ["Modules/NPCPrediction.lua"] = [====[--[[
-    NPCPrediction.lua — NPC-Specific Prediction Profile
-    ═══════════════════════════════════════════════════
-    Kế thừa PredictionCore, tuning cho Boss/NPC:
-      • Kalman tiêu chuẩn (không boost Q)
-      • Ping bù 1x (NPC không có ping riêng)
-      • Lead cap cao (Boss di chuyển quãng dài, thuật sĩ bay xa)
-      • Reversal penalty nhẹ (Boss ít zigzag hơn Player)
-      • Không có Jump Arc prediction
+    NPCPrediction.lua â€” NPC-Specific Prediction Profile
+    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    Káº¿ thá»«a PredictionCore, tuning cho Boss/NPC:
+      â€¢ Kalman tiÃªu chuáº©n (khÃ´ng boost Q)
+      â€¢ Ping bÃ¹ 1x (NPC khÃ´ng cÃ³ ping riÃªng)
+      â€¢ Lead cap cao (Boss di chuyá»ƒn quÃ£ng dÃ i, thuáº­t sÄ© bay xa)
+      â€¢ Reversal penalty nháº¹ (Boss Ã­t zigzag hÆ¡n Player)
+      â€¢ KhÃ´ng cÃ³ Jump Arc prediction
 ]]
 
 return function(PredictionCore)
@@ -2131,13 +2486,13 @@ return function(PredictionCore)
         local self = PredictionCore.new(config, npcTracker)
         setmetatable(self, NPCPrediction)
 
-        -- ═══ NPC PROFILE ═══
+        -- â•â•â• NPC PROFILE â•â•â•
         self.Profile = {
-            KalmanQBoost      = 0,           -- Không boost: NPC movement ổn định hơn
-            PingMultiplier    = 1,            -- Server-side NPC, không cần bù ping thêm
-            ReversalPenalty   = 0.6,          -- Confidence giảm 40% khi đổi hướng
+            KalmanQBoost      = 0,           -- KhÃ´ng boost: NPC movement á»•n Ä‘á»‹nh hÆ¡n
+            PingMultiplier    = 1,            -- Server-side NPC, khÃ´ng cáº§n bÃ¹ ping thÃªm
+            ReversalPenalty   = 0.6,          -- Confidence giáº£m 40% khi Ä‘á»•i hÆ°á»›ng
             LeadCap           = config.Prediction.MAX_LEAD_DIST,  -- 340 studs
-            JumpArcEnabled    = false,        -- NPC không jump theo kiểu Player
+            JumpArcEnabled    = false,        -- NPC khÃ´ng jump theo kiá»ƒu Player
             JumpGravity       = -196.2,
             JumpArcBlend      = 0,
         }
@@ -2149,25 +2504,25 @@ return function(PredictionCore)
 end
 ]====],
     ["Modules/PredictionCore.lua"] = [====[--[[
-    PredictionCore.lua — Base Prediction Engine (OOP)
-    ═══════════════════════════════════════════════════
-    Class cơ sở chứa toàn bộ thuật toán prediction:
-      • Kalman Filter, Intercept Solver, Kinematics
-      • Motion State Analysis, Teleport Detection
-      • Brain Response, Hit Feedback, Stabilization
+    PredictionCore.lua â€” Base Prediction Engine (OOP)
+    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    Class cÆ¡ sá»Ÿ chá»©a toÃ n bá»™ thuáº­t toÃ¡n prediction:
+      â€¢ Kalman Filter, Intercept Solver, Kinematics
+      â€¢ Motion State Analysis, Teleport Detection
+      â€¢ Brain Response, Hit Feedback, Stabilization
     
-    NPC/PvP-specific tuning nằm trong self.Profile
-    (được set bởi NPCPrediction hoặc PvPPrediction).
+    NPC/PvP-specific tuning náº±m trong self.Profile
+    (Ä‘Æ°á»£c set bá»Ÿi NPCPrediction hoáº·c PvPPrediction).
     
-    PERF: Không có runtime branch cho NPC vs PvP.
-    Mọi giá trị được đọc từ Profile table.
+    PERF: KhÃ´ng cÃ³ runtime branch cho NPC vs PvP.
+    Má»i giÃ¡ trá»‹ Ä‘Æ°á»£c Ä‘á»c tá»« Profile table.
 ]]
 
 local PredictionCore = {}
 PredictionCore.__index = PredictionCore
 
--- ═══ STATIC: Kinematics Helpers (no self) ═══
--- Dùng PredictionCore.FuncName() thay vì self: để tránh overhead method lookup
+-- â•â•â• STATIC: Kinematics Helpers (no self) â•â•â•
+-- DÃ¹ng PredictionCore.FuncName() thay vÃ¬ self: Ä‘á»ƒ trÃ¡nh overhead method lookup
 
 local function uniformMotionOffset(velocity, time)
     if not velocity or not time or time <= 0 then return Vector3.zero end
@@ -2227,9 +2582,9 @@ PredictionCore.brakedSpeed = brakedSpeed
 PredictionCore.brakingTravelDist = brakingTravelDist
 PredictionCore.clampLeadByBraking = clampLeadByBraking
 
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- CONSTRUCTOR
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function PredictionCore.new(config, npcTracker)
     local self = setmetatable({}, PredictionCore)
@@ -2242,7 +2597,7 @@ function PredictionCore.new(config, npcTracker)
     self._cachedPing = 50
     self._lastPingCheck = 0
 
-    -- Profile: sẽ bị override bởi NPCPrediction / PvPPrediction
+    -- Profile: sáº½ bá»‹ override bá»Ÿi NPCPrediction / PvPPrediction
     self.Profile = {
         KalmanQBoost = 0,
         PingMultiplier = 1,
@@ -2253,7 +2608,7 @@ function PredictionCore.new(config, npcTracker)
         JumpArcBlend = 0.7,
     }
 
-    -- Reusable context table (tránh tạo table mới mỗi frame)
+    -- Reusable context table (trÃ¡nh táº¡o table má»›i má»—i frame)
     self._brainCtx = {
         CloseOrbitAlpha = 0,
         HitFeedbackAlpha = 0,
@@ -2270,9 +2625,9 @@ function PredictionCore.new(config, npcTracker)
     return self
 end
 
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- UTILITY METHODS
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function PredictionCore:GetNetworkLatency()
     local now = os.clock()
@@ -2286,7 +2641,7 @@ function PredictionCore:GetNetworkLatency()
     return math.clamp(self._cachedPing / 2000, 0, 0.2)
 end
 
--- ═══ Alpha Calculators (inlined math, no table lookups) ═══
+-- â•â•â• Alpha Calculators (inlined math, no table lookups) â•â•â•
 
 function PredictionCore:DistanceAlpha(distance)
     local C = self.C
@@ -2302,7 +2657,7 @@ function PredictionCore:ExtremeDistAlpha(distance)
     return math.clamp((distance - self.C.DISTANCE_PREDICTION_MAX) / math.max(self.C.DISTANCE_PREDICTION_MAX, 1), 0, 1)
 end
 
--- ═══ Motion Shock ═══
+-- â•â•â• Motion Shock â•â•â•
 
 function PredictionCore:MotionShockAlpha(entry, rawVel, filtVel)
     local C = self.C
@@ -2335,7 +2690,7 @@ function PredictionCore:MotionShockAlpha(entry, rawVel, filtVel)
     return shock
 end
 
--- ═══ Smart Projectile Speed ═══
+-- â•â•â• Smart Projectile Speed â•â•â•
 
 function PredictionCore:SmartProjectileSpeed(distance, targetSpeed, motionShock)
     local C = self.C
@@ -2347,7 +2702,7 @@ function PredictionCore:SmartProjectileSpeed(distance, targetSpeed, motionShock)
     return math.clamp(ps, C.SMART_PROJECTILE_SPEED_MIN, C.SMART_PROJECTILE_SPEED_MAX)
 end
 
--- ═══ Intercept Solver ═══
+-- â•â•â• Intercept Solver â•â•â•
 
 function PredictionCore:SolveInterceptTime(shooterPos, targetPos, targetVel, projSpeed)
     if projSpeed <= 0 then return nil end
@@ -2357,7 +2712,7 @@ function PredictionCore:SolveInterceptTime(shooterPos, targetPos, targetVel, pro
     local b = 2 * r:Dot(v)
     local c = r:Dot(r)
     if c <= 1e-6 then return 0 end
-    if math.abs(a) < 1e-5 then -- Tránh chia cho số gần bằng 0
+    if math.abs(a) < 1e-5 then -- TrÃ¡nh chia cho sá»‘ gáº§n báº±ng 0
         if math.abs(b) < 1e-5 then return nil end
         local t = -c / b
         return t > 0 and t or nil
@@ -2380,7 +2735,7 @@ function PredictionCore:SolveInterceptPos(shooterPos, targetPos, targetVel, proj
     return targetPos + (targetVel * t), t
 end
 
--- ═══ Jerk / Motion State ═══
+-- â•â•â• Jerk / Motion State â•â•â•
 
 function PredictionCore:JerkAlpha(entry, acceleration, dt)
     local C = self.C
@@ -2436,7 +2791,7 @@ function PredictionCore:LinearMotionAlpha(entry, rawVel, filtVel)
     return lma
 end
 
--- ═══ Teleport Detection ═══
+-- â•â•â• Teleport Detection â•â•â•
 
 function PredictionCore:TeleportAlpha(entry)
     local C = self.C
@@ -2479,7 +2834,7 @@ function PredictionCore:UpdateTeleportState(entry, pos)
     return tpAlpha
 end
 
--- ═══ Brain Response ═══
+-- â•â•â• Brain Response â•â•â•
 
 function PredictionCore:UpdateBrain(entry, ctx)
     local C = self.C
@@ -2506,7 +2861,7 @@ function PredictionCore:UpdateBrain(entry, ctx)
     return br
 end
 
--- ═══ Hit Feedback ═══
+-- â•â•â• Hit Feedback â•â•â•
 
 function PredictionCore:HitFeedbackAlpha(entry)
     if not entry or not entry.LastHitTime then return 0 end
@@ -2522,7 +2877,7 @@ function PredictionCore:RegisterHitFeedback(entry, targetPosition)
     if targetPosition then entry.LastHitTargetPos = targetPosition end
 end
 
--- ═══ Close Orbit ═══
+-- â•â•â• Close Orbit â•â•â•
 
 function PredictionCore:CloseOrbitAlpha(origin, basePos, planarVel, lateralVel)
     local C = self.C
@@ -2544,7 +2899,7 @@ function PredictionCore:CloseOrbitAlpha(origin, basePos, planarVel, lateralVel)
     return math.clamp(dA * ((oR * 0.65) + (sA * 0.35)), 0, 1)
 end
 
--- ═══ Base Position ═══
+-- â•â•â• Base Position â•â•â•
 
 function PredictionCore:GetBaseTargetPosition(part)
     local model = part:FindFirstAncestorOfClass("Model")
@@ -2561,7 +2916,7 @@ function PredictionCore:GetBaseTargetPosition(part)
     return part.Position
 end
 
--- ═══ Smooth Aim Velocity ═══
+-- â•â•â• Smooth Aim Velocity â•â•â•
 
 function PredictionCore:SmoothAimVelocity(entry, velocity)
     local C = self.C
@@ -2579,7 +2934,7 @@ function PredictionCore:SmoothAimVelocity(entry, velocity)
 
     if self.Options.AssistMode == "Silent Aim" then
         local cur = entry.SmoothedAimVelocity
-        -- Alpha thấp (0.12) cho Silent Aim: ưu tiên độ mượt hơn độ nhạy
+        -- Alpha tháº¥p (0.12) cho Silent Aim: Æ°u tiÃªn Ä‘á»™ mÆ°á»£t hÆ¡n Ä‘á»™ nháº¡y
         local a = 1 - math.pow(1 - 0.12, math.max(dt * 60, 1))
         local s = cur + ((velocity - cur) * a)
         entry.SmoothedAimVelocity = s
@@ -2607,7 +2962,7 @@ function PredictionCore:SmoothAimVelocity(entry, velocity)
     return sv
 end
 
--- ═══ Entry Motion Velocity ═══
+-- â•â•â• Entry Motion Velocity â•â•â•
 
 function PredictionCore:EntryMotionVelocity(entry, part)
     if entry then
@@ -2619,9 +2974,9 @@ function PredictionCore:EntryMotionVelocity(entry, part)
     return Vector3.zero
 end
 
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- CORE PREDICTION
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function PredictionCore:PredictTargetPosition(origin, part, entry)
     local C = self.C
@@ -2632,7 +2987,7 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
 
     if not self.Options.PredictionEnabled then
         local totalOffset = self.Options.AimOffset
-        -- Cộng thêm AimOffset từ BossProfile
+        -- Cá»™ng thÃªm AimOffset tá»« BossProfile
         if entry and entry.BossProfile then
             totalOffset = totalOffset + (entry.BossProfile.AimOffset or 0)
         end
@@ -2644,18 +2999,18 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
 
     local now = os.clock()
 
-    -- PERIODIC REFRESH: Reset partial state mỗi 15 giây để tránh drift
+    -- PERIODIC REFRESH: Reset partial state má»—i 15 giÃ¢y Ä‘á»ƒ trÃ¡nh drift
     if not entry._lastRefreshTime then entry._lastRefreshTime = now end
     if (now - entry._lastRefreshTime) >= 15 then
         entry._lastRefreshTime = now
         entry.KalmanP = math.clamp(entry.KalmanP, 0.5, 2) -- Normalize KalmanP
-        entry.Confidence = math.max(entry.Confidence, 0.7)  -- Phục hồi confidence
+        entry.Confidence = math.max(entry.Confidence, 0.7)  -- Phá»¥c há»“i confidence
         if entry.Acceleration and entry.Acceleration.Magnitude > 200 then
-            entry.Acceleration = entry.Acceleration.Unit * 100 -- Giảm acceleration tích lũy
+            entry.Acceleration = entry.Acceleration.Unit * 100 -- Giáº£m acceleration tÃ­ch lÅ©y
         end
     end
 
-    -- BƯỚC 1: Raw Velocity
+    -- BÆ¯á»šC 1: Raw Velocity
     local rawVel = Vector3.zero
     local dt = 0.03
     if not entry.LastPos then
@@ -2666,10 +3021,10 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.KalmanV = Vector3.zero
         entry.KalmanP = 1
     else
-        dt = math.max(now - entry.LastTime, 0.001) -- Chốt chặn dt không được bằng 0
+        dt = math.max(now - entry.LastTime, 0.001) -- Chá»‘t cháº·n dt khÃ´ng Ä‘Æ°á»£c báº±ng 0
         if dt >= 0.015 then
             local newVel = (basePos - entry.LastPos) / dt
-            -- Chốt chặn vận tốc quá ảo (do teleport hoặc lag cực nặng)
+            -- Chá»‘t cháº·n váº­n tá»‘c quÃ¡ áº£o (do teleport hoáº·c lag cá»±c náº·ng)
             if newVel.Magnitude < 2000 then
                 rawVel = newVel
             else
@@ -2683,11 +3038,11 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
     end
     entry.RealVelocity = rawVel
 
-    -- BƯỚC 2: Kalman Filter (Profile-tuned Q boost)
+    -- BÆ¯á»šC 2: Kalman Filter (Profile-tuned Q boost)
     local velErr = (rawVel - entry.KalmanV).Magnitude
     local q = 0.15 + math.clamp(velErr / 28, 0, 2.0) + P.KalmanQBoost
     local r = 0.3
-    entry.KalmanP = math.clamp(entry.KalmanP + q, 0.01, 10) -- CLAMP: tránh drift vô hạn
+    entry.KalmanP = math.clamp(entry.KalmanP + q, 0.01, 10) -- CLAMP: trÃ¡nh drift vÃ´ háº¡n
     local k = entry.KalmanP / (entry.KalmanP + r)
     entry.KalmanV = entry.KalmanV + k * (rawVel - entry.KalmanV)
     entry.KalmanP = math.clamp((1 - k) * entry.KalmanP, 0.01, 10)
@@ -2718,25 +3073,25 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.KalmanP = math.max(entry.KalmanP, 1 + motionShock)
     end
 
-    -- BƯỚC 3: Confidence (với recovery nhanh hơn cho boss fights dài)
+    -- BÆ¯á»šC 3: Confidence (vá»›i recovery nhanh hÆ¡n cho boss fights dÃ i)
     if entry.LastExpectedPos then
         local errDist = (basePos - entry.LastExpectedPos).Magnitude
         local errPenalty = math.clamp(errDist / 8, 0, 0.3)
-        -- Recovery rate tăng lên 0.15 (từ 0.1) để confidence không bị stuck ở 0.4
+        -- Recovery rate tÄƒng lÃªn 0.15 (tá»« 0.1) Ä‘á»ƒ confidence khÃ´ng bá»‹ stuck á»Ÿ 0.4
         local recovery = 0.15
         entry.Confidence = math.clamp(entry.Confidence - errPenalty + recovery, 0.4, 1)
     else
         entry.Confidence = 1
     end
 
-    -- BƯỚC 4: Acceleration (với magnitude clamp tránh drift)
+    -- BÆ¯á»šC 4: Acceleration (vá»›i magnitude clamp trÃ¡nh drift)
     if entry.LastFilteredVelocity then
         local rawAcc = (filtVel - entry.LastFilteredVelocity) / dt
-        -- Clamp acceleration magnitude để tránh tích lũy sai số
+        -- Clamp acceleration magnitude Ä‘á»ƒ trÃ¡nh tÃ­ch lÅ©y sai sá»‘
         if rawAcc.Magnitude > 500 then rawAcc = rawAcc.Unit * 500 end
         local accSmooth = (rawAcc - entry.Acceleration).Magnitude > 80 and 0.8 or 0.2
         entry.Acceleration = entry.Acceleration:Lerp(rawAcc, accSmooth)
-        -- Clamp kết quả cuối
+        -- Clamp káº¿t quáº£ cuá»‘i
         if entry.Acceleration.Magnitude > 400 then
             entry.Acceleration = entry.Acceleration.Unit * 400
         end
@@ -2769,7 +3124,7 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.Confidence = math.max(entry.Confidence, 0.58 + (tpAlpha * 0.35))
     end
 
-    -- BƯỚC 5: Latency Compensation
+    -- BÆ¯á»šC 5: Latency Compensation
     local latency = self:GetNetworkLatency()
     local totalTime = latency * P.PingMultiplier
     local leadOffset = Vector3.zero
@@ -2898,9 +3253,9 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
     return finalPos
 end
 
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- STRAFE ENHANCED PREDICTION
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function PredictionCore:PredictWithStrafe(origin, part, entry)
     local C = self.C
@@ -3002,9 +3357,9 @@ function PredictionCore:PredictWithStrafe(origin, part, entry)
     return predicted + eLead
 end
 
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- SELECTION TARGET POSITION (Lightweight for scanning)
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function PredictionCore:GetSelectionTargetPosition(origin, part, entry, isCurrentTarget)
     local C = self.C
@@ -3039,9 +3394,9 @@ function PredictionCore:GetSelectionTargetPosition(origin, part, entry, isCurren
     return pos
 end
 
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- STABILIZE TARGET POSITION
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function PredictionCore:StabilizeTargetPosition(entry, part, rawPos, deltaTime)
     local C = self.C
@@ -3053,7 +3408,7 @@ function PredictionCore:StabilizeTargetPosition(entry, part, rawPos, deltaTime)
         local d = rawPos - cur
         local dm = d.Magnitude
 
-        -- Lấy tham số từ BossProfile (nếu có)
+        -- Láº¥y tham sá»‘ tá»« BossProfile (náº¿u cÃ³)
         local bpDeadzone = 1.2
         local bpAlpha = 0.08
         local bpSnap = 50
@@ -3114,14 +3469,14 @@ end
 return PredictionCore
 ]====],
     ["Modules/PvPPrediction.lua"] = [====[--[[
-    PvPPrediction.lua — PvP-Specific Prediction Profile
-    ═══════════════════════════════════════════════════
-    Kế thừa PredictionCore, tuning cho Player thực:
-      • Kalman Q boost +0.3 (nhạy hơn cho human input)
-      • Ping bù 2x (player có latency riêng + reconciliation)
-      • Lead cap thấp (player di chuyển ngắn, đổi hướng nhiều)
-      • Zigzag dampen mạnh (confidence giảm 45% khi đảo chiều)
-      • Jump Arc prediction (dự đoán cung nhảy parabola)
+    PvPPrediction.lua â€” PvP-Specific Prediction Profile
+    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    Káº¿ thá»«a PredictionCore, tuning cho Player thá»±c:
+      â€¢ Kalman Q boost +0.3 (nháº¡y hÆ¡n cho human input)
+      â€¢ Ping bÃ¹ 2x (player cÃ³ latency riÃªng + reconciliation)
+      â€¢ Lead cap tháº¥p (player di chuyá»ƒn ngáº¯n, Ä‘á»•i hÆ°á»›ng nhiá»u)
+      â€¢ Zigzag dampen máº¡nh (confidence giáº£m 45% khi Ä‘áº£o chiá»u)
+      â€¢ Jump Arc prediction (dá»± Ä‘oÃ¡n cung nháº£y parabola)
 ]]
 
 return function(PredictionCore)
@@ -3132,15 +3487,15 @@ return function(PredictionCore)
         local self = PredictionCore.new(config, npcTracker)
         setmetatable(self, PvPPrediction)
 
-        -- ═══ PVP PROFILE ═══
+        -- â•â•â• PVP PROFILE â•â•â•
         self.Profile = {
-            KalmanQBoost      = 0.3,          -- Kalman nhạy hơn cho input người thật
-            PingMultiplier    = 2.0,          -- Bù ping gấp đôi (player ping + reconciliation)
-            ReversalPenalty   = 0.55,         -- Zigzag penalty mạnh hơn
-            LeadCap           = 180,          -- Lead cap thấp (player di chuyển ngắn)
-            JumpArcEnabled    = true,         -- Dự đoán cung nhảy parabola
-            JumpGravity       = -196.2,       -- Gia tốc trọng lực chuẩn Roblox
-            JumpArcBlend      = 0.7,          -- 70% áp dụng dự đoán cung nhảy
+            KalmanQBoost      = 0.3,          -- Kalman nháº¡y hÆ¡n cho input ngÆ°á»i tháº­t
+            PingMultiplier    = 2.0,          -- BÃ¹ ping gáº¥p Ä‘Ã´i (player ping + reconciliation)
+            ReversalPenalty   = 0.55,         -- Zigzag penalty máº¡nh hÆ¡n
+            LeadCap           = 180,          -- Lead cap tháº¥p (player di chuyá»ƒn ngáº¯n)
+            JumpArcEnabled    = true,         -- Dá»± Ä‘oÃ¡n cung nháº£y parabola
+            JumpGravity       = -196.2,       -- Gia tá»‘c trá»ng lá»±c chuáº©n Roblox
+            JumpArcBlend      = 0.7,          -- 70% Ã¡p dá»¥ng dá»± Ä‘oÃ¡n cung nháº£y
         }
 
         return self
@@ -3150,58 +3505,58 @@ return function(PredictionCore)
 end
 ]====],
     ["Modules/Utils/BossClassifier.lua"] = [====[--[[
-    BossClassifier.lua — Auto Boss Type Detection
-    ═══════════════════════════════════════════════════
-    Phân loại Boss thành 3 loại dựa trên kích thước model:
-      • "humanoid"     : Boss dáng người chuẩn (R6/R15)
-      • "humanoid_mini": Boss nhỏ hơn người thường
-      • "large"        : Boss khổng lồ / không humanoid
+    BossClassifier.lua â€” Auto Boss Type Detection
+    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    PhÃ¢n loáº¡i Boss thÃ nh 3 loáº¡i dá»±a trÃªn kÃ­ch thÆ°á»›c model:
+      â€¢ "humanoid"     : Boss dÃ¡ng ngÆ°á»i chuáº©n (R6/R15)
+      â€¢ "humanoid_mini": Boss nhá» hÆ¡n ngÆ°á»i thÆ°á»ng
+      â€¢ "large"        : Boss khá»•ng lá»“ / khÃ´ng humanoid
     
-    Mỗi loại có bộ aim parameters riêng:
-      • AimOffset (Y) — điểm ngắm tối ưu
-      • Deadzone      — vùng bỏ qua rung
-      • LeadScale     — hệ số lead (nhỏ = ít lead)
-      • TargetPart    — phần thân ưu tiên aim
+    Má»—i loáº¡i cÃ³ bá»™ aim parameters riÃªng:
+      â€¢ AimOffset (Y) â€” Ä‘iá»ƒm ngáº¯m tá»‘i Æ°u
+      â€¢ Deadzone      â€” vÃ¹ng bá» qua rung
+      â€¢ LeadScale     â€” há»‡ sá»‘ lead (nhá» = Ã­t lead)
+      â€¢ TargetPart    â€” pháº§n thÃ¢n Æ°u tiÃªn aim
 ]]
 
 local BossClassifier = {}
 
--- ═══ Ngưỡng để phân loại ═══
-local MINI_HEIGHT_MAX = 3.5    -- Model dưới 3.5 studs → mini
-local STANDARD_HEIGHT_MAX = 8  -- Model 3.5-8 studs → humanoid chuẩn
--- Trên 8 studs → large boss
+-- â•â•â• NgÆ°á»¡ng Ä‘á»ƒ phÃ¢n loáº¡i â•â•â•
+local MINI_HEIGHT_MAX = 3.5    -- Model dÆ°á»›i 3.5 studs â†’ mini
+local STANDARD_HEIGHT_MAX = 8  -- Model 3.5-8 studs â†’ humanoid chuáº©n
+-- TrÃªn 8 studs â†’ large boss
 
--- ═══ Profiles cho từng loại Boss ═══
+-- â•â•â• Profiles cho tá»«ng loáº¡i Boss â•â•â•
 BossClassifier.Profiles = {
     humanoid = {
-        AimOffset = 0,          -- Ngắm chính xác root/torso
-        Deadzone = 1.2,         -- Deadzone chuẩn
-        LeadScale = 1.0,        -- Lead bình thường
+        AimOffset = 0,          -- Ngáº¯m chÃ­nh xÃ¡c root/torso
+        Deadzone = 1.2,         -- Deadzone chuáº©n
+        LeadScale = 1.0,        -- Lead bÃ¬nh thÆ°á»ng
         PreferredPart = "HumanoidRootPart",
-        StabilizeAlpha = 0.08,  -- Smoothing chuẩn
+        StabilizeAlpha = 0.08,  -- Smoothing chuáº©n
     },
     humanoid_mini = {
-        AimOffset = -0.5,       -- Ngắm thấp hơn (hitbox nhỏ, center thấp)
-        Deadzone = 0.5,         -- Deadzone nhỏ (hitbox nhỏ cần chính xác hơn)
-        LeadScale = 0.7,        -- Lead ít hơn (mini boss thường di chuyển nhanh, hitbox nhỏ)
-        PreferredPart = "Head", -- Head thường ở trung tâm mini model
-        StabilizeAlpha = 0.06,  -- Mượt hơn (tránh aim trượt khỏi hitbox nhỏ)
+        AimOffset = -0.5,       -- Ngáº¯m tháº¥p hÆ¡n (hitbox nhá», center tháº¥p)
+        Deadzone = 0.5,         -- Deadzone nhá» (hitbox nhá» cáº§n chÃ­nh xÃ¡c hÆ¡n)
+        LeadScale = 0.7,        -- Lead Ã­t hÆ¡n (mini boss thÆ°á»ng di chuyá»ƒn nhanh, hitbox nhá»)
+        PreferredPart = "Head", -- Head thÆ°á»ng á»Ÿ trung tÃ¢m mini model
+        StabilizeAlpha = 0.06,  -- MÆ°á»£t hÆ¡n (trÃ¡nh aim trÆ°á»£t khá»i hitbox nhá»)
     },
     large = {
-        AimOffset = 2,          -- Ngắm cao hơn (boss to, center cao)
-        Deadzone = 2.5,         -- Deadzone lớn (hitbox lớn, không cần aim chính xác)
-        LeadScale = 1.2,        -- Lead nhiều hơn (boss to di chuyển quãng dài)
+        AimOffset = 2,          -- Ngáº¯m cao hÆ¡n (boss to, center cao)
+        Deadzone = 2.5,         -- Deadzone lá»›n (hitbox lá»›n, khÃ´ng cáº§n aim chÃ­nh xÃ¡c)
+        LeadScale = 1.2,        -- Lead nhiá»u hÆ¡n (boss to di chuyá»ƒn quÃ£ng dÃ i)
         PreferredPart = "HumanoidRootPart",
-        StabilizeAlpha = 0.12,  -- Ít smooth (hitbox lớn, tha thứ lệch nhiều hơn)
+        StabilizeAlpha = 0.12,  -- Ãt smooth (hitbox lá»›n, tha thá»© lá»‡ch nhiá»u hÆ¡n)
     },
 }
 
--- ═══ Đo chiều cao model ═══
+-- â•â•â• Äo chiá»u cao model â•â•â•
 function BossClassifier.MeasureModelHeight(model)
-    if not model or not model:IsA("Model") then return 5 end -- Mặc định 5 studs
+    if not model or not model:IsA("Model") then return 5 end -- Máº·c Ä‘á»‹nh 5 studs
     
     local ok, result = pcall(function()
-        -- Dùng GetBoundingBox nếu có
+        -- DÃ¹ng GetBoundingBox náº¿u cÃ³
         local _, size = model:GetBoundingBox()
         return size.Y
     end)
@@ -3210,7 +3565,7 @@ function BossClassifier.MeasureModelHeight(model)
         return result
     end
     
-    -- Fallback: đo từ parts
+    -- Fallback: Ä‘o tá»« parts
     local minY, maxY = math.huge, -math.huge
     for _, part in ipairs(model:GetDescendants()) do
         if part:IsA("BasePart") then
@@ -3227,7 +3582,7 @@ function BossClassifier.MeasureModelHeight(model)
     return 5
 end
 
--- ═══ Phân loại Boss ═══
+-- â•â•â• PhÃ¢n loáº¡i Boss â•â•â•
 function BossClassifier.Classify(model)
     local height = BossClassifier.MeasureModelHeight(model)
     
@@ -3242,12 +3597,12 @@ function BossClassifier.Classify(model)
             return "large", height
         end
     else
-        -- Không có Humanoid → luôn coi là large
+        -- KhÃ´ng cÃ³ Humanoid â†’ luÃ´n coi lÃ  large
         return "large", height
     end
 end
 
--- ═══ Lấy profile theo loại ═══
+-- â•â•â• Láº¥y profile theo loáº¡i â•â•â•
 function BossClassifier.GetProfile(bossType)
     return BossClassifier.Profiles[bossType] or BossClassifier.Profiles.humanoid
 end
@@ -3255,7 +3610,7 @@ end
 return BossClassifier
 ]====],
     ["Modules/Utils/BossDetector.lua"] = [====[--[[
-    BossDetector.lua — OOP Target Classification Class
+    BossDetector.lua â€” OOP Target Classification Class
     Identifies if an NPC is a boss based on common properties (Size, Health, Height).
 ]]
 
@@ -3294,8 +3649,42 @@ end
 
 return BossDetector
 ]====],
+    ["Modules/Utils/CheckGame.lua"] = [====[--[[
+    CheckGame.lua - Place ID Validation
+    Job: Ensures the script only executes in the intended game environment.
+    Target: Star Glitcher ~ Revitalized (ID: 11380216916)
+]]
+
+local TARGET_PLACE_ID = 11380216916
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local function Check()
+    if game.PlaceId ~= TARGET_PLACE_ID then
+        local errorMsg = "âŒ Access Denied: This script only supports Star Glitcher! (Place ID: " .. tostring(TARGET_PLACE_ID) .. ")"
+        
+        -- Attempt to notify via executor if possible
+        if Rayfield and Rayfield.Notify then
+            Rayfield:Notify({
+                Title = "Wrong Game Detected",
+                Content = errorMsg,
+                Duration = 10,
+                Image = 4483362458,
+            })
+        end
+        
+        warn(errorMsg)
+        -- Kick the player to prevent unexpected behavior in wrong games
+        LocalPlayer:Kick(errorMsg)
+        return false
+    end
+    return true
+end
+
+return Check()
+]====],
     ["Modules/Utils/GarbageCollector.lua"] = [====[--[[
-    GarbageCollector.lua — Memory & Workspace Optimization v1.0
+    GarbageCollector.lua â€” Memory & Workspace Optimization v1.0
     Job: Proactive cleanup of visual debris, effects, and orphaned instances.
     Analogy: The Lymphatic System (Cleaning up cellular debris).
 ]]
@@ -3308,9 +3697,10 @@ local LocalPlayer = Players.LocalPlayer
 local GarbageCollector = {}
 GarbageCollector.__index = GarbageCollector
 
-function GarbageCollector.new(options)
+function GarbageCollector.new(options, resourceManager)
     local self = setmetatable({}, GarbageCollector)
     self.Options = options
+    self.ResourceManager = resourceManager
     self.Connection = nil
     self._lastClean = 0
     self._cleanInterval = 60 -- Default to every 60 seconds
@@ -3322,6 +3712,7 @@ function GarbageCollector.new(options)
     self._destroyBudget = 10
     self._collectStepSize = 24
     self._manualBoostUntil = 0
+    self._frameBudget = 0.0012
     self.Status = "Idle"
     return self
 end
@@ -3419,23 +3810,37 @@ end
 function GarbageCollector:_drainQueue(destroyBudget, gcStepSize)
     local destroyed = 0
     local processed = 0
+    local startTime = os.clock()
 
     while self._queueSize > 0 and processed < destroyBudget do
+        if (os.clock() - startTime) >= self._frameBudget then
+            break
+        end
+
         local instance = self._queued[self._queueSize]
         self._queued[self._queueSize] = nil
         self._queueSize = self._queueSize - 1
         processed = processed + 1
 
         if instance and instance.Parent then
-            pcall(function()
-                instance:SetAttribute("__SG_QueuedForCleanup", nil)
-                instance:Destroy()
-            end)
-            destroyed = destroyed + 1
+            if self.ResourceManager then
+                self.ResourceManager:DeferCleanup(function()
+                    if instance and instance.Parent then
+                        instance:SetAttribute("__SG_QueuedForCleanup", nil)
+                        instance:Destroy()
+                    end
+                end)
+            else
+                pcall(function()
+                    instance:SetAttribute("__SG_QueuedForCleanup", nil)
+                    instance:Destroy()
+                end)
+                destroyed = destroyed + 1
+            end
         end
     end
 
-    if destroyed > 0 then
+    if destroyed > 0 and not self.ResourceManager then
         collectgarbage("step", gcStepSize)
     end
 
@@ -3486,7 +3891,10 @@ function GarbageCollector:Init()
 end
 
 function GarbageCollector:Clean()
-    self._manualBoostUntil = os.clock() + 2
+    self._manualBoostUntil = os.clock() + 3
+    if self.ResourceManager then
+        self.ResourceManager:Boost(2.5)
+    end
     if not self._scanList then
         self._lastClean = 0
         self:_beginScan()
@@ -3494,20 +3902,28 @@ function GarbageCollector:Clean()
 
     local queued = 0
     local destroyed = 0
-    for _ = 1, 6 do
+    for _ = 1, 4 do
         local q = 0
         if self._scanList then
             q = select(1, self:_processScan(self._scanBatchSize * 2))
         end
         queued = queued + q
-        destroyed = destroyed + self:_drainQueue(self._destroyBudget * 2, self._collectStepSize * 2)
+        destroyed = destroyed + self:_drainQueue(self._destroyBudget, self._collectStepSize)
 
         if not self._scanList and self._queueSize == 0 then
             break
         end
     end
 
-    self.Status = self._queueSize > 0 and string.format("Cleaning (%d left)", self._queueSize) or "Cleanup Settled"
+    if self.ResourceManager and self.ResourceManager:GetPendingCount() > 0 then
+        self.Status = string.format(
+            "Smart Cleanup (%d local / %d deferred)",
+            self._queueSize,
+            self.ResourceManager:GetPendingCount()
+        )
+    else
+        self.Status = self._queueSize > 0 and string.format("Cleaning (%d left)", self._queueSize) or "Cleanup Settled"
+    end
     return destroyed, queued, self._queueSize
 end
 
@@ -3530,7 +3946,7 @@ end
 return GarbageCollector
 ]====],
     ["Modules/Utils/Input.lua"] = [====[--[[
-    Input.lua — OOP User Interaction Class
+    Input.lua â€” OOP User Interaction Class
     Handles mouseholding and assist availability checks.
 ]]
 
@@ -3591,8 +4007,8 @@ end
 return Input
 ]====],
     ["Modules/Utils/InputHandler.lua"] = [====[--[[
-    InputHandler.lua — Input Management Class
-    Quản lý trạng thái chuột/bàn phím và logic shouldAssist().
+    InputHandler.lua â€” Input Management Class
+    Quáº£n lÃ½ tráº¡ng thÃ¡i chuá»™t/bÃ n phÃ­m vÃ  logic shouldAssist().
 ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -3775,7 +4191,7 @@ end
 return LocalCharacter
 ]====],
     ["Modules/Utils/Math/Kalman.lua"] = [====[--[[
-    KalmanFilter.lua — OOP Noise Reduction Class
+    KalmanFilter.lua â€” OOP Noise Reduction Class
     A scientific implementation of 1D Kalman Filter for linear motion smoothing.
 ]]
 
@@ -3855,7 +4271,7 @@ end
 return Kalman
 ]====],
     ["Modules/Utils/NPCTracker.lua"] = [====[--[[
-    NPCTracker.lua — Neural Entity Management Class
+    NPCTracker.lua â€” Neural Entity Management Class
     Track, categorize, and filter game entities (NPCs/Mobs/Bosses).
     Fixes: Non-humanoid boss support and performance bottlenecks.
 ]]
@@ -3936,7 +4352,7 @@ function NPCTracker:_IsTargetCandidate(model)
         return false
     end
 
-    -- UNIVERSAL TARGETING: Support both Humanoid và Non-Humanoid (Bosses)
+    -- UNIVERSAL TARGETING: Support both Humanoid vÃ  Non-Humanoid (Bosses)
     local humanoid = model:FindFirstChildOfClass("Humanoid")
     local primary = self:_GetPrimaryPart(model)
     
@@ -3945,7 +4361,7 @@ function NPCTracker:_IsTargetCandidate(model)
     -- STATIC OBJECT FILTER: Boss boards, shops, etc.
     -- Mobs/Bosses (even custom ones) usually have unanchored root parts.
     if not humanoid and primary.Anchored and not model:FindFirstChild("Health") then
-        -- Only ignore if it has no health indicators và is anchored
+        -- Only ignore if it has no health indicators vÃ  is anchored
         return false
     end
 
@@ -4073,8 +4489,236 @@ end
 
 return NPCTracker
 ]====],
+    ["Modules/Utils/ResourceManager.lua"] = [====[local RunService = game:GetService("RunService")
+
+local ResourceManager = {}
+ResourceManager.__index = ResourceManager
+
+local DEFAULT_FRAME_BUDGET = 0.0015
+local DEFAULT_GC_STEP = 16
+
+function ResourceManager.new(options)
+    local self = setmetatable({}, ResourceManager)
+    self.Options = options
+    self.Status = "Idle"
+    self.Connection = nil
+    self._trackedConnections = {}
+    self._trackedObjects = {}
+    self._cleanupQueue = {}
+    self._queueHead = 1
+    self._queueTail = 0
+    self._frameBudget = DEFAULT_FRAME_BUDGET
+    self._gcStep = DEFAULT_GC_STEP
+    self._manualBoostUntil = 0
+    self._lastHitch = 0
+    return self
+end
+
+function ResourceManager:_pushJob(kind, payload)
+    self._queueTail = self._queueTail + 1
+    self._cleanupQueue[self._queueTail] = {
+        Kind = kind,
+        Payload = payload,
+    }
+end
+
+function ResourceManager:_popJob()
+    if self._queueHead > self._queueTail then
+        return nil
+    end
+
+    local job = self._cleanupQueue[self._queueHead]
+    self._cleanupQueue[self._queueHead] = nil
+    self._queueHead = self._queueHead + 1
+
+    if self._queueHead > self._queueTail then
+        self._queueHead = 1
+        self._queueTail = 0
+    end
+
+    return job
+end
+
+function ResourceManager:GetPendingCount()
+    return math.max(0, self._queueTail - self._queueHead + 1)
+end
+
+function ResourceManager:TrackConnection(connection)
+    if connection then
+        self._trackedConnections[#self._trackedConnections + 1] = connection
+    end
+    return connection
+end
+
+function ResourceManager:TrackObject(object)
+    if object then
+        self._trackedObjects[#self._trackedObjects + 1] = object
+    end
+    return object
+end
+
+function ResourceManager:DeferDestroy(object)
+    if object then
+        self:_pushJob("destroy", object)
+    end
+end
+
+function ResourceManager:DeferDisconnect(connection)
+    if connection then
+        self:_pushJob("disconnect", connection)
+    end
+end
+
+function ResourceManager:DeferCleanup(callback)
+    if callback then
+        self:_pushJob("callback", callback)
+    end
+end
+
+function ResourceManager:_getBudget(dt)
+    local budget = self._frameBudget
+    local now = os.clock()
+    local boosted = now < self._manualBoostUntil
+
+    if boosted then
+        budget = budget * 2.5
+    end
+
+    if dt and dt > (1 / 35) then
+        self._lastHitch = now
+        budget = budget * 0.45
+    elseif (now - self._lastHitch) < 0.75 then
+        budget = budget * 0.7
+    end
+
+    return budget
+end
+
+function ResourceManager:_runJob(job)
+    if not job then
+        return false
+    end
+
+    if job.Kind == "destroy" then
+        local object = job.Payload
+        if object and object.Destroy then
+            pcall(function()
+                object:Destroy()
+            end)
+        elseif object and object.Parent then
+            pcall(function()
+                object:Destroy()
+            end)
+        end
+        return true
+    end
+
+    if job.Kind == "disconnect" then
+        local connection = job.Payload
+        if connection then
+            pcall(function()
+                connection:Disconnect()
+            end)
+        end
+        return true
+    end
+
+    if job.Kind == "callback" then
+        pcall(job.Payload)
+        return true
+    end
+
+    return false
+end
+
+function ResourceManager:_step(dt)
+    local budget = self:_getBudget(dt)
+    local startTime = os.clock()
+    local processed = 0
+
+    while self:GetPendingCount() > 0 and (os.clock() - startTime) < budget do
+        local job = self:_popJob()
+        if not job then
+            break
+        end
+        if self:_runJob(job) then
+            processed = processed + 1
+        end
+    end
+
+    if processed > 0 then
+        collectgarbage("step", self._gcStep)
+    end
+
+    local pending = self:GetPendingCount()
+    if pending > 0 then
+        self.Status = string.format("Draining (%d pending)", pending)
+    elseif processed > 0 then
+        self.Status = "Settled"
+    else
+        self.Status = "Idle"
+    end
+end
+
+function ResourceManager:Init()
+    if self.Connection then
+        return
+    end
+
+    self.Connection = RunService.Heartbeat:Connect(function(dt)
+        if self.Options and self.Options.SmartCleanupEnabled == false then
+            return
+        end
+        self:_step(dt)
+    end)
+end
+
+function ResourceManager:ScheduleTrackedCleanup()
+    for i = #self._trackedConnections, 1, -1 do
+        local connection = self._trackedConnections[i]
+        self._trackedConnections[i] = nil
+        self:DeferDisconnect(connection)
+    end
+
+    for i = #self._trackedObjects, 1, -1 do
+        local object = self._trackedObjects[i]
+        self._trackedObjects[i] = nil
+        self:DeferDestroy(object)
+    end
+end
+
+function ResourceManager:Boost(duration)
+    self._manualBoostUntil = math.max(self._manualBoostUntil, os.clock() + (duration or 1.5))
+end
+
+function ResourceManager:Flush(maxSeconds)
+    local deadline = os.clock() + (maxSeconds or 1.25)
+    self:Boost(maxSeconds or 1.25)
+
+    while self:GetPendingCount() > 0 and os.clock() < deadline do
+        self:_step(1 / 60)
+        if self:GetPendingCount() > 0 then
+            task.wait()
+        end
+    end
+
+    return self:GetPendingCount()
+end
+
+function ResourceManager:Destroy()
+    self:ScheduleTrackedCleanup()
+    self:Flush(0.75)
+
+    if self.Connection then
+        self.Connection:Disconnect()
+        self.Connection = nil
+    end
+end
+
+return ResourceManager
+]====],
     ["Modules/Utils/Synapse.lua"] = [====[--[[
-    Synapse.lua — Communication Signal System
+    Synapse.lua â€” Communication Signal System
     Analogy: The neural synapses connecting different regions of the brain.
     Allows decoupled cross-module communication (Events).
 ]]
@@ -4110,8 +4754,8 @@ end
 return Synapse
 ]====],
     ["Modules/Visuals.lua"] = [====[--[[
-    Visuals.lua — Visual Feedback Class
-    Quản lý FOV Circle, Target Dot, Highlight, và Hitmarker system.
+    Visuals.lua â€” Visual Feedback Class
+    Quáº£n lÃ½ FOV Circle, Target Dot, Highlight, vÃ  Hitmarker system.
 ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -4254,7 +4898,7 @@ FOVCircle.__index = FOVCircle
 function FOVCircle.new(options)
     local self = setmetatable({}, FOVCircle)
     self.Options = options
-    self._visible = options.ShowFOV
+    self._visible = false
     self._radius = options.FOV or 150
     self._x = nil
     self._y = nil
@@ -4264,14 +4908,19 @@ function FOVCircle.new(options)
     self.Drawing.Radius = self._radius
     self.Drawing.Filled = false
     self.Drawing.Color = Color3.fromRGB(255, 255, 255)
-    self.Drawing.Visible = self._visible
+    self.Drawing.Visible = false
     self.Drawing.Thickness = 1.5
 
     return self
 end
 
+function FOVCircle:_shouldShow()
+    local method = tostring(self.Options.TargetingMethod or "FOV")
+    return method ~= "Distance"
+end
+
 function FOVCircle:Update(mousePos)
-    if self.Options.ShowFOV then
+    if self:_shouldShow() then
         if self._x ~= mousePos.X or self._y ~= mousePos.Y then
             self.Drawing.Position = mousePos
             self._x = mousePos.X
@@ -4300,7 +4949,7 @@ end
 return FOVCircle
 ]====],
     ["Modules/Visuals/Highlight.lua"] = [====[--[[
-    TargetHighlight.lua — OOP Highlight Visualization Class
+    TargetHighlight.lua â€” OOP Highlight Visualization Class
 ]]
 
 local CoreGui = game:GetService("CoreGui")
@@ -4528,15 +5177,15 @@ return TargetDot
     ["UI/Tabs/AimbotTab.lua"] = [====[--[[
     AimTab.lua - Unified Combat Control Center
     Consolidated: Assist Mode, FOV, Target Part, and Source Management.
-    Replaces: AimbotTab.lua và TargetingTab.lua.
+    Replaces: AimbotTab.lua vÃ  TargetingTab.lua.
 ]]
 
 return function(Window, Options, Visuals, NPCTracker)
     local Tab = Window:CreateTab("Aim", 4483362458)
 
-    -- ═══════════════════════════════════════════════════
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     -- SECTION: ASSIST MODE
-    -- ═══════════════════════════════════════════════════
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     Tab:CreateSection("Assist Mode")
 
     Tab:CreateDropdown({
@@ -4559,9 +5208,9 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- ═══════════════════════════════════════════════════
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     -- SECTION: TARGETING PARAMETERS
-    -- ═══════════════════════════════════════════════════
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     Tab:CreateSection("Targeting Parameters")
 
     Tab:CreateDropdown({
@@ -4586,25 +5235,27 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- ═══════════════════════════════════════════════════
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     -- SECTION: FOV (FIELD OF VIEW)
-    -- ═══════════════════════════════════════════════════
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     Tab:CreateSection("Field of View (FOV)")
 
-    Tab:CreateToggle({
-        Name = "Show FOV Circle",
-        CurrentValue = Options.ShowFOV,
-        Flag = "FOVToggle",
+    Tab:CreateDropdown({
+        Name = "Targeting Method",
+        Options = {"FOV", "Distance", "Deadlock"},
+        CurrentOption = {Options.TargetingMethod or "FOV"},
+        Flag = "TargetingMethodDropdown",
         Callback = function(Value)
-            Options.ShowFOV = Value
+            local selected = type(Value) == "table" and Value[1] or Value
+            Options.TargetingMethod = selected
             if Visuals and Visuals.FOVCircle then
-                Visuals.FOVCircle.Visible = Value
+                Visuals.FOVCircle.Visible = (selected ~= "Distance")
             end
         end,
     })
 
     Tab:CreateSlider({
-        Name = "FOV Radius",
+        Name = "FOV / Lock Radius",
         Range = {0, 1000},
         Increment = 10,
         Suffix = "px",
@@ -4618,9 +5269,9 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- ═══════════════════════════════════════════════════
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     -- SECTION: CAMERA SETTINGS
-    -- ═══════════════════════════════════════════════════
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     Tab:CreateSection("Camera Lock (Aimbot)")
 
     Tab:CreateSlider({
@@ -4635,9 +5286,9 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- ═══════════════════════════════════════════════════
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     -- SECTION: TARGET SOURCE
-    -- ═══════════════════════════════════════════════════
+    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     Tab:CreateSection("Target Filter")
 
     Tab:CreateToggle({
@@ -4713,7 +5364,7 @@ end
     Updated: Active status monitoring for anti-debuffs.
 ]]
 
-return function(Window, Options, noSlowdown, noStun, speedMultiplier)
+return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost)
     local Tab = Window:CreateTab("Player", 4483362458)
 
     Tab:CreateSection("Movement")
@@ -4741,6 +5392,73 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier)
             Options.CustomMoveSpeed = Value
         end,
     })
+
+    Tab:CreateSection("Mobility")
+
+    Tab:CreateToggle({
+        Name = "Jump Boost",
+        CurrentValue = Options.JumpBoostEnabled,
+        Flag = "JumpBoostEnabledFlag",
+        Callback = function(Value)
+            Options.JumpBoostEnabled = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Jump Power",
+        Range = { 1, 300 },
+        Increment = 1,
+        CurrentValue = Options.JumpBoostPower or 70,
+        Flag = "JumpBoostPowerFlag",
+        Callback = function(Value)
+            Options.JumpBoostPower = Value
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Float",
+        CurrentValue = Options.FloatEnabled,
+        Flag = "FloatEnabledFlag",
+        Callback = function(Value)
+            Options.FloatEnabled = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Float Fall Speed",
+        Range = { 0, 40 },
+        Increment = 1,
+        CurrentValue = Options.FloatFallSpeed or 8,
+        Flag = "FloatFallSpeedFlag",
+        Suffix = " studs/s",
+        Callback = function(Value)
+            Options.FloatFallSpeed = Value
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Custom Gravity",
+        CurrentValue = Options.GravityEnabled,
+        Flag = "GravityEnabledFlag",
+        Callback = function(Value)
+            Options.GravityEnabled = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Gravity Value",
+        Range = { 0, 500 },
+        Increment = 1,
+        CurrentValue = Options.GravityValue or 196.2,
+        Flag = "GravityValueFlag",
+        Callback = function(Value)
+            Options.GravityValue = Value
+        end,
+    })
+
+    local jumpBoostLabel = Tab:CreateLabel("Jump Boost Status: Idle")
+    local floatLabel = Tab:CreateLabel("Float Status: Idle")
+    local gravityLabel = Tab:CreateLabel("Gravity Status: Idle")
 
     Tab:CreateSection("Legit Multiplier")
 
@@ -4805,6 +5523,9 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier)
         local lastSlowdownText
         local lastStunText
         local lastSpeedText
+        local lastJumpText
+        local lastFloatText
+        local lastGravityText
 
         while true do
             if noSlowdown then
@@ -4828,6 +5549,30 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier)
                 if nextText ~= lastSpeedText then
                     speedMultiplierLabel:Set(nextText)
                     lastSpeedText = nextText
+                end
+            end
+
+            if jumpBoost then
+                local nextText = "Jump Boost Status: " .. tostring(jumpBoost.Status)
+                if nextText ~= lastJumpText then
+                    jumpBoostLabel:Set(nextText)
+                    lastJumpText = nextText
+                end
+            end
+
+            if floatController then
+                local nextText = "Float Status: " .. tostring(floatController.Status)
+                if nextText ~= lastFloatText then
+                    floatLabel:Set(nextText)
+                    lastFloatText = nextText
+                end
+            end
+
+            if gravityController then
+                local nextText = "Gravity Status: " .. tostring(gravityController.Status)
+                if nextText ~= lastGravityText then
+                    gravityLabel:Set(nextText)
+                    lastGravityText = nextText
                 end
             end
 
@@ -4911,10 +5656,13 @@ end
     UI toggle key, config actions, and maintenance tools.
 ]]
 
-return function(Window, Options, cleaner)
+return function(Window, Options, cleaner, resourceManager)
     local Tab = Window:CreateTab("Settings", 4483362458)
 
     Tab:CreateSection("Optimization & Safety")
+
+    local cleanerLabel = Tab:CreateLabel("Cleanup Status: Idle")
+    local resourceLabel = Tab:CreateLabel("Resource Manager: Idle")
 
     Tab:CreateToggle({
         Name = "Auto-Clean Debris (60s interval)",
@@ -4925,7 +5673,14 @@ return function(Window, Options, cleaner)
         end,
     })
 
-    local cleanerLabel = Tab:CreateLabel("Cleanup Status: Idle")
+    Tab:CreateToggle({
+        Name = "Smart Cleanup Scheduler",
+        CurrentValue = Options.SmartCleanupEnabled ~= false,
+        Flag = "SmartCleanupEnabledFlag",
+        Callback = function(Value)
+            Options.SmartCleanupEnabled = Value
+        end,
+    })
 
     Tab:CreateButton({
         Name = "Clean Memory & Debris Now",
@@ -4993,6 +5748,22 @@ return function(Window, Options, cleaner)
         end,
     })
 
+    Tab:CreateButton({
+        Name = "Check for Updates",
+        Callback = function()
+            if _G.BossAimAssist_CheckForUpdates then
+                _G.BossAimAssist_CheckForUpdates(true)
+            elseif Rayfield and Rayfield.Notify then
+                Rayfield:Notify({
+                    Title = "Updater Unavailable",
+                    Content = "This runtime does not expose the update checker yet. Reload from Main.lua.",
+                    Duration = 4,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
+
     Tab:CreateSection("Configuration")
 
     Tab:CreateButton({
@@ -5044,6 +5815,7 @@ return function(Window, Options, cleaner)
 
     task.spawn(function()
         local lastCleanerText
+        local lastResourceText
 
         while true do
             if cleaner then
@@ -5051,6 +5823,16 @@ return function(Window, Options, cleaner)
                 if nextText ~= lastCleanerText then
                     cleanerLabel:Set(nextText)
                     lastCleanerText = nextText
+                end
+            end
+            if resourceManager then
+                local nextText = string.format(
+                    "Resource Manager: %s",
+                    tostring(resourceManager.Status)
+                )
+                if nextText ~= lastResourceText then
+                    resourceLabel:Set(nextText)
+                    lastResourceText = nextText
                 end
             end
             task.wait(0.5)
@@ -5086,37 +5868,39 @@ return function(Window, Options, cleaner)
 end
 ]====]
 }
-local bundleCache = {}
-local function loadModule(path)
-    local cached = bundleCache[path]
-    if cached ~= nil then
-        return cached
-    end
+
+local function loadBundledModule(path)
     local source = BUNDLED_SOURCES[path]
     if not source then
-        warn('[Bundle] Missing module: ' .. tostring(path))
-        return nil
+        error("Missing bundled module: " .. tostring(path))
     end
-    local chunk, compileErr = loadstring(source, '=' .. path)
+
+    local chunk, compileErr = loadstring(source, "=" .. path)
     if not chunk then
-        warn('[Bundle] Compile failed: ' .. tostring(path) .. ' | Error: ' .. tostring(compileErr))
-        return nil
+        error("Bundled compile failed for " .. tostring(path) .. ": " .. tostring(compileErr))
     end
-    local ok, result = pcall(chunk)
-    if not ok then
-        warn('[Bundle] Runtime failed: ' .. tostring(path) .. ' | Error: ' .. tostring(result))
-        return nil
-    end
-    bundleCache[path] = result
-    return result
+
+    return chunk()
 end
+
+local function loadModule(path)
+    local ok, result = pcall(loadBundledModule, path)
+    if ok then
+        return result
+    end
+
+    warn("[Bundle] Failed: " .. tostring(path) .. " | Error: " .. tostring(result))
+    return nil
+end
+
 local function requireModule(path)
     local module = loadModule(path)
     if module == nil then
-        error('Required module failed to load: ' .. tostring(path), 2)
+        error("Required module failed to load: " .. tostring(path))
     end
     return module
 end
+
 -- Services
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -5161,11 +5945,31 @@ local function normalizeToggleUIKey(value)
     return "RightControl"
 end
 
+local function normalizeTargetingMethod(value)
+    if type(value) ~= "string" then
+        return "FOV"
+    end
+
+    local normalized = string.lower(value)
+    if normalized == "fov" then
+        return "FOV"
+    end
+    if normalized == "distance" then
+        return "Distance"
+    end
+    if normalized == "deadlock" then
+        return "Deadlock"
+    end
+
+    return "FOV"
+end
+
 -- UI initialization
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
 
 Options.ToggleUIKey = normalizeToggleUIKey(Options.ToggleUIKey)
+Options.TargetingMethod = normalizeTargetingMethod(Options.TargetingMethod)
 
 local Window = Rayfield:CreateWindow({
     Name = "STAR GLITCHER ~ REVITALIZED",
@@ -5220,9 +6024,9 @@ local function getRayfieldScreenGuis()
     return matches
 end
 
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- LOAD ALL MODULES (Scientific Order)
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 local Brain          = requireModule("Modules/Core/Brain.lua")
 local InputHandler   = requireModule("Modules/Utils/Input.lua")
 local Tracker        = requireModule("Modules/Utils/NPCTracker.lua")
@@ -5230,6 +6034,7 @@ local Detector       = requireModule("Modules/Utils/BossDetector.lua")
 local LocalCharacter = requireModule("Modules/Utils/LocalCharacter.lua")
 local Synapse         = requireModule("Modules/Utils/Synapse.lua")
 local Kalman          = requireModule("Modules/Utils/Math/Kalman.lua")
+local ResourceManager = requireModule("Modules/Utils/ResourceManager.lua")
 
 local BasePred        = requireModule("Modules/Combat/Prediction/Base.lua")
 local Predictor       = requireModule("Modules/Combat/Predictor.lua")
@@ -5242,6 +6047,9 @@ local SilentAim       = requireModule("Modules/Combat/SilentAim.lua")
 local SpeedSpoof      = requireModule("Modules/Movement/SpeedSpoof.lua")
 local SpeedMultiplier = requireModule("Modules/Movement/SpeedMultiplier.lua")
 local CustomSpeed     = requireModule("Modules/Movement/CustomSpeed.lua")
+local GravityController = requireModule("Modules/Movement/GravityController.lua")
+local FloatController = requireModule("Modules/Movement/FloatController.lua")
+local JumpBoost      = requireModule("Modules/Movement/JumpBoost.lua")
 local AntiSlowdown    = requireModule("Modules/Movement/AntiSlowdown.lua")
 local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
 local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
@@ -5251,9 +6059,9 @@ local Hitmarker       = requireModule("Modules/Visuals/Hitmarker.lua")
 local Highlight       = requireModule("Modules/Visuals/Highlight.lua")
 local TargetDot       = requireModule("Modules/Visuals/TargetDot.lua")
 
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- INSTANTIATE (OOP Injection)
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 local synapse    = Synapse
 local input      = InputHandler.new(Config)
 local localCharacter = LocalCharacter.new()
@@ -5262,7 +6070,8 @@ local tracker    = Tracker.new(Config, detector)
 local aimbot     = Aimbot.new(Config)
 local silentAim  = SilentAim.new(Config, synapse) 
 local apocalypse = Apocalypse.new(Config)
-local cleaner    = GarbageCollector.new(Options)
+local resourceManager = ResourceManager.new(Options)
+local cleaner    = GarbageCollector.new(Options, resourceManager)
 
 local pred       = Predictor.new(Config, loadModule, Kalman)
 local selector   = Selector.new(Config, tracker, pred)
@@ -5278,6 +6087,9 @@ local movementSuite = {
     spoof = SpeedSpoof.new(Options, localCharacter),
     multi = SpeedMultiplier.new(Options, localCharacter),
     fixed = CustomSpeed.new(Options, localCharacter),
+    gravity = GravityController.new(Options),
+    float = FloatController.new(Options, localCharacter),
+    jump = JumpBoost.new(Options, localCharacter),
     slow  = AntiSlowdown.new(Options, localCharacter),
     stun  = AntiStun.new(Options, localCharacter),
     clean = Cleaner.new(Options, localCharacter)
@@ -5289,14 +6101,15 @@ local brain = Brain.new(Config, {
     Aimbot = aimbot, SilentAim = silentAim, Visuals = visuals
 }, loadModule)
 
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- INITIALIZE & SETUP UI
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 input:Init()
 localCharacter:Init()
 tracker:Init()
 silentAim:Init()
 apocalypse:Init()
+resourceManager:Init()
 cleaner:Init()
 visuals.hit:Init()
 
@@ -5304,20 +6117,27 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
-requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi)
+requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump)
 requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, apocalypse)
-requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner)
+requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager)
 
 Rayfield:LoadConfiguration()
+Options.TargetingMethod = normalizeTargetingMethod(Options.TargetingMethod)
 
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- MAIN ORCHESTRATION LOOP (Brain Powered)
--- ═══════════════════════════════════════════════════
+-- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 local SESSION_ID = os.time()
 _G.BossAimAssist_SessionID = SESSION_ID
 
 local _conns = {}
-local function reg(c) table.insert(_conns, c) end
+local function reg(c)
+    table.insert(_conns, c)
+    if resourceManager then
+        resourceManager:TrackConnection(c)
+    end
+    return c
+end
 
 local function performCleanup(fullSweep)
     pcall(function()
@@ -5339,17 +6159,27 @@ local function performCleanup(fullSweep)
         objs[#objs + 1] = obj
     end
 
-    for _, obj in ipairs(objs) do
-        if obj and obj.Destroy then
-            pcall(function()
-                obj:Destroy()
-            end)
+    if resourceManager then
+        for _, obj in ipairs(objs) do
+            resourceManager:TrackObject(obj)
+        end
+        resourceManager:ScheduleTrackedCleanup()
+        resourceManager:Flush(fullSweep and 1.5 or 0.75)
+    else
+        for _, obj in ipairs(objs) do
+            if obj and obj.Destroy then
+                pcall(function()
+                    obj:Destroy()
+                end)
+            end
         end
     end
 
     _G.BossAimAssist_SessionID = nil
     _G.BossAimAssist_Update = nil
     _G.BossAimAssist_Cleanup = nil
+    _G.BossAimAssist_CheckForUpdates = nil
+    _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED = nil
 
     local silentHook = getgenv and getgenv().__STAR_GLITCHER_SILENT_AIM_HOOK
     if silentHook then
@@ -5367,9 +6197,19 @@ local function performCleanup(fullSweep)
                 cleaner:Clean()
             end
         end)
+        if resourceManager then
+            resourceManager:Boost(1.5)
+            resourceManager:Flush(1.5)
+        end
         pcall(function()
             collectgarbage("collect")
             collectgarbage("collect")
+        end)
+    end
+
+    if resourceManager then
+        pcall(function()
+            resourceManager:Destroy()
         end)
     end
 end
@@ -5383,6 +6223,71 @@ _G.BossAimAssist_Update = function()
     task.wait(0.2)
     local updateUrl = UPDATE_ENTRY_URL .. "?update=" .. tostring(os.time())
     return loadstring(game:HttpGet(updateUrl))()
+end
+
+_G.BossAimAssist_CheckForUpdates = function(manual)
+    local ok, remoteVersion = pcall(function()
+        local content = game:HttpGet(VERSION_URL .. "?check=" .. tostring(os.time()))
+        local chunk, compileErr = loadstring(content, "=remote-version")
+        if not chunk then
+            error(compileErr)
+        end
+        return tonumber(chunk())
+    end)
+
+    if not ok then
+        if manual and Rayfield and Rayfield.Notify then
+            Rayfield:Notify({
+                Title = "Update Check Failed",
+                Content = "Could not reach the remote version file.",
+                Duration = 4,
+                Image = 4483362458,
+            })
+        end
+        return false
+    end
+
+    remoteVersion = tonumber(remoteVersion) or 0
+    local currentVersion = tonumber(Version) or 0
+
+    if remoteVersion > currentVersion then
+        if Rayfield and Rayfield.Notify then
+            Rayfield:Notify({
+                Title = "Update Found",
+                Content = string.format("Updating from r%d to r%d.", currentVersion, remoteVersion),
+                Duration = 3,
+                Image = 4483362458,
+            })
+        end
+        task.spawn(function()
+            task.wait(0.35)
+            if _G.BossAimAssist_Update then
+                _G.BossAimAssist_Update()
+            end
+        end)
+        return true
+    end
+
+    if manual and Rayfield and Rayfield.Notify then
+        Rayfield:Notify({
+            Title = "Up To Date",
+            Content = string.format("Current runtime r%d is already the newest version.", currentVersion),
+            Duration = 4,
+            Image = 4483362458,
+        })
+    end
+
+    return false
+end
+
+if not _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED then
+    _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED = true
+    task.spawn(function()
+        task.wait(1)
+        if _G.BossAimAssist_CheckForUpdates then
+            _G.BossAimAssist_CheckForUpdates(false)
+        end
+    end)
 end
 
 -- Scanning (Heartbeat, Off render)
@@ -5426,4 +6331,5 @@ reg(RunService.RenderStepped:Connect(function(dt)
     brain:Update(dt, UserInputService:GetMouseLocation(), Camera.CFrame)
 end))
 
-warn("✅ [Core] Brain Orchestration v6 Active.")
+warn("âœ… [Core] Brain Orchestration v6 Active.")
+

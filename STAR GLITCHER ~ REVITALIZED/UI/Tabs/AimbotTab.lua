@@ -64,20 +64,22 @@ return function(Window, Options, Visuals, NPCTracker)
     -- ═══════════════════════════════════════════════════
     Tab:CreateSection("Field of View (FOV)")
 
-    Tab:CreateToggle({
-        Name = "Show FOV Circle",
-        CurrentValue = Options.ShowFOV,
-        Flag = "FOVToggle",
+    Tab:CreateDropdown({
+        Name = "Targeting Method",
+        Options = {"FOV", "Distance", "Deadlock"},
+        CurrentOption = {Options.TargetingMethod or "FOV"},
+        Flag = "TargetingMethodDropdown",
         Callback = function(Value)
-            Options.ShowFOV = Value
+            local selected = type(Value) == "table" and Value[1] or Value
+            Options.TargetingMethod = selected
             if Visuals and Visuals.FOVCircle then
-                Visuals.FOVCircle.Visible = Value
+                Visuals.FOVCircle.Visible = (selected ~= "Distance")
             end
         end,
     })
 
     Tab:CreateSlider({
-        Name = "FOV Radius",
+        Name = "FOV / Lock Radius",
         Range = {0, 1000},
         Increment = 10,
         Suffix = "px",

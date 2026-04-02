@@ -1,1 +1,1 @@
-return 129 -- Version 1.1.19 (Unified UI / Anti-Stun Fix / Status Check)
+return 130 -- Version 1.2.0 (Auto Update Runtime / Player Mobility Additions)

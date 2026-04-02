@@ -4,7 +4,7 @@
     Updated: Active status monitoring for anti-debuffs.
 ]]
 
-return function(Window, Options, noSlowdown, noStun, speedMultiplier)
+return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost)
     local Tab = Window:CreateTab("Player", 4483362458)
 
     Tab:CreateSection("Movement")
@@ -32,6 +32,73 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier)
             Options.CustomMoveSpeed = Value
         end,
     })
+
+    Tab:CreateSection("Mobility")
+
+    Tab:CreateToggle({
+        Name = "Jump Boost",
+        CurrentValue = Options.JumpBoostEnabled,
+        Flag = "JumpBoostEnabledFlag",
+        Callback = function(Value)
+            Options.JumpBoostEnabled = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Jump Power",
+        Range = { 1, 300 },
+        Increment = 1,
+        CurrentValue = Options.JumpBoostPower or 70,
+        Flag = "JumpBoostPowerFlag",
+        Callback = function(Value)
+            Options.JumpBoostPower = Value
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Float",
+        CurrentValue = Options.FloatEnabled,
+        Flag = "FloatEnabledFlag",
+        Callback = function(Value)
+            Options.FloatEnabled = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Float Fall Speed",
+        Range = { 0, 40 },
+        Increment = 1,
+        CurrentValue = Options.FloatFallSpeed or 8,
+        Flag = "FloatFallSpeedFlag",
+        Suffix = " studs/s",
+        Callback = function(Value)
+            Options.FloatFallSpeed = Value
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Custom Gravity",
+        CurrentValue = Options.GravityEnabled,
+        Flag = "GravityEnabledFlag",
+        Callback = function(Value)
+            Options.GravityEnabled = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Gravity Value",
+        Range = { 0, 500 },
+        Increment = 1,
+        CurrentValue = Options.GravityValue or 196.2,
+        Flag = "GravityValueFlag",
+        Callback = function(Value)
+            Options.GravityValue = Value
+        end,
+    })
+
+    local jumpBoostLabel = Tab:CreateLabel("Jump Boost Status: Idle")
+    local floatLabel = Tab:CreateLabel("Float Status: Idle")
+    local gravityLabel = Tab:CreateLabel("Gravity Status: Idle")
 
     Tab:CreateSection("Legit Multiplier")
 
@@ -96,6 +163,9 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier)
         local lastSlowdownText
         local lastStunText
         local lastSpeedText
+        local lastJumpText
+        local lastFloatText
+        local lastGravityText
 
         while true do
             if noSlowdown then
@@ -119,6 +189,30 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier)
                 if nextText ~= lastSpeedText then
                     speedMultiplierLabel:Set(nextText)
                     lastSpeedText = nextText
+                end
+            end
+
+            if jumpBoost then
+                local nextText = "Jump Boost Status: " .. tostring(jumpBoost.Status)
+                if nextText ~= lastJumpText then
+                    jumpBoostLabel:Set(nextText)
+                    lastJumpText = nextText
+                end
+            end
+
+            if floatController then
+                local nextText = "Float Status: " .. tostring(floatController.Status)
+                if nextText ~= lastFloatText then
+                    floatLabel:Set(nextText)
+                    lastFloatText = nextText
+                end
+            end
+
+            if gravityController then
+                local nextText = "Gravity Status: " .. tostring(gravityController.Status)
+                if nextText ~= lastGravityText then
+                    gravityLabel:Set(nextText)
+                    lastGravityText = nextText
                 end
             end
 

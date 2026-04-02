@@ -30,9 +30,17 @@ function Brain.new(config, modules, loader)
     return self
 end
 
+function Brain:_isDeadlockMode()
+    return tostring(self.Options.TargetingMethod or "FOV") == "Deadlock"
+end
+
 function Brain:Scan(mousePos, originPos)
     local shouldAssist = self.Parietal.Input:ShouldAssist()
+    local deadlockMode = self:_isDeadlockMode()
     if not shouldAssist then
+        if deadlockMode and self.Options.AssistMode ~= "Off" then
+            return
+        end
         self.Parietal.Tracker.CurrentTargetEntry = nil
         return
     end
@@ -50,8 +58,10 @@ end
 function Brain:Update(dt, mousePos, camCFrame)
     local shouldAssist = self.Parietal.Input:ShouldAssist()
     local entry = self.Parietal.Tracker.CurrentTargetEntry
+    local maintainDeadlock = self:_isDeadlockMode() and self.Options.AssistMode ~= "Off" and entry ~= nil
+    local shouldTrack = shouldAssist or maintainDeadlock
 
-    if not shouldAssist or not entry then
+    if not shouldTrack or not entry then
         self.Occipital:Clear()
         self.Frontal:Rest()
         return

@@ -10,7 +10,7 @@ FOVCircle.__index = FOVCircle
 function FOVCircle.new(options)
     local self = setmetatable({}, FOVCircle)
     self.Options = options
-    self._visible = options.ShowFOV
+    self._visible = false
     self._radius = options.FOV or 150
     self._x = nil
     self._y = nil
@@ -20,14 +20,19 @@ function FOVCircle.new(options)
     self.Drawing.Radius = self._radius
     self.Drawing.Filled = false
     self.Drawing.Color = Color3.fromRGB(255, 255, 255)
-    self.Drawing.Visible = self._visible
+    self.Drawing.Visible = false
     self.Drawing.Thickness = 1.5
 
     return self
 end
 
+function FOVCircle:_shouldShow()
+    local method = tostring(self.Options.TargetingMethod or "FOV")
+    return method ~= "Distance"
+end
+
 function FOVCircle:Update(mousePos)
-    if self.Options.ShowFOV then
+    if self:_shouldShow() then
         if self._x ~= mousePos.X or self._y ~= mousePos.Y then
             self.Drawing.Position = mousePos
             self._x = mousePos.X

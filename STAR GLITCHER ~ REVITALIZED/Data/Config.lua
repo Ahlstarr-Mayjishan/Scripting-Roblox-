@@ -12,6 +12,7 @@ Config.Options = {
     TargetPlayersToggle = false,
     SmartPrediction = true,
     TargetPart = "HumanoidRootPart",
+    TargetingMethod = "FOV",
     AimOffset = 0,
     FOV = 150,
     ShowFOV = true,
@@ -24,11 +25,18 @@ Config.Options = {
     NoStun = false,
     CustomMoveSpeedEnabled = false,
     CustomMoveSpeed = 16,
+    GravityEnabled = false,
+    GravityValue = 196.2,
+    FloatEnabled = false,
+    FloatFallSpeed = 8,
+    JumpBoostEnabled = false,
+    JumpBoostPower = 70,
     SpeedMultiplierEnabled = false,
     SpeedMultiplier = 1.0,
     SpeedSpoofEnabled = false,
     ApocalypseEnabled = false,
     AutoCleanEnabled = true,
+    SmartCleanupEnabled = true,
 }
 
 Config.Prediction = {

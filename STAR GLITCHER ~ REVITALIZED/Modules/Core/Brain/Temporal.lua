@@ -44,9 +44,27 @@ function TemporalLobe:Process(originPos, dt)
         return nil, nil
     end
 
+    if self._targetEntry.Humanoid and self._targetEntry.Humanoid.Health <= 0 then
+        self._targetEntry = nil
+        self._targetPart = nil
+        self._prediction = nil
+        if self._lastEntry then
+            self.Predictor:NotifyTargetChanged(nil)
+            self._lastEntry = nil
+            self._lastPart = nil
+        end
+        return nil, nil
+    end
+
     self._targetPart = self.Selector.Tracker:GetTargetPart(self._targetEntry)
     if not self._targetPart then
+        self._targetEntry = nil
         self._prediction = nil
+        if self._lastEntry then
+            self.Predictor:NotifyTargetChanged(nil)
+            self._lastEntry = nil
+            self._lastPart = nil
+        end
         return nil, nil
     end
 

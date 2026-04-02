@@ -5,7 +5,6 @@
     ╚═══════════════════════════════════════════════════════════════╝
 ]]
 
-local USE_GITHUB = true
 local GITHUB_CONFIG = {
     User = "Ahlstarr-Mayjishan",
     Repo = "Scripting-Roblox-",
@@ -15,80 +14,58 @@ local GITHUB_CONFIG = {
 
 local GITHUB_BASE = string.format("https://raw.githubusercontent.com/%s/%s/%s/%s/", GITHUB_CONFIG.User, GITHUB_CONFIG.Repo, GITHUB_CONFIG.Branch, GITHUB_CONFIG.Folder:gsub(" ", "%%20"):gsub("~", "%%7E"))
 local UPDATE_ENTRY_URL = GITHUB_BASE .. "Main.lua"
+local VERSION_URL = GITHUB_BASE .. "Data/Version.lua"
+local loaderSession = tostring(os.time())
+local runtimeModuleCache = {}
+
+local function compileChunk(content, chunkName)
+    local chunk, compileErr = loadstring(content, chunkName)
+    if not chunk then
+        error("[compile] " .. tostring(compileErr))
+    end
+    return chunk
+end
 
 local function loadModule(path)
+    local cached = runtimeModuleCache[path]
+    if cached ~= nil then
+        return cached
+    end
+
     local url = GITHUB_BASE .. path
-    local ok, res = pcall(function()
-        local content = game:HttpGet(url)
-        if content == "404: Not Found" then error("404: "..path) end
-        return loadstring(content)()
-    end)
-    if ok then return res end
-    warn("⚠️ [Loader] Failed: " .. path .. " | Error: " .. tostring(res))
+    local finalError = nil
+
+    for attempt = 1, 3 do
+        local ok, res = pcall(function()
+            local content = game:HttpGet(url .. "?v=" .. loaderSession .. "&attempt=" .. attempt)
+            if content == "404: Not Found" then
+                error("[http] 404: " .. path)
+            end
+
+            local chunk = compileChunk(content, "=" .. path)
+            local value = chunk()
+            runtimeModuleCache[path] = value
+            return value
+        end)
+
+        if ok then
+            return res
+        end
+
+        finalError = res
+        task.wait(0.15 * attempt)
+    end
+
+    warn("[Loader] Failed: " .. path .. " | Error: " .. tostring(finalError))
     return nil
 end
 
 local function requireModule(path)
     local module = loadModule(path)
-    if not module then
-        error("Required module failed to load: " .. tostring(path))
+    if module == nil then
+        error("Required module failed to load: " .. tostring(path), 2)
     end
     return module
-end
-
-do
-    local loaderSession = tostring(os.time())
-    local runtimeModuleCache = {}
-
-    local function compileChunk(content, chunkName)
-        local chunk, compileErr = loadstring(content, chunkName)
-        if not chunk then
-            error("[compile] " .. tostring(compileErr))
-        end
-        return chunk
-    end
-
-    loadModule = function(path)
-        local cached = runtimeModuleCache[path]
-        if cached ~= nil then
-            return cached
-        end
-
-        local url = GITHUB_BASE .. path
-        local finalError = nil
-
-        for attempt = 1, 3 do
-            local ok, res = pcall(function()
-                local content = game:HttpGet(url .. "?v=" .. loaderSession .. "&attempt=" .. attempt)
-                if content == "404: Not Found" then
-                    error("[http] 404: " .. path)
-                end
-
-                local chunk = compileChunk(content, "=" .. path)
-                local value = chunk()
-                runtimeModuleCache[path] = value
-                return value
-            end)
-
-            if ok then
-                return res
-            end
-
-            finalError = res
-            task.wait(0.15 * attempt)
-        end
-
-        warn("[Loader] Failed: " .. path .. " | Error: " .. tostring(finalError))
-        return nil
-    end
-
-    requireModule = function(path)
-        local module = loadModule(path)
-        if not module then
-            error("Required module failed to load: " .. tostring(path), 2)
-        end
-        return module
-    end
 end
 
 -- Services
@@ -135,11 +112,31 @@ local function normalizeToggleUIKey(value)
     return "RightControl"
 end
 
+local function normalizeTargetingMethod(value)
+    if type(value) ~= "string" then
+        return "FOV"
+    end
+
+    local normalized = string.lower(value)
+    if normalized == "fov" then
+        return "FOV"
+    end
+    if normalized == "distance" then
+        return "Distance"
+    end
+    if normalized == "deadlock" then
+        return "Deadlock"
+    end
+
+    return "FOV"
+end
+
 -- UI initialization
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
 
 Options.ToggleUIKey = normalizeToggleUIKey(Options.ToggleUIKey)
+Options.TargetingMethod = normalizeTargetingMethod(Options.TargetingMethod)
 
 local Window = Rayfield:CreateWindow({
     Name = "STAR GLITCHER ~ REVITALIZED",
@@ -204,6 +201,7 @@ local Detector       = requireModule("Modules/Utils/BossDetector.lua")
 local LocalCharacter = requireModule("Modules/Utils/LocalCharacter.lua")
 local Synapse         = requireModule("Modules/Utils/Synapse.lua")
 local Kalman          = requireModule("Modules/Utils/Math/Kalman.lua")
+local ResourceManager = requireModule("Modules/Utils/ResourceManager.lua")
 
 local BasePred        = requireModule("Modules/Combat/Prediction/Base.lua")
 local Predictor       = requireModule("Modules/Combat/Predictor.lua")
@@ -216,6 +214,9 @@ local SilentAim       = requireModule("Modules/Combat/SilentAim.lua")
 local SpeedSpoof      = requireModule("Modules/Movement/SpeedSpoof.lua")
 local SpeedMultiplier = requireModule("Modules/Movement/SpeedMultiplier.lua")
 local CustomSpeed     = requireModule("Modules/Movement/CustomSpeed.lua")
+local GravityController = requireModule("Modules/Movement/GravityController.lua")
+local FloatController = requireModule("Modules/Movement/FloatController.lua")
+local JumpBoost      = requireModule("Modules/Movement/JumpBoost.lua")
 local AntiSlowdown    = requireModule("Modules/Movement/AntiSlowdown.lua")
 local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
 local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
@@ -236,7 +237,8 @@ local tracker    = Tracker.new(Config, detector)
 local aimbot     = Aimbot.new(Config)
 local silentAim  = SilentAim.new(Config, synapse) 
 local apocalypse = Apocalypse.new(Config)
-local cleaner    = GarbageCollector.new(Options)
+local resourceManager = ResourceManager.new(Options)
+local cleaner    = GarbageCollector.new(Options, resourceManager)
 
 local pred       = Predictor.new(Config, loadModule, Kalman)
 local selector   = Selector.new(Config, tracker, pred)
@@ -252,6 +254,9 @@ local movementSuite = {
     spoof = SpeedSpoof.new(Options, localCharacter),
     multi = SpeedMultiplier.new(Options, localCharacter),
     fixed = CustomSpeed.new(Options, localCharacter),
+    gravity = GravityController.new(Options),
+    float = FloatController.new(Options, localCharacter),
+    jump = JumpBoost.new(Options, localCharacter),
     slow  = AntiSlowdown.new(Options, localCharacter),
     stun  = AntiStun.new(Options, localCharacter),
     clean = Cleaner.new(Options, localCharacter)
@@ -271,6 +276,7 @@ localCharacter:Init()
 tracker:Init()
 silentAim:Init()
 apocalypse:Init()
+resourceManager:Init()
 cleaner:Init()
 visuals.hit:Init()
 
@@ -278,11 +284,12 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
-requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi)
+requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump)
 requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, apocalypse)
-requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner)
+requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager)
 
 Rayfield:LoadConfiguration()
+Options.TargetingMethod = normalizeTargetingMethod(Options.TargetingMethod)
 
 -- ═══════════════════════════════════════════════════
 -- MAIN ORCHESTRATION LOOP (Brain Powered)
@@ -291,7 +298,13 @@ local SESSION_ID = os.time()
 _G.BossAimAssist_SessionID = SESSION_ID
 
 local _conns = {}
-local function reg(c) table.insert(_conns, c) end
+local function reg(c)
+    table.insert(_conns, c)
+    if resourceManager then
+        resourceManager:TrackConnection(c)
+    end
+    return c
+end
 
 local function performCleanup(fullSweep)
     pcall(function()
@@ -313,17 +326,27 @@ local function performCleanup(fullSweep)
         objs[#objs + 1] = obj
     end
 
-    for _, obj in ipairs(objs) do
-        if obj and obj.Destroy then
-            pcall(function()
-                obj:Destroy()
-            end)
+    if resourceManager then
+        for _, obj in ipairs(objs) do
+            resourceManager:TrackObject(obj)
+        end
+        resourceManager:ScheduleTrackedCleanup()
+        resourceManager:Flush(fullSweep and 1.5 or 0.75)
+    else
+        for _, obj in ipairs(objs) do
+            if obj and obj.Destroy then
+                pcall(function()
+                    obj:Destroy()
+                end)
+            end
         end
     end
 
     _G.BossAimAssist_SessionID = nil
     _G.BossAimAssist_Update = nil
     _G.BossAimAssist_Cleanup = nil
+    _G.BossAimAssist_CheckForUpdates = nil
+    _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED = nil
 
     local silentHook = getgenv and getgenv().__STAR_GLITCHER_SILENT_AIM_HOOK
     if silentHook then
@@ -341,9 +364,19 @@ local function performCleanup(fullSweep)
                 cleaner:Clean()
             end
         end)
+        if resourceManager then
+            resourceManager:Boost(1.5)
+            resourceManager:Flush(1.5)
+        end
         pcall(function()
             collectgarbage("collect")
             collectgarbage("collect")
+        end)
+    end
+
+    if resourceManager then
+        pcall(function()
+            resourceManager:Destroy()
         end)
     end
 end
@@ -357,6 +390,71 @@ _G.BossAimAssist_Update = function()
     task.wait(0.2)
     local updateUrl = UPDATE_ENTRY_URL .. "?update=" .. tostring(os.time())
     return loadstring(game:HttpGet(updateUrl))()
+end
+
+_G.BossAimAssist_CheckForUpdates = function(manual)
+    local ok, remoteVersion = pcall(function()
+        local content = game:HttpGet(VERSION_URL .. "?check=" .. tostring(os.time()))
+        local chunk, compileErr = loadstring(content, "=remote-version")
+        if not chunk then
+            error(compileErr)
+        end
+        return tonumber(chunk())
+    end)
+
+    if not ok then
+        if manual and Rayfield and Rayfield.Notify then
+            Rayfield:Notify({
+                Title = "Update Check Failed",
+                Content = "Could not reach the remote version file.",
+                Duration = 4,
+                Image = 4483362458,
+            })
+        end
+        return false
+    end
+
+    remoteVersion = tonumber(remoteVersion) or 0
+    local currentVersion = tonumber(Version) or 0
+
+    if remoteVersion > currentVersion then
+        if Rayfield and Rayfield.Notify then
+            Rayfield:Notify({
+                Title = "Update Found",
+                Content = string.format("Updating from r%d to r%d.", currentVersion, remoteVersion),
+                Duration = 3,
+                Image = 4483362458,
+            })
+        end
+        task.spawn(function()
+            task.wait(0.35)
+            if _G.BossAimAssist_Update then
+                _G.BossAimAssist_Update()
+            end
+        end)
+        return true
+    end
+
+    if manual and Rayfield and Rayfield.Notify then
+        Rayfield:Notify({
+            Title = "Up To Date",
+            Content = string.format("Current runtime r%d is already the newest version.", currentVersion),
+            Duration = 4,
+            Image = 4483362458,
+        })
+    end
+
+    return false
+end
+
+if not _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED then
+    _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED = true
+    task.spawn(function()
+        task.wait(1)
+        if _G.BossAimAssist_CheckForUpdates then
+            _G.BossAimAssist_CheckForUpdates(false)
+        end
+    end)
 end
 
 -- Scanning (Heartbeat, Off render)

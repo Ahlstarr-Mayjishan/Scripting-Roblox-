@@ -15,19 +15,21 @@ local GLOBAL_HOOK_KEY = "__STAR_GLITCHER_SILENT_AIM_HOOK"
 local REDIRECT_WINDOW = 0.35
 local clock = os.clock
 
+local REMOTE_BLACKLIST = {
+    "sprint", "speed", "walk", "jump", "action", "interact", "dialogue", "inventory", "tab"
+}
+
 local function isCombatRemote(remote)
     local mName = tostring(remote):lower()
+    for _, word in ipairs(REMOTE_BLACKLIST) do
+        if mName:find(word) then return false end
+    end
     return mName:find("shoot")
         or mName:find("fire")
         or mName:find("attack")
-        or mName:find("magic")
-        or mName:find("spell")
-        or mName:find("skill")
-        or mName:find("ability")
-        or mName:find("target")
-        or mName:find("input")
         or mName:find("hit")
         or mName:find("damage")
+        or mName:find("impact")
 end
 
 local function buildTargetCFrame(targetPos)
@@ -63,7 +65,8 @@ local function ensureHookState()
         if selfRef
             and not selfRef._destroyed
             and not checkcaller()
-            and selfRef:_hasTargetLock() then
+            and selfRef:_hasTargetLock()
+            and selfRef:_isRedirectActive() then -- FIX: Only redirect mouse during firing window
             if inst == Mouse or (typeof(inst) == "Instance" and inst:IsA("Mouse")) then
                 if index == "Hit" then
                     return buildTargetCFrame(selfRef.TargetPosCache)
@@ -111,18 +114,22 @@ local function ensureHookState()
                         if typeof(arg) == "Vector3" then
                             args[i] = selfRef.TargetPosCache
                             modified = true
+                            break -- FIX: Only modify the first Vector3 (Primary Target) to avoid breaking skills
                         elseif typeof(arg) == "Instance" and (arg:IsA("BasePart") or arg:IsA("Model")) then
                             local localCharacter = LocalPlayer.Character
                             if not (localCharacter and arg:IsDescendantOf(localCharacter)) then
                                 args[i] = selfRef.TargetPartCache
                                 modified = true
+                                break -- FIX: Same for Instances
                             end
                         elseif typeof(arg) == "CFrame" then
                             args[i] = buildTargetCFrame(selfRef.TargetPosCache)
                             modified = true
+                            break -- FIX: Same for CFrames
                         elseif typeof(arg) == "Ray" then
                             args[i] = buildTargetRay(arg.Origin, selfRef.TargetPosCache, arg.Direction.Magnitude)
                             modified = true
+                            break
                         end
                     end
 

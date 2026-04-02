@@ -3,10 +3,13 @@
     UI toggle key, config actions, and maintenance tools.
 ]]
 
-return function(Window, Options, cleaner)
+return function(Window, Options, cleaner, resourceManager)
     local Tab = Window:CreateTab("Settings", 4483362458)
 
     Tab:CreateSection("Optimization & Safety")
+
+    local cleanerLabel = Tab:CreateLabel("Cleanup Status: Idle")
+    local resourceLabel = Tab:CreateLabel("Resource Manager: Idle")
 
     Tab:CreateToggle({
         Name = "Auto-Clean Debris (60s interval)",
@@ -17,7 +20,14 @@ return function(Window, Options, cleaner)
         end,
     })
 
-    local cleanerLabel = Tab:CreateLabel("Cleanup Status: Idle")
+    Tab:CreateToggle({
+        Name = "Smart Cleanup Scheduler",
+        CurrentValue = Options.SmartCleanupEnabled ~= false,
+        Flag = "SmartCleanupEnabledFlag",
+        Callback = function(Value)
+            Options.SmartCleanupEnabled = Value
+        end,
+    })
 
     Tab:CreateButton({
         Name = "Clean Memory & Debris Now",
@@ -85,6 +95,22 @@ return function(Window, Options, cleaner)
         end,
     })
 
+    Tab:CreateButton({
+        Name = "Check for Updates",
+        Callback = function()
+            if _G.BossAimAssist_CheckForUpdates then
+                _G.BossAimAssist_CheckForUpdates(true)
+            elseif Rayfield and Rayfield.Notify then
+                Rayfield:Notify({
+                    Title = "Updater Unavailable",
+                    Content = "This runtime does not expose the update checker yet. Reload from Main.lua.",
+                    Duration = 4,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
+
     Tab:CreateSection("Configuration")
 
     Tab:CreateButton({
@@ -136,6 +162,7 @@ return function(Window, Options, cleaner)
 
     task.spawn(function()
         local lastCleanerText
+        local lastResourceText
 
         while true do
             if cleaner then
@@ -143,6 +170,16 @@ return function(Window, Options, cleaner)
                 if nextText ~= lastCleanerText then
                     cleanerLabel:Set(nextText)
                     lastCleanerText = nextText
+                end
+            end
+            if resourceManager then
+                local nextText = string.format(
+                    "Resource Manager: %s",
+                    tostring(resourceManager.Status)
+                )
+                if nextText ~= lastResourceText then
+                    resourceLabel:Set(nextText)
+                    lastResourceText = nextText
                 end
             end
             task.wait(0.5)
