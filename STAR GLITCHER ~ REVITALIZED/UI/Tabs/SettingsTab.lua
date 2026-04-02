@@ -109,8 +109,9 @@ return function(Window, Options, cleaner, resourceManager)
     Tab:CreateButton({
         Name = "Clean + Update Script",
         Callback = function()
-            if _G.BossAimAssist_Update then
-                _G.BossAimAssist_Update()
+            local updater = _G.BossAimAssist_Update
+            if updater then
+                task.spawn(updater)
             elseif _G.BossAimAssist_Cleanup then
                 _G.BossAimAssist_Cleanup(true)
             end

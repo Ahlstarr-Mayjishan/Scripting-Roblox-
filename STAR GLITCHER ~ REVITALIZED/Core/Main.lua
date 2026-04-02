@@ -403,11 +403,24 @@ _G.BossAimAssist_Cleanup = function(fullSweep)
     performCleanup(fullSweep == true)
 end
 
+local function executeUpdatedEntry(url, chunkName)
+    local content = game:HttpGet(url)
+    local chunk = compileChunk(content, chunkName)
+    return chunk()
+end
+
 _G.BossAimAssist_Update = function()
-    performCleanup(true)
-    task.wait(0.2)
     local updateUrl = UPDATE_ENTRY_URL .. "?update=" .. tostring(os.time())
-    return loadstring(game:HttpGet(updateUrl))()
+    task.spawn(function()
+        task.wait(0.15)
+        local ok, result = pcall(function()
+            return executeUpdatedEntry(updateUrl, "=updated-entry")
+        end)
+        if not ok then
+            warn("[Update] Reload failed after cleanup | Error: " .. tostring(result))
+        end
+    end)
+    performCleanup(true)
 end
 
 _G.BossAimAssist_CheckForUpdates = function(manual)
@@ -446,8 +459,9 @@ _G.BossAimAssist_CheckForUpdates = function(manual)
         end
         task.spawn(function()
             task.wait(0.35)
-            if _G.BossAimAssist_Update then
-                _G.BossAimAssist_Update()
+            local updater = _G.BossAimAssist_Update
+            if updater then
+                updater()
             end
         end)
         return true
