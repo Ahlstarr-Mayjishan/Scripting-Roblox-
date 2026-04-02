@@ -13,6 +13,7 @@ function SpeedMultiplier.new(options, localCharacter)
     self.Status = "Idle"
     self._lastBoostTime = 0
     self._lastWalkWriteTime = 0
+    self._fallbackWarmupUntil = 0
     return self
 end
 
@@ -44,23 +45,36 @@ function SpeedMultiplier:_applyVelocityFallback(humanoid, rootPart, desiredSpeed
         return false
     end
 
+    local now = os.clock()
     local moveDirection = humanoid.MoveDirection
     if moveDirection.Magnitude <= 0.05 then
+        self._fallbackWarmupUntil = 0
         return false
     end
 
     local planarVelocity = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z)
     local currentSpeedAlongMove = planarVelocity:Dot(moveDirection)
+    local perpendicularPlanarVelocity = planarVelocity - (moveDirection * currentSpeedAlongMove)
     local missingSpeed = desiredSpeed - currentSpeedAlongMove
     if missingSpeed <= 0.75 then
+        self._fallbackWarmupUntil = 0
         return false
     end
 
-    local boost = math.min(missingSpeed, math.max(desiredSpeed * 0.35, 6))
-    local targetPlanarVelocity = planarVelocity + (moveDirection * boost)
+    if self._fallbackWarmupUntil == 0 then
+        self._fallbackWarmupUntil = now + 0.2
+        return false
+    end
+
+    if now < self._fallbackWarmupUntil then
+        return false
+    end
+
+    local targetAlongMove = math.min(desiredSpeed, math.max(currentSpeedAlongMove, 0) + math.max(missingSpeed * 0.45, 4))
+    local targetPlanarVelocity = perpendicularPlanarVelocity + (moveDirection * targetAlongMove)
     local verticalVelocity = rootPart.AssemblyLinearVelocity.Y
     rootPart.AssemblyLinearVelocity = Vector3.new(targetPlanarVelocity.X, verticalVelocity, targetPlanarVelocity.Z)
-    self._lastBoostTime = os.clock()
+    self._lastBoostTime = now
     return true
 end
 
@@ -76,6 +90,7 @@ function SpeedMultiplier:Init()
             if hum ~= self.TrackedHumanoid then
                 self:_captureBaseSpeed(hum)
             end
+            self._fallbackWarmupUntil = 0
             self.Status = "Respawn Grace"
             return
         end
@@ -89,6 +104,7 @@ function SpeedMultiplier:Init()
         self:_learnLegitBaseSpeed(hum)
 
         if not self.Options.SpeedMultiplierEnabled or self.Options.CustomMoveSpeedEnabled then
+            self._fallbackWarmupUntil = 0
             self.Status = self.Options.CustomMoveSpeedEnabled and "Blocked by Fixed Speed" or "Disabled"
             return
         end

@@ -10,6 +10,8 @@ local function compileRemoteChunk(url, chunkName)
     end
 
     local source = game:HttpGet(url)
+    source = source:gsub("^\239\187\191", "")
+    source = source:gsub("^﻿", "")
     local chunk, compileErr = compiler(source, chunkName)
     if not chunk then
         error(string.format("Failed to compile %s: %s", chunkName, tostring(compileErr)))
