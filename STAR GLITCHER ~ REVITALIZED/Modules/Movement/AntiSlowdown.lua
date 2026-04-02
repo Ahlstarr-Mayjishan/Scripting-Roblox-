@@ -54,6 +54,14 @@ function AntiSlowdown:Init()
             return
         end
 
+        if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            if hum ~= self.TrackedHumanoid then
+                self:CaptureBaseStats(hum)
+            end
+            self:_setStatus("Respawn Grace")
+            return
+        end
+
         self:_setStatus("Monitoring Speed")
 
         if hum ~= self.TrackedHumanoid then

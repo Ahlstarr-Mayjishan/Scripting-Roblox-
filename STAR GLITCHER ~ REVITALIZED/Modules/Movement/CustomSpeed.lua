@@ -17,6 +17,10 @@ function CustomSpeed:Init()
             return
         end
 
+        if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            return
+        end
+
         local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
         if not hum then
             return

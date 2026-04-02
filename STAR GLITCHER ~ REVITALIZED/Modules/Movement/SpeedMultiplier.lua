@@ -53,6 +53,14 @@ function SpeedMultiplier:Init()
             return
         end
 
+        if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            if hum ~= self.TrackedHumanoid then
+                self:_captureBaseSpeed(hum)
+            end
+            self.Status = "Respawn Grace"
+            return
+        end
+
         if hum ~= self.TrackedHumanoid then
             self:_captureBaseSpeed(hum)
         elseif not self.Options.SpeedMultiplierEnabled then

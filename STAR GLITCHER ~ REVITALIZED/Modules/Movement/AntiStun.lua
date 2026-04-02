@@ -68,6 +68,17 @@ function AntiStun:Init()
             return
         end
 
+        if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            if hum ~= self.TrackedHumanoid then
+                if self.TrackedHumanoid then
+                    self:_restoreStateGuards(self.TrackedHumanoid)
+                end
+                self.TrackedHumanoid = hum
+            end
+            self:_setStatus("Respawn Grace")
+            return
+        end
+
         self:_setStatus("Active: Monitoring")
 
         if hum ~= self.TrackedHumanoid then

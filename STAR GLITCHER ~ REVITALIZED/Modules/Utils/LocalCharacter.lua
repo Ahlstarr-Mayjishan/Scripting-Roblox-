@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local clock = os.clock
 
 local LocalCharacter = {}
 LocalCharacter.__index = LocalCharacter
@@ -10,6 +11,8 @@ function LocalCharacter.new()
     self.Humanoid = nil
     self.RootPart = nil
     self.PlayerGui = nil
+    self.LastSpawnTime = 0
+    self.RespawnGracePeriod = 1.25
     self._connections = {}
     return self
 end
@@ -28,11 +31,16 @@ end
 function LocalCharacter:Init()
     self:_refresh(self.Player and self.Player.Character or nil)
 
+    if self.Character then
+        self.LastSpawnTime = clock()
+    end
+
     if not self.Player then
         return
     end
 
     table.insert(self._connections, self.Player.CharacterAdded:Connect(function(character)
+        self.LastSpawnTime = clock()
         self:_refresh(character)
     end))
 
@@ -47,6 +55,9 @@ function LocalCharacter:GetCharacter()
     local character = self.Player and self.Player.Character or nil
     if character ~= self.Character then
         self:_refresh(character)
+        if character then
+            self.LastSpawnTime = clock()
+        end
     end
     return self.Character
 end
@@ -80,6 +91,13 @@ end
 function LocalCharacter:IsLocalHumanoid(instance)
     local humanoid = self:GetHumanoid()
     return humanoid ~= nil and instance == humanoid
+end
+
+function LocalCharacter:IsRespawning()
+    if not self.Character then
+        return false
+    end
+    return (clock() - (self.LastSpawnTime or 0)) < self.RespawnGracePeriod
 end
 
 function LocalCharacter:Destroy()
