@@ -14,6 +14,8 @@ function SpeedMultiplier.new(options, localCharacter)
     self._lastBoostTime = 0
     self._lastWalkWriteTime = 0
     self._fallbackWarmupUntil = 0
+    self._wasEnabled = false
+    self._preEnableBaseSpeed = 16
     return self
 end
 
@@ -22,10 +24,31 @@ function SpeedMultiplier:_captureBaseSpeed(humanoid)
     self.BaseWalkSpeed = math.max(humanoid.WalkSpeed, 16)
 end
 
+function SpeedMultiplier:_writeWalkSpeed(humanoid, value)
+    if not humanoid then
+        return
+    end
+
+    if math.abs(humanoid.WalkSpeed - value) > 0.1 then
+        humanoid.WalkSpeed = value
+        self._lastWalkWriteTime = os.clock()
+    end
+end
+
+function SpeedMultiplier:_restoreBaseSpeed(humanoid)
+    if not humanoid then
+        return
+    end
+
+    local restoreSpeed = math.max(self._preEnableBaseSpeed or self.BaseWalkSpeed or 16, 16)
+    self.BaseWalkSpeed = restoreSpeed
+    self:_writeWalkSpeed(humanoid, restoreSpeed)
+end
+
 function SpeedMultiplier:_learnLegitBaseSpeed(humanoid)
     local multiplier = math.max(self.Options.SpeedMultiplier or 1, 1)
     local now = os.clock()
-    if (now - self._lastWalkWriteTime) < 0.2 then
+    if (now - self._lastWalkWriteTime) < 0.35 then
         return
     end
 
@@ -91,32 +114,41 @@ function SpeedMultiplier:Init()
                 self:_captureBaseSpeed(hum)
             end
             self._fallbackWarmupUntil = 0
+            self._wasEnabled = false
             self.Status = "Respawn Grace"
             return
         end
 
         if hum ~= self.TrackedHumanoid then
             self:_captureBaseSpeed(hum)
-        elseif not self.Options.SpeedMultiplierEnabled then
-            self.BaseWalkSpeed = math.max(hum.WalkSpeed, 16)
         end
-
-        self:_learnLegitBaseSpeed(hum)
 
         if not self.Options.SpeedMultiplierEnabled or self.Options.CustomMoveSpeedEnabled then
             self._fallbackWarmupUntil = 0
+            if self._wasEnabled then
+                self:_restoreBaseSpeed(hum)
+            else
+                self.BaseWalkSpeed = math.max(hum.WalkSpeed, 16)
+            end
+            self._wasEnabled = false
             self.Status = self.Options.CustomMoveSpeedEnabled and "Blocked by Fixed Speed" or "Disabled"
             return
+        end
+
+        if not self._wasEnabled then
+            self._preEnableBaseSpeed = math.max(hum.WalkSpeed, 16)
+            self.BaseWalkSpeed = self._preEnableBaseSpeed
+            self._fallbackWarmupUntil = 0
+            self._wasEnabled = true
+        else
+            self:_learnLegitBaseSpeed(hum)
         end
 
         local rootPart = self.LocalCharacter and self.LocalCharacter:GetRootPart()
         local desiredSpeed = self.BaseWalkSpeed * self.Options.SpeedMultiplier
         local boosted = false
 
-        if math.abs(hum.WalkSpeed - desiredSpeed) > 0.1 then
-            hum.WalkSpeed = desiredSpeed
-            self._lastWalkWriteTime = os.clock()
-        end
+        self:_writeWalkSpeed(hum, desiredSpeed)
 
         -- Some games ignore WalkSpeed entirely and drive movement from custom controllers.
         -- When that happens, nudge the root part's horizontal velocity along MoveDirection.
@@ -138,6 +170,11 @@ function SpeedMultiplier:Destroy()
     if self.Connection then
         self.Connection:Disconnect()
         self.Connection = nil
+    end
+
+    local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
+    if hum and self._wasEnabled then
+        self:_restoreBaseSpeed(hum)
     end
 end
 

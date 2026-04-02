@@ -22,6 +22,7 @@ function AntiSlowdown.new(options, localCharacter)
     self.Status = "Idle"
     self._lastAction = 0
     self._lastWriteTime = 0
+    self._yieldingToSpeedOverride = false
     return self
 end
 
@@ -74,7 +75,21 @@ function AntiSlowdown:Init()
             if hum ~= self.TrackedHumanoid then
                 self:CaptureBaseStats(hum)
             end
+            self._yieldingToSpeedOverride = false
             self:_setStatus("Respawn Grace")
+            return
+        end
+
+        if self.Options.CustomMoveSpeedEnabled or self.Options.SpeedMultiplierEnabled then
+            self._yieldingToSpeedOverride = true
+            self:_setStatus("Yielding to Speed Override")
+            return
+        end
+
+        if self._yieldingToSpeedOverride then
+            self._yieldingToSpeedOverride = false
+            self:CaptureBaseStats(hum)
+            self:_setStatus("Recalibrated")
             return
         end
 
