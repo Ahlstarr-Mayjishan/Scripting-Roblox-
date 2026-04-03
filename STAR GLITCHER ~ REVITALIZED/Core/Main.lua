@@ -92,6 +92,26 @@ local function loadModule(path)
     local url = GITHUB_BASE .. path
     local finalError = nil
 
+    local function compileAndCache(content)
+        local chunk = compileChunk(content, "=" .. path)
+        local value = chunk()
+        runtimeModuleCache[path] = value
+        return value
+    end
+
+    -- Local load strategy (if base path provided in _G)
+    if _G.BossAimAssist_LocalPath then
+        local localPath = _G.BossAimAssist_LocalPath .. path
+        if readfile then
+            local ok, content = pcall(readfile, localPath)
+            if ok and content then
+                local success, val = pcall(compileAndCache, content)
+                if success then return val end
+            end
+        end
+    end
+
+    -- Remote load strategy
     for attempt = 1, 3 do
         local ok, res = pcall(function()
             local content = game:HttpGet(url .. "?v=" .. loaderSession .. "&attempt=" .. attempt)
@@ -99,10 +119,7 @@ local function loadModule(path)
                 error("[http] 404: " .. path)
             end
 
-            local chunk = compileChunk(content, "=" .. path)
-            local value = chunk()
-            runtimeModuleCache[path] = value
-            return value
+            return compileAndCache(content)
         end)
 
         if ok then
