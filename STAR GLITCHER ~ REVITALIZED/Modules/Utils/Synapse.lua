@@ -1,5 +1,5 @@
 --[[
-    Synapse.lua — Communication Signal System
+    Synapse.lua - Communication Signal System
     Analogy: The neural synapses connecting different regions of the brain.
     Allows decoupled cross-module communication (Events).
 ]]
@@ -33,3 +33,4 @@ function Synapse.fire(name, ...)
 end
 
 return Synapse
+

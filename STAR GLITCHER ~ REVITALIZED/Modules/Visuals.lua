@@ -1,6 +1,6 @@
 --[[
-    Visuals.lua — Visual Feedback Class
-    Quản lý FOV Circle, Target Dot, Highlight, và Hitmarker system.
+    Visuals.lua - Visual Feedback Class
+    Quan ly FOV Circle, Target Dot, Highlight, va Hitmarker system.
 ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -130,3 +130,4 @@ function Visuals:Destroy()
 end
 
 return Visuals
+

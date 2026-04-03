@@ -1,5 +1,5 @@
 --[[
-    Input.lua — OOP User Interaction Class
+    Input.lua - OOP User Interaction Class
     Handles mouseholding and assist availability checks.
 ]]
 
@@ -58,3 +58,4 @@ function Input:Destroy()
 end
 
 return Input
+

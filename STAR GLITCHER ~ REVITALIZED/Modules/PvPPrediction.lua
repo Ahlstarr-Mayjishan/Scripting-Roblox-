@@ -1,12 +1,12 @@
 --[[
-    PvPPrediction.lua — PvP-Specific Prediction Profile
-    ═══════════════════════════════════════════════════
-    Kế thừa PredictionCore, tuning cho Player thực:
-      • Kalman Q boost +0.3 (nhạy hơn cho human input)
-      • Ping bù 2x (player có latency riêng + reconciliation)
-      • Lead cap thấp (player di chuyển ngắn, đổi hướng nhiều)
-      • Zigzag dampen mạnh (confidence giảm 45% khi đảo chiều)
-      • Jump Arc prediction (dự đoán cung nhảy parabola)
+    PvPPrediction.lua - PvP-Specific Prediction Profile
+    ===================================================
+    Ke thua PredictionCore, tuning cho Player thuc:
+      * Kalman Q boost +0.3 (nhay hon cho human input)
+      * Ping bu 2x (player co latency rieng + reconciliation)
+      * Lead cap thap (player di chuyn ngan, di huong nhieu)
+      * Zigzag dampen manh (confidence giam 45% khi dao chieu)
+      * Jump Arc prediction (du doan cung nhay parabola)
 ]]
 
 return function(PredictionCore)
@@ -18,15 +18,15 @@ return function(PredictionCore)
         local self = PredictionCore.new(config, npcTracker)
         setmetatable(self, PvPPrediction)
 
-        -- ═══ PVP PROFILE ═══
+        -- === PVP PROFILE ===
         self.Profile = {
-            KalmanQBoost      = 0.3,          -- Kalman nhạy hơn cho input người thật
-            PingMultiplier    = 2.0,          -- Bù ping gấp đôi (player ping + reconciliation)
-            ReversalPenalty   = 0.55,         -- Zigzag penalty mạnh hơn
-            LeadCap           = 180,          -- Lead cap thấp (player di chuyển ngắn)
-            JumpArcEnabled    = true,         -- Dự đoán cung nhảy parabola
-            JumpGravity       = -196.2,       -- Gia tốc trọng lực chuẩn Roblox
-            JumpArcBlend      = 0.7,          -- 70% áp dụng dự đoán cung nhảy
+            KalmanQBoost      = 0.3,          -- Kalman nhay hon cho input nguoi that
+            PingMultiplier    = 2.0,          -- Bu ping gap doi (player ping + reconciliation)
+            ReversalPenalty   = 0.55,         -- Zigzag penalty manh hon
+            LeadCap           = 180,          -- Lead cap thap (player di chuyn ngan)
+            JumpArcEnabled    = true,         -- Du doan cung nhay parabola
+            JumpGravity       = -196.2,       -- Gia toc trong luc chun Roblox
+            JumpArcBlend      = 0.7,          -- 70% ap dung du doan cung nhay
         }
 
         return self
@@ -34,3 +34,4 @@ return function(PredictionCore)
 
     return PvPPrediction
 end
+

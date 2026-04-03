@@ -1,8 +1,8 @@
 --[[
-    â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-    â•‘     Boss Aim Assist â€” Centralized Brain Orchestration v6       â•‘
-    â•‘  Scientifically Reorganized | Fully Decoupled | Brain Driven  â•‘
-    â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*-
+    a*     Boss Aim Assist a Centralized Brain Orchestration v6       a*
+    a*  Scientifically Reorganized | Fully Decoupled | Brain Driven  a*
+    a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 ]]
 
 local BUNDLED_SOURCES = {
@@ -132,15 +132,15 @@ end
 
 local mainContent = loadLocalFile("Core/Main.lua")
 if mainContent then
-    print("âœ… [Loader] Loading Star Glitcher from local workspace...")
+    print("a [Loader] Loading Star Glitcher from local workspace...")
     local chunk, err = loadstring(mainContent, "=Core/Main.lua")
     if chunk then
         chunk()
     else
-        warn("âŒ [Loader] Failed to compile Main.lua: " .. tostring(err))
+        warn("a [Loader] Failed to compile Main.lua: " .. tostring(err))
     end
 else
-    warn("âŒ [Loader] Could not find Core/Main.lua in workspace/" .. _G.BossAimAssist_LocalPath)
+    warn("a [Loader] Could not find Core/Main.lua in workspace/" .. _G.BossAimAssist_LocalPath)
     warn("Please ensure you have copied the folder correctly to your executor's workspace.")
 end
 ]====],
@@ -436,12 +436,12 @@ end
 return Apocalypse
 ]====],
     ["Modules/Combat/Prediction/Base.lua"] = [====[--[[
-    Base.lua â€” Scientific Physics Core (Smart Prediction)
+    Base.lua a Scientific Physics Core (Smart Prediction)
     Implements advanced kinematic equations:
-    â€¢ Uniform Linear Motion: s = vt
-    â€¢ Uniformly Accelerated Motion: s = v0t + 0.5at^2
-    â€¢ Braking/Deceleration compensation
-    â€¢ Jerk-aware extrapolation
+    a Uniform Linear Motion: s = vt
+    a Uniformly Accelerated Motion: s = v0t + 0.5at^2
+    a Braking/Deceleration compensation
+    a Jerk-aware extrapolation
 ]]
 
 local Base = {}
@@ -459,15 +459,15 @@ function Base:Calculate(origin, part, velocity, acceleration, jerk, dt)
     local dist = (targetPos - origin).Magnitude
     
     -- 1. Travel Time Estimation (Projectile/Spell flight)
-    -- Náº¿u lÃ  Beam (tá»‘c Ä‘á»™ Ã¡nh sÃ¡ng), travelTime ~ 0.
-    -- Vá»›i phÃ©p thuáº­t cÃ³ váº­n tá»‘c, travelTime = dist / bulletSpeed.
+    -- Nau la Beam (tac a anh sang), travelTime ~ 0.
+    -- Vai phap thuat ca van tac, travelTime = dist / bulletSpeed.
     local travelTime = (dist / 1000) * (self.Options.PredictionScale or 1)
     
     -- 2. Kinematic Equations Dispatch
     local predictedOffset = Vector3.zero
     
     if acceleration and acceleration.Magnitude > 0.05 then
-        -- Chuyá»ƒn Ä‘á»™ng cÃ³ gia tá»‘c Ä‘á»u: s = vt + 0.5at^2
+        -- Chuyan ang ca gia tac au: s = vt + 0.5at^2
         predictedOffset = (velocity * travelTime) + (0.5 * acceleration * travelTime * travelTime)
         
         -- Jerk compensation: s += (1/6) * j * t^3
@@ -475,21 +475,21 @@ function Base:Calculate(origin, part, velocity, acceleration, jerk, dt)
             predictedOffset = predictedOffset + ( (1/6) * jerk * math.pow(travelTime, 3) )
         end
     else
-        -- Chuyá»ƒn Ä‘á»™ng tháº³ng Ä‘á»u: s = vt
+        -- Chuyan ang thang au: s = vt
         predictedOffset = velocity * travelTime
     end
     
-    -- 3. Braking / Deceleration Logic (QuÃ£ng Ä‘Æ°á»ng phanh)
-    -- Náº¿u váº­n tá»‘c Ä‘ang giáº£m máº¡nh (a ngÆ°á»£c chiá»u v), chÃºng ta bÃ¹ trá»« quÃ£ng Ä‘Æ°á»ng phanh
+    -- 3. Braking / Deceleration Logic (Quang ang phanh)
+    -- Nau van tac ang giam manh (a ngac chiau v), chang ta ba tra quang ang phanh
     local speed = velocity.Magnitude
     if speed > 1 and acceleration then
         local dot = velocity.Unit:Dot(acceleration.Unit)
-        if dot < -0.7 then -- Äang phanh/hÃ£m
+        if dot < -0.7 then -- ang phanh/ham
             local deceleration = acceleration.Magnitude
-            -- s_phanh = v^2 / 2a (CÃ´ng thá»©c quÃ£ng Ä‘Æ°á»ng hÃ£m)
+            -- s_phanh = v^2 / 2a (Cang thac quang ang ham)
             local brakingDist = (speed * speed) / (2 * deceleration)
             
-            -- Giá»›i háº¡n bÃ¹ trá»« phanh Ä‘á»ƒ trÃ¡nh jitter
+            -- Giai han ba tra phanh a tranh jitter
             brakingDist = math.min(brakingDist, 5) 
             predictedOffset = predictedOffset + (acceleration.Unit * brakingDist * 0.5)
         end
@@ -768,7 +768,7 @@ end
 return Engine
 ]====],
     ["Modules/Combat/Prediction/Estimator.lua"] = [====[--[[
-    Estimator.lua â€” State Estimation & Noise Removal (Physics Damping v2)
+    Estimator.lua a State Estimation & Noise Removal (Physics Damping v2)
     Analogy: Inferior Colliculus (Auditory/Visual processing before perception).
     Job: Filtering raw velocity, detecting acceleration/jerk, and scoring confidence.
     Fixes: Jitter/Shakiness (rung) via progressive damping filters.
@@ -901,7 +901,7 @@ end
 return Estimator
 ]====],
     ["Modules/Combat/Prediction/Sampler.lua"] = [====[--[[
-    Sampler.lua â€” Pure Kinematic Data Extraction
+    Sampler.lua a Pure Kinematic Data Extraction
     Analogy: The sensory nerves (Afferent fibers).
     Job: Extract raw position, velocity, and teleportation data without modification.
 ]]
@@ -1156,7 +1156,7 @@ end
 return Stabilizer
 ]====],
     ["Modules/Combat/Predictor.lua"] = [====[--[[
-    Predictor.lua â€” High-Performance Layered Orchestrator
+    Predictor.lua a High-Performance Layered Orchestrator
     Analogy: The Neural Motor Network.
     Job: Orchestrates the 4 layers: Sampler -> Estimator -> Engine -> Stabilizer.
     Architecture: Orthogonal-First design (Zero feedback loop).
@@ -1834,7 +1834,7 @@ end
 return Brain
 ]====],
     ["Modules/Core/Brain/Frontal.lua"] = [====[--[[
-    FrontalLobe.lua â€” Executive Function & Motor Control
+    FrontalLobe.lua a Executive Function & Motor Control
     Analogy: Planning and executing movements (Aimbot/Silent Aim).
     Script Job: Dispatches actual aimbot actions based on brain decisions.
 ]]
@@ -1872,7 +1872,7 @@ end
 return FrontalLobe
 ]====],
     ["Modules/Core/Brain/Occipital.lua"] = [====[--[[
-    OccipitalLobe.lua â€” Visual Processing
+    OccipitalLobe.lua a Visual Processing
     Analogy: Primary visual cortex.
     Job: Manages FOV, Highlight, and Target feedback dots.
 ]]
@@ -1912,7 +1912,7 @@ end
 return OccipitalLobe
 ]====],
     ["Modules/Core/Brain/Parietal.lua"] = [====[--[[
-    ParietalLobe.lua â€” Sensory & Input Processing
+    ParietalLobe.lua a Sensory & Input Processing
     Analogy: Integrates sensory information from various parts of the body.
     Script Job: Monitors user input and world entity tracking.
 ]]
@@ -2967,14 +2967,14 @@ end
 return SpeedSpoof
 ]====],
     ["Modules/NPCPrediction.lua"] = [====[--[[
-    NPCPrediction.lua â€” NPC-Specific Prediction Profile
-    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    Káº¿ thá»«a PredictionCore, tuning cho Boss/NPC:
-      â€¢ Kalman tiÃªu chuáº©n (khÃ´ng boost Q)
-      â€¢ Ping bÃ¹ 1x (NPC khÃ´ng cÃ³ ping riÃªng)
-      â€¢ Lead cap cao (Boss di chuyá»ƒn quÃ£ng dÃ i, thuáº­t sÄ© bay xa)
-      â€¢ Reversal penalty nháº¹ (Boss Ã­t zigzag hÆ¡n Player)
-      â€¢ KhÃ´ng cÃ³ Jump Arc prediction
+    NPCPrediction.lua a NPC-Specific Prediction Profile
+    a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
+    Ka thaa PredictionCore, tuning cho Boss/NPC:
+      a Kalman tiau chuan (khang boost Q)
+      a Ping ba 1x (NPC khang ca ping riang)
+      a Lead cap cao (Boss di chuyan quang dai, thuat s bay xa)
+      a Reversal penalty nha (Boss at zigzag hn Player)
+      a Khang ca Jump Arc prediction
 ]]
 
 return function(PredictionCore)
@@ -2986,13 +2986,13 @@ return function(PredictionCore)
         local self = PredictionCore.new(config, npcTracker)
         setmetatable(self, NPCPrediction)
 
-        -- â•â•â• NPC PROFILE â•â•â•
+        -- a*a*a* NPC PROFILE a*a*a*
         self.Profile = {
-            KalmanQBoost      = 0,           -- KhÃ´ng boost: NPC movement á»•n Ä‘á»‹nh hÆ¡n
-            PingMultiplier    = 1,            -- Server-side NPC, khÃ´ng cáº§n bÃ¹ ping thÃªm
-            ReversalPenalty   = 0.6,          -- Confidence giáº£m 40% khi Ä‘á»•i hÆ°á»›ng
+            KalmanQBoost      = 0,           -- Khang boost: NPC movement a*n anh hn
+            PingMultiplier    = 1,            -- Server-side NPC, khang can ba ping tham
+            ReversalPenalty   = 0.6,          -- Confidence giam 40% khi a*i hang
             LeadCap           = config.Prediction.MAX_LEAD_DIST,  -- 340 studs
-            JumpArcEnabled    = false,        -- NPC khÃ´ng jump theo kiá»ƒu Player
+            JumpArcEnabled    = false,        -- NPC khang jump theo kiau Player
             JumpGravity       = -196.2,
             JumpArcBlend      = 0,
         }
@@ -3004,18 +3004,18 @@ return function(PredictionCore)
 end
 ]====],
     ["Modules/PredictionCore.lua"] = [====[--[[
-    PredictionCore.lua â€” Base Prediction Engine (OOP)
-    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    Class cÆ¡ sá»Ÿ chá»©a toÃ n bá»™ thuáº­t toÃ¡n prediction:
-      â€¢ Kalman Filter, Intercept Solver, Kinematics
-      â€¢ Motion State Analysis, Teleport Detection
-      â€¢ Brain Response, Hit Feedback, Stabilization
+    PredictionCore.lua a Base Prediction Engine (OOP)
+    a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
+    Class c sa chaa toan ba thuat toan prediction:
+      a Kalman Filter, Intercept Solver, Kinematics
+      a Motion State Analysis, Teleport Detection
+      a Brain Response, Hit Feedback, Stabilization
     
-    NPC/PvP-specific tuning náº±m trong self.Profile
-    (Ä‘Æ°á»£c set bá»Ÿi NPCPrediction hoáº·c PvPPrediction).
+    NPC/PvP-specific tuning nam trong self.Profile
+    (ac set bai NPCPrediction hoac PvPPrediction).
     
-    PERF: KhÃ´ng cÃ³ runtime branch cho NPC vs PvP.
-    Má»i giÃ¡ trá»‹ Ä‘Æ°á»£c Ä‘á»c tá»« Profile table.
+    PERF: Khang ca runtime branch cho NPC vs PvP.
+    Mai gia tra ac ac ta Profile table.
 ]]
 
 local PredictionCore = {}
@@ -3024,8 +3024,8 @@ PredictionCore.__index = PredictionCore
 PredictionCore.__Legacy = true
 PredictionCore.__RuntimeReplacement = "Modules/Combat/Predictor.lua"
 
--- â•â•â• STATIC: Kinematics Helpers (no self) â•â•â•
--- DÃ¹ng PredictionCore.FuncName() thay vÃ¬ self: Ä‘á»ƒ trÃ¡nh overhead method lookup
+-- a*a*a* STATIC: Kinematics Helpers (no self) a*a*a*
+-- Dang PredictionCore.FuncName() thay va self: a tranh overhead method lookup
 
 local function uniformMotionOffset(velocity, time)
     if not velocity or not time or time <= 0 then return Vector3.zero end
@@ -3085,9 +3085,9 @@ PredictionCore.brakedSpeed = brakedSpeed
 PredictionCore.brakingTravelDist = brakingTravelDist
 PredictionCore.clampLeadByBraking = clampLeadByBraking
 
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 -- CONSTRUCTOR
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 
 function PredictionCore.new(config, npcTracker)
     local self = setmetatable({}, PredictionCore)
@@ -3100,7 +3100,7 @@ function PredictionCore.new(config, npcTracker)
     self._cachedPing = 50
     self._lastPingCheck = 0
 
-    -- Profile: sáº½ bá»‹ override bá»Ÿi NPCPrediction / PvPPrediction
+    -- Profile: sa ba override bai NPCPrediction / PvPPrediction
     self.Profile = {
         KalmanQBoost = 0,
         PingMultiplier = 1,
@@ -3111,7 +3111,7 @@ function PredictionCore.new(config, npcTracker)
         JumpArcBlend = 0.7,
     }
 
-    -- Reusable context table (trÃ¡nh táº¡o table má»›i má»—i frame)
+    -- Reusable context table (tranh tao table mai ma-i frame)
     self._brainCtx = {
         CloseOrbitAlpha = 0,
         HitFeedbackAlpha = 0,
@@ -3128,9 +3128,9 @@ function PredictionCore.new(config, npcTracker)
     return self
 end
 
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 -- UTILITY METHODS
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 
 function PredictionCore:GetNetworkLatency()
     local now = os.clock()
@@ -3144,7 +3144,7 @@ function PredictionCore:GetNetworkLatency()
     return math.clamp(self._cachedPing / 2000, 0, 0.2)
 end
 
--- â•â•â• Alpha Calculators (inlined math, no table lookups) â•â•â•
+-- a*a*a* Alpha Calculators (inlined math, no table lookups) a*a*a*
 
 function PredictionCore:DistanceAlpha(distance)
     local C = self.C
@@ -3160,7 +3160,7 @@ function PredictionCore:ExtremeDistAlpha(distance)
     return math.clamp((distance - self.C.DISTANCE_PREDICTION_MAX) / math.max(self.C.DISTANCE_PREDICTION_MAX, 1), 0, 1)
 end
 
--- â•â•â• Motion Shock â•â•â•
+-- a*a*a* Motion Shock a*a*a*
 
 function PredictionCore:MotionShockAlpha(entry, rawVel, filtVel)
     local C = self.C
@@ -3193,7 +3193,7 @@ function PredictionCore:MotionShockAlpha(entry, rawVel, filtVel)
     return shock
 end
 
--- â•â•â• Smart Projectile Speed â•â•â•
+-- a*a*a* Smart Projectile Speed a*a*a*
 
 function PredictionCore:SmartProjectileSpeed(distance, targetSpeed, motionShock)
     local C = self.C
@@ -3205,7 +3205,7 @@ function PredictionCore:SmartProjectileSpeed(distance, targetSpeed, motionShock)
     return math.clamp(ps, C.SMART_PROJECTILE_SPEED_MIN, C.SMART_PROJECTILE_SPEED_MAX)
 end
 
--- â•â•â• Intercept Solver â•â•â•
+-- a*a*a* Intercept Solver a*a*a*
 
 function PredictionCore:SolveInterceptTime(shooterPos, targetPos, targetVel, projSpeed)
     if projSpeed <= 0 then return nil end
@@ -3215,7 +3215,7 @@ function PredictionCore:SolveInterceptTime(shooterPos, targetPos, targetVel, pro
     local b = 2 * r:Dot(v)
     local c = r:Dot(r)
     if c <= 1e-6 then return 0 end
-    if math.abs(a) < 1e-5 then -- TrÃ¡nh chia cho sá»‘ gáº§n báº±ng 0
+    if math.abs(a) < 1e-5 then -- Tranh chia cho sa gan bang 0
         if math.abs(b) < 1e-5 then return nil end
         local t = -c / b
         return t > 0 and t or nil
@@ -3238,7 +3238,7 @@ function PredictionCore:SolveInterceptPos(shooterPos, targetPos, targetVel, proj
     return targetPos + (targetVel * t), t
 end
 
--- â•â•â• Jerk / Motion State â•â•â•
+-- a*a*a* Jerk / Motion State a*a*a*
 
 function PredictionCore:JerkAlpha(entry, acceleration, dt)
     local C = self.C
@@ -3294,7 +3294,7 @@ function PredictionCore:LinearMotionAlpha(entry, rawVel, filtVel)
     return lma
 end
 
--- â•â•â• Teleport Detection â•â•â•
+-- a*a*a* Teleport Detection a*a*a*
 
 function PredictionCore:TeleportAlpha(entry)
     local C = self.C
@@ -3337,7 +3337,7 @@ function PredictionCore:UpdateTeleportState(entry, pos)
     return tpAlpha
 end
 
--- â•â•â• Brain Response â•â•â•
+-- a*a*a* Brain Response a*a*a*
 
 function PredictionCore:UpdateBrain(entry, ctx)
     local C = self.C
@@ -3364,7 +3364,7 @@ function PredictionCore:UpdateBrain(entry, ctx)
     return br
 end
 
--- â•â•â• Hit Feedback â•â•â•
+-- a*a*a* Hit Feedback a*a*a*
 
 function PredictionCore:HitFeedbackAlpha(entry)
     if not entry or not entry.LastHitTime then return 0 end
@@ -3380,7 +3380,7 @@ function PredictionCore:RegisterHitFeedback(entry, targetPosition)
     if targetPosition then entry.LastHitTargetPos = targetPosition end
 end
 
--- â•â•â• Close Orbit â•â•â•
+-- a*a*a* Close Orbit a*a*a*
 
 function PredictionCore:CloseOrbitAlpha(origin, basePos, planarVel, lateralVel)
     local C = self.C
@@ -3402,7 +3402,7 @@ function PredictionCore:CloseOrbitAlpha(origin, basePos, planarVel, lateralVel)
     return math.clamp(dA * ((oR * 0.65) + (sA * 0.35)), 0, 1)
 end
 
--- â•â•â• Base Position â•â•â•
+-- a*a*a* Base Position a*a*a*
 
 function PredictionCore:GetBaseTargetPosition(part)
     local model = part:FindFirstAncestorOfClass("Model")
@@ -3419,7 +3419,7 @@ function PredictionCore:GetBaseTargetPosition(part)
     return part.Position
 end
 
--- â•â•â• Smooth Aim Velocity â•â•â•
+-- a*a*a* Smooth Aim Velocity a*a*a*
 
 function PredictionCore:SmoothAimVelocity(entry, velocity)
     local C = self.C
@@ -3437,7 +3437,7 @@ function PredictionCore:SmoothAimVelocity(entry, velocity)
 
     if self.Options.AssistMode == "Silent Aim" then
         local cur = entry.SmoothedAimVelocity
-        -- Alpha tháº¥p (0.12) cho Silent Aim: Æ°u tiÃªn Ä‘á»™ mÆ°á»£t hÆ¡n Ä‘á»™ nháº¡y
+        -- Alpha thap (0.12) cho Silent Aim: u tian a mat hn a nhay
         local a = 1 - math.pow(1 - 0.12, math.max(dt * 60, 1))
         local s = cur + ((velocity - cur) * a)
         entry.SmoothedAimVelocity = s
@@ -3465,7 +3465,7 @@ function PredictionCore:SmoothAimVelocity(entry, velocity)
     return sv
 end
 
--- â•â•â• Entry Motion Velocity â•â•â•
+-- a*a*a* Entry Motion Velocity a*a*a*
 
 function PredictionCore:EntryMotionVelocity(entry, part)
     if entry then
@@ -3477,9 +3477,9 @@ function PredictionCore:EntryMotionVelocity(entry, part)
     return Vector3.zero
 end
 
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 -- CORE PREDICTION
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 
 function PredictionCore:PredictTargetPosition(origin, part, entry)
     local C = self.C
@@ -3490,7 +3490,7 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
 
     if not self.Options.PredictionEnabled then
         local totalOffset = self.Options.AimOffset
-        -- Cá»™ng thÃªm AimOffset tá»« BossProfile
+        -- Cang tham AimOffset ta BossProfile
         if entry and entry.BossProfile then
             totalOffset = totalOffset + (entry.BossProfile.AimOffset or 0)
         end
@@ -3502,18 +3502,18 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
 
     local now = os.clock()
 
-    -- PERIODIC REFRESH: Reset partial state má»—i 15 giÃ¢y Ä‘á»ƒ trÃ¡nh drift
+    -- PERIODIC REFRESH: Reset partial state ma-i 15 giay a tranh drift
     if not entry._lastRefreshTime then entry._lastRefreshTime = now end
     if (now - entry._lastRefreshTime) >= 15 then
         entry._lastRefreshTime = now
         entry.KalmanP = math.clamp(entry.KalmanP, 0.5, 2) -- Normalize KalmanP
-        entry.Confidence = math.max(entry.Confidence, 0.7)  -- Phá»¥c há»“i confidence
+        entry.Confidence = math.max(entry.Confidence, 0.7)  -- Phac hai confidence
         if entry.Acceleration and entry.Acceleration.Magnitude > 200 then
-            entry.Acceleration = entry.Acceleration.Unit * 100 -- Giáº£m acceleration tÃ­ch lÅ©y
+            entry.Acceleration = entry.Acceleration.Unit * 100 -- Giam acceleration tach ly
         end
     end
 
-    -- BÆ¯á»šC 1: Raw Velocity
+    -- BaC 1: Raw Velocity
     local rawVel = Vector3.zero
     local dt = 0.03
     if not entry.LastPos then
@@ -3524,10 +3524,10 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.KalmanV = Vector3.zero
         entry.KalmanP = 1
     else
-        dt = math.max(now - entry.LastTime, 0.001) -- Chá»‘t cháº·n dt khÃ´ng Ä‘Æ°á»£c báº±ng 0
+        dt = math.max(now - entry.LastTime, 0.001) -- Chat chan dt khang ac bang 0
         if dt >= 0.015 then
             local newVel = (basePos - entry.LastPos) / dt
-            -- Chá»‘t cháº·n váº­n tá»‘c quÃ¡ áº£o (do teleport hoáº·c lag cá»±c náº·ng)
+            -- Chat chan van tac qua ao (do teleport hoac lag cac nang)
             if newVel.Magnitude < 2000 then
                 rawVel = newVel
             else
@@ -3541,11 +3541,11 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
     end
     entry.RealVelocity = rawVel
 
-    -- BÆ¯á»šC 2: Kalman Filter (Profile-tuned Q boost)
+    -- BaC 2: Kalman Filter (Profile-tuned Q boost)
     local velErr = (rawVel - entry.KalmanV).Magnitude
     local q = 0.15 + math.clamp(velErr / 28, 0, 2.0) + P.KalmanQBoost
     local r = 0.3
-    entry.KalmanP = math.clamp(entry.KalmanP + q, 0.01, 10) -- CLAMP: trÃ¡nh drift vÃ´ háº¡n
+    entry.KalmanP = math.clamp(entry.KalmanP + q, 0.01, 10) -- CLAMP: tranh drift va han
     local k = entry.KalmanP / (entry.KalmanP + r)
     entry.KalmanV = entry.KalmanV + k * (rawVel - entry.KalmanV)
     entry.KalmanP = math.clamp((1 - k) * entry.KalmanP, 0.01, 10)
@@ -3576,25 +3576,25 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.KalmanP = math.max(entry.KalmanP, 1 + motionShock)
     end
 
-    -- BÆ¯á»šC 3: Confidence (vá»›i recovery nhanh hÆ¡n cho boss fights dÃ i)
+    -- BaC 3: Confidence (vai recovery nhanh hn cho boss fights dai)
     if entry.LastExpectedPos then
         local errDist = (basePos - entry.LastExpectedPos).Magnitude
         local errPenalty = math.clamp(errDist / 8, 0, 0.3)
-        -- Recovery rate tÄƒng lÃªn 0.15 (tá»« 0.1) Ä‘á»ƒ confidence khÃ´ng bá»‹ stuck á»Ÿ 0.4
+        -- Recovery rate tng lan 0.15 (ta 0.1) a confidence khang ba stuck a 0.4
         local recovery = 0.15
         entry.Confidence = math.clamp(entry.Confidence - errPenalty + recovery, 0.4, 1)
     else
         entry.Confidence = 1
     end
 
-    -- BÆ¯á»šC 4: Acceleration (vá»›i magnitude clamp trÃ¡nh drift)
+    -- BaC 4: Acceleration (vai magnitude clamp tranh drift)
     if entry.LastFilteredVelocity then
         local rawAcc = (filtVel - entry.LastFilteredVelocity) / dt
-        -- Clamp acceleration magnitude Ä‘á»ƒ trÃ¡nh tÃ­ch lÅ©y sai sá»‘
+        -- Clamp acceleration magnitude a tranh tach ly sai sa
         if rawAcc.Magnitude > 500 then rawAcc = rawAcc.Unit * 500 end
         local accSmooth = (rawAcc - entry.Acceleration).Magnitude > 80 and 0.8 or 0.2
         entry.Acceleration = entry.Acceleration:Lerp(rawAcc, accSmooth)
-        -- Clamp káº¿t quáº£ cuá»‘i
+        -- Clamp kat qua cuai
         if entry.Acceleration.Magnitude > 400 then
             entry.Acceleration = entry.Acceleration.Unit * 400
         end
@@ -3627,7 +3627,7 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.Confidence = math.max(entry.Confidence, 0.58 + (tpAlpha * 0.35))
     end
 
-    -- BÆ¯á»šC 5: Latency Compensation
+    -- BaC 5: Latency Compensation
     local latency = self:GetNetworkLatency()
     local totalTime = latency * P.PingMultiplier
     local leadOffset = Vector3.zero
@@ -3756,9 +3756,9 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
     return finalPos
 end
 
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 -- STRAFE ENHANCED PREDICTION
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 
 function PredictionCore:PredictWithStrafe(origin, part, entry)
     local C = self.C
@@ -3860,9 +3860,9 @@ function PredictionCore:PredictWithStrafe(origin, part, entry)
     return predicted + eLead
 end
 
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 -- SELECTION TARGET POSITION (Lightweight for scanning)
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 
 function PredictionCore:GetSelectionTargetPosition(origin, part, entry, isCurrentTarget)
     local C = self.C
@@ -3897,9 +3897,9 @@ function PredictionCore:GetSelectionTargetPosition(origin, part, entry, isCurren
     return pos
 end
 
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 -- STABILIZE TARGET POSITION
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 
 function PredictionCore:StabilizeTargetPosition(entry, part, rawPos, deltaTime)
     local C = self.C
@@ -3911,7 +3911,7 @@ function PredictionCore:StabilizeTargetPosition(entry, part, rawPos, deltaTime)
         local d = rawPos - cur
         local dm = d.Magnitude
 
-        -- Láº¥y tham sá»‘ tá»« BossProfile (náº¿u cÃ³)
+        -- Lay tham sa ta BossProfile (nau ca)
         local bpDeadzone = 1.2
         local bpAlpha = 0.08
         local bpSnap = 50
@@ -3972,14 +3972,14 @@ end
 return PredictionCore
 ]====],
     ["Modules/PvPPrediction.lua"] = [====[--[[
-    PvPPrediction.lua â€” PvP-Specific Prediction Profile
-    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    Káº¿ thá»«a PredictionCore, tuning cho Player thá»±c:
-      â€¢ Kalman Q boost +0.3 (nháº¡y hÆ¡n cho human input)
-      â€¢ Ping bÃ¹ 2x (player cÃ³ latency riÃªng + reconciliation)
-      â€¢ Lead cap tháº¥p (player di chuyá»ƒn ngáº¯n, Ä‘á»•i hÆ°á»›ng nhiá»u)
-      â€¢ Zigzag dampen máº¡nh (confidence giáº£m 45% khi Ä‘áº£o chiá»u)
-      â€¢ Jump Arc prediction (dá»± Ä‘oÃ¡n cung nháº£y parabola)
+    PvPPrediction.lua a PvP-Specific Prediction Profile
+    a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
+    Ka thaa PredictionCore, tuning cho Player thac:
+      a Kalman Q boost +0.3 (nhay hn cho human input)
+      a Ping ba 2x (player ca latency riang + reconciliation)
+      a Lead cap thap (player di chuyan ngan, a*i hang nhiau)
+      a Zigzag dampen manh (confidence giam 45% khi ao chiau)
+      a Jump Arc prediction (da oan cung nhay parabola)
 ]]
 
 return function(PredictionCore)
@@ -3991,15 +3991,15 @@ return function(PredictionCore)
         local self = PredictionCore.new(config, npcTracker)
         setmetatable(self, PvPPrediction)
 
-        -- â•â•â• PVP PROFILE â•â•â•
+        -- a*a*a* PVP PROFILE a*a*a*
         self.Profile = {
-            KalmanQBoost      = 0.3,          -- Kalman nháº¡y hÆ¡n cho input ngÆ°á»i tháº­t
-            PingMultiplier    = 2.0,          -- BÃ¹ ping gáº¥p Ä‘Ã´i (player ping + reconciliation)
-            ReversalPenalty   = 0.55,         -- Zigzag penalty máº¡nh hÆ¡n
-            LeadCap           = 180,          -- Lead cap tháº¥p (player di chuyá»ƒn ngáº¯n)
-            JumpArcEnabled    = true,         -- Dá»± Ä‘oÃ¡n cung nháº£y parabola
-            JumpGravity       = -196.2,       -- Gia tá»‘c trá»ng lá»±c chuáº©n Roblox
-            JumpArcBlend      = 0.7,          -- 70% Ã¡p dá»¥ng dá»± Ä‘oÃ¡n cung nháº£y
+            KalmanQBoost      = 0.3,          -- Kalman nhay hn cho input ngai that
+            PingMultiplier    = 2.0,          -- Ba ping gap ai (player ping + reconciliation)
+            ReversalPenalty   = 0.55,         -- Zigzag penalty manh hn
+            LeadCap           = 180,          -- Lead cap thap (player di chuyan ngan)
+            JumpArcEnabled    = true,         -- Da oan cung nhay parabola
+            JumpGravity       = -196.2,       -- Gia tac trang lac chuan Roblox
+            JumpArcBlend      = 0.7,          -- 70% ap dang da oan cung nhay
         }
 
         return self
@@ -4009,58 +4009,58 @@ return function(PredictionCore)
 end
 ]====],
     ["Modules/Utils/BossClassifier.lua"] = [====[--[[
-    BossClassifier.lua â€” Auto Boss Type Detection
-    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-    PhÃ¢n loáº¡i Boss thÃ nh 3 loáº¡i dá»±a trÃªn kÃ­ch thÆ°á»›c model:
-      â€¢ "humanoid"     : Boss dÃ¡ng ngÆ°á»i chuáº©n (R6/R15)
-      â€¢ "humanoid_mini": Boss nhá» hÆ¡n ngÆ°á»i thÆ°á»ng
-      â€¢ "large"        : Boss khá»•ng lá»“ / khÃ´ng humanoid
+    BossClassifier.lua a Auto Boss Type Detection
+    a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
+    Phan loai Boss thanh 3 loai daa tran kach thac model:
+      a "humanoid"     : Boss dang ngai chuan (R6/R15)
+      a "humanoid_mini": Boss nha hn ngai thang
+      a "large"        : Boss kha*ng la / khang humanoid
     
-    Má»—i loáº¡i cÃ³ bá»™ aim parameters riÃªng:
-      â€¢ AimOffset (Y) â€” Ä‘iá»ƒm ngáº¯m tá»‘i Æ°u
-      â€¢ Deadzone      â€” vÃ¹ng bá» qua rung
-      â€¢ LeadScale     â€” há»‡ sá»‘ lead (nhá» = Ã­t lead)
-      â€¢ TargetPart    â€” pháº§n thÃ¢n Æ°u tiÃªn aim
+    Ma-i loai ca ba aim parameters riang:
+      a AimOffset (Y) a iam ngam tai u
+      a Deadzone      a vang ba qua rung
+      a LeadScale     a ha sa lead (nha = at lead)
+      a TargetPart    a phan than u tian aim
 ]]
 
 local BossClassifier = {}
 
--- â•â•â• NgÆ°á»¡ng Ä‘á»ƒ phÃ¢n loáº¡i â•â•â•
-local MINI_HEIGHT_MAX = 3.5    -- Model dÆ°á»›i 3.5 studs â†’ mini
-local STANDARD_HEIGHT_MAX = 8  -- Model 3.5-8 studs â†’ humanoid chuáº©n
--- TrÃªn 8 studs â†’ large boss
+-- a*a*a* Ngang a phan loai a*a*a*
+local MINI_HEIGHT_MAX = 3.5    -- Model dai 3.5 studs a mini
+local STANDARD_HEIGHT_MAX = 8  -- Model 3.5-8 studs a humanoid chuan
+-- Tran 8 studs a large boss
 
--- â•â•â• Profiles cho tá»«ng loáº¡i Boss â•â•â•
+-- a*a*a* Profiles cho tang loai Boss a*a*a*
 BossClassifier.Profiles = {
     humanoid = {
-        AimOffset = 0,          -- Ngáº¯m chÃ­nh xÃ¡c root/torso
-        Deadzone = 1.2,         -- Deadzone chuáº©n
-        LeadScale = 1.0,        -- Lead bÃ¬nh thÆ°á»ng
+        AimOffset = 0,          -- Ngam chanh xac root/torso
+        Deadzone = 1.2,         -- Deadzone chuan
+        LeadScale = 1.0,        -- Lead banh thang
         PreferredPart = "HumanoidRootPart",
-        StabilizeAlpha = 0.08,  -- Smoothing chuáº©n
+        StabilizeAlpha = 0.08,  -- Smoothing chuan
     },
     humanoid_mini = {
-        AimOffset = -0.5,       -- Ngáº¯m tháº¥p hÆ¡n (hitbox nhá», center tháº¥p)
-        Deadzone = 0.5,         -- Deadzone nhá» (hitbox nhá» cáº§n chÃ­nh xÃ¡c hÆ¡n)
-        LeadScale = 0.7,        -- Lead Ã­t hÆ¡n (mini boss thÆ°á»ng di chuyá»ƒn nhanh, hitbox nhá»)
-        PreferredPart = "Head", -- Head thÆ°á»ng á»Ÿ trung tÃ¢m mini model
-        StabilizeAlpha = 0.06,  -- MÆ°á»£t hÆ¡n (trÃ¡nh aim trÆ°á»£t khá»i hitbox nhá»)
+        AimOffset = -0.5,       -- Ngam thap hn (hitbox nha, center thap)
+        Deadzone = 0.5,         -- Deadzone nha (hitbox nha can chanh xac hn)
+        LeadScale = 0.7,        -- Lead at hn (mini boss thang di chuyan nhanh, hitbox nha)
+        PreferredPart = "Head", -- Head thang a trung tam mini model
+        StabilizeAlpha = 0.06,  -- Mat hn (tranh aim trat khai hitbox nha)
     },
     large = {
-        AimOffset = 2,          -- Ngáº¯m cao hÆ¡n (boss to, center cao)
-        Deadzone = 2.5,         -- Deadzone lá»›n (hitbox lá»›n, khÃ´ng cáº§n aim chÃ­nh xÃ¡c)
-        LeadScale = 1.2,        -- Lead nhiá»u hÆ¡n (boss to di chuyá»ƒn quÃ£ng dÃ i)
+        AimOffset = 2,          -- Ngam cao hn (boss to, center cao)
+        Deadzone = 2.5,         -- Deadzone lan (hitbox lan, khang can aim chanh xac)
+        LeadScale = 1.2,        -- Lead nhiau hn (boss to di chuyan quang dai)
         PreferredPart = "HumanoidRootPart",
-        StabilizeAlpha = 0.12,  -- Ãt smooth (hitbox lá»›n, tha thá»© lá»‡ch nhiá»u hÆ¡n)
+        StabilizeAlpha = 0.12,  -- at smooth (hitbox lan, tha tha lach nhiau hn)
     },
 }
 
--- â•â•â• Äo chiá»u cao model â•â•â•
+-- a*a*a* o chiau cao model a*a*a*
 function BossClassifier.MeasureModelHeight(model)
-    if not model or not model:IsA("Model") then return 5 end -- Máº·c Ä‘á»‹nh 5 studs
+    if not model or not model:IsA("Model") then return 5 end -- Mac anh 5 studs
     
     local ok, result = pcall(function()
-        -- DÃ¹ng GetBoundingBox náº¿u cÃ³
+        -- Dang GetBoundingBox nau ca
         local _, size = model:GetBoundingBox()
         return size.Y
     end)
@@ -4069,7 +4069,7 @@ function BossClassifier.MeasureModelHeight(model)
         return result
     end
     
-    -- Fallback: Ä‘o tá»« parts
+    -- Fallback: o ta parts
     local minY, maxY = math.huge, -math.huge
     for _, part in ipairs(model:GetDescendants()) do
         if part:IsA("BasePart") then
@@ -4086,7 +4086,7 @@ function BossClassifier.MeasureModelHeight(model)
     return 5
 end
 
--- â•â•â• PhÃ¢n loáº¡i Boss â•â•â•
+-- a*a*a* Phan loai Boss a*a*a*
 function BossClassifier.Classify(model)
     local height = BossClassifier.MeasureModelHeight(model)
     
@@ -4101,12 +4101,12 @@ function BossClassifier.Classify(model)
             return "large", height
         end
     else
-        -- KhÃ´ng cÃ³ Humanoid â†’ luÃ´n coi lÃ  large
+        -- Khang ca Humanoid a luan coi la large
         return "large", height
     end
 end
 
--- â•â•â• Láº¥y profile theo loáº¡i â•â•â•
+-- a*a*a* Lay profile theo loai a*a*a*
 function BossClassifier.GetProfile(bossType)
     return BossClassifier.Profiles[bossType] or BossClassifier.Profiles.humanoid
 end
@@ -4114,7 +4114,7 @@ end
 return BossClassifier
 ]====],
     ["Modules/Utils/BossDetector.lua"] = [====[--[[
-    BossDetector.lua â€” OOP Target Classification Class
+    BossDetector.lua a OOP Target Classification Class
     Identifies if an NPC is a boss based on common properties (Size, Health, Height).
 ]]
 
@@ -4165,7 +4165,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local function Check()
     if game.PlaceId ~= TARGET_PLACE_ID then
-        local errorMsg = "âŒ Access Denied: This script only supports Star Glitcher! (Place ID: " .. tostring(TARGET_PLACE_ID) .. ")"
+        local errorMsg = "a Access Denied: This script only supports Star Glitcher! (Place ID: " .. tostring(TARGET_PLACE_ID) .. ")"
         
         -- Attempt to notify via executor if possible
         if Rayfield and Rayfield.Notify then
@@ -4188,7 +4188,7 @@ end
 return Check()
 ]====],
     ["Modules/Utils/GarbageCollector.lua"] = [====[--[[
-    GarbageCollector.lua â€” Memory & Workspace Optimization v1.0
+    GarbageCollector.lua a Memory & Workspace Optimization v1.0
     Job: Proactive cleanup of visual debris, effects, and orphaned instances.
     Analogy: The Lymphatic System (Cleaning up cellular debris).
 ]]
@@ -4438,7 +4438,7 @@ end
 return GarbageCollector
 ]====],
     ["Modules/Utils/Input.lua"] = [====[--[[
-    Input.lua â€” OOP User Interaction Class
+    Input.lua a OOP User Interaction Class
     Handles mouseholding and assist availability checks.
 ]]
 
@@ -4499,8 +4499,8 @@ end
 return Input
 ]====],
     ["Modules/Utils/InputHandler.lua"] = [====[--[[
-    InputHandler.lua â€” Input Management Class
-    Quáº£n lÃ½ tráº¡ng thÃ¡i chuá»™t/bÃ n phÃ­m vÃ  logic shouldAssist().
+    InputHandler.lua a Input Management Class
+    Quan la trang thai chuat/ban pham va logic shouldAssist().
 ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -4683,7 +4683,7 @@ end
 return LocalCharacter
 ]====],
     ["Modules/Utils/Math/Kalman.lua"] = [====[--[[
-    KalmanFilter.lua â€” OOP Noise Reduction Class
+    KalmanFilter.lua a OOP Noise Reduction Class
     A scientific implementation of 1D Kalman Filter for linear motion smoothing.
 ]]
 
@@ -4763,7 +4763,7 @@ end
 return Kalman
 ]====],
     ["Modules/Utils/NPCTracker.lua"] = [====[--[[
-    NPCTracker.lua â€” Neural Entity Management Class
+    NPCTracker.lua a Neural Entity Management Class
     Track, categorize, and filter game entities (NPCs/Mobs/Bosses).
     Fixes: Non-humanoid boss support and performance bottlenecks.
 ]]
@@ -4844,7 +4844,7 @@ function NPCTracker:_IsTargetCandidate(model)
         return false
     end
 
-    -- UNIVERSAL TARGETING: Support both Humanoid vÃ  Non-Humanoid (Bosses)
+    -- UNIVERSAL TARGETING: Support both Humanoid va Non-Humanoid (Bosses)
     local humanoid = model:FindFirstChildOfClass("Humanoid")
     local primary = self:_GetPrimaryPart(model)
     
@@ -4853,7 +4853,7 @@ function NPCTracker:_IsTargetCandidate(model)
     -- STATIC OBJECT FILTER: Boss boards, shops, etc.
     -- Mobs/Bosses (even custom ones) usually have unanchored root parts.
     if not humanoid and primary.Anchored and not model:FindFirstChild("Health") then
-        -- Only ignore if it has no health indicators vÃ  is anchored
+        -- Only ignore if it has no health indicators va is anchored
         return false
     end
 
@@ -5208,7 +5208,7 @@ end
 return ResourceManager
 ]====],
     ["Modules/Utils/Synapse.lua"] = [====[--[[
-    Synapse.lua â€” Communication Signal System
+    Synapse.lua a Communication Signal System
     Analogy: The neural synapses connecting different regions of the brain.
     Allows decoupled cross-module communication (Events).
 ]]
@@ -5244,8 +5244,8 @@ end
 return Synapse
 ]====],
     ["Modules/Visuals.lua"] = [====[--[[
-    Visuals.lua â€” Visual Feedback Class
-    Quáº£n lÃ½ FOV Circle, Target Dot, Highlight, vÃ  Hitmarker system.
+    Visuals.lua a Visual Feedback Class
+    Quan la FOV Circle, Target Dot, Highlight, va Hitmarker system.
 ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -5439,7 +5439,7 @@ end
 return FOVCircle
 ]====],
     ["Modules/Visuals/Highlight.lua"] = [====[--[[
-    TargetHighlight.lua â€” OOP Highlight Visualization Class
+    TargetHighlight.lua a OOP Highlight Visualization Class
 ]]
 
 local CoreGui = game:GetService("CoreGui")
@@ -5667,15 +5667,15 @@ return TargetDot
     ["UI/Tabs/AimbotTab.lua"] = [====[--[[
     AimTab.lua - Unified Combat Control Center
     Consolidated: Assist Mode, FOV, Target Part, and Source Management.
-    Replaces: AimbotTab.lua vÃ  TargetingTab.lua.
+    Replaces: AimbotTab.lua va TargetingTab.lua.
 ]]
 
 return function(Window, Options, Visuals, NPCTracker)
     local Tab = Window:CreateTab("Aim", 4483362458)
 
-    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
     -- SECTION: ASSIST MODE
-    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
     Tab:CreateSection("Assist Mode")
 
     Tab:CreateDropdown({
@@ -5698,9 +5698,9 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
     -- SECTION: TARGETING PARAMETERS
-    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
     Tab:CreateSection("Targeting Parameters")
 
     Tab:CreateDropdown({
@@ -5725,9 +5725,9 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
     -- SECTION: AIM METHODS
-    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
     Tab:CreateSection("Aim Methods")
 
     Tab:CreateDropdown({
@@ -5771,9 +5771,9 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
     -- SECTION: CAMERA SETTINGS
-    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
     Tab:CreateSection("Camera Lock (Aimbot)")
 
     Tab:CreateSlider({
@@ -5788,9 +5788,9 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
     -- SECTION: TARGET SOURCE
-    -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    -- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
     Tab:CreateSection("Target Filter")
 
     Tab:CreateToggle({
@@ -6574,9 +6574,9 @@ Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
 
 local Window = RayfieldUI.CreateWindow(Rayfield)
 
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 -- LOAD ALL MODULES (Scientific Order)
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 local Brain          = requireModule("Modules/Core/Brain.lua")
 local InputHandler   = requireModule("Modules/Utils/Input.lua")
 local Tracker        = requireModule("Modules/Utils/NPCTracker.lua")
@@ -6614,9 +6614,9 @@ local PlayerLayout = requireModule("UI/Tabs/Player/Layout.lua")
 local PlayerStatusLoop = requireModule("UI/Tabs/Player/StatusLoop.lua")
 local PlayerController = requireModule("UI/Tabs/Player/Controller.lua")
 
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 -- INSTANTIATE (OOP Injection)
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 local synapse    = Synapse
 local input      = InputHandler.new(Config)
 local localCharacter = LocalCharacter.new()
@@ -6658,9 +6658,9 @@ local brain = Brain.new(Config, {
     Aimbot = aimbot, SilentAim = silentAim, Visuals = visuals
 }, loadModule)
 
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 -- INITIALIZE & SETUP UI
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 input:Init()
 localCharacter:Init()
 tracker:Init()
@@ -6684,9 +6684,9 @@ if not loadConfigOk then
 end
 Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
 
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 -- MAIN ORCHESTRATION LOOP (Brain Powered)
--- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+-- a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*
 local SESSION_ID = os.time()
 _G.BossAimAssist_SessionID = SESSION_ID
 
@@ -6926,4 +6926,5 @@ reg(RunService.RenderStepped:Connect(function(dt)
     brain:Update(dt, UserInputService:GetMouseLocation(), Camera.CFrame)
 end))
 
-warn("âœ… [Core] Brain Orchestration v6 Active.")
+warn("a [Core] Brain Orchestration v6 Active.")
+

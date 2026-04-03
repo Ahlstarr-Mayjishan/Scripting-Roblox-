@@ -1,6 +1,6 @@
 --[[
-    InputHandler.lua — Input Management Class
-    Quản lý trạng thái chuột/bàn phím và logic shouldAssist().
+    InputHandler.lua - Input Management Class
+    Quan ly trang thai chuot/ban phim va logic shouldAssist().
 ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -70,3 +70,4 @@ function InputHandler:Destroy()
 end
 
 return InputHandler
+

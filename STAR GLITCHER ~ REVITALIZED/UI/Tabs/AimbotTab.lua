@@ -1,15 +1,15 @@
 --[[
     AimTab.lua - Unified Combat Control Center
     Consolidated: Assist Mode, FOV, Target Part, and Source Management.
-    Replaces: AimbotTab.lua và TargetingTab.lua.
+    Replaces: AimbotTab.lua va TargetingTab.lua.
 ]]
 
 return function(Window, Options, Visuals, NPCTracker)
     local Tab = Window:CreateTab("Aim", 4483362458)
 
-    -- ═══════════════════════════════════════════════════
+    -- ===================================================
     -- SECTION: ASSIST MODE
-    -- ═══════════════════════════════════════════════════
+    -- ===================================================
     Tab:CreateSection("Assist Mode")
 
     Tab:CreateDropdown({
@@ -32,9 +32,9 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- ═══════════════════════════════════════════════════
+    -- ===================================================
     -- SECTION: TARGETING PARAMETERS
-    -- ═══════════════════════════════════════════════════
+    -- ===================================================
     Tab:CreateSection("Targeting Parameters")
 
     Tab:CreateDropdown({
@@ -59,9 +59,9 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- ═══════════════════════════════════════════════════
+    -- ===================================================
     -- SECTION: AIM METHODS
-    -- ═══════════════════════════════════════════════════
+    -- ===================================================
     Tab:CreateSection("Aim Methods")
 
     Tab:CreateDropdown({
@@ -105,9 +105,9 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- ═══════════════════════════════════════════════════
+    -- ===================================================
     -- SECTION: CAMERA SETTINGS
-    -- ═══════════════════════════════════════════════════
+    -- ===================================================
     Tab:CreateSection("Camera Lock (Aimbot)")
 
     Tab:CreateSlider({
@@ -122,9 +122,9 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- ═══════════════════════════════════════════════════
+    -- ===================================================
     -- SECTION: TARGET SOURCE
-    -- ═══════════════════════════════════════════════════
+    -- ===================================================
     Tab:CreateSection("Target Filter")
 
     Tab:CreateToggle({
@@ -141,3 +141,4 @@ return function(Window, Options, Visuals, NPCTracker)
 
     return Tab
 end
+

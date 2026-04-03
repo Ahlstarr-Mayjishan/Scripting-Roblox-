@@ -1,16 +1,16 @@
 --[[
-    PredictionCore.lua — Base Prediction Engine (OOP)
-    ═══════════════════════════════════════════════════
-    Class cơ sở chứa toàn bộ thuật toán prediction:
-      • Kalman Filter, Intercept Solver, Kinematics
-      • Motion State Analysis, Teleport Detection
-      • Brain Response, Hit Feedback, Stabilization
+    PredictionCore.lua - Base Prediction Engine (OOP)
+    ===================================================
+    Class co s chua toan bo thuat toan prediction:
+      * Kalman Filter, Intercept Solver, Kinematics
+      * Motion State Analysis, Teleport Detection
+      * Brain Response, Hit Feedback, Stabilization
     
-    NPC/PvP-specific tuning nằm trong self.Profile
-    (được set bởi NPCPrediction hoặc PvPPrediction).
+    NPC/PvP-specific tuning nam trong self.Profile
+    (duoc set bi NPCPrediction hoac PvPPrediction).
     
-    PERF: Không có runtime branch cho NPC vs PvP.
-    Mọi giá trị được đọc từ Profile table.
+    PERF: Khong co runtime branch cho NPC vs PvP.
+    Moi gia tri duoc doc tu Profile table.
 ]]
 
 local PredictionCore = {}
@@ -19,8 +19,8 @@ PredictionCore.__index = PredictionCore
 PredictionCore.__Legacy = true
 PredictionCore.__RuntimeReplacement = "Modules/Combat/Predictor.lua"
 
--- ═══ STATIC: Kinematics Helpers (no self) ═══
--- Dùng PredictionCore.FuncName() thay vì self: để tránh overhead method lookup
+-- === STATIC: Kinematics Helpers (no self) ===
+-- Dung PredictionCore.FuncName() thay vi self: d tranh overhead method lookup
 
 local function uniformMotionOffset(velocity, time)
     if not velocity or not time or time <= 0 then return Vector3.zero end
@@ -80,9 +80,9 @@ PredictionCore.brakedSpeed = brakedSpeed
 PredictionCore.brakingTravelDist = brakingTravelDist
 PredictionCore.clampLeadByBraking = clampLeadByBraking
 
--- ═══════════════════════════════════════════════════
+-- ===================================================
 -- CONSTRUCTOR
--- ═══════════════════════════════════════════════════
+-- ===================================================
 
 function PredictionCore.new(config, npcTracker)
     local self = setmetatable({}, PredictionCore)
@@ -95,7 +95,7 @@ function PredictionCore.new(config, npcTracker)
     self._cachedPing = 50
     self._lastPingCheck = 0
 
-    -- Profile: sẽ bị override bởi NPCPrediction / PvPPrediction
+    -- Profile: se bi override bi NPCPrediction / PvPPrediction
     self.Profile = {
         KalmanQBoost = 0,
         PingMultiplier = 1,
@@ -106,7 +106,7 @@ function PredictionCore.new(config, npcTracker)
         JumpArcBlend = 0.7,
     }
 
-    -- Reusable context table (tránh tạo table mới mỗi frame)
+    -- Reusable context table (tranh tao table moi moi frame)
     self._brainCtx = {
         CloseOrbitAlpha = 0,
         HitFeedbackAlpha = 0,
@@ -123,9 +123,9 @@ function PredictionCore.new(config, npcTracker)
     return self
 end
 
--- ═══════════════════════════════════════════════════
+-- ===================================================
 -- UTILITY METHODS
--- ═══════════════════════════════════════════════════
+-- ===================================================
 
 function PredictionCore:GetNetworkLatency()
     local now = os.clock()
@@ -139,7 +139,7 @@ function PredictionCore:GetNetworkLatency()
     return math.clamp(self._cachedPing / 2000, 0, 0.2)
 end
 
--- ═══ Alpha Calculators (inlined math, no table lookups) ═══
+-- === Alpha Calculators (inlined math, no table lookups) ===
 
 function PredictionCore:DistanceAlpha(distance)
     local C = self.C
@@ -155,7 +155,7 @@ function PredictionCore:ExtremeDistAlpha(distance)
     return math.clamp((distance - self.C.DISTANCE_PREDICTION_MAX) / math.max(self.C.DISTANCE_PREDICTION_MAX, 1), 0, 1)
 end
 
--- ═══ Motion Shock ═══
+-- === Motion Shock ===
 
 function PredictionCore:MotionShockAlpha(entry, rawVel, filtVel)
     local C = self.C
@@ -188,7 +188,7 @@ function PredictionCore:MotionShockAlpha(entry, rawVel, filtVel)
     return shock
 end
 
--- ═══ Smart Projectile Speed ═══
+-- === Smart Projectile Speed ===
 
 function PredictionCore:SmartProjectileSpeed(distance, targetSpeed, motionShock)
     local C = self.C
@@ -200,7 +200,7 @@ function PredictionCore:SmartProjectileSpeed(distance, targetSpeed, motionShock)
     return math.clamp(ps, C.SMART_PROJECTILE_SPEED_MIN, C.SMART_PROJECTILE_SPEED_MAX)
 end
 
--- ═══ Intercept Solver ═══
+-- === Intercept Solver ===
 
 function PredictionCore:SolveInterceptTime(shooterPos, targetPos, targetVel, projSpeed)
     if projSpeed <= 0 then return nil end
@@ -210,7 +210,7 @@ function PredictionCore:SolveInterceptTime(shooterPos, targetPos, targetVel, pro
     local b = 2 * r:Dot(v)
     local c = r:Dot(r)
     if c <= 1e-6 then return 0 end
-    if math.abs(a) < 1e-5 then -- Tránh chia cho số gần bằng 0
+    if math.abs(a) < 1e-5 then -- Tranh chia cho so gan bang 0
         if math.abs(b) < 1e-5 then return nil end
         local t = -c / b
         return t > 0 and t or nil
@@ -233,7 +233,7 @@ function PredictionCore:SolveInterceptPos(shooterPos, targetPos, targetVel, proj
     return targetPos + (targetVel * t), t
 end
 
--- ═══ Jerk / Motion State ═══
+-- === Jerk / Motion State ===
 
 function PredictionCore:JerkAlpha(entry, acceleration, dt)
     local C = self.C
@@ -289,7 +289,7 @@ function PredictionCore:LinearMotionAlpha(entry, rawVel, filtVel)
     return lma
 end
 
--- ═══ Teleport Detection ═══
+-- === Teleport Detection ===
 
 function PredictionCore:TeleportAlpha(entry)
     local C = self.C
@@ -332,7 +332,7 @@ function PredictionCore:UpdateTeleportState(entry, pos)
     return tpAlpha
 end
 
--- ═══ Brain Response ═══
+-- === Brain Response ===
 
 function PredictionCore:UpdateBrain(entry, ctx)
     local C = self.C
@@ -359,7 +359,7 @@ function PredictionCore:UpdateBrain(entry, ctx)
     return br
 end
 
--- ═══ Hit Feedback ═══
+-- === Hit Feedback ===
 
 function PredictionCore:HitFeedbackAlpha(entry)
     if not entry or not entry.LastHitTime then return 0 end
@@ -375,7 +375,7 @@ function PredictionCore:RegisterHitFeedback(entry, targetPosition)
     if targetPosition then entry.LastHitTargetPos = targetPosition end
 end
 
--- ═══ Close Orbit ═══
+-- === Close Orbit ===
 
 function PredictionCore:CloseOrbitAlpha(origin, basePos, planarVel, lateralVel)
     local C = self.C
@@ -397,7 +397,7 @@ function PredictionCore:CloseOrbitAlpha(origin, basePos, planarVel, lateralVel)
     return math.clamp(dA * ((oR * 0.65) + (sA * 0.35)), 0, 1)
 end
 
--- ═══ Base Position ═══
+-- === Base Position ===
 
 function PredictionCore:GetBaseTargetPosition(part)
     local model = part:FindFirstAncestorOfClass("Model")
@@ -414,7 +414,7 @@ function PredictionCore:GetBaseTargetPosition(part)
     return part.Position
 end
 
--- ═══ Smooth Aim Velocity ═══
+-- === Smooth Aim Velocity ===
 
 function PredictionCore:SmoothAimVelocity(entry, velocity)
     local C = self.C
@@ -432,7 +432,7 @@ function PredictionCore:SmoothAimVelocity(entry, velocity)
 
     if self.Options.AssistMode == "Silent Aim" then
         local cur = entry.SmoothedAimVelocity
-        -- Alpha thấp (0.12) cho Silent Aim: ưu tiên độ mượt hơn độ nhạy
+        -- Alpha thap (0.12) cho Silent Aim: uu tien do muot hon do nhay
         local a = 1 - math.pow(1 - 0.12, math.max(dt * 60, 1))
         local s = cur + ((velocity - cur) * a)
         entry.SmoothedAimVelocity = s
@@ -460,7 +460,7 @@ function PredictionCore:SmoothAimVelocity(entry, velocity)
     return sv
 end
 
--- ═══ Entry Motion Velocity ═══
+-- === Entry Motion Velocity ===
 
 function PredictionCore:EntryMotionVelocity(entry, part)
     if entry then
@@ -472,9 +472,9 @@ function PredictionCore:EntryMotionVelocity(entry, part)
     return Vector3.zero
 end
 
--- ═══════════════════════════════════════════════════
+-- ===================================================
 -- CORE PREDICTION
--- ═══════════════════════════════════════════════════
+-- ===================================================
 
 function PredictionCore:PredictTargetPosition(origin, part, entry)
     local C = self.C
@@ -485,7 +485,7 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
 
     if not self.Options.PredictionEnabled then
         local totalOffset = self.Options.AimOffset
-        -- Cộng thêm AimOffset từ BossProfile
+        -- Cong them AimOffset tu BossProfile
         if entry and entry.BossProfile then
             totalOffset = totalOffset + (entry.BossProfile.AimOffset or 0)
         end
@@ -497,18 +497,18 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
 
     local now = os.clock()
 
-    -- PERIODIC REFRESH: Reset partial state mỗi 15 giây để tránh drift
+    -- PERIODIC REFRESH: Reset partial state moi 15 giay d tranh drift
     if not entry._lastRefreshTime then entry._lastRefreshTime = now end
     if (now - entry._lastRefreshTime) >= 15 then
         entry._lastRefreshTime = now
         entry.KalmanP = math.clamp(entry.KalmanP, 0.5, 2) -- Normalize KalmanP
-        entry.Confidence = math.max(entry.Confidence, 0.7)  -- Phục hồi confidence
+        entry.Confidence = math.max(entry.Confidence, 0.7)  -- Phuc hoi confidence
         if entry.Acceleration and entry.Acceleration.Magnitude > 200 then
-            entry.Acceleration = entry.Acceleration.Unit * 100 -- Giảm acceleration tích lũy
+            entry.Acceleration = entry.Acceleration.Unit * 100 -- Giam acceleration tich luy
         end
     end
 
-    -- BƯỚC 1: Raw Velocity
+    -- BuoC 1: Raw Velocity
     local rawVel = Vector3.zero
     local dt = 0.03
     if not entry.LastPos then
@@ -519,10 +519,10 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.KalmanV = Vector3.zero
         entry.KalmanP = 1
     else
-        dt = math.max(now - entry.LastTime, 0.001) -- Chốt chặn dt không được bằng 0
+        dt = math.max(now - entry.LastTime, 0.001) -- Chot chan dt khong duoc bang 0
         if dt >= 0.015 then
             local newVel = (basePos - entry.LastPos) / dt
-            -- Chốt chặn vận tốc quá ảo (do teleport hoặc lag cực nặng)
+            -- Chot chan van toc qua ao (do teleport hoac lag cuc nang)
             if newVel.Magnitude < 2000 then
                 rawVel = newVel
             else
@@ -536,11 +536,11 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
     end
     entry.RealVelocity = rawVel
 
-    -- BƯỚC 2: Kalman Filter (Profile-tuned Q boost)
+    -- BuoC 2: Kalman Filter (Profile-tuned Q boost)
     local velErr = (rawVel - entry.KalmanV).Magnitude
     local q = 0.15 + math.clamp(velErr / 28, 0, 2.0) + P.KalmanQBoost
     local r = 0.3
-    entry.KalmanP = math.clamp(entry.KalmanP + q, 0.01, 10) -- CLAMP: tránh drift vô hạn
+    entry.KalmanP = math.clamp(entry.KalmanP + q, 0.01, 10) -- CLAMP: tranh drift vo han
     local k = entry.KalmanP / (entry.KalmanP + r)
     entry.KalmanV = entry.KalmanV + k * (rawVel - entry.KalmanV)
     entry.KalmanP = math.clamp((1 - k) * entry.KalmanP, 0.01, 10)
@@ -571,25 +571,25 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.KalmanP = math.max(entry.KalmanP, 1 + motionShock)
     end
 
-    -- BƯỚC 3: Confidence (với recovery nhanh hơn cho boss fights dài)
+    -- BuoC 3: Confidence (voi recovery nhanh hon cho boss fights dai)
     if entry.LastExpectedPos then
         local errDist = (basePos - entry.LastExpectedPos).Magnitude
         local errPenalty = math.clamp(errDist / 8, 0, 0.3)
-        -- Recovery rate tăng lên 0.15 (từ 0.1) để confidence không bị stuck ở 0.4
+        -- Recovery rate tang len 0.15 (tu 0.1) d confidence khong bi stuck  0.4
         local recovery = 0.15
         entry.Confidence = math.clamp(entry.Confidence - errPenalty + recovery, 0.4, 1)
     else
         entry.Confidence = 1
     end
 
-    -- BƯỚC 4: Acceleration (với magnitude clamp tránh drift)
+    -- BuoC 4: Acceleration (voi magnitude clamp tranh drift)
     if entry.LastFilteredVelocity then
         local rawAcc = (filtVel - entry.LastFilteredVelocity) / dt
-        -- Clamp acceleration magnitude để tránh tích lũy sai số
+        -- Clamp acceleration magnitude d tranh tich luy sai so
         if rawAcc.Magnitude > 500 then rawAcc = rawAcc.Unit * 500 end
         local accSmooth = (rawAcc - entry.Acceleration).Magnitude > 80 and 0.8 or 0.2
         entry.Acceleration = entry.Acceleration:Lerp(rawAcc, accSmooth)
-        -- Clamp kết quả cuối
+        -- Clamp ket qua cuoi
         if entry.Acceleration.Magnitude > 400 then
             entry.Acceleration = entry.Acceleration.Unit * 400
         end
@@ -622,7 +622,7 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
         entry.Confidence = math.max(entry.Confidence, 0.58 + (tpAlpha * 0.35))
     end
 
-    -- BƯỚC 5: Latency Compensation
+    -- BuoC 5: Latency Compensation
     local latency = self:GetNetworkLatency()
     local totalTime = latency * P.PingMultiplier
     local leadOffset = Vector3.zero
@@ -751,9 +751,9 @@ function PredictionCore:PredictTargetPosition(origin, part, entry)
     return finalPos
 end
 
--- ═══════════════════════════════════════════════════
+-- ===================================================
 -- STRAFE ENHANCED PREDICTION
--- ═══════════════════════════════════════════════════
+-- ===================================================
 
 function PredictionCore:PredictWithStrafe(origin, part, entry)
     local C = self.C
@@ -855,9 +855,9 @@ function PredictionCore:PredictWithStrafe(origin, part, entry)
     return predicted + eLead
 end
 
--- ═══════════════════════════════════════════════════
+-- ===================================================
 -- SELECTION TARGET POSITION (Lightweight for scanning)
--- ═══════════════════════════════════════════════════
+-- ===================================================
 
 function PredictionCore:GetSelectionTargetPosition(origin, part, entry, isCurrentTarget)
     local C = self.C
@@ -892,9 +892,9 @@ function PredictionCore:GetSelectionTargetPosition(origin, part, entry, isCurren
     return pos
 end
 
--- ═══════════════════════════════════════════════════
+-- ===================================================
 -- STABILIZE TARGET POSITION
--- ═══════════════════════════════════════════════════
+-- ===================================================
 
 function PredictionCore:StabilizeTargetPosition(entry, part, rawPos, deltaTime)
     local C = self.C
@@ -906,7 +906,7 @@ function PredictionCore:StabilizeTargetPosition(entry, part, rawPos, deltaTime)
         local d = rawPos - cur
         local dm = d.Magnitude
 
-        -- Lấy tham số từ BossProfile (nếu có)
+        -- Lay tham so tu BossProfile (neu co)
         local bpDeadzone = 1.2
         local bpAlpha = 0.08
         local bpSnap = 50
@@ -965,3 +965,4 @@ function PredictionCore:StabilizeTargetPosition(entry, part, rawPos, deltaTime)
 end
 
 return PredictionCore
+

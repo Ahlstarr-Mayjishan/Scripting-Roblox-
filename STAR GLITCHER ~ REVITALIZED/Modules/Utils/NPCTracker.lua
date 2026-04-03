@@ -1,5 +1,5 @@
 --[[
-    NPCTracker.lua — Neural Entity Management Class
+    NPCTracker.lua - Neural Entity Management Class
     Track, categorize, and filter game entities (NPCs/Mobs/Bosses).
     Fixes: Non-humanoid boss support and performance bottlenecks.
 ]]
@@ -80,7 +80,7 @@ function NPCTracker:_IsTargetCandidate(model)
         return false
     end
 
-    -- UNIVERSAL TARGETING: Support both Humanoid và Non-Humanoid (Bosses)
+    -- UNIVERSAL TARGETING: Support both Humanoid va Non-Humanoid (Bosses)
     local humanoid = model:FindFirstChildOfClass("Humanoid")
     local primary = self:_GetPrimaryPart(model)
     
@@ -89,7 +89,7 @@ function NPCTracker:_IsTargetCandidate(model)
     -- STATIC OBJECT FILTER: Boss boards, shops, etc.
     -- Mobs/Bosses (even custom ones) usually have unanchored root parts.
     if not humanoid and primary.Anchored and not model:FindFirstChild("Health") then
-        -- Only ignore if it has no health indicators và is anchored
+        -- Only ignore if it has no health indicators va is anchored
         return false
     end
 
@@ -216,3 +216,4 @@ function NPCTracker:ClearCache()
 end
 
 return NPCTracker
+

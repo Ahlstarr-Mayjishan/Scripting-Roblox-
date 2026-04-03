@@ -1,5 +1,5 @@
 --[[
-    OccipitalLobe.lua — Visual Processing
+    OccipitalLobe.lua - Visual Processing
     Analogy: Primary visual cortex.
     Job: Manages FOV, Highlight, and Target feedback dots.
 ]]
@@ -37,3 +37,4 @@ function OccipitalLobe:Clear()
 end
 
 return OccipitalLobe
+

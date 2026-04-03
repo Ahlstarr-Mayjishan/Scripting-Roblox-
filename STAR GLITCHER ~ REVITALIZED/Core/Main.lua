@@ -1,8 +1,8 @@
 --[[
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║     Boss Aim Assist — Centralized Brain Orchestration v6       ║
-    ║  Scientifically Reorganized | Fully Decoupled | Brain Driven  ║
-    ╚═══════════════════════════════════════════════════════════════╝
+    ===============================================================
+         Boss Aim Assist - Centralized Brain Orchestration v6       
+      Scientifically Reorganized | Fully Decoupled | Brain Driven  
+    ===============================================================
 ]]
 
 local GITHUB_CONFIG = {
@@ -26,7 +26,7 @@ local function compileChunk(content, chunkName)
         error("[compile] No Lua compiler available")
     end
 
-    content = tostring(content):gsub("^\239\187\191", ""):gsub("^﻿", "")
+    content = tostring(content):gsub("^\239\187\191", ""):gsub("^", "")
     local chunk, compileErr = compiler(content, chunkName)
     if not chunk then
         error("[compile] " .. tostring(compileErr))
@@ -35,7 +35,7 @@ local function compileChunk(content, chunkName)
 end
 
 local function parseRemoteVersion(content)
-    content = tostring(content or ""):gsub("^\239\187\191", ""):gsub("^﻿", "")
+    content = tostring(content or ""):gsub("^\239\187\191", ""):gsub("^", "")
 
     local directReturn = content:match("^%s*return%s+(%d+)")
     if directReturn then
@@ -171,9 +171,9 @@ Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
 
 local Window = RayfieldUI.CreateWindow(Rayfield)
 
--- ═══════════════════════════════════════════════════
+-- ===================================================
 -- LOAD ALL MODULES (Scientific Order)
--- ═══════════════════════════════════════════════════
+-- ===================================================
 local Brain          = requireModule("Modules/Core/Brain.lua")
 local InputHandler   = requireModule("Modules/Utils/Input.lua")
 local Tracker        = requireModule("Modules/Utils/NPCTracker.lua")
@@ -211,9 +211,9 @@ local PlayerLayout = requireModule("UI/Tabs/Player/Layout.lua")
 local PlayerStatusLoop = requireModule("UI/Tabs/Player/StatusLoop.lua")
 local PlayerController = requireModule("UI/Tabs/Player/Controller.lua")
 
--- ═══════════════════════════════════════════════════
+-- ===================================================
 -- INSTANTIATE (OOP Injection)
--- ═══════════════════════════════════════════════════
+-- ===================================================
 local synapse    = Synapse
 local input      = InputHandler.new(Config)
 local localCharacter = LocalCharacter.new()
@@ -255,9 +255,9 @@ local brain = Brain.new(Config, {
     Aimbot = aimbot, SilentAim = silentAim, Visuals = visuals
 }, loadModule)
 
--- ═══════════════════════════════════════════════════
+-- ===================================================
 -- INITIALIZE & SETUP UI
--- ═══════════════════════════════════════════════════
+-- ===================================================
 input:Init()
 localCharacter:Init()
 tracker:Init()
@@ -281,9 +281,9 @@ if not loadConfigOk then
 end
 Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
 
--- ═══════════════════════════════════════════════════
+-- ===================================================
 -- MAIN ORCHESTRATION LOOP (Brain Powered)
--- ═══════════════════════════════════════════════════
+-- ===================================================
 local SESSION_ID = os.time()
 _G.BossAimAssist_SessionID = SESSION_ID
 
@@ -523,4 +523,5 @@ reg(RunService.RenderStepped:Connect(function(dt)
     brain:Update(dt, UserInputService:GetMouseLocation(), Camera.CFrame)
 end))
 
-warn("✅ [Core] Brain Orchestration v6 Active.")
+warn(" [Core] Brain Orchestration v6 Active.")
+

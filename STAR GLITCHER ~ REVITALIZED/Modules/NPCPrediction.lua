@@ -1,12 +1,12 @@
 --[[
-    NPCPrediction.lua — NPC-Specific Prediction Profile
-    ═══════════════════════════════════════════════════
-    Kế thừa PredictionCore, tuning cho Boss/NPC:
-      • Kalman tiêu chuẩn (không boost Q)
-      • Ping bù 1x (NPC không có ping riêng)
-      • Lead cap cao (Boss di chuyển quãng dài, thuật sĩ bay xa)
-      • Reversal penalty nhẹ (Boss ít zigzag hơn Player)
-      • Không có Jump Arc prediction
+    NPCPrediction.lua - NPC-Specific Prediction Profile
+    ===================================================
+    Ke thua PredictionCore, tuning cho Boss/NPC:
+      * Kalman tieu chun (khong boost Q)
+      * Ping bu 1x (NPC khong co ping rieng)
+      * Lead cap cao (Boss di chuyn quang dai, thuat si bay xa)
+      * Reversal penalty nhe (Boss it zigzag hon Player)
+      * Khong co Jump Arc prediction
 ]]
 
 return function(PredictionCore)
@@ -18,13 +18,13 @@ return function(PredictionCore)
         local self = PredictionCore.new(config, npcTracker)
         setmetatable(self, NPCPrediction)
 
-        -- ═══ NPC PROFILE ═══
+        -- === NPC PROFILE ===
         self.Profile = {
-            KalmanQBoost      = 0,           -- Không boost: NPC movement ổn định hơn
-            PingMultiplier    = 1,            -- Server-side NPC, không cần bù ping thêm
-            ReversalPenalty   = 0.6,          -- Confidence giảm 40% khi đổi hướng
+            KalmanQBoost      = 0,           -- Khong boost: NPC movement n dinh hon
+            PingMultiplier    = 1,            -- Server-side NPC, khong can bu ping them
+            ReversalPenalty   = 0.6,          -- Confidence giam 40% khi di huong
             LeadCap           = config.Prediction.MAX_LEAD_DIST,  -- 340 studs
-            JumpArcEnabled    = false,        -- NPC không jump theo kiểu Player
+            JumpArcEnabled    = false,        -- NPC khong jump theo kiu Player
             JumpGravity       = -196.2,
             JumpArcBlend      = 0,
         }
@@ -34,3 +34,4 @@ return function(PredictionCore)
 
     return NPCPrediction
 end
+

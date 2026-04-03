@@ -10,7 +10,7 @@ local LocalPlayer = Players.LocalPlayer
 
 local function Check()
     if game.PlaceId ~= TARGET_PLACE_ID then
-        local errorMsg = "❌ Access Denied: This script only supports Star Glitcher! (Place ID: " .. tostring(TARGET_PLACE_ID) .. ")"
+        local errorMsg = " Access Denied: This script only supports Star Glitcher! (Place ID: " .. tostring(TARGET_PLACE_ID) .. ")"
         
         -- Attempt to notify via executor if possible
         if Rayfield and Rayfield.Notify then
@@ -31,3 +31,4 @@ local function Check()
 end
 
 return Check()
+

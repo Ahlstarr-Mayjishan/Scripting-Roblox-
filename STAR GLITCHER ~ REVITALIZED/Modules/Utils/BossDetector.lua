@@ -1,5 +1,5 @@
 --[[
-    BossDetector.lua — OOP Target Classification Class
+    BossDetector.lua - OOP Target Classification Class
     Identifies if an NPC is a boss based on common properties (Size, Health, Height).
 ]]
 
@@ -37,3 +37,4 @@ function BossDetector:IsBoss(model, humanoid)
 end
 
 return BossDetector
+

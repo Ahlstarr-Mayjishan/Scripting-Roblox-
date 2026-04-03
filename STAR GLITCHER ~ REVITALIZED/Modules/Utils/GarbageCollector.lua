@@ -1,5 +1,5 @@
 --[[
-    GarbageCollector.lua — Memory & Workspace Optimization v1.0
+    GarbageCollector.lua - Memory & Workspace Optimization v1.0
     Job: Proactive cleanup of visual debris, effects, and orphaned instances.
     Analogy: The Lymphatic System (Cleaning up cellular debris).
 ]]
@@ -247,3 +247,4 @@ function GarbageCollector:Destroy()
 end
 
 return GarbageCollector
+

@@ -1,5 +1,5 @@
 --[[
-    KalmanFilter.lua — OOP Noise Reduction Class
+    KalmanFilter.lua - OOP Noise Reduction Class
     A scientific implementation of 1D Kalman Filter for linear motion smoothing.
 ]]
 
@@ -77,3 +77,4 @@ function Kalman:Update(measurement, dt, context)
 end
 
 return Kalman
+

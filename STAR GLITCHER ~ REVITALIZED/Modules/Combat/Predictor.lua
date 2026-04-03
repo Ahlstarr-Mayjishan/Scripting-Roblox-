@@ -1,5 +1,5 @@
 --[[
-    Predictor.lua — High-Performance Layered Orchestrator
+    Predictor.lua - High-Performance Layered Orchestrator
     Analogy: The Neural Motor Network.
     Job: Orchestrates the 4 layers: Sampler -> Estimator -> Engine -> Stabilizer.
     Architecture: Orthogonal-First design (Zero feedback loop).
@@ -85,3 +85,4 @@ function Predictor:Predict(origin, part, entry, dt)
 end
 
 return Predictor
+

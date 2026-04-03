@@ -1,5 +1,5 @@
 --[[
-    Sampler.lua — Pure Kinematic Data Extraction
+    Sampler.lua - Pure Kinematic Data Extraction
     Analogy: The sensory nerves (Afferent fibers).
     Job: Extract raw position, velocity, and teleportation data without modification.
 ]]
@@ -87,3 +87,4 @@ function Sampler:GetRawState(part, lastPos, lastTime, dt)
 end
 
 return Sampler
+

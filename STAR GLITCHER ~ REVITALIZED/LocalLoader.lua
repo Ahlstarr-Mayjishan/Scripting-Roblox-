@@ -20,14 +20,15 @@ end
 
 local mainContent = loadLocalFile("Core/Main.lua")
 if mainContent then
-    print("✅ [Loader] Loading Star Glitcher from local workspace...")
+    print(" [Loader] Loading Star Glitcher from local workspace...")
     local chunk, err = loadstring(mainContent, "=Core/Main.lua")
     if chunk then
         chunk()
     else
-        warn("❌ [Loader] Failed to compile Main.lua: " .. tostring(err))
+        warn(" [Loader] Failed to compile Main.lua: " .. tostring(err))
     end
 else
-    warn("❌ [Loader] Could not find Core/Main.lua in workspace/" .. _G.BossAimAssist_LocalPath)
+    warn(" [Loader] Could not find Core/Main.lua in workspace/" .. _G.BossAimAssist_LocalPath)
     warn("Please ensure you have copied the folder correctly to your executor's workspace.")
 end
+

@@ -1,5 +1,5 @@
 --[[
-    FrontalLobe.lua — Executive Function & Motor Control
+    FrontalLobe.lua - Executive Function & Motor Control
     Analogy: Planning and executing movements (Aimbot/Silent Aim).
     Script Job: Dispatches actual aimbot actions based on brain decisions.
 ]]
@@ -35,3 +35,4 @@ function FrontalLobe:Rest()
 end
 
 return FrontalLobe
+

@@ -1,5 +1,5 @@
 --[[
-    ParietalLobe.lua — Sensory & Input Processing
+    ParietalLobe.lua - Sensory & Input Processing
     Analogy: Integrates sensory information from various parts of the body.
     Script Job: Monitors user input and world entity tracking.
 ]]
@@ -23,3 +23,4 @@ function ParietalLobe:Process()
 end
 
 return ParietalLobe
+

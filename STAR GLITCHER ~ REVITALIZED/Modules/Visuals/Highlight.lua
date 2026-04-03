@@ -1,5 +1,5 @@
 --[[
-    TargetHighlight.lua — OOP Highlight Visualization Class
+    TargetHighlight.lua - OOP Highlight Visualization Class
 ]]
 
 local CoreGui = game:GetService("CoreGui")
@@ -41,3 +41,4 @@ function TargetHighlight:Destroy()
 end
 
 return TargetHighlight
+

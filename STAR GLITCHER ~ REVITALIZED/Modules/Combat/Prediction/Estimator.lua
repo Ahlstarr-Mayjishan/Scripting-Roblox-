@@ -1,5 +1,5 @@
 --[[
-    Estimator.lua — State Estimation & Noise Removal (Physics Damping v2)
+    Estimator.lua - State Estimation & Noise Removal (Physics Damping v2)
     Analogy: Inferior Colliculus (Auditory/Visual processing before perception).
     Job: Filtering raw velocity, detecting acceleration/jerk, and scoring confidence.
     Fixes: Jitter/Shakiness (rung) via progressive damping filters.
@@ -130,3 +130,4 @@ function Estimator:Estimate(raw, dt)
 end
 
 return Estimator
+
