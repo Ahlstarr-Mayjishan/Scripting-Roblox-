@@ -34,7 +34,7 @@ return function(Window, Options, cleaner, resourceManager)
     local resourceLabel = Tab:CreateLabel("Resource Manager: Idle")
 
     Tab:CreateToggle({
-        Name = "Auto-Clean Debris (60s interval)",
+        Name = "Auto-Clean Debris",
         CurrentValue = Options.AutoCleanEnabled,
         Flag = "AutoCleanFlag",
         Callback = function(Value)
@@ -57,18 +57,6 @@ return function(Window, Options, cleaner, resourceManager)
         Flag = "AutoUpdateEnabledFlag",
         Callback = function(Value)
             Options.AutoUpdateEnabled = Value
-        end,
-    })
-
-    Tab:CreateSlider({
-        Name = "Update Check Interval",
-        Range = {1, 30},
-        Increment = 1,
-        CurrentValue = Options.AutoUpdateIntervalMinutes or 5,
-        Flag = "AutoUpdateIntervalMinutesFlag",
-        Suffix = " min",
-        Callback = function(Value)
-            Options.AutoUpdateIntervalMinutes = Value
         end,
     })
 
@@ -230,28 +218,59 @@ return function(Window, Options, cleaner, resourceManager)
         end
     end)
 
-    Tab:CreateButton({
-        Name = "Install Auto-Execute",
-        Callback = function()
-            local command = [[loadstring(game:HttpGet("https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Main.lua?v=" .. tostring(os.time())))()]]
-            if writefile then
-                pcall(function()
-                    writefile("BossAimAssist_Loader.lua", command)
+    Tab:CreateToggle({
+        Name = "Auto-Execute",
+        CurrentValue = Options.AutoExecuteEnabled or false,
+        Flag = "AutoExecuteFlag",
+        Callback = function(Value)
+            Options.AutoExecuteEnabled = Value
+            if Value then
+                local command = [[loadstring(game:HttpGet("https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Main.lua?v=" .. tostring(os.time())))()]]
+                if writefile then
+                    pcall(function()
+                        writefile("BossAimAssist_Loader.lua", command)
+                        Rayfield:Notify({
+                            Title = "Auto-Execute Enabled",
+                            Content = "Loader saved to workspace/BossAimAssist_Loader.lua. Move this to your autoexec folder.",
+                            Duration = 5,
+                            Image = 4483362458,
+                        })
+                    end)
+                else
                     Rayfield:Notify({
-                        Title = "Success",
-                        Content = "Loader saved to workspace/BossAimAssist_Loader.lua. Move this to your autoexec folder.",
+                        Title = "Error",
+                        Content = "Your executor does not support writefile.",
                         Duration = 5,
                         Image = 4483362458,
                     })
-                end)
+                end
             else
-                Rayfield:Notify({
-                    Title = "Error",
-                    Content = "Your executor does not support writefile.",
-                    Duration = 5,
-                    Image = 4483362458,
-                })
+                if delfile then
+                    pcall(function()
+                        delfile("BossAimAssist_Loader.lua")
+                        Rayfield:Notify({
+                            Title = "Auto-Execute Disabled",
+                            Content = "Loader file removed from workspace.",
+                            Duration = 5,
+                            Image = 4483362458,
+                        })
+                    end)
+                end
             end
+        end,
+    })
+
+    Tab:CreateSection("Custom")
+
+    Tab:CreateSlider({
+        Name = "Update Check Interval",
+        Range = { 1, 30 },
+        Increment = 1,
+        CurrentValue = Options.AutoUpdateIntervalMinutes or 5,
+        Flag = "AutoUpdateIntervalMinutesFlag",
+        Suffix = " min",
+        Callback = function(Value)
+            Options.AutoUpdateIntervalMinutes = Value
         end,
     })
 

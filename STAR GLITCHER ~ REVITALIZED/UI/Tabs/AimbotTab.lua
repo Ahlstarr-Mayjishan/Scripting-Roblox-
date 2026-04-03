@@ -60,12 +60,12 @@ return function(Window, Options, Visuals, NPCTracker)
     })
 
     -- ═══════════════════════════════════════════════════
-    -- SECTION: FOV (FIELD OF VIEW)
+    -- SECTION: AIM METHODS
     -- ═══════════════════════════════════════════════════
-    Tab:CreateSection("Field of View (FOV)")
+    Tab:CreateSection("Aim Methods")
 
     Tab:CreateDropdown({
-        Name = "Targeting Method",
+        Name = "Aim Method",
         Options = {"FOV", "Distance", "Deadlock"},
         CurrentOption = {Options.TargetingMethod or "FOV"},
         Flag = "TargetingMethodDropdown",
@@ -90,6 +90,18 @@ return function(Window, Options, Visuals, NPCTracker)
             if Visuals and Visuals.FOVCircle then
                 Visuals.FOVCircle.Radius = Value
             end
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Distance Detect",
+        Range = {0, 5000},
+        Increment = 25,
+        Suffix = " studs",
+        CurrentValue = Options.MaxDistance or 1500,
+        Flag = "DistanceDetectSlider",
+        Callback = function(Value)
+            Options.MaxDistance = Value
         end,
     })
 

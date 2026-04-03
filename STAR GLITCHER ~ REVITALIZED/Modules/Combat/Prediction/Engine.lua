@@ -112,6 +112,20 @@ function Engine:_GetLateralTrust(profile, confidence, lateralAlpha, shockAlpha)
     return math.clamp((base + (confidence * confGain) + (lateralAlpha * lateralGain)) * (1 - shockAlpha * 0.35), 0.08, cap)
 end
 
+function Engine:_GetDistanceRatio(distance)
+    local startDist = self.Prediction.DISTANCE_PREDICTION_START or 180
+    local maxDist = self.Prediction.DISTANCE_PREDICTION_MAX or math.max(startDist + 1, 1800)
+    if distance <= startDist then
+        return 0
+    end
+    return math.clamp((distance - startDist) / math.max(maxDist - startDist, 1), 0, 1)
+end
+
+function Engine:_IsBeamLike(projectileSpeed)
+    local beamFloor = self.Prediction.SMART_PROJECTILE_SPEED_MIN or 3400
+    return projectileSpeed >= beamFloor
+end
+
 function Engine:Calculate(origin, targetPos, est, dt, entry, part)
     local Options = self.Options
     if not Options.PredictionEnabled then
@@ -138,6 +152,7 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
 
     local projectileSpeed = Options.ProjectileVelocity or Options.ProjectileSpeed or DEFAULT_PROJECTILE_SPEED
     projectileSpeed = math.max(projectileSpeed, 1)
+    local beamLike = self:_IsBeamLike(projectileSpeed)
 
     local travelTime = distance / projectileSpeed
     local latency = self:_GetLatency() * self:_GetPingMultiplier()
@@ -152,6 +167,32 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
     local shockAlpha = math.clamp(motionShock / 180, 0, 1)
     local speedAlpha = math.clamp(speed / 140, 0, 1)
     local lateralAlpha = math.clamp(lateralSpeed / 110, 0, 1)
+    local distanceRatio = self:_GetDistanceRatio(distance)
+    local linearStability = math.clamp(1 - (accel.Magnitude / math.max(self.Prediction.BRAKE_ACCEL_THRESHOLD or 20, 1) * 0.06) - (shockAlpha * 0.35), 0, 1)
+    local closeOrbitAlpha = 0
+    local closeOrbitDistance = self.Prediction.CLOSE_ORBIT_DISTANCE or 135
+    if distance <= closeOrbitDistance then
+        local fullDistance = self.Prediction.CLOSE_ORBIT_FULL_ALPHA_DISTANCE or 42
+        closeOrbitAlpha = math.clamp(1 - ((distance - fullDistance) / math.max(closeOrbitDistance - fullDistance, 1)), 0, 1)
+    end
+
+    if beamLike then
+        totalTime = totalTime * math.clamp(self.Prediction.BEAM_TIME_BIAS or 0.92, 0.72, 1.1)
+    end
+
+    if distanceRatio > 0 then
+        local distanceTimeGain = self.Prediction.DISTANCE_TIME_GAIN or 0.68
+        local distanceBonus = distanceRatio * (0.01 + (distanceTimeGain * 0.035)) * (0.65 + (confidence * 0.35))
+        totalTime = totalTime + distanceBonus
+    end
+
+    if linearStability >= (self.Prediction.LINEAR_MOTION_DOT_THRESHOLD or 0.91) then
+        totalTime = totalTime + (self.Prediction.LINEAR_MOTION_TIME_BONUS or 0.02) * (0.55 + (distanceRatio * 0.45))
+    end
+
+    if lateralSpeed >= (self.Prediction.CLOSE_ORBIT_STRAFE_THRESHOLD or 14) and closeOrbitAlpha > 0 then
+        totalTime = totalTime + (self.Prediction.CLOSE_ORBIT_LEAD_BONUS_TIME or 0.018) * closeOrbitAlpha
+    end
 
     local predictedOffset = velocity * totalTime
 
@@ -159,7 +200,15 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
     -- aggressive lead than front/back motion under frame + ping delay.
     if lateralSpeed > 0.01 then
         local lateralTrust = self:_GetLateralTrust(targetProfile, confidence, lateralAlpha, shockAlpha)
+        local distanceStrafeGain = 1 + ((self.Prediction.DISTANCE_STRAFE_GAIN or 1.2) - 1) * distanceRatio * 0.35
+        if beamLike then
+            distanceStrafeGain = distanceStrafeGain * math.clamp(self.Prediction.BEAM_STRAFE_BIAS or 0.78, 0.5, 1.05)
+        end
+        if closeOrbitAlpha > 0 then
+            distanceStrafeGain = distanceStrafeGain * (1 + (closeOrbitAlpha * 0.2))
+        end
         predictedOffset = predictedOffset + (lateralVelocity * totalTime * lateralTrust)
+        predictedOffset = predictedOffset + (lateralVelocity * totalTime * (distanceStrafeGain - 1) * (0.18 + (confidence * 0.12)))
     end
 
     if Options.SmartPrediction and (est.Stable or speed > 65) then
@@ -172,6 +221,18 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
 
         predictedOffset = predictedOffset + ((0.5 * accel * (totalTime ^ 2)) * accelWeight)
         predictedOffset = predictedOffset + (((1 / 6) * jerk * (totalTime ^ 3)) * jerkWeight)
+    end
+
+    if forwardSpeed > 0.01 and accel.Magnitude > 0.01 then
+        local accelDir = accel.Unit
+        local brakeDot = accelDir:Dot(shotDir)
+        if brakeDot <= (self.Prediction.REVERSE_RESPONSE_DOT or -0.05) then
+            local brakeThreshold = self.Prediction.BRAKE_ACCEL_THRESHOLD or 20
+            local brakeAlpha = math.clamp(accel.Magnitude / math.max(brakeThreshold, 1), 0, 1)
+            local brakeCap = self.Prediction.ACCEL_CORRECTION_MAX_RATIO or 0.38
+            local brakeReduction = math.clamp(brakeAlpha * (0.16 + (1 - confidence) * 0.08), 0.04, brakeCap)
+            predictedOffset = predictedOffset - (shotDir * forwardSpeed * totalTime * brakeReduction)
+        end
     end
 
     local leadCap = self.Prediction.MAX_LEAD_DIST or math.huge

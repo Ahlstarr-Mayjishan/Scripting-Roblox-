@@ -43,85 +43,6 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
         end,
     })
 
-    Tab:CreateSlider({
-        Name = "Walk Speed (Fixed)",
-        Range = { 1, 250 },
-        Increment = 1,
-        CurrentValue = Options.CustomMoveSpeed or 16,
-        Flag = "CustomMoveSpeedFlag",
-        Suffix = " studs/s",
-        Callback = function(Value)
-            Options.CustomMoveSpeed = Value
-        end,
-    })
-
-    Tab:CreateSection("Mobility")
-
-    Tab:CreateToggle({
-        Name = "Jump Boost",
-        CurrentValue = Options.JumpBoostEnabled,
-        Flag = "JumpBoostEnabledFlag",
-        Callback = function(Value)
-            Options.JumpBoostEnabled = Value
-        end,
-    })
-
-    Tab:CreateSlider({
-        Name = "Jump Power",
-        Range = { 1, 300 },
-        Increment = 1,
-        CurrentValue = Options.JumpBoostPower or 70,
-        Flag = "JumpBoostPowerFlag",
-        Callback = function(Value)
-            Options.JumpBoostPower = Value
-        end,
-    })
-
-    Tab:CreateToggle({
-        Name = "Float",
-        CurrentValue = Options.FloatEnabled,
-        Flag = "FloatEnabledFlag",
-        Callback = function(Value)
-            Options.FloatEnabled = Value
-        end,
-    })
-
-    Tab:CreateSlider({
-        Name = "Float Fall Speed",
-        Range = { 0, 40 },
-        Increment = 1,
-        CurrentValue = Options.FloatFallSpeed or 8,
-        Flag = "FloatFallSpeedFlag",
-        Suffix = " studs/s",
-        Callback = function(Value)
-            Options.FloatFallSpeed = Value
-        end,
-    })
-
-    Tab:CreateToggle({
-        Name = "Custom Gravity",
-        CurrentValue = Options.GravityEnabled,
-        Flag = "GravityEnabledFlag",
-        Callback = function(Value)
-            Options.GravityEnabled = Value
-        end,
-    })
-
-    Tab:CreateSlider({
-        Name = "Gravity Value",
-        Range = { 0, 500 },
-        Increment = 1,
-        CurrentValue = Options.GravityValue or 196.2,
-        Flag = "GravityValueFlag",
-        Callback = function(Value)
-            Options.GravityValue = Value
-        end,
-    })
-
-    local jumpBoostLabel = Tab:CreateLabel("Jump Boost Status: Idle")
-    local floatLabel = Tab:CreateLabel("Float Status: Idle")
-    local gravityLabel = Tab:CreateLabel("Gravity Status: Idle")
-
     Tab:CreateSection("Legit Multiplier")
 
     Tab:CreateToggle({
@@ -136,19 +57,40 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
         end,
     })
 
-    Tab:CreateSlider({
-        Name = "Multiplier Factor",
-        Range = { 1, 5 },
-        Increment = 0.1,
-        CurrentValue = Options.SpeedMultiplier or 1.0,
-        Flag = "SpeedMultiplierFlag",
-        Suffix = "x",
+    local speedMultiplierLabel = Tab:CreateLabel("Multi Speed Status: Idle")
+
+    Tab:CreateSection("Mobility")
+
+    Tab:CreateToggle({
+        Name = "Jump Boost",
+        CurrentValue = Options.JumpBoostEnabled,
+        Flag = "JumpBoostEnabledFlag",
         Callback = function(Value)
-            Options.SpeedMultiplier = Value
+            Options.JumpBoostEnabled = Value
         end,
     })
 
-    local speedMultiplierLabel = Tab:CreateLabel("Multi Speed Status: Idle")
+    Tab:CreateToggle({
+        Name = "Float",
+        CurrentValue = Options.FloatEnabled,
+        Flag = "FloatEnabledFlag",
+        Callback = function(Value)
+            Options.FloatEnabled = Value
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Custom Gravity",
+        CurrentValue = Options.GravityEnabled,
+        Flag = "GravityEnabledFlag",
+        Callback = function(Value)
+            Options.GravityEnabled = Value
+        end,
+    })
+
+    local jumpBoostLabel = Tab:CreateLabel("Jump Boost Status: Idle")
+    local floatLabel = Tab:CreateLabel("Float Status: Idle")
+    local gravityLabel = Tab:CreateLabel("Gravity Status: Idle")
 
     Tab:CreateSection("Anti-Debuff")
 
@@ -242,16 +184,65 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
         end
     end)
 
-    Tab:CreateSection("Maintenance")
+    Tab:CreateSection("Custom")
 
-    if noSlowdown then
-        Tab:CreateButton({
-            Name = "Re-capture Base Stats (Fixed Speed)",
-            Callback = function()
-                noSlowdown:CaptureBaseStats()
-            end,
-        })
-    end
+    Tab:CreateSlider({
+        Name = "Walk Speed (Fixed)",
+        Range = { 1, 250 },
+        Increment = 1,
+        CurrentValue = Options.CustomMoveSpeed or 16,
+        Flag = "CustomMoveSpeedFlag",
+        Suffix = " studs/s",
+        Callback = function(Value)
+            Options.CustomMoveSpeed = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Multiplier Factor",
+        Range = { 1, 5 },
+        Increment = 0.1,
+        CurrentValue = Options.SpeedMultiplier or 1.0,
+        Flag = "SpeedMultiplierFlag",
+        Suffix = "x",
+        Callback = function(Value)
+            Options.SpeedMultiplier = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Jump Power",
+        Range = { 1, 300 },
+        Increment = 1,
+        CurrentValue = Options.JumpBoostPower or 70,
+        Flag = "JumpBoostPowerFlag",
+        Callback = function(Value)
+            Options.JumpBoostPower = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Float Fall Speed",
+        Range = { 0, 40 },
+        Increment = 1,
+        CurrentValue = Options.FloatFallSpeed or 8,
+        Flag = "FloatFallSpeedFlag",
+        Suffix = " studs/s",
+        Callback = function(Value)
+            Options.FloatFallSpeed = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Gravity Value",
+        Range = { 0, 500 },
+        Increment = 1,
+        CurrentValue = Options.GravityValue or 196.2,
+        Flag = "GravityValueFlag",
+        Callback = function(Value)
+            Options.GravityValue = Value
+        end,
+    })
 
     return Tab
 end
