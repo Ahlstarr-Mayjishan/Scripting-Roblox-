@@ -3,7 +3,7 @@ local RunService = game:GetService("RunService")
 local ResourceManager = {}
 ResourceManager.__index = ResourceManager
 
-local DEFAULT_FRAME_BUDGET = 0.0015
+local DEFAULT_FRAME_BUDGET = 0.0008
 local DEFAULT_GC_STEP = 16
 
 function ResourceManager.new(options)
@@ -90,7 +90,7 @@ function ResourceManager:_getBudget(dt)
     local boosted = now < self._manualBoostUntil
 
     if boosted then
-        budget = budget * 2.5
+        budget = budget * 1.6
     end
 
     if dt and dt > (1 / 35) then
@@ -206,9 +206,7 @@ function ResourceManager:Flush(maxSeconds)
 
     while self:GetPendingCount() > 0 and os.clock() < deadline do
         self:_step(1 / 60)
-        if self:GetPendingCount() > 0 then
-            task.wait()
-        end
+        task.wait()
     end
 
     return self:GetPendingCount()
@@ -216,7 +214,7 @@ end
 
 function ResourceManager:Destroy()
     self:ScheduleTrackedCleanup()
-    self:Flush(0.75)
+    self:Flush(0.2)
 
     if self.Connection then
         self.Connection:Disconnect()

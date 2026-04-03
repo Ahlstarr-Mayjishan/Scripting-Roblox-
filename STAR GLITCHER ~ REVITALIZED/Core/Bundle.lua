@@ -4209,14 +4209,15 @@ function GarbageCollector.new(options, resourceManager)
     self._lastClean = 0
     self._cleanInterval = 60 -- Default to every 60 seconds
     self._queued = {}
+    self._queuedMap = setmetatable({}, { __mode = "k" })
     self._queueSize = 0
     self._scanIndex = 1
     self._scanList = nil
-    self._scanBatchSize = 80
-    self._destroyBudget = 10
+    self._scanBatchSize = 30
+    self._destroyBudget = 4
     self._collectStepSize = 24
     self._manualBoostUntil = 0
-    self._frameBudget = 0.0012
+    self._frameBudget = 0.0008
     self.Status = "Idle"
     return self
 end
@@ -4268,11 +4269,11 @@ function GarbageCollector:_isDebrisCandidate(instance, playerPos)
 end
 
 function GarbageCollector:_queueInstance(instance)
-    if instance:GetAttribute("__SG_QueuedForCleanup") then
+    if self._queuedMap[instance] then
         return false
     end
 
-    instance:SetAttribute("__SG_QueuedForCleanup", true)
+    self._queuedMap[instance] = true
     self._queueSize = self._queueSize + 1
     self._queued[self._queueSize] = instance
     return true
@@ -4326,17 +4327,16 @@ function GarbageCollector:_drainQueue(destroyBudget, gcStepSize)
         self._queueSize = self._queueSize - 1
         processed = processed + 1
 
+        self._queuedMap[instance] = nil
         if instance and instance.Parent then
             if self.ResourceManager then
                 self.ResourceManager:DeferCleanup(function()
                     if instance and instance.Parent then
-                        instance:SetAttribute("__SG_QueuedForCleanup", nil)
                         instance:Destroy()
                     end
                 end)
             else
                 pcall(function()
-                    instance:SetAttribute("__SG_QueuedForCleanup", nil)
                     instance:Destroy()
                 end)
                 destroyed = destroyed + 1
@@ -4354,9 +4354,9 @@ end
 function GarbageCollector:_stepCleanup()
     local now = os.clock()
     local manualBoost = now < self._manualBoostUntil
-    local scanBatchSize = manualBoost and (self._scanBatchSize * 2) or self._scanBatchSize
-    local destroyBudget = manualBoost and (self._destroyBudget * 2) or self._destroyBudget
-    local gcStepSize = manualBoost and (self._collectStepSize * 2) or self._collectStepSize
+    local scanBatchSize = manualBoost and math.ceil(self._scanBatchSize * 1.35) or self._scanBatchSize
+    local destroyBudget = manualBoost and math.ceil(self._destroyBudget * 1.5) or self._destroyBudget
+    local gcStepSize = manualBoost and math.ceil(self._collectStepSize * 1.5) or self._collectStepSize
 
     if not self._scanList and self._queueSize == 0 then
         if now - self._lastClean < self._cleanInterval then
@@ -4397,7 +4397,7 @@ end
 function GarbageCollector:Clean()
     self._manualBoostUntil = os.clock() + 3
     if self.ResourceManager then
-        self.ResourceManager:Boost(2.5)
+        self.ResourceManager:Boost(1.5)
     end
     if not self._scanList then
         self._lastClean = 0
@@ -4406,18 +4406,10 @@ function GarbageCollector:Clean()
 
     local queued = 0
     local destroyed = 0
-    for _ = 1, 4 do
-        local q = 0
-        if self._scanList then
-            q = select(1, self:_processScan(self._scanBatchSize * 2))
-        end
-        queued = queued + q
-        destroyed = destroyed + self:_drainQueue(self._destroyBudget, self._collectStepSize)
-
-        if not self._scanList and self._queueSize == 0 then
-            break
-        end
+    if self._scanList then
+        queued = select(1, self:_processScan(self._scanBatchSize))
     end
+    destroyed = self:_drainQueue(self._destroyBudget, self._collectStepSize)
 
     if self.ResourceManager and self.ResourceManager:GetPendingCount() > 0 then
         self.Status = string.format(
@@ -4439,11 +4431,7 @@ function GarbageCollector:Destroy()
 
     for i = 1, self._queueSize do
         local instance = self._queued[i]
-        if instance and instance.Parent then
-            pcall(function()
-                instance:SetAttribute("__SG_QueuedForCleanup", nil)
-            end)
-        end
+        self._queuedMap[instance] = nil
     end
 end
 
@@ -4998,7 +4986,7 @@ return NPCTracker
 local ResourceManager = {}
 ResourceManager.__index = ResourceManager
 
-local DEFAULT_FRAME_BUDGET = 0.0015
+local DEFAULT_FRAME_BUDGET = 0.0008
 local DEFAULT_GC_STEP = 16
 
 function ResourceManager.new(options)
@@ -5085,7 +5073,7 @@ function ResourceManager:_getBudget(dt)
     local boosted = now < self._manualBoostUntil
 
     if boosted then
-        budget = budget * 2.5
+        budget = budget * 1.6
     end
 
     if dt and dt > (1 / 35) then
@@ -5201,9 +5189,7 @@ function ResourceManager:Flush(maxSeconds)
 
     while self:GetPendingCount() > 0 and os.clock() < deadline do
         self:_step(1 / 60)
-        if self:GetPendingCount() > 0 then
-            task.wait()
-        end
+        task.wait()
     end
 
     return self:GetPendingCount()
@@ -5211,7 +5197,7 @@ end
 
 function ResourceManager:Destroy()
     self:ScheduleTrackedCleanup()
-    self:Flush(0.75)
+    self:Flush(0.2)
 
     if self.Connection then
         self.Connection:Disconnect()
