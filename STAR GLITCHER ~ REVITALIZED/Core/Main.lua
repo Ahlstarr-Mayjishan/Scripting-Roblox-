@@ -84,11 +84,6 @@ local function fetchRemoteVersion()
     error(lastError or "Remote version sources exhausted")
 end
 
-local function getAutoUpdateIntervalSeconds()
-    local minutes = tonumber(Options.AutoUpdateIntervalMinutes) or 5
-    return math.max(1, minutes) * 60
-end
-
 local function loadModule(path)
     local cached = runtimeModuleCache[path]
     if cached ~= nil then
@@ -558,7 +553,8 @@ if not autoUpdateLoopStarted then
             end
 
             local now = os.clock()
-            if (now - lastCheck) < getAutoUpdateIntervalSeconds() then
+            local intervalSeconds = math.max(1, tonumber(Options.AutoUpdateIntervalMinutes) or 5) * 60
+            if (now - lastCheck) < intervalSeconds then
                 continue
             end
 

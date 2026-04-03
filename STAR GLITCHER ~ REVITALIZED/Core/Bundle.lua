@@ -6621,7 +6621,8 @@ if not autoUpdateLoopStarted then
             end
 
             local now = os.clock()
-            if (now - lastCheck) < getAutoUpdateIntervalSeconds() then
+            local intervalSeconds = math.max(1, tonumber(Options.AutoUpdateIntervalMinutes) or 5) * 60
+            if (now - lastCheck) < intervalSeconds then
                 continue
             end
 
