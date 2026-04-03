@@ -1062,7 +1062,7 @@ function Predictor:Predict(origin, part, entry, dt)
     local predicted = self.Engine:Calculate(origin, raw.Position, est, dt, entry, part)
     
     -- 4. PRESENTATION (Smoothing)
-    return state.Stabilizer:Smooth(predicted, dt)
+    return state.Stabilizer:Smooth(predicted, dt), predicted
 end
 
 return Predictor
@@ -1585,7 +1585,7 @@ function Brain:Update(dt, mousePos, camCFrame)
         return
     end
 
-    local targetPart, targetPos = self.Temporal:Process(camCFrame.Position, dt)
+    local targetPart, targetPos, rawTargetPos = self.Temporal:Process(camCFrame.Position, dt)
 
     if not targetPart or not targetPos then
         self.Occipital:Clear()
@@ -1595,7 +1595,7 @@ function Brain:Update(dt, mousePos, camCFrame)
 
     local sPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(targetPos)
     self.Occipital:Process(mousePos, sPos, targetPart, onScreen)
-    self.Frontal:Execute(targetPos, targetPart, entry, dt)
+    self.Frontal:Execute(targetPos, targetPart, entry, dt, rawTargetPos)
 end
 
 function Brain:Destroy()
@@ -1639,14 +1639,14 @@ function FrontalLobe.new(aimbot, silentAim, options)
     return self
 end
 
-function FrontalLobe:Execute(targetPos, part, entry, dt)
+function FrontalLobe:Execute(targetPos, part, entry, dt, rawTargetPos)
     local mode = self.Options.AssistMode
     
     if mode == "Camera Lock" then
         self.SilentAim:Clear()
         self.Aimbot:Update(targetPos, self.Options.Smoothness)
     elseif mode == "Silent Aim" then
-        self.SilentAim:SetState(true, part, targetPos, entry, dt)
+        self.SilentAim:SetState(true, part, rawTargetPos or targetPos, entry, dt)
     elseif mode == "Highlight Only" then
         self.SilentAim:Clear()
     else
@@ -1743,6 +1743,7 @@ function TemporalLobe.new(selector, predictor)
     self._targetEntry = nil
     self._targetPart = nil
     self._prediction = nil
+    self._rawPrediction = nil
     self._lastEntry = nil
     self._lastPart = nil
     return self
@@ -1769,6 +1770,7 @@ function TemporalLobe:Process(originPos, dt)
         end
         self._targetPart = nil
         self._prediction = nil
+        self._rawPrediction = nil
         return nil, nil
     end
 
@@ -1776,6 +1778,7 @@ function TemporalLobe:Process(originPos, dt)
         self._targetEntry = nil
         self._targetPart = nil
         self._prediction = nil
+        self._rawPrediction = nil
         if self._lastEntry then
             self.Predictor:NotifyTargetChanged(nil)
             self._lastEntry = nil
@@ -1788,6 +1791,7 @@ function TemporalLobe:Process(originPos, dt)
     if not self._targetPart then
         self._targetEntry = nil
         self._prediction = nil
+        self._rawPrediction = nil
         if self._lastEntry then
             self.Predictor:NotifyTargetChanged(nil)
             self._lastEntry = nil
@@ -1802,9 +1806,9 @@ function TemporalLobe:Process(originPos, dt)
         self._lastPart = self._targetPart
     end
 
-    self._prediction = self.Predictor:Predict(originPos, self._targetPart, self._targetEntry, dt)
+    self._prediction, self._rawPrediction = self.Predictor:Predict(originPos, self._targetPart, self._targetEntry, dt)
 
-    return self._targetPart, self._prediction
+    return self._targetPart, self._prediction, self._rawPrediction
 end
 
 return TemporalLobe

@@ -15,6 +15,7 @@ function TemporalLobe.new(selector, predictor)
     self._targetEntry = nil
     self._targetPart = nil
     self._prediction = nil
+    self._rawPrediction = nil
     self._lastEntry = nil
     self._lastPart = nil
     return self
@@ -41,6 +42,7 @@ function TemporalLobe:Process(originPos, dt)
         end
         self._targetPart = nil
         self._prediction = nil
+        self._rawPrediction = nil
         return nil, nil
     end
 
@@ -48,6 +50,7 @@ function TemporalLobe:Process(originPos, dt)
         self._targetEntry = nil
         self._targetPart = nil
         self._prediction = nil
+        self._rawPrediction = nil
         if self._lastEntry then
             self.Predictor:NotifyTargetChanged(nil)
             self._lastEntry = nil
@@ -60,6 +63,7 @@ function TemporalLobe:Process(originPos, dt)
     if not self._targetPart then
         self._targetEntry = nil
         self._prediction = nil
+        self._rawPrediction = nil
         if self._lastEntry then
             self.Predictor:NotifyTargetChanged(nil)
             self._lastEntry = nil
@@ -74,9 +78,9 @@ function TemporalLobe:Process(originPos, dt)
         self._lastPart = self._targetPart
     end
 
-    self._prediction = self.Predictor:Predict(originPos, self._targetPart, self._targetEntry, dt)
+    self._prediction, self._rawPrediction = self.Predictor:Predict(originPos, self._targetPart, self._targetEntry, dt)
 
-    return self._targetPart, self._prediction
+    return self._targetPart, self._prediction, self._rawPrediction
 end
 
 return TemporalLobe

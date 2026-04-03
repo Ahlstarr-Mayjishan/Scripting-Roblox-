@@ -15,14 +15,14 @@ function FrontalLobe.new(aimbot, silentAim, options)
     return self
 end
 
-function FrontalLobe:Execute(targetPos, part, entry, dt)
+function FrontalLobe:Execute(targetPos, part, entry, dt, rawTargetPos)
     local mode = self.Options.AssistMode
     
     if mode == "Camera Lock" then
         self.SilentAim:Clear()
         self.Aimbot:Update(targetPos, self.Options.Smoothness)
     elseif mode == "Silent Aim" then
-        self.SilentAim:SetState(true, part, targetPos, entry, dt)
+        self.SilentAim:SetState(true, part, rawTargetPos or targetPos, entry, dt)
     elseif mode == "Highlight Only" then
         self.SilentAim:Clear()
     else

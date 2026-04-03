@@ -81,7 +81,7 @@ function Predictor:Predict(origin, part, entry, dt)
     local predicted = self.Engine:Calculate(origin, raw.Position, est, dt, entry, part)
     
     -- 4. PRESENTATION (Smoothing)
-    return state.Stabilizer:Smooth(predicted, dt)
+    return state.Stabilizer:Smooth(predicted, dt), predicted
 end
 
 return Predictor
