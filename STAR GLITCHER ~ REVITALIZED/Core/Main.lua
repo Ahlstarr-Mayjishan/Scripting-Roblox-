@@ -18,6 +18,7 @@ local VERSION_URL = GITHUB_BASE .. "Data/Version.lua"
 local BUNDLE_URL = GITHUB_BASE .. "Core/Bundle.lua"
 local loaderSession = tostring(os.time())
 local runtimeModuleCache = {}
+local autoUpdateLoopStarted = false
 
 local function compileChunk(content, chunkName)
     local compiler = loadstring or load
@@ -81,6 +82,11 @@ local function fetchRemoteVersion()
     end
 
     error(lastError or "Remote version sources exhausted")
+end
+
+local function getAutoUpdateIntervalSeconds()
+    local minutes = tonumber(Options.AutoUpdateIntervalMinutes) or 5
+    return math.max(1, minutes) * 60
 end
 
 local function loadModule(path)
@@ -534,6 +540,33 @@ if not _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED then
         task.wait(1)
         if _G.BossAimAssist_CheckForUpdates then
             _G.BossAimAssist_CheckForUpdates(false)
+        end
+    end)
+end
+
+if not autoUpdateLoopStarted then
+    autoUpdateLoopStarted = true
+    task.spawn(function()
+        local lastCheck = 0
+
+        while _G.BossAimAssist_SessionID == SESSION_ID do
+            task.wait(5)
+
+            if not Options.AutoUpdateEnabled then
+                lastCheck = os.clock()
+                continue
+            end
+
+            local now = os.clock()
+            if (now - lastCheck) < getAutoUpdateIntervalSeconds() then
+                continue
+            end
+
+            lastCheck = now
+            local checker = _G.BossAimAssist_CheckForUpdates
+            if checker then
+                checker(false)
+            end
         end
     end)
 end

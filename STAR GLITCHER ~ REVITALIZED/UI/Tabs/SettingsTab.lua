@@ -51,6 +51,27 @@ return function(Window, Options, cleaner, resourceManager)
         end,
     })
 
+    Tab:CreateToggle({
+        Name = "Auto Clean + Update",
+        CurrentValue = Options.AutoUpdateEnabled == true,
+        Flag = "AutoUpdateEnabledFlag",
+        Callback = function(Value)
+            Options.AutoUpdateEnabled = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Update Check Interval",
+        Range = {1, 30},
+        Increment = 1,
+        CurrentValue = Options.AutoUpdateIntervalMinutes or 5,
+        Flag = "AutoUpdateIntervalMinutesFlag",
+        Suffix = " min",
+        Callback = function(Value)
+            Options.AutoUpdateIntervalMinutes = Value
+        end,
+    })
+
     Tab:CreateButton({
         Name = "Clean Memory & Debris Now",
         Callback = function()
@@ -107,7 +128,7 @@ return function(Window, Options, cleaner, resourceManager)
     })
 
     Tab:CreateButton({
-        Name = "Clean + Update Script",
+        Name = "Run Clean + Update Now",
         Callback = function()
             local updater = _G.BossAimAssist_Update
             if updater then

@@ -45,6 +45,8 @@ Config.Options = {
     ApocalypseEnabled = false,
     AutoCleanEnabled = true,
     SmartCleanupEnabled = true,
+    AutoUpdateEnabled = false,
+    AutoUpdateIntervalMinutes = 5,
 }
 
 Config.Prediction = {
@@ -107,6 +109,40 @@ Config.Blacklist = {
 return Config
 ]====],
     ["Data/Version.lua"] = [====[return 130 -- Version 1.2.0 (Auto Update Runtime / Player Mobility Additions)
+]====],
+    ["LocalLoader.lua"] = [====[--[[
+    STAR GLITCHER ~ LOCAL LOADER
+    Use this script to run the fixed version from your local computer.
+    Instructions:
+    1. Make sure the folder "STAR GLITCHER ~ REVITALIZED" is in your executor's workspace folder.
+    2. Run this script in your executor.
+]]
+
+_G.BossAimAssist_LocalPath = "STAR GLITCHER ~ REVITALIZED/"
+
+local function loadLocalFile(path)
+    if readfile then
+        local ok, content = pcall(readfile, _G.BossAimAssist_LocalPath .. path)
+        if ok and content then
+            return content
+        end
+    end
+    return nil
+end
+
+local mainContent = loadLocalFile("Core/Main.lua")
+if mainContent then
+    print("âœ… [Loader] Loading Star Glitcher from local workspace...")
+    local chunk, err = loadstring(mainContent, "=Core/Main.lua")
+    if chunk then
+        chunk()
+    else
+        warn("âŒ [Loader] Failed to compile Main.lua: " .. tostring(err))
+    end
+else
+    warn("âŒ [Loader] Could not find Core/Main.lua in workspace/" .. _G.BossAimAssist_LocalPath)
+    warn("Please ensure you have copied the folder correctly to your executor's workspace.")
+end
 ]====],
     ["Modules/Combat/Aimbot.lua"] = [====[local Workspace = game:GetService("Workspace")
 
@@ -1080,6 +1116,50 @@ local function buildTargetRay(origin, targetPos, length)
     return Ray.new(origin, direction)
 end
 
+local function getEntryExtents(entry, part)
+    local extents = part and part.Size or Vector3.new(2, 2, 2)
+    local model = entry and entry.Model
+
+    if model then
+        local ok, modelExtents = pcall(model.GetExtentsSize, model)
+        if ok and typeof(modelExtents) == "Vector3" then
+            extents = Vector3.new(
+                math.max(extents.X, modelExtents.X),
+                math.max(extents.Y, modelExtents.Y),
+                math.max(extents.Z, modelExtents.Z)
+            )
+        end
+    end
+
+    return extents
+end
+
+local function classifyAimProfile(entry, part, extents)
+    if part and part.Shape == Enum.PartType.Ball then
+        return "sphere"
+    end
+
+    if entry and entry.Humanoid then
+        local isMini = math.min(extents.X, extents.Y, extents.Z) <= 2.4
+            or extents.Y <= 4.3
+            or (part and part.Size.Y <= 2.6)
+            or entry.Humanoid.HipHeight <= 1.5
+
+        return isMini and "mini_humanoid" or "humanoid"
+    end
+
+    return "box"
+end
+
+local function clampBoxOffset(offset, extents, innerScale)
+    local half = extents * 0.5 * innerScale
+    return Vector3.new(
+        math.clamp(offset.X, -half.X, half.X),
+        math.clamp(offset.Y, -half.Y, half.Y),
+        math.clamp(offset.Z, -half.Z, half.Z)
+    )
+end
+
 local function ensureHookState()
     local hookState = getgenv()[GLOBAL_HOOK_KEY]
     if hookState then
@@ -1212,6 +1292,59 @@ function SilentAim:_isRedirectActive()
         or (now - self._lastRedirectTime) <= REDIRECT_WINDOW
 end
 
+function SilentAim:_resolveAdaptiveTargetPos(targetPart, targetPos, currentEntry)
+    if not targetPart or not targetPos then
+        return targetPos
+    end
+
+    local extents = getEntryExtents(currentEntry, targetPart)
+    local minAxis = math.min(extents.X, extents.Y, extents.Z)
+    local maxAxis = math.max(extents.X, extents.Y, extents.Z)
+    local profile = classifyAimProfile(currentEntry, targetPart, extents)
+
+    local center = targetPart.Position
+    if profile == "mini_humanoid" then
+        center = center + Vector3.new(0, math.clamp(extents.Y * 0.12, 0.16, 0.4), 0)
+    elseif profile == "humanoid" then
+        center = center + Vector3.new(0, math.clamp(extents.Y * 0.05, 0.08, 0.22), 0)
+    end
+
+    local rawOffset = targetPos - center
+    if rawOffset.Magnitude <= 0.001 then
+        return center
+    end
+
+    local tinyAlpha = math.clamp((2.8 - minAxis) / 1.8, 0, 1)
+    local narrowAlpha = math.clamp((4.2 - maxAxis) / 2.6, 0, 1)
+    local centerBias = math.max(tinyAlpha, narrowAlpha * 0.75)
+    local innerScale = 0.42
+
+    if profile == "mini_humanoid" then
+        innerScale = 0.28
+        centerBias = math.max(centerBias, 0.55)
+    elseif profile == "humanoid" then
+        innerScale = 0.34
+        centerBias = math.max(centerBias, 0.2)
+    elseif profile == "sphere" then
+        innerScale = 0.4
+    end
+
+    local clampedOffset
+    if profile == "sphere" then
+        local radius = math.max(minAxis * 0.5 * innerScale, 0.2)
+        clampedOffset = rawOffset.Magnitude > radius and (rawOffset.Unit * radius) or rawOffset
+    else
+        clampedOffset = clampBoxOffset(rawOffset, extents, innerScale)
+    end
+
+    local clampedPos = center + clampedOffset
+    if centerBias > 0 then
+        clampedPos = clampedPos:Lerp(center, math.clamp(centerBias * 0.45, 0, 0.4))
+    end
+
+    return clampedPos
+end
+
 function SilentAim:Init()
     if not hookmetamethod then
         return
@@ -1242,7 +1375,7 @@ end
 function SilentAim:SetState(active, targetPart, targetPos, currentEntry, dt)
     self.Active = active
     self.TargetPartCache = targetPart
-    self.TargetPosCache = targetPos
+    self.TargetPosCache = active and self:_resolveAdaptiveTargetPos(targetPart, targetPos, currentEntry) or targetPos
     self.CurrentTargetEntry = currentEntry
 end
 
@@ -3952,7 +4085,7 @@ function GarbageCollector:_drainQueue(destroyBudget, gcStepSize)
     end
 
     if destroyed > 0 and not self.ResourceManager then
-        -- collectgarbage("step", gcStepSize) -- Restricted environment fix
+        -- collectgarbage("step", gcStepSize) -- Restricted in some environments
     end
 
     return destroyed
@@ -4758,7 +4891,7 @@ function ResourceManager:_step(dt)
     end
 
     if processed > 0 then
-        -- collectgarbage("step", self._gcStep) -- Restricted environment fix
+        -- collectgarbage("step", self._gcStep) -- Restricted in some environments
     end
 
     local pending = self:GetPendingCount()
@@ -5837,6 +5970,27 @@ return function(Window, Options, cleaner, resourceManager)
         end,
     })
 
+    Tab:CreateToggle({
+        Name = "Auto Clean + Update",
+        CurrentValue = Options.AutoUpdateEnabled == true,
+        Flag = "AutoUpdateEnabledFlag",
+        Callback = function(Value)
+            Options.AutoUpdateEnabled = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Update Check Interval",
+        Range = {1, 30},
+        Increment = 1,
+        CurrentValue = Options.AutoUpdateIntervalMinutes or 5,
+        Flag = "AutoUpdateIntervalMinutesFlag",
+        Suffix = " min",
+        Callback = function(Value)
+            Options.AutoUpdateIntervalMinutes = Value
+        end,
+    })
+
     Tab:CreateButton({
         Name = "Clean Memory & Debris Now",
         Callback = function()
@@ -5893,7 +6047,7 @@ return function(Window, Options, cleaner, resourceManager)
     })
 
     Tab:CreateButton({
-        Name = "Clean + Update Script",
+        Name = "Run Clean + Update Now",
         Callback = function()
             local updater = _G.BossAimAssist_Update
             if updater then
@@ -6024,84 +6178,6 @@ return function(Window, Options, cleaner, resourceManager)
 end
 ]====]
 }
-
-local GITHUB_CONFIG = {
-    User = "Ahlstarr-Mayjishan",
-    Repo = "Scripting-Roblox-",
-    Branch = "main",
-    Folder = "STAR GLITCHER ~ REVITALIZED"
-}
-
-local GITHUB_BASE = string.format("https://raw.githubusercontent.com/%s/%s/%s/%s/", GITHUB_CONFIG.User, GITHUB_CONFIG.Repo, GITHUB_CONFIG.Branch, GITHUB_CONFIG.Folder:gsub(" ", "%%20"):gsub("~", "%%7E"))
-local UPDATE_ENTRY_URL = GITHUB_BASE .. "Main.lua"
-local VERSION_URL = GITHUB_BASE .. "Data/Version.lua"
-local BUNDLE_URL = GITHUB_BASE .. "Core/Bundle.lua"
-local loaderSession = tostring(os.time())
-local runtimeModuleCache = {}
-
-local function compileChunk(content, chunkName)
-    local compiler = loadstring or load
-    if not compiler then
-        error("[compile] No Lua compiler available")
-    end
-
-    content = tostring(content):gsub("^\239\187\191", ""):gsub("^﻿", "")
-    local chunk, compileErr = compiler(content, chunkName)
-    if not chunk then
-        error("[compile] " .. tostring(compileErr))
-    end
-    return chunk
-end
-
-local function parseRemoteVersion(content)
-    content = tostring(content or ""):gsub("^\239\187\191", ""):gsub("^﻿", "")
-
-    local directReturn = content:match("^%s*return%s+(%d+)")
-    if directReturn then
-        return tonumber(directReturn)
-    end
-
-    local bundledReturn = content:match('%["Data/Version%.lua"%]%s*=%s*%[====%[return%s+(%d+)')
-    if bundledReturn then
-        return tonumber(bundledReturn)
-    end
-
-    local genericReturn = content:match("return%s+(%d+)")
-    if genericReturn then
-        return tonumber(genericReturn)
-    end
-
-    local chunk = compileChunk(content, "=remote-version")
-    return tonumber(chunk())
-end
-
-local function fetchRemoteVersion()
-    local timestamp = tostring(os.time())
-    local sources = {
-        VERSION_URL .. "?check=" .. timestamp,
-        BUNDLE_URL .. "?check=" .. timestamp,
-    }
-
-    local lastError = nil
-    for _, url in ipairs(sources) do
-        local ok, result = pcall(function()
-            local content = game:HttpGet(url)
-            local parsedVersion = parseRemoteVersion(content)
-            if not parsedVersion then
-                error("Could not parse version from " .. url)
-            end
-            return parsedVersion
-        end)
-
-        if ok and result then
-            return result
-        end
-
-        lastError = result
-    end
-
-    error(lastError or "Remote version sources exhausted")
-end
 
 local function loadBundledModule(path)
     local source = BUNDLED_SOURCES[path]
@@ -6527,6 +6603,33 @@ if not _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED then
         task.wait(1)
         if _G.BossAimAssist_CheckForUpdates then
             _G.BossAimAssist_CheckForUpdates(false)
+        end
+    end)
+end
+
+if not autoUpdateLoopStarted then
+    autoUpdateLoopStarted = true
+    task.spawn(function()
+        local lastCheck = 0
+
+        while _G.BossAimAssist_SessionID == SESSION_ID do
+            task.wait(5)
+
+            if not Options.AutoUpdateEnabled then
+                lastCheck = os.clock()
+                continue
+            end
+
+            local now = os.clock()
+            if (now - lastCheck) < getAutoUpdateIntervalSeconds() then
+                continue
+            end
+
+            lastCheck = now
+            local checker = _G.BossAimAssist_CheckForUpdates
+            if checker then
+                checker(false)
+            end
         end
     end)
 end

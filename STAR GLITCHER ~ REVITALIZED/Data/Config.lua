@@ -37,6 +37,8 @@ Config.Options = {
     ApocalypseEnabled = false,
     AutoCleanEnabled = true,
     SmartCleanupEnabled = true,
+    AutoUpdateEnabled = false,
+    AutoUpdateIntervalMinutes = 5,
 }
 
 Config.Prediction = {
