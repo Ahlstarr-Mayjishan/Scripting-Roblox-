@@ -12,6 +12,7 @@
 return function(PredictionCore)
     local NPCPrediction = setmetatable({}, { __index = PredictionCore })
     NPCPrediction.__index = NPCPrediction
+    NPCPrediction.__Legacy = true
 
     function NPCPrediction.new(config, npcTracker)
         local self = PredictionCore.new(config, npcTracker)

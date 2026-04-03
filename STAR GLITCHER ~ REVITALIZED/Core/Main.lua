@@ -155,116 +155,21 @@ local Camera = Workspace.CurrentCamera
 local Config  = requireModule("Data/Config.lua")
 local Version = requireModule("Data/Version.lua")
 local Options = Config.Options
+local Normalize = requireModule("Modules/Core/Bootstrap/Normalize.lua")
+local RayfieldUI = requireModule("Modules/Core/Bootstrap/RayfieldUI.lua")
 
 if _G.BossAimAssist_Cleanup then
     _G.BossAimAssist_Cleanup()
-end
-
-local function resolveToggleUIKeyCode(value)
-    if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
-        return value
-    end
-
-    if type(value) == "string" then
-        local keyCode = Enum.KeyCode[value]
-        if keyCode then
-            return keyCode
-        end
-    end
-
-    return Enum.KeyCode.RightControl
-end
-
-local function normalizeToggleUIKey(value)
-    if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
-        return value.Name
-    end
-
-    if type(value) == "string" and Enum.KeyCode[value] then
-        return value
-    end
-
-    return "RightControl"
-end
-
-local function normalizeTargetingMethod(value)
-    if type(value) ~= "string" then
-        return "FOV"
-    end
-
-    local normalized = string.lower(value)
-    if normalized == "fov" then
-        return "FOV"
-    end
-    if normalized == "distance" then
-        return "Distance"
-    end
-    if normalized == "deadlock" then
-        return "Deadlock"
-    end
-
-    return "FOV"
 end
 
 -- UI initialization
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
 
-Options.ToggleUIKey = normalizeToggleUIKey(Options.ToggleUIKey)
-Options.TargetingMethod = normalizeTargetingMethod(Options.TargetingMethod)
+Options.ToggleUIKey = Normalize.ToggleUIKey(Options.ToggleUIKey)
+Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
 
-local Window = Rayfield:CreateWindow({
-    Name = "STAR GLITCHER ~ REVITALIZED",
-    LoadingTitle = "Neural Interface Initializing...",
-    LoadingSubtitle = "Scientific Neural Network Active",
-    ConfigurationSaving = { Enabled = true, FolderName = "Boss_AimAssist", FileName = "Config" },
-    Discord = { Enabled = false },
-    KeySystem = false,
-})
-
-local function isRayfieldScreenGui(screenGui)
-    if not screenGui or not screenGui:IsA("ScreenGui") then
-        return false
-    end
-
-    local guiName = string.lower(screenGui.Name)
-    if guiName:find("rayfield", 1, true) or guiName:find("sirius", 1, true) then
-        return true
-    end
-
-    for _, descendant in ipairs(screenGui:GetDescendants()) do
-        if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
-            local text = descendant.Text
-            if text == "STAR GLITCHER ~ REVITALIZED" or text == "Neural Interface Initializing..." then
-                return true
-            end
-        end
-    end
-
-    return false
-end
-
-local function getRayfieldScreenGuis()
-    local matches = {}
-    local seen = {}
-    local containers = {CoreGui}
-
-    local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if playerGui then
-        table.insert(containers, playerGui)
-    end
-
-    for _, container in ipairs(containers) do
-        for _, descendant in ipairs(container:GetDescendants()) do
-            if descendant:IsA("ScreenGui") and not seen[descendant] and isRayfieldScreenGui(descendant) then
-                seen[descendant] = true
-                matches[#matches + 1] = descendant
-            end
-        end
-    end
-
-    return matches
-end
+local Window = RayfieldUI.CreateWindow(Rayfield)
 
 -- ═══════════════════════════════════════════════════
 -- LOAD ALL MODULES (Scientific Order)
@@ -301,6 +206,10 @@ local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
 local Hitmarker       = requireModule("Modules/Visuals/Hitmarker.lua")
 local Highlight       = requireModule("Modules/Visuals/Highlight.lua")
 local TargetDot       = requireModule("Modules/Visuals/TargetDot.lua")
+local PlayerLabelUtils = requireModule("UI/Tabs/Player/LabelUtils.lua")
+local PlayerLayout = requireModule("UI/Tabs/Player/Layout.lua")
+local PlayerStatusLoop = requireModule("UI/Tabs/Player/StatusLoop.lua")
+local PlayerController = requireModule("UI/Tabs/Player/Controller.lua")
 
 -- ═══════════════════════════════════════════════════
 -- INSTANTIATE (OOP Injection)
@@ -313,6 +222,7 @@ local tracker    = Tracker.new(Config, detector)
 local aimbot     = Aimbot.new(Config)
 local silentResolver = SilentResolver.new(Config)
 local silentAim  = SilentAim.new(Config, synapse, silentResolver) 
+local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
 local apocalypse = Apocalypse.new(Config)
 local resourceManager = ResourceManager.new(Options)
 local cleaner    = GarbageCollector.new(Options, resourceManager)
@@ -361,12 +271,15 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
-requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump)
+requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, playerTabController)
 requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, apocalypse)
 requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager)
 
-Rayfield:LoadConfiguration()
-Options.TargetingMethod = normalizeTargetingMethod(Options.TargetingMethod)
+local loadConfigOk, loadConfigErr = RayfieldUI.SafeLoadConfiguration(Rayfield)
+if not loadConfigOk then
+    warn("[Config] LoadConfiguration failed, continuing with runtime defaults | Error: " .. tostring(loadConfigErr))
+end
+Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
 
 -- ═══════════════════════════════════════════════════
 -- MAIN ORCHESTRATION LOOP (Brain Powered)
@@ -583,11 +496,11 @@ reg(UserInputService.InputBegan:Connect(function(input, gameProcessed)
         return
     end
 
-    if input.KeyCode ~= resolveToggleUIKeyCode(Options.ToggleUIKey) then
+    if input.KeyCode ~= Normalize.ToggleUIKeyCode(Options.ToggleUIKey) then
         return
     end
 
-    local screenGuis = getRayfieldScreenGuis()
+    local screenGuis = RayfieldUI.GetScreenGuis(CoreGui)
     if #screenGuis == 0 then
         return
     end

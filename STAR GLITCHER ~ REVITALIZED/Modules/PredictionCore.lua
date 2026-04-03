@@ -16,6 +16,9 @@
 local PredictionCore = {}
 PredictionCore.__index = PredictionCore
 
+PredictionCore.__Legacy = true
+PredictionCore.__RuntimeReplacement = "Modules/Combat/Predictor.lua"
+
 -- ═══ STATIC: Kinematics Helpers (no self) ═══
 -- Dùng PredictionCore.FuncName() thay vì self: để tránh overhead method lookup
 

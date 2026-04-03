@@ -1596,6 +1596,137 @@ end
 
 return TargetSelector
 ]====],
+    ["Modules/Core/Bootstrap/Normalize.lua"] = [====[--[[
+    Normalize.lua - Bootstrap option normalization helpers
+    Job: Keep startup normalization logic out of Core/Main.lua.
+]]
+
+local Normalize = {}
+
+function Normalize.ToggleUIKeyCode(value)
+    if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
+        return value
+    end
+
+    if type(value) == "string" then
+        local keyCode = Enum.KeyCode[value]
+        if keyCode then
+            return keyCode
+        end
+    end
+
+    return Enum.KeyCode.RightControl
+end
+
+function Normalize.ToggleUIKey(value)
+    if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
+        return value.Name
+    end
+
+    if type(value) == "string" and Enum.KeyCode[value] then
+        return value
+    end
+
+    return "RightControl"
+end
+
+function Normalize.TargetingMethod(value)
+    if type(value) ~= "string" then
+        return "FOV"
+    end
+
+    local normalized = string.lower(value)
+    if normalized == "fov" then
+        return "FOV"
+    end
+    if normalized == "distance" then
+        return "Distance"
+    end
+    if normalized == "deadlock" then
+        return "Deadlock"
+    end
+
+    return "FOV"
+end
+
+return Normalize
+]====],
+    ["Modules/Core/Bootstrap/RayfieldUI.lua"] = [====[--[[
+    RayfieldUI.lua - Bootstrap UI helper for Rayfield startup
+    Job: Create the main window, discover Rayfield ScreenGuis, and load config safely.
+]]
+
+local Players = game:GetService("Players")
+
+local RayfieldUI = {}
+
+function RayfieldUI.CreateWindow(rayfield)
+    return rayfield:CreateWindow({
+        Name = "STAR GLITCHER ~ REVITALIZED",
+        LoadingTitle = "Neural Interface Initializing...",
+        LoadingSubtitle = "Scientific Neural Network Active",
+        ConfigurationSaving = { Enabled = true, FolderName = "Boss_AimAssist", FileName = "Config" },
+        Discord = { Enabled = false },
+        KeySystem = false,
+    })
+end
+
+function RayfieldUI.IsRayfieldScreenGui(screenGui)
+    if not screenGui or not screenGui:IsA("ScreenGui") then
+        return false
+    end
+
+    local guiName = string.lower(screenGui.Name)
+    if guiName:find("rayfield", 1, true) or guiName:find("sirius", 1, true) then
+        return true
+    end
+
+    for _, descendant in ipairs(screenGui:GetDescendants()) do
+        if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
+            local text = descendant.Text
+            if text == "STAR GLITCHER ~ REVITALIZED" or text == "Neural Interface Initializing..." then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+function RayfieldUI.GetScreenGuis(coreGui)
+    local matches = {}
+    local seen = {}
+    local containers = { coreGui }
+
+    local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+    if playerGui then
+        table.insert(containers, playerGui)
+    end
+
+    for _, container in ipairs(containers) do
+        for _, descendant in ipairs(container:GetDescendants()) do
+            if descendant:IsA("ScreenGui") and not seen[descendant] and RayfieldUI.IsRayfieldScreenGui(descendant) then
+                seen[descendant] = true
+                matches[#matches + 1] = descendant
+            end
+        end
+    end
+
+    return matches
+end
+
+function RayfieldUI.SafeLoadConfiguration(rayfield)
+    local ok, err = pcall(function()
+        if rayfield and rayfield.LoadConfiguration then
+            rayfield:LoadConfiguration()
+        end
+    end)
+
+    return ok, err
+end
+
+return RayfieldUI
+]====],
     ["Modules/Core/Brain.lua"] = [====[--[[
     Brain.lua - Central Nervous System (Orchestrator)
     Analogy: The Spinal Cord/CNS connecting all Brain Lobes.
@@ -1892,6 +2023,46 @@ function TemporalLobe:Process(originPos, dt)
 end
 
 return TemporalLobe
+]====],
+    ["Modules/Legacy/Prediction/CompatAdapter.lua"] = [====[--[[
+    CompatAdapter.lua - Bridge from the legacy PredictionCore interface to the modern predictor pipeline
+    Job: Provide a compatibility seam so future callers can stop depending on the God-file API.
+]]
+
+local CompatAdapter = {}
+CompatAdapter.__index = CompatAdapter
+
+function CompatAdapter.new(predictor)
+    local self = setmetatable({}, CompatAdapter)
+    self.Predictor = predictor
+    return self
+end
+
+function CompatAdapter:PredictTargetPosition(origin, part, entry, dt)
+    if not self.Predictor or not part then
+        return part and part.Position or nil
+    end
+
+    local predicted = self.Predictor:Predict(origin, part, entry, dt or (1 / 60))
+    return predicted
+end
+
+function CompatAdapter:PredictWithStrafe(origin, part, entry, dt)
+    return self:PredictTargetPosition(origin, part, entry, dt)
+end
+
+function CompatAdapter:GetSelectionTargetPosition(origin, part, entry, _isCurrentTarget, dt)
+    return self:PredictTargetPosition(origin, part, entry, dt)
+end
+
+function CompatAdapter:StabilizeTargetPosition(entry, _part, rawPos)
+    if entry then
+        entry.StabilizedTargetPos = rawPos
+    end
+    return rawPos
+end
+
+return CompatAdapter
 ]====],
     ["Modules/Movement/AntiSlowdown.lua"] = [====[--[[
     AntiSlowdown.lua - Neuro-Motor Defense Module
@@ -2809,6 +2980,7 @@ return SpeedSpoof
 return function(PredictionCore)
     local NPCPrediction = setmetatable({}, { __index = PredictionCore })
     NPCPrediction.__index = NPCPrediction
+    NPCPrediction.__Legacy = true
 
     function NPCPrediction.new(config, npcTracker)
         local self = PredictionCore.new(config, npcTracker)
@@ -2848,6 +3020,9 @@ end
 
 local PredictionCore = {}
 PredictionCore.__index = PredictionCore
+
+PredictionCore.__Legacy = true
+PredictionCore.__RuntimeReplacement = "Modules/Combat/Predictor.lua"
 
 -- â•â•â• STATIC: Kinematics Helpers (no self) â•â•â•
 -- DÃ¹ng PredictionCore.FuncName() thay vÃ¬ self: Ä‘á»ƒ trÃ¡nh overhead method lookup
@@ -3810,6 +3985,7 @@ return PredictionCore
 return function(PredictionCore)
     local PvPPrediction = setmetatable({}, { __index = PredictionCore })
     PvPPrediction.__index = PvPPrediction
+    PvPPrediction.__Legacy = true
 
     function PvPPrediction.new(config, npcTracker)
         local self = PredictionCore.new(config, npcTracker)
@@ -5698,36 +5874,78 @@ return function(Window, Options, apocalypse)
     return Tab
 end
 ]====],
-    ["UI/Tabs/PlayerTab.lua"] = [====[--[[
-    PlayerTab.lua - Tab Player
-    No Slowdown, No Delay, No Stun, Custom Move Speed.
-    Updated: Active status monitoring for anti-debuffs.
+    ["UI/Tabs/Player/Controller.lua"] = [====[--[[
+    Controller.lua - Player tab controller
+    Job: Compose layout and status refresh helpers for the Player tab.
 ]]
 
-return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost)
-    local Tab = Window:CreateTab("Player", 4483362458)
+local Controller = {}
+Controller.__index = Controller
 
-    local function setLabelText(label, text)
-        if not label then
+function Controller.new(layout, statusLoop, labelUtils)
+    local self = setmetatable({}, Controller)
+    self.Layout = layout
+    self.StatusLoop = statusLoop
+    self.LabelUtils = labelUtils
+    return self
+end
+
+function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost)
+    local Tab = Window:CreateTab("Player", 4483362458)
+    local refs = self.Layout.Build(Tab, Options)
+
+    self.StatusLoop.Start(refs, {
+        noSlowdown = noSlowdown,
+        noStun = noStun,
+        speedMultiplier = speedMultiplier,
+        gravityController = gravityController,
+        floatController = floatController,
+        jumpBoost = jumpBoost,
+    }, self.LabelUtils)
+
+    return Tab
+end
+
+return Controller
+]====],
+    ["UI/Tabs/Player/LabelUtils.lua"] = [====[--[[
+    LabelUtils.lua - Shared label helpers for Player tab UI
+]]
+
+local LabelUtils = {}
+
+function LabelUtils.SetText(label, text)
+    if not label then
+        return
+    end
+
+    if type(label) == "table" and type(label.Set) == "function" then
+        local ok = pcall(function()
+            label:Set(text)
+        end)
+        if ok then
             return
         end
+    end
 
-        if type(label) == "table" and type(label.Set) == "function" then
-            local ok = pcall(function()
-                label:Set(text)
-            end)
-            if ok then
-                return
-            end
-        end
-
-        if typeof(label) == "Instance" then
-            local textLabel = label:IsA("TextLabel") and label or label:FindFirstChildWhichIsA("TextLabel", true)
-            if textLabel then
-                textLabel.Text = text
-            end
+    if typeof(label) == "Instance" then
+        local textLabel = label:IsA("TextLabel") and label or label:FindFirstChildWhichIsA("TextLabel", true)
+        if textLabel then
+            textLabel.Text = text
         end
     end
+end
+
+return LabelUtils
+]====],
+    ["UI/Tabs/Player/Layout.lua"] = [====[--[[
+    Layout.lua - Player tab layout builder
+]]
+
+local Layout = {}
+
+function Layout.Build(Tab, Options)
+    local refs = {}
 
     Tab:CreateSection("Movement")
 
@@ -5740,18 +5958,6 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             if Value then
                 Options.SpeedMultiplierEnabled = false
             end
-        end,
-    })
-
-    Tab:CreateSlider({
-        Name = "Walk Speed (Fixed)",
-        Range = { 1, 250 },
-        Increment = 1,
-        CurrentValue = Options.CustomMoveSpeed or 16,
-        Flag = "CustomMoveSpeedFlag",
-        Suffix = " studs/s",
-        Callback = function(Value)
-            Options.CustomMoveSpeed = Value
         end,
     })
 
@@ -5769,19 +5975,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
         end,
     })
 
-    Tab:CreateSlider({
-        Name = "Multiplier Factor",
-        Range = { 1, 5 },
-        Increment = 0.1,
-        CurrentValue = Options.SpeedMultiplier or 1.0,
-        Flag = "SpeedMultiplierFlag",
-        Suffix = "x",
-        Callback = function(Value)
-            Options.SpeedMultiplier = Value
-        end,
-    })
-
-    local speedMultiplierLabel = Tab:CreateLabel("Multi Speed Status: Idle")
+    refs.speedMultiplierLabel = Tab:CreateLabel("Multi Speed Status: Idle")
 
     Tab:CreateSection("Mobility")
 
@@ -5794,35 +5988,12 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
         end,
     })
 
-    Tab:CreateSlider({
-        Name = "Jump Power",
-        Range = { 1, 300 },
-        Increment = 1,
-        CurrentValue = Options.JumpBoostPower or 70,
-        Flag = "JumpBoostPowerFlag",
-        Callback = function(Value)
-            Options.JumpBoostPower = Value
-        end,
-    })
-
     Tab:CreateToggle({
         Name = "Float",
         CurrentValue = Options.FloatEnabled,
         Flag = "FloatEnabledFlag",
         Callback = function(Value)
             Options.FloatEnabled = Value
-        end,
-    })
-
-    Tab:CreateSlider({
-        Name = "Float Fall Speed",
-        Range = { 0, 40 },
-        Increment = 1,
-        CurrentValue = Options.FloatFallSpeed or 8,
-        Flag = "FloatFallSpeedFlag",
-        Suffix = " studs/s",
-        Callback = function(Value)
-            Options.FloatFallSpeed = Value
         end,
     })
 
@@ -5835,24 +6006,13 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
         end,
     })
 
-    Tab:CreateSlider({
-        Name = "Gravity Value",
-        Range = { 0, 500 },
-        Increment = 1,
-        CurrentValue = Options.GravityValue or 196.2,
-        Flag = "GravityValueFlag",
-        Callback = function(Value)
-            Options.GravityValue = Value
-        end,
-    })
-
-    local jumpBoostLabel = Tab:CreateLabel("Jump Boost Status: Idle")
-    local floatLabel = Tab:CreateLabel("Float Status: Idle")
-    local gravityLabel = Tab:CreateLabel("Gravity Status: Idle")
+    refs.jumpBoostLabel = Tab:CreateLabel("Jump Boost Status: Idle")
+    refs.floatLabel = Tab:CreateLabel("Float Status: Idle")
+    refs.gravityLabel = Tab:CreateLabel("Gravity Status: Idle")
 
     Tab:CreateSection("Anti-Debuff")
 
-    local slowdownLabel = Tab:CreateLabel("No Slowdown: Idle")
+    refs.slowdownLabel = Tab:CreateLabel("No Slowdown: Idle")
     Tab:CreateToggle({
         Name = "No Slowdown",
         CurrentValue = Options.NoSlowdown,
@@ -5862,7 +6022,7 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
         end,
     })
 
-    local stunLabel = Tab:CreateLabel("No Stun: Idle")
+    refs.stunLabel = Tab:CreateLabel("No Stun: Idle")
     Tab:CreateToggle({
         Name = "No Stun",
         CurrentValue = Options.NoStun,
@@ -5881,6 +6041,78 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
         end,
     })
 
+    Tab:CreateSection("Custom")
+
+    Tab:CreateSlider({
+        Name = "Walk Speed (Fixed)",
+        Range = { 1, 250 },
+        Increment = 1,
+        CurrentValue = Options.CustomMoveSpeed or 16,
+        Flag = "CustomMoveSpeedFlag",
+        Suffix = " studs/s",
+        Callback = function(Value)
+            Options.CustomMoveSpeed = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Multiplier Factor",
+        Range = { 1, 5 },
+        Increment = 0.1,
+        CurrentValue = Options.SpeedMultiplier or 1.0,
+        Flag = "SpeedMultiplierFlag",
+        Suffix = "x",
+        Callback = function(Value)
+            Options.SpeedMultiplier = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Jump Power",
+        Range = { 1, 300 },
+        Increment = 1,
+        CurrentValue = Options.JumpBoostPower or 70,
+        Flag = "JumpBoostPowerFlag",
+        Callback = function(Value)
+            Options.JumpBoostPower = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Float Fall Speed",
+        Range = { 0, 40 },
+        Increment = 1,
+        CurrentValue = Options.FloatFallSpeed or 8,
+        Flag = "FloatFallSpeedFlag",
+        Suffix = " studs/s",
+        Callback = function(Value)
+            Options.FloatFallSpeed = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Gravity Value",
+        Range = { 0, 500 },
+        Increment = 1,
+        CurrentValue = Options.GravityValue or 196.2,
+        Flag = "GravityValueFlag",
+        Callback = function(Value)
+            Options.GravityValue = Value
+        end,
+    })
+
+    return refs
+end
+
+return Layout
+]====],
+    ["UI/Tabs/Player/StatusLoop.lua"] = [====[--[[
+    StatusLoop.lua - Player tab active status refresh loop
+]]
+
+local StatusLoop = {}
+
+function StatusLoop.Start(refs, deps, labelUtils)
     task.spawn(function()
         local lastSlowdownText
         local lastStunText
@@ -5890,50 +6122,50 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
         local lastGravityText
 
         while true do
-            if noSlowdown then
-                local nextText = "Slowdown Status: " .. tostring(noSlowdown.Status)
+            if deps.noSlowdown then
+                local nextText = "Slowdown Status: " .. tostring(deps.noSlowdown.Status)
                 if nextText ~= lastSlowdownText then
-                    setLabelText(slowdownLabel, nextText)
+                    labelUtils.SetText(refs.slowdownLabel, nextText)
                     lastSlowdownText = nextText
                 end
             end
 
-            if noStun then
-                local nextText = "Stun Status: " .. tostring(noStun.Status)
+            if deps.noStun then
+                local nextText = "Stun Status: " .. tostring(deps.noStun.Status)
                 if nextText ~= lastStunText then
-                    setLabelText(stunLabel, nextText)
+                    labelUtils.SetText(refs.stunLabel, nextText)
                     lastStunText = nextText
                 end
             end
 
-            if speedMultiplier then
-                local nextText = "Multi Speed Status: " .. tostring(speedMultiplier.Status)
+            if deps.speedMultiplier then
+                local nextText = "Multi Speed Status: " .. tostring(deps.speedMultiplier.Status)
                 if nextText ~= lastSpeedText then
-                    setLabelText(speedMultiplierLabel, nextText)
+                    labelUtils.SetText(refs.speedMultiplierLabel, nextText)
                     lastSpeedText = nextText
                 end
             end
 
-            if jumpBoost then
-                local nextText = "Jump Boost Status: " .. tostring(jumpBoost.Status)
+            if deps.jumpBoost then
+                local nextText = "Jump Boost Status: " .. tostring(deps.jumpBoost.Status)
                 if nextText ~= lastJumpText then
-                    setLabelText(jumpBoostLabel, nextText)
+                    labelUtils.SetText(refs.jumpBoostLabel, nextText)
                     lastJumpText = nextText
                 end
             end
 
-            if floatController then
-                local nextText = "Float Status: " .. tostring(floatController.Status)
+            if deps.floatController then
+                local nextText = "Float Status: " .. tostring(deps.floatController.Status)
                 if nextText ~= lastFloatText then
-                    setLabelText(floatLabel, nextText)
+                    labelUtils.SetText(refs.floatLabel, nextText)
                     lastFloatText = nextText
                 end
             end
 
-            if gravityController then
-                local nextText = "Gravity Status: " .. tostring(gravityController.Status)
+            if deps.gravityController then
+                local nextText = "Gravity Status: " .. tostring(deps.gravityController.Status)
                 if nextText ~= lastGravityText then
-                    setLabelText(gravityLabel, nextText)
+                    labelUtils.SetText(refs.gravityLabel, nextText)
                     lastGravityText = nextText
                 end
             end
@@ -5941,19 +6173,21 @@ return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityCon
             task.wait(0.5)
         end
     end)
+end
 
-    Tab:CreateSection("Maintenance")
+return StatusLoop
+]====],
+    ["UI/Tabs/PlayerTab.lua"] = [====[--[[
+    PlayerTab.lua - Compatibility wrapper
+    Job: Delegate Player tab construction to an injected controller.
+]]
 
-    if noSlowdown then
-        Tab:CreateButton({
-            Name = "Re-capture Base Stats (Fixed Speed)",
-            Callback = function()
-                noSlowdown:CaptureBaseStats()
-            end,
-        })
+return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, controller)
+    if controller and controller.Build then
+        return controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost)
     end
 
-    return Tab
+    error("PlayerTab controller was not provided", 2)
 end
 ]====],
     ["UI/Tabs/PredictionTab.lua"] = [====[--[[
@@ -6049,7 +6283,7 @@ return function(Window, Options, cleaner, resourceManager)
     local resourceLabel = Tab:CreateLabel("Resource Manager: Idle")
 
     Tab:CreateToggle({
-        Name = "Auto-Clean Debris (60s interval)",
+        Name = "Auto-Clean Debris",
         CurrentValue = Options.AutoCleanEnabled,
         Flag = "AutoCleanFlag",
         Callback = function(Value)
@@ -6072,18 +6306,6 @@ return function(Window, Options, cleaner, resourceManager)
         Flag = "AutoUpdateEnabledFlag",
         Callback = function(Value)
             Options.AutoUpdateEnabled = Value
-        end,
-    })
-
-    Tab:CreateSlider({
-        Name = "Update Check Interval",
-        Range = {1, 30},
-        Increment = 1,
-        CurrentValue = Options.AutoUpdateIntervalMinutes or 5,
-        Flag = "AutoUpdateIntervalMinutesFlag",
-        Suffix = " min",
-        Callback = function(Value)
-            Options.AutoUpdateIntervalMinutes = Value
         end,
     })
 
@@ -6245,28 +6467,59 @@ return function(Window, Options, cleaner, resourceManager)
         end
     end)
 
-    Tab:CreateButton({
-        Name = "Install Auto-Execute",
-        Callback = function()
-            local command = [[loadstring(game:HttpGet("https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Main.lua?v=" .. tostring(os.time())))()]]
-            if writefile then
-                pcall(function()
-                    writefile("BossAimAssist_Loader.lua", command)
+    Tab:CreateToggle({
+        Name = "Auto-Execute",
+        CurrentValue = Options.AutoExecuteEnabled or false,
+        Flag = "AutoExecuteFlag",
+        Callback = function(Value)
+            Options.AutoExecuteEnabled = Value
+            if Value then
+                local command = [[loadstring(game:HttpGet("https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Main.lua?v=" .. tostring(os.time())))()]]
+                if writefile then
+                    pcall(function()
+                        writefile("BossAimAssist_Loader.lua", command)
+                        Rayfield:Notify({
+                            Title = "Auto-Execute Enabled",
+                            Content = "Loader saved to workspace/BossAimAssist_Loader.lua. Move this to your autoexec folder.",
+                            Duration = 5,
+                            Image = 4483362458,
+                        })
+                    end)
+                else
                     Rayfield:Notify({
-                        Title = "Success",
-                        Content = "Loader saved to workspace/BossAimAssist_Loader.lua. Move this to your autoexec folder.",
+                        Title = "Error",
+                        Content = "Your executor does not support writefile.",
                         Duration = 5,
                         Image = 4483362458,
                     })
-                end)
+                end
             else
-                Rayfield:Notify({
-                    Title = "Error",
-                    Content = "Your executor does not support writefile.",
-                    Duration = 5,
-                    Image = 4483362458,
-                })
+                if delfile then
+                    pcall(function()
+                        delfile("BossAimAssist_Loader.lua")
+                        Rayfield:Notify({
+                            Title = "Auto-Execute Disabled",
+                            Content = "Loader file removed from workspace.",
+                            Duration = 5,
+                            Image = 4483362458,
+                        })
+                    end)
+                end
             end
+        end,
+    })
+
+    Tab:CreateSection("Custom")
+
+    Tab:CreateSlider({
+        Name = "Update Check Interval",
+        Range = { 1, 30 },
+        Increment = 1,
+        CurrentValue = Options.AutoUpdateIntervalMinutes or 5,
+        Flag = "AutoUpdateIntervalMinutesFlag",
+        Suffix = " min",
+        Callback = function(Value)
+            Options.AutoUpdateIntervalMinutes = Value
         end,
     })
 
@@ -6319,116 +6572,21 @@ local Camera = Workspace.CurrentCamera
 local Config  = requireModule("Data/Config.lua")
 local Version = requireModule("Data/Version.lua")
 local Options = Config.Options
+local Normalize = requireModule("Modules/Core/Bootstrap/Normalize.lua")
+local RayfieldUI = requireModule("Modules/Core/Bootstrap/RayfieldUI.lua")
 
 if _G.BossAimAssist_Cleanup then
     _G.BossAimAssist_Cleanup()
-end
-
-local function resolveToggleUIKeyCode(value)
-    if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
-        return value
-    end
-
-    if type(value) == "string" then
-        local keyCode = Enum.KeyCode[value]
-        if keyCode then
-            return keyCode
-        end
-    end
-
-    return Enum.KeyCode.RightControl
-end
-
-local function normalizeToggleUIKey(value)
-    if typeof(value) == "EnumItem" and value.EnumType == Enum.KeyCode then
-        return value.Name
-    end
-
-    if type(value) == "string" and Enum.KeyCode[value] then
-        return value
-    end
-
-    return "RightControl"
-end
-
-local function normalizeTargetingMethod(value)
-    if type(value) ~= "string" then
-        return "FOV"
-    end
-
-    local normalized = string.lower(value)
-    if normalized == "fov" then
-        return "FOV"
-    end
-    if normalized == "distance" then
-        return "Distance"
-    end
-    if normalized == "deadlock" then
-        return "Deadlock"
-    end
-
-    return "FOV"
 end
 
 -- UI initialization
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
 
-Options.ToggleUIKey = normalizeToggleUIKey(Options.ToggleUIKey)
-Options.TargetingMethod = normalizeTargetingMethod(Options.TargetingMethod)
+Options.ToggleUIKey = Normalize.ToggleUIKey(Options.ToggleUIKey)
+Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
 
-local Window = Rayfield:CreateWindow({
-    Name = "STAR GLITCHER ~ REVITALIZED",
-    LoadingTitle = "Neural Interface Initializing...",
-    LoadingSubtitle = "Scientific Neural Network Active",
-    ConfigurationSaving = { Enabled = true, FolderName = "Boss_AimAssist", FileName = "Config" },
-    Discord = { Enabled = false },
-    KeySystem = false,
-})
-
-local function isRayfieldScreenGui(screenGui)
-    if not screenGui or not screenGui:IsA("ScreenGui") then
-        return false
-    end
-
-    local guiName = string.lower(screenGui.Name)
-    if guiName:find("rayfield", 1, true) or guiName:find("sirius", 1, true) then
-        return true
-    end
-
-    for _, descendant in ipairs(screenGui:GetDescendants()) do
-        if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
-            local text = descendant.Text
-            if text == "STAR GLITCHER ~ REVITALIZED" or text == "Neural Interface Initializing..." then
-                return true
-            end
-        end
-    end
-
-    return false
-end
-
-local function getRayfieldScreenGuis()
-    local matches = {}
-    local seen = {}
-    local containers = {CoreGui}
-
-    local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if playerGui then
-        table.insert(containers, playerGui)
-    end
-
-    for _, container in ipairs(containers) do
-        for _, descendant in ipairs(container:GetDescendants()) do
-            if descendant:IsA("ScreenGui") and not seen[descendant] and isRayfieldScreenGui(descendant) then
-                seen[descendant] = true
-                matches[#matches + 1] = descendant
-            end
-        end
-    end
-
-    return matches
-end
+local Window = RayfieldUI.CreateWindow(Rayfield)
 
 -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- LOAD ALL MODULES (Scientific Order)
@@ -6465,6 +6623,10 @@ local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
 local Hitmarker       = requireModule("Modules/Visuals/Hitmarker.lua")
 local Highlight       = requireModule("Modules/Visuals/Highlight.lua")
 local TargetDot       = requireModule("Modules/Visuals/TargetDot.lua")
+local PlayerLabelUtils = requireModule("UI/Tabs/Player/LabelUtils.lua")
+local PlayerLayout = requireModule("UI/Tabs/Player/Layout.lua")
+local PlayerStatusLoop = requireModule("UI/Tabs/Player/StatusLoop.lua")
+local PlayerController = requireModule("UI/Tabs/Player/Controller.lua")
 
 -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- INSTANTIATE (OOP Injection)
@@ -6477,6 +6639,7 @@ local tracker    = Tracker.new(Config, detector)
 local aimbot     = Aimbot.new(Config)
 local silentResolver = SilentResolver.new(Config)
 local silentAim  = SilentAim.new(Config, synapse, silentResolver) 
+local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
 local apocalypse = Apocalypse.new(Config)
 local resourceManager = ResourceManager.new(Options)
 local cleaner    = GarbageCollector.new(Options, resourceManager)
@@ -6525,12 +6688,15 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
-requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump)
+requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, playerTabController)
 requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, apocalypse)
 requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager)
 
-Rayfield:LoadConfiguration()
-Options.TargetingMethod = normalizeTargetingMethod(Options.TargetingMethod)
+local loadConfigOk, loadConfigErr = RayfieldUI.SafeLoadConfiguration(Rayfield)
+if not loadConfigOk then
+    warn("[Config] LoadConfiguration failed, continuing with runtime defaults | Error: " .. tostring(loadConfigErr))
+end
+Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
 
 -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 -- MAIN ORCHESTRATION LOOP (Brain Powered)
@@ -6747,11 +6913,11 @@ reg(UserInputService.InputBegan:Connect(function(input, gameProcessed)
         return
     end
 
-    if input.KeyCode ~= resolveToggleUIKeyCode(Options.ToggleUIKey) then
+    if input.KeyCode ~= Normalize.ToggleUIKeyCode(Options.ToggleUIKey) then
         return
     end
 
-    local screenGuis = getRayfieldScreenGuis()
+    local screenGuis = RayfieldUI.GetScreenGuis(CoreGui)
     if #screenGuis == 0 then
         return
     end
