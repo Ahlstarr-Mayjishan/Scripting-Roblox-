@@ -233,15 +233,76 @@ function Apocalypse.new(config)
     local self = setmetatable({}, Apocalypse)
     self.Options = config.Options
     self.Active = config.Options.ApocalypseEnabled == true
+    self.Scheduler = config.TaskScheduler
 
     self._bossPos = Vector3.zero
     self._bossModel = nil
+    self._bossScore = -math.huge
     self._bossExists = false
     self._connections = {}
     self._destroyed = false
     self._hookState = nil
+    self._deepScanPending = false
+    self._childScanInterval = 0.12
 
     return self
+end
+
+function Apocalypse:_scheduleDeepScan(root)
+    if not self.Scheduler or self._deepScanPending or not root then
+        return
+    end
+
+    self._deepScanPending = true
+
+    local queue = { root }
+    local cursor = 1
+    local bestScore = self._bossScore or -math.huge
+    local bestPrimary = nil
+    local jobKey = "__STAR_GLITCHER_APOCALYPSE_DEEP_SCAN"
+    local selfRef = self
+
+    local function step()
+        if selfRef._destroyed or not selfRef.Active then
+            selfRef._deepScanPending = false
+            return
+        end
+
+        local processed = 0
+        while cursor <= #queue and processed < 24 do
+            local node = queue[cursor]
+            cursor = cursor + 1
+            processed = processed + 1
+
+            if node:IsA("Model") then
+                local score, primary = scoreBossModel(node)
+                if score and primary and score > bestScore then
+                    bestScore = score
+                    bestPrimary = primary
+                end
+            end
+
+            local children = node:GetChildren()
+            for i = 1, #children do
+                queue[#queue + 1] = children[i]
+            end
+        end
+
+        if cursor <= #queue then
+            selfRef.Scheduler:Enqueue(step, jobKey)
+            return
+        end
+
+        selfRef._deepScanPending = false
+        if bestPrimary and bestScore > (selfRef._bossScore or -math.huge) then
+            selfRef._bossPos = bestPrimary.Position
+            selfRef._bossModel = bestPrimary.Parent
+            selfRef._bossScore = bestScore
+            selfRef._bossExists = true
+        end
+    end
+
+    self.Scheduler:Enqueue(step, jobKey)
 end
 
 function Apocalypse:Init()
@@ -260,11 +321,12 @@ function Apocalypse:Init()
     table.insert(self._connections, RunService.Heartbeat:Connect(function()
         if selfRef._destroyed or not selfRef.Active then
             selfRef._bossExists = false
+            selfRef._bossScore = -math.huge
             return
         end
 
         local now = os.clock()
-        if now - lastTrackerUpdate < 0.03 then
+        if now - lastTrackerUpdate < selfRef._childScanInterval then
             return
         end
         lastTrackerUpdate = now
@@ -285,27 +347,30 @@ function Apocalypse:Init()
             end
         end
 
-        if (not found or foundScore < 6) and (now - lastFullScan > 1.5) then
-            lastFullScan = now
-            if entities then
-                for _, descendant in ipairs(entities:GetDescendants()) do
-                    local model = descendant:IsA("Model") and descendant or descendant:FindFirstAncestorOfClass("Model")
-                    local score, primary = scoreBossModel(model)
-                    if score and primary and score > foundScore then
-                        found = primary
-                        foundScore = score
-                    end
-                end
-            end
-        end
-
         if found then
             selfRef._bossPos = found.Position
             selfRef._bossModel = found.Parent
+            selfRef._bossScore = foundScore
             selfRef._bossExists = true
+        elseif selfRef._bossModel and selfRef._bossModel.Parent then
+            local currentPrimary = getPrimaryPart(selfRef._bossModel)
+            if currentPrimary then
+                selfRef._bossPos = currentPrimary.Position
+                selfRef._bossExists = true
+            else
+                selfRef._bossExists = false
+                selfRef._bossModel = nil
+                selfRef._bossScore = -math.huge
+            end
         else
             selfRef._bossExists = false
             selfRef._bossModel = nil
+            selfRef._bossScore = -math.huge
+        end
+
+        if (not found or foundScore < 6) and (now - lastFullScan > 1.5) then
+            lastFullScan = now
+            selfRef:_scheduleDeepScan(entities)
         end
     end))
 
@@ -377,6 +442,7 @@ function Apocalypse:SetState(active)
     if not active then
         self._bossExists = false
         self._bossModel = nil
+        self._bossScore = -math.huge
     end
 end
 
@@ -385,6 +451,8 @@ function Apocalypse:Destroy()
     self.Active = false
     self._bossExists = false
     self._bossModel = nil
+    self._bossScore = -math.huge
+    self._deepScanPending = false
 
     if self._hookState and self._hookState.Instance == self then
         self._hookState.Instance = nil

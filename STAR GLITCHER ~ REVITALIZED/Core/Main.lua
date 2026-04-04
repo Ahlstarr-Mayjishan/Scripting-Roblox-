@@ -182,6 +182,7 @@ local LocalCharacter = requireModule("Modules/Utils/LocalCharacter.lua")
 local Synapse         = requireModule("Modules/Utils/Synapse.lua")
 local Kalman          = requireModule("Modules/Utils/Math/Kalman.lua")
 local ResourceManager = requireModule("Modules/Utils/ResourceManager.lua")
+local TaskScheduler   = requireModule("Modules/Utils/TaskScheduler.lua")
 
 local BasePred        = requireModule("Modules/Combat/Prediction/Base.lua")
 local Predictor       = requireModule("Modules/Combat/Predictor.lua")
@@ -223,8 +224,10 @@ local aimbot     = Aimbot.new(Config)
 local silentResolver = SilentResolver.new(Config)
 local silentAim  = SilentAim.new(Config, synapse, silentResolver) 
 local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
-local apocalypse = Apocalypse.new(Config)
 local resourceManager = ResourceManager.new(Options)
+local taskScheduler = TaskScheduler.new(Options)
+Config.TaskScheduler = taskScheduler
+local apocalypse = Apocalypse.new(Config)
 local cleaner    = GarbageCollector.new(Options, resourceManager)
 
 local pred       = Predictor.new(Config, loadModule, Kalman)
@@ -264,6 +267,7 @@ tracker:Init()
 silentAim:Init()
 apocalypse:Init()
 resourceManager:Init()
+taskScheduler:Init()
 cleaner:Init()
 visuals.hit:Init()
 
@@ -311,6 +315,7 @@ local function performCleanup(fullSweep)
     local objs = {
         input, localCharacter, tracker, aimbot, silentAim, apocalypse,
         cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain,
+        taskScheduler,
         playerTabController, settingsTabController
     }
     for _, obj in pairs(movementSuite) do

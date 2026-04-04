@@ -417,15 +417,76 @@ function Apocalypse.new(config)
     local self = setmetatable({}, Apocalypse)
     self.Options = config.Options
     self.Active = config.Options.ApocalypseEnabled == true
+    self.Scheduler = config.TaskScheduler
 
     self._bossPos = Vector3.zero
     self._bossModel = nil
+    self._bossScore = -math.huge
     self._bossExists = false
     self._connections = {}
     self._destroyed = false
     self._hookState = nil
+    self._deepScanPending = false
+    self._childScanInterval = 0.12
 
     return self
+end
+
+function Apocalypse:_scheduleDeepScan(root)
+    if not self.Scheduler or self._deepScanPending or not root then
+        return
+    end
+
+    self._deepScanPending = true
+
+    local queue = { root }
+    local cursor = 1
+    local bestScore = self._bossScore or -math.huge
+    local bestPrimary = nil
+    local jobKey = "__STAR_GLITCHER_APOCALYPSE_DEEP_SCAN"
+    local selfRef = self
+
+    local function step()
+        if selfRef._destroyed or not selfRef.Active then
+            selfRef._deepScanPending = false
+            return
+        end
+
+        local processed = 0
+        while cursor <= #queue and processed < 24 do
+            local node = queue[cursor]
+            cursor = cursor + 1
+            processed = processed + 1
+
+            if node:IsA("Model") then
+                local score, primary = scoreBossModel(node)
+                if score and primary and score > bestScore then
+                    bestScore = score
+                    bestPrimary = primary
+                end
+            end
+
+            local children = node:GetChildren()
+            for i = 1, #children do
+                queue[#queue + 1] = children[i]
+            end
+        end
+
+        if cursor <= #queue then
+            selfRef.Scheduler:Enqueue(step, jobKey)
+            return
+        end
+
+        selfRef._deepScanPending = false
+        if bestPrimary and bestScore > (selfRef._bossScore or -math.huge) then
+            selfRef._bossPos = bestPrimary.Position
+            selfRef._bossModel = bestPrimary.Parent
+            selfRef._bossScore = bestScore
+            selfRef._bossExists = true
+        end
+    end
+
+    self.Scheduler:Enqueue(step, jobKey)
 end
 
 function Apocalypse:Init()
@@ -444,11 +505,12 @@ function Apocalypse:Init()
     table.insert(self._connections, RunService.Heartbeat:Connect(function()
         if selfRef._destroyed or not selfRef.Active then
             selfRef._bossExists = false
+            selfRef._bossScore = -math.huge
             return
         end
 
         local now = os.clock()
-        if now - lastTrackerUpdate < 0.03 then
+        if now - lastTrackerUpdate < selfRef._childScanInterval then
             return
         end
         lastTrackerUpdate = now
@@ -469,27 +531,30 @@ function Apocalypse:Init()
             end
         end
 
-        if (not found or foundScore < 6) and (now - lastFullScan > 1.5) then
-            lastFullScan = now
-            if entities then
-                for _, descendant in ipairs(entities:GetDescendants()) do
-                    local model = descendant:IsA("Model") and descendant or descendant:FindFirstAncestorOfClass("Model")
-                    local score, primary = scoreBossModel(model)
-                    if score and primary and score > foundScore then
-                        found = primary
-                        foundScore = score
-                    end
-                end
-            end
-        end
-
         if found then
             selfRef._bossPos = found.Position
             selfRef._bossModel = found.Parent
+            selfRef._bossScore = foundScore
             selfRef._bossExists = true
+        elseif selfRef._bossModel and selfRef._bossModel.Parent then
+            local currentPrimary = getPrimaryPart(selfRef._bossModel)
+            if currentPrimary then
+                selfRef._bossPos = currentPrimary.Position
+                selfRef._bossExists = true
+            else
+                selfRef._bossExists = false
+                selfRef._bossModel = nil
+                selfRef._bossScore = -math.huge
+            end
         else
             selfRef._bossExists = false
             selfRef._bossModel = nil
+            selfRef._bossScore = -math.huge
+        end
+
+        if (not found or foundScore < 6) and (now - lastFullScan > 1.5) then
+            lastFullScan = now
+            selfRef:_scheduleDeepScan(entities)
         end
     end))
 
@@ -561,6 +626,7 @@ function Apocalypse:SetState(active)
     if not active then
         self._bossExists = false
         self._bossModel = nil
+        self._bossScore = -math.huge
     end
 end
 
@@ -569,6 +635,8 @@ function Apocalypse:Destroy()
     self.Active = false
     self._bossExists = false
     self._bossModel = nil
+    self._bossScore = -math.huge
+    self._deepScanPending = false
 
     if self._hookState and self._hookState.Instance == self then
         self._hookState.Instance = nil
@@ -5554,6 +5622,154 @@ end
 return Synapse
 
 ]====],
+    ["Modules/Utils/TaskScheduler.lua"] = [====[local RunService = game:GetService("RunService")
+
+local TaskScheduler = {}
+TaskScheduler.__index = TaskScheduler
+
+local DEFAULT_FRAME_BUDGET = 0.0012
+
+function TaskScheduler.new(options)
+    local self = setmetatable({}, TaskScheduler)
+    self.Options = options
+    self.Connection = nil
+    self.Status = "Idle"
+    self._queue = {}
+    self._head = 1
+    self._tail = 0
+    self._activeKeys = {}
+    self._frameBudget = DEFAULT_FRAME_BUDGET
+    self._lastHitch = 0
+    return self
+end
+
+function TaskScheduler:_push(job)
+    self._tail = self._tail + 1
+    self._queue[self._tail] = job
+end
+
+function TaskScheduler:_pop()
+    if self._head > self._tail then
+        return nil
+    end
+
+    local job = self._queue[self._head]
+    self._queue[self._head] = nil
+    self._head = self._head + 1
+
+    if self._head > self._tail then
+        self._head = 1
+        self._tail = 0
+    end
+
+    return job
+end
+
+function TaskScheduler:GetPendingCount()
+    return math.max(0, self._tail - self._head + 1)
+end
+
+function TaskScheduler:Enqueue(callback, key)
+    if type(callback) ~= "function" then
+        return false
+    end
+
+    if key ~= nil then
+        if self._activeKeys[key] then
+            return false
+        end
+        self._activeKeys[key] = true
+    end
+
+    self:_push({
+        Callback = callback,
+        Key = key,
+    })
+    return true
+end
+
+function TaskScheduler:_getBudget(dt)
+    local budget = self._frameBudget
+    local now = os.clock()
+
+    if dt and dt > (1 / 35) then
+        self._lastHitch = now
+        budget = budget * 0.5
+    elseif (now - self._lastHitch) < 0.75 then
+        budget = budget * 0.7
+    end
+
+    return budget
+end
+
+function TaskScheduler:_runJob(job)
+    if not job then
+        return false
+    end
+
+    if job.Key ~= nil then
+        self._activeKeys[job.Key] = nil
+    end
+
+    local ok, err = pcall(job.Callback)
+    if not ok then
+        warn("[TaskScheduler] Job failed | Error: " .. tostring(err))
+    end
+
+    return ok
+end
+
+function TaskScheduler:_step(dt)
+    local startTime = os.clock()
+    local budget = self:_getBudget(dt)
+    local processed = 0
+
+    while self:GetPendingCount() > 0 and (os.clock() - startTime) < budget do
+        local job = self:_pop()
+        if not job then
+            break
+        end
+
+        if self:_runJob(job) then
+            processed = processed + 1
+        end
+    end
+
+    local pending = self:GetPendingCount()
+    if pending > 0 then
+        self.Status = string.format("Batching (%d pending)", pending)
+    elseif processed > 0 then
+        self.Status = "Settled"
+    else
+        self.Status = "Idle"
+    end
+end
+
+function TaskScheduler:Init()
+    if self.Connection then
+        return
+    end
+
+    self.Connection = RunService.Heartbeat:Connect(function(dt)
+        self:_step(dt)
+    end)
+end
+
+function TaskScheduler:Destroy()
+    if self.Connection then
+        self.Connection:Disconnect()
+        self.Connection = nil
+    end
+
+    table.clear(self._queue)
+    table.clear(self._activeKeys)
+    self._head = 1
+    self._tail = 0
+    self.Status = "Idle"
+end
+
+return TaskScheduler
+]====],
     ["Modules/Visuals.lua"] = [====[--[[
     Visuals.lua - Visual Feedback Class
     Quan ly FOV Circle, Target Dot, Highlight, va Hitmarker system.
@@ -6957,6 +7173,7 @@ local LocalCharacter = requireModule("Modules/Utils/LocalCharacter.lua")
 local Synapse         = requireModule("Modules/Utils/Synapse.lua")
 local Kalman          = requireModule("Modules/Utils/Math/Kalman.lua")
 local ResourceManager = requireModule("Modules/Utils/ResourceManager.lua")
+local TaskScheduler   = requireModule("Modules/Utils/TaskScheduler.lua")
 
 local BasePred        = requireModule("Modules/Combat/Prediction/Base.lua")
 local Predictor       = requireModule("Modules/Combat/Predictor.lua")
@@ -6998,8 +7215,10 @@ local aimbot     = Aimbot.new(Config)
 local silentResolver = SilentResolver.new(Config)
 local silentAim  = SilentAim.new(Config, synapse, silentResolver) 
 local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
-local apocalypse = Apocalypse.new(Config)
 local resourceManager = ResourceManager.new(Options)
+local taskScheduler = TaskScheduler.new(Options)
+Config.TaskScheduler = taskScheduler
+local apocalypse = Apocalypse.new(Config)
 local cleaner    = GarbageCollector.new(Options, resourceManager)
 
 local pred       = Predictor.new(Config, loadModule, Kalman)
@@ -7039,6 +7258,7 @@ tracker:Init()
 silentAim:Init()
 apocalypse:Init()
 resourceManager:Init()
+taskScheduler:Init()
 cleaner:Init()
 visuals.hit:Init()
 
@@ -7086,6 +7306,7 @@ local function performCleanup(fullSweep)
     local objs = {
         input, localCharacter, tracker, aimbot, silentAim, apocalypse,
         cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain,
+        taskScheduler,
         playerTabController, settingsTabController
     }
     for _, obj in pairs(movementSuite) do
