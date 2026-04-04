@@ -31,6 +31,8 @@ function NPCTracker.new(config, detector, taskScheduler)
     self._folderRefreshInterval = 2
     self._lastStaleSweep = 0
     self._staleSweepInterval = 3
+    self._entryExpiry = 18
+    self._deadEntryExpiry = 6
     self._schedulerAlive = false
 
     for i, keyword in ipairs(self.Blacklist) do
@@ -77,13 +79,19 @@ function NPCTracker:_queueStaleSweep()
             return
         end
 
+        local now = os.clock()
         for model, entry in pairs(selfRef._entries) do
+            local lastSeen = entry and entry.LastSeen or 0
+            local isDead = entry and entry.Humanoid and entry.Humanoid.Health <= 0
+            local expiry = isDead and selfRef._deadEntryExpiry or selfRef._entryExpiry
             if not model
                 or not model.Parent
                 or not entry
                 or not entry.PrimaryPart
                 or not entry.PrimaryPart.Parent
                 or selfRef:_HasBlacklistedName(model) then
+                selfRef._entries[model] = nil
+            elseif lastSeen > 0 and (now - lastSeen) > expiry then
                 selfRef._entries[model] = nil
             end
         end
@@ -182,6 +190,13 @@ function NPCTracker:GetTargets()
         
         local entry = self:_GetOrCreateEntry(model)
         if entry then
+            entry.LastSeen = now
+            entry.PrimaryPart = self:_GetPrimaryPart(model) or entry.PrimaryPart
+            entry.Humanoid = model:FindFirstChildOfClass("Humanoid") or entry.Humanoid
+            if entry.PrimaryPart then
+                entry.LastPos = entry.PrimaryPart.Position
+            end
+
             -- Only include alive targets
             if not entry.Humanoid or entry.Humanoid.Health > 0 then
                 result[#result + 1] = entry
@@ -247,7 +262,8 @@ function NPCTracker:_GetOrCreateEntry(model)
         IsBoss = self.Detector:IsBoss(model, hum),
         Name = model.Name,
         LastPos = primary.Position,
-        LastTime = os.clock()
+        LastTime = os.clock(),
+        LastSeen = os.clock(),
     }
     
     self._entries[model] = entry
@@ -267,7 +283,11 @@ function NPCTracker:GetTargetPart(entry)
         end
     end
 
-    return targetPart or entry.PrimaryPart or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+    local resolvedPart = targetPart or entry.PrimaryPart or model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+    if resolvedPart then
+        entry.PrimaryPart = resolvedPart
+    end
+    return resolvedPart
 end
 
 function NPCTracker:ClearCache()

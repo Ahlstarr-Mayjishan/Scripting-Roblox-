@@ -203,7 +203,6 @@ local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
 local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
 
 local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
-local Hitmarker       = requireModule("Modules/Visuals/Hitmarker.lua")
 local Highlight       = requireModule("Modules/Visuals/Highlight.lua")
 local TargetDot       = requireModule("Modules/Visuals/TargetDot.lua")
 local PlayerLabelUtils = requireModule("UI/Tabs/Player/LabelUtils.lua")
@@ -232,7 +231,6 @@ local selector   = Selector.new(Config, tracker, pred)
 
 local visuals = {
     fov = FOVCircle.new(Options),
-    hit = Hitmarker.new(synapse),
     highlight = Highlight.new(),
     dot = TargetDot.new()
 }
@@ -265,8 +263,6 @@ tracker:Init()
 silentAim:Init()
 resourceManager:Init()
 cleaner:Init()
-visuals.hit:Init()
-
 for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
@@ -310,7 +306,7 @@ local function performCleanup(fullSweep)
 
     local objs = {
         input, localCharacter, tracker, aimbot, silentAim,
-        cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain,
+        cleaner, visuals.fov, visuals.highlight, visuals.dot, brain,
         taskScheduler,
         playerTabController, settingsTabController
     }

@@ -10,7 +10,6 @@ OccipitalLobe.__index = OccipitalLobe
 function OccipitalLobe.new(visuals)
     local self = setmetatable({}, OccipitalLobe)
     self.fov = visuals.fov
-    self.hit = visuals.hit
     self.highlight = visuals.highlight
     self.dot = visuals.dot
     return self

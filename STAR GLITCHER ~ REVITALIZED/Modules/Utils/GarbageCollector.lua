@@ -165,8 +165,25 @@ end
 function GarbageCollector:_stepCleanup()
     local now = os.clock()
     local manualBoost = now < self._manualBoostUntil
-    local scanBatchSize = manualBoost and math.ceil(self._scanBatchSize * 1.35) or self._scanBatchSize
-    local destroyBudget = manualBoost and math.ceil(self._destroyBudget * 1.5) or self._destroyBudget
+    local queuePressure = self._queueSize
+    if self.ResourceManager and self.ResourceManager.GetPendingCount then
+        queuePressure = queuePressure + self.ResourceManager:GetPendingCount()
+    end
+
+    local pressureMultiplier = 1
+    if queuePressure >= 500 then
+        pressureMultiplier = 3
+    elseif queuePressure >= 200 then
+        pressureMultiplier = 2
+    elseif queuePressure >= 80 then
+        pressureMultiplier = 1.5
+    end
+
+    local scanBatchSize = (manualBoost and math.ceil(self._scanBatchSize * 1.35) or self._scanBatchSize)
+    scanBatchSize = math.max(scanBatchSize, math.ceil(scanBatchSize * pressureMultiplier))
+
+    local destroyBudget = (manualBoost and math.ceil(self._destroyBudget * 1.5) or self._destroyBudget)
+    destroyBudget = math.max(destroyBudget, math.ceil(destroyBudget * pressureMultiplier))
     local gcStepSize = manualBoost and math.ceil(self._collectStepSize * 1.5) or self._collectStepSize
 
     if not self._scanList and self._queueSize == 0 then

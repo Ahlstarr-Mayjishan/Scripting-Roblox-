@@ -88,8 +88,17 @@ function ResourceManager:_getBudget(dt)
     local budget = self._frameBudget
     local now = os.clock()
     local boosted = now < self._manualBoostUntil
+    local pending = self:GetPendingCount()
 
     if boosted then
+        budget = budget * 1.6
+    end
+
+    if pending >= 400 then
+        budget = budget * 4
+    elseif pending >= 150 then
+        budget = budget * 2.5
+    elseif pending >= 50 then
         budget = budget * 1.6
     end
 
