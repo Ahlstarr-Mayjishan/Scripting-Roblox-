@@ -996,6 +996,24 @@ function TechniqueSelector.new(config)
     return self
 end
 
+function TechniqueSelector:Prune(expiry, now)
+    local pruneBefore = (now or os.clock()) - (expiry or 15)
+    for entry, state in pairs(self._states) do
+        if not entry
+            or not entry.Model
+            or not entry.Model.Parent
+            or ((entry.LastSeen or 0) > 0 and (entry.LastSeen or 0) < pruneBefore) then
+            self._states[entry] = nil
+        elseif state and state.LastSwitch > 0 and state.LastSwitch < (pruneBefore - 8) then
+            self._states[entry] = nil
+        end
+    end
+end
+
+function TechniqueSelector:Destroy()
+    table.clear(self._states)
+end
+
 function TechniqueSelector:_getState(entry)
     if not entry then
         return nil
@@ -1249,7 +1267,29 @@ function Predictor.new(config, loader, kalman)
     self._StabilizerClass = Stabilizer
     self._KalmanFactory = kalman and kalman.new or nil
     self._EntryStates = setmetatable({}, { __mode = "k" })
+    self._lastPrune = 0
+    self._pruneInterval = 5
+    self._stateExpiry = 15
     return self
+end
+
+function Predictor:_PruneStates(now)
+    local pruneBefore = now - self._stateExpiry
+    for entry, state in pairs(self._EntryStates) do
+        if not entry
+            or not entry.Model
+            or not entry.Model.Parent
+            or ((entry.LastSeen or 0) > 0 and (entry.LastSeen or 0) < pruneBefore) then
+            if state and state.Estimator and state.Estimator.Reset then
+                state.Estimator:Reset()
+            end
+            self._EntryStates[entry] = nil
+        end
+    end
+
+    if self.TechniqueSelector and self.TechniqueSelector.Prune then
+        self.TechniqueSelector:Prune(self._stateExpiry, now)
+    end
 end
 
 function Predictor:_GetState(entry)
@@ -1288,6 +1328,13 @@ function Predictor:Predict(origin, part, entry, dt)
 
     -- GUARD: Ensure entry exists
     if not entry then return part.Position end
+
+    local now = os.clock()
+    if (now - self._lastPrune) >= self._pruneInterval then
+        self._lastPrune = now
+        self:_PruneStates(now)
+    end
+
     local state = self:_GetState(entry)
     
     -- 1. SAMPLING (Input Only)
@@ -1308,6 +1355,19 @@ function Predictor:Predict(origin, part, entry, dt)
     
     -- 5. PRESENTATION (Smoothing)
     return state.Stabilizer:Smooth(predicted, dt), predicted, techniqueDecision
+end
+
+function Predictor:Destroy()
+    if self.TechniqueSelector and self.TechniqueSelector.Destroy then
+        self.TechniqueSelector:Destroy()
+    end
+
+    for entry, state in pairs(self._EntryStates) do
+        if state and state.Estimator and state.Estimator.Reset then
+            state.Estimator:Reset()
+        end
+        self._EntryStates[entry] = nil
+    end
 end
 
 return Predictor
@@ -5466,6 +5526,7 @@ function NPCTracker.new(config, detector, taskScheduler)
     self._staleSweepInterval = 3
     self._entryExpiry = 18
     self._deadEntryExpiry = 6
+    self._maxEntries = 180
     self._schedulerAlive = false
 
     for i, keyword in ipairs(self.Blacklist) do
@@ -5513,7 +5574,9 @@ function NPCTracker:_queueStaleSweep()
         end
 
         local now = os.clock()
+        local entryCount = 0
         for model, entry in pairs(selfRef._entries) do
+            entryCount = entryCount + 1
             local lastSeen = entry and entry.LastSeen or 0
             local isDead = entry and entry.Humanoid and entry.Humanoid.Health <= 0
             local expiry = isDead and selfRef._deadEntryExpiry or selfRef._entryExpiry
@@ -5526,6 +5589,14 @@ function NPCTracker:_queueStaleSweep()
                 selfRef._entries[model] = nil
             elseif lastSeen > 0 and (now - lastSeen) > expiry then
                 selfRef._entries[model] = nil
+            end
+        end
+
+        if entryCount > selfRef._maxEntries then
+            for model, entry in pairs(selfRef._entries) do
+                if not entry or (entry.LastSeen or 0) < (now - 4) then
+                    selfRef._entries[model] = nil
+                end
             end
         end
 
@@ -5744,6 +5815,7 @@ ResourceManager.__index = ResourceManager
 
 local DEFAULT_FRAME_BUDGET = 0.0008
 local DEFAULT_GC_STEP = 16
+local COMPACT_THRESHOLD = 256
 
 function ResourceManager.new(options)
     local self = setmetatable({}, ResourceManager)
@@ -5760,6 +5832,39 @@ function ResourceManager.new(options)
     self._manualBoostUntil = 0
     self._lastHitch = 0
     return self
+end
+
+function ResourceManager:_compactQueue()
+    if self._queueHead <= 1 then
+        return
+    end
+
+    local pending = self:GetPendingCount()
+    if pending <= 0 then
+        self._queueHead = 1
+        self._queueTail = 0
+        return
+    end
+
+    local compacted = table.create and table.create(pending) or {}
+    local nextIndex = 1
+    for i = self._queueHead, self._queueTail do
+        local job = self._cleanupQueue[i]
+        if job ~= nil then
+            compacted[nextIndex] = job
+            nextIndex = nextIndex + 1
+        end
+    end
+
+    self._cleanupQueue = compacted
+    self._queueHead = 1
+    self._queueTail = nextIndex - 1
+end
+
+function ResourceManager:_maybeCompactQueue()
+    if self._queueHead > COMPACT_THRESHOLD and self._queueHead > (self._queueTail * 0.5) then
+        self:_compactQueue()
+    end
 end
 
 function ResourceManager:_pushJob(kind, payload)
@@ -5908,6 +6013,7 @@ function ResourceManager:_step(dt)
     end
 
     local pending = self:GetPendingCount()
+    self:_maybeCompactQueue()
     if pending > 0 then
         self.Status = string.format("Draining (%d pending)", pending)
     elseif processed > 0 then
@@ -6015,6 +6121,7 @@ local TaskScheduler = {}
 TaskScheduler.__index = TaskScheduler
 
 local DEFAULT_FRAME_BUDGET = 0.001
+local COMPACT_THRESHOLD = 256
 
 function TaskScheduler.new(options)
     local self = setmetatable({}, TaskScheduler)
@@ -6028,6 +6135,39 @@ function TaskScheduler.new(options)
     self._frameBudget = DEFAULT_FRAME_BUDGET
     self._lastHitch = 0
     return self
+end
+
+function TaskScheduler:_compactQueue()
+    if self._head <= 1 then
+        return
+    end
+
+    local pending = self:GetPendingCount()
+    if pending <= 0 then
+        self._head = 1
+        self._tail = 0
+        return
+    end
+
+    local compacted = table.create and table.create(pending) or {}
+    local nextIndex = 1
+    for i = self._head, self._tail do
+        local job = self._queue[i]
+        if job ~= nil then
+            compacted[nextIndex] = job
+            nextIndex = nextIndex + 1
+        end
+    end
+
+    self._queue = compacted
+    self._head = 1
+    self._tail = nextIndex - 1
+end
+
+function TaskScheduler:_maybeCompactQueue()
+    if self._head > COMPACT_THRESHOLD and self._head > (self._tail * 0.5) then
+        self:_compactQueue()
+    end
 end
 
 function TaskScheduler:_push(job)
@@ -6122,6 +6262,7 @@ function TaskScheduler:_step(dt)
     end
 
     local pending = self:GetPendingCount()
+    self:_maybeCompactQueue()
     if pending > 0 then
         self.Status = string.format("Batching (%d pending)", pending)
     elseif processed > 0 then

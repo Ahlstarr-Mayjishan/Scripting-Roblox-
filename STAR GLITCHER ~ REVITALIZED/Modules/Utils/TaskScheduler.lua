@@ -4,6 +4,7 @@ local TaskScheduler = {}
 TaskScheduler.__index = TaskScheduler
 
 local DEFAULT_FRAME_BUDGET = 0.001
+local COMPACT_THRESHOLD = 256
 
 function TaskScheduler.new(options)
     local self = setmetatable({}, TaskScheduler)
@@ -17,6 +18,39 @@ function TaskScheduler.new(options)
     self._frameBudget = DEFAULT_FRAME_BUDGET
     self._lastHitch = 0
     return self
+end
+
+function TaskScheduler:_compactQueue()
+    if self._head <= 1 then
+        return
+    end
+
+    local pending = self:GetPendingCount()
+    if pending <= 0 then
+        self._head = 1
+        self._tail = 0
+        return
+    end
+
+    local compacted = table.create and table.create(pending) or {}
+    local nextIndex = 1
+    for i = self._head, self._tail do
+        local job = self._queue[i]
+        if job ~= nil then
+            compacted[nextIndex] = job
+            nextIndex = nextIndex + 1
+        end
+    end
+
+    self._queue = compacted
+    self._head = 1
+    self._tail = nextIndex - 1
+end
+
+function TaskScheduler:_maybeCompactQueue()
+    if self._head > COMPACT_THRESHOLD and self._head > (self._tail * 0.5) then
+        self:_compactQueue()
+    end
 end
 
 function TaskScheduler:_push(job)
@@ -111,6 +145,7 @@ function TaskScheduler:_step(dt)
     end
 
     local pending = self:GetPendingCount()
+    self:_maybeCompactQueue()
     if pending > 0 then
         self.Status = string.format("Batching (%d pending)", pending)
     elseif processed > 0 then

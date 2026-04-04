@@ -5,6 +5,7 @@ ResourceManager.__index = ResourceManager
 
 local DEFAULT_FRAME_BUDGET = 0.0008
 local DEFAULT_GC_STEP = 16
+local COMPACT_THRESHOLD = 256
 
 function ResourceManager.new(options)
     local self = setmetatable({}, ResourceManager)
@@ -21,6 +22,39 @@ function ResourceManager.new(options)
     self._manualBoostUntil = 0
     self._lastHitch = 0
     return self
+end
+
+function ResourceManager:_compactQueue()
+    if self._queueHead <= 1 then
+        return
+    end
+
+    local pending = self:GetPendingCount()
+    if pending <= 0 then
+        self._queueHead = 1
+        self._queueTail = 0
+        return
+    end
+
+    local compacted = table.create and table.create(pending) or {}
+    local nextIndex = 1
+    for i = self._queueHead, self._queueTail do
+        local job = self._cleanupQueue[i]
+        if job ~= nil then
+            compacted[nextIndex] = job
+            nextIndex = nextIndex + 1
+        end
+    end
+
+    self._cleanupQueue = compacted
+    self._queueHead = 1
+    self._queueTail = nextIndex - 1
+end
+
+function ResourceManager:_maybeCompactQueue()
+    if self._queueHead > COMPACT_THRESHOLD and self._queueHead > (self._queueTail * 0.5) then
+        self:_compactQueue()
+    end
 end
 
 function ResourceManager:_pushJob(kind, payload)
@@ -169,6 +203,7 @@ function ResourceManager:_step(dt)
     end
 
     local pending = self:GetPendingCount()
+    self:_maybeCompactQueue()
     if pending > 0 then
         self.Status = string.format("Draining (%d pending)", pending)
     elseif processed > 0 then

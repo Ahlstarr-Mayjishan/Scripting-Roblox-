@@ -33,6 +33,7 @@ function NPCTracker.new(config, detector, taskScheduler)
     self._staleSweepInterval = 3
     self._entryExpiry = 18
     self._deadEntryExpiry = 6
+    self._maxEntries = 180
     self._schedulerAlive = false
 
     for i, keyword in ipairs(self.Blacklist) do
@@ -80,7 +81,9 @@ function NPCTracker:_queueStaleSweep()
         end
 
         local now = os.clock()
+        local entryCount = 0
         for model, entry in pairs(selfRef._entries) do
+            entryCount = entryCount + 1
             local lastSeen = entry and entry.LastSeen or 0
             local isDead = entry and entry.Humanoid and entry.Humanoid.Health <= 0
             local expiry = isDead and selfRef._deadEntryExpiry or selfRef._entryExpiry
@@ -93,6 +96,14 @@ function NPCTracker:_queueStaleSweep()
                 selfRef._entries[model] = nil
             elseif lastSeen > 0 and (now - lastSeen) > expiry then
                 selfRef._entries[model] = nil
+            end
+        end
+
+        if entryCount > selfRef._maxEntries then
+            for model, entry in pairs(selfRef._entries) do
+                if not entry or (entry.LastSeen or 0) < (now - 4) then
+                    selfRef._entries[model] = nil
+                end
             end
         end
 

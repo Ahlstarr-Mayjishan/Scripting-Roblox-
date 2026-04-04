@@ -32,7 +32,29 @@ function Predictor.new(config, loader, kalman)
     self._StabilizerClass = Stabilizer
     self._KalmanFactory = kalman and kalman.new or nil
     self._EntryStates = setmetatable({}, { __mode = "k" })
+    self._lastPrune = 0
+    self._pruneInterval = 5
+    self._stateExpiry = 15
     return self
+end
+
+function Predictor:_PruneStates(now)
+    local pruneBefore = now - self._stateExpiry
+    for entry, state in pairs(self._EntryStates) do
+        if not entry
+            or not entry.Model
+            or not entry.Model.Parent
+            or ((entry.LastSeen or 0) > 0 and (entry.LastSeen or 0) < pruneBefore) then
+            if state and state.Estimator and state.Estimator.Reset then
+                state.Estimator:Reset()
+            end
+            self._EntryStates[entry] = nil
+        end
+    end
+
+    if self.TechniqueSelector and self.TechniqueSelector.Prune then
+        self.TechniqueSelector:Prune(self._stateExpiry, now)
+    end
 end
 
 function Predictor:_GetState(entry)
@@ -71,6 +93,13 @@ function Predictor:Predict(origin, part, entry, dt)
 
     -- GUARD: Ensure entry exists
     if not entry then return part.Position end
+
+    local now = os.clock()
+    if (now - self._lastPrune) >= self._pruneInterval then
+        self._lastPrune = now
+        self:_PruneStates(now)
+    end
+
     local state = self:_GetState(entry)
     
     -- 1. SAMPLING (Input Only)
@@ -91,6 +120,19 @@ function Predictor:Predict(origin, part, entry, dt)
     
     -- 5. PRESENTATION (Smoothing)
     return state.Stabilizer:Smooth(predicted, dt), predicted, techniqueDecision
+end
+
+function Predictor:Destroy()
+    if self.TechniqueSelector and self.TechniqueSelector.Destroy then
+        self.TechniqueSelector:Destroy()
+    end
+
+    for entry, state in pairs(self._EntryStates) do
+        if state and state.Estimator and state.Estimator.Reset then
+            state.Estimator:Reset()
+        end
+        self._EntryStates[entry] = nil
+    end
 end
 
 return Predictor

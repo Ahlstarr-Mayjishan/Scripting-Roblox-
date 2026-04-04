@@ -19,6 +19,24 @@ function TechniqueSelector.new(config)
     return self
 end
 
+function TechniqueSelector:Prune(expiry, now)
+    local pruneBefore = (now or os.clock()) - (expiry or 15)
+    for entry, state in pairs(self._states) do
+        if not entry
+            or not entry.Model
+            or not entry.Model.Parent
+            or ((entry.LastSeen or 0) > 0 and (entry.LastSeen or 0) < pruneBefore) then
+            self._states[entry] = nil
+        elseif state and state.LastSwitch > 0 and state.LastSwitch < (pruneBefore - 8) then
+            self._states[entry] = nil
+        end
+    end
+end
+
+function TechniqueSelector:Destroy()
+    table.clear(self._states)
+end
+
 function TechniqueSelector:_getState(entry)
     if not entry then
         return nil
