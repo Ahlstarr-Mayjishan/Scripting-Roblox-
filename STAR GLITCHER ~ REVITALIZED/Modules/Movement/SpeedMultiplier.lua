@@ -3,10 +3,11 @@ local RunService = game:GetService("RunService")
 local SpeedMultiplier = {}
 SpeedMultiplier.__index = SpeedMultiplier
 
-function SpeedMultiplier.new(options, localCharacter)
+function SpeedMultiplier.new(options, localCharacter, movementArbiter)
     local self = setmetatable({}, SpeedMultiplier)
     self.Options = options
     self.LocalCharacter = localCharacter
+    self.MovementArbiter = movementArbiter
     self.Connection = nil
     self.BaseWalkSpeed = 16
     self.TrackedHumanoid = nil
@@ -16,6 +17,7 @@ function SpeedMultiplier.new(options, localCharacter)
     self._fallbackWarmupUntil = 0
     self._wasEnabled = false
     self._preEnableBaseSpeed = 16
+    self._arbiterKey = "__STAR_GLITCHER_SPEED_MULTIPLIER"
     return self
 end
 
@@ -25,6 +27,12 @@ function SpeedMultiplier:_captureBaseSpeed(humanoid)
 end
 
 function SpeedMultiplier:_writeWalkSpeed(humanoid, value)
+    if self.MovementArbiter then
+        self.MovementArbiter:SetWalkExact(self._arbiterKey, value, 20)
+        self._lastWalkWriteTime = os.clock()
+        return
+    end
+
     if not humanoid then
         return
     end
@@ -36,6 +44,11 @@ function SpeedMultiplier:_writeWalkSpeed(humanoid, value)
 end
 
 function SpeedMultiplier:_restoreBaseSpeed(humanoid)
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
+        return
+    end
+
     if not humanoid then
         return
     end
@@ -113,6 +126,9 @@ function SpeedMultiplier:Init()
             if hum ~= self.TrackedHumanoid then
                 self:_captureBaseSpeed(hum)
             end
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self._fallbackWarmupUntil = 0
             self._wasEnabled = false
             self.Status = "Respawn Grace"
@@ -129,6 +145,9 @@ function SpeedMultiplier:Init()
                 self:_restoreBaseSpeed(hum)
             else
                 self.BaseWalkSpeed = math.max(hum.WalkSpeed, 16)
+                if self.MovementArbiter then
+                    self.MovementArbiter:ClearSource(self._arbiterKey)
+                end
             end
             self._wasEnabled = false
             self.Status = self.Options.CustomMoveSpeedEnabled and "Blocked by Fixed Speed" or "Disabled"
@@ -170,6 +189,10 @@ function SpeedMultiplier:Destroy()
     if self.Connection then
         self.Connection:Disconnect()
         self.Connection = nil
+    end
+
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
     end
 
     local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()

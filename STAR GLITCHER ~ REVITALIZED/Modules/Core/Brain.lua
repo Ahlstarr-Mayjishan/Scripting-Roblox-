@@ -69,7 +69,7 @@ function Brain:Update(dt, mousePos, camCFrame)
         return
     end
 
-    local targetPart, targetPos, rawTargetPos = self.Temporal:Process(camCFrame.Position, dt)
+    local targetPart, targetPos, rawTargetPos, techniqueDecision = self.Temporal:Process(camCFrame.Position, dt)
 
     if not targetPart or not targetPos then
         self.Occipital:Clear()
@@ -78,7 +78,7 @@ function Brain:Update(dt, mousePos, camCFrame)
     end
 
     local sPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(targetPos)
-    self.Occipital:Process(mousePos, sPos, targetPart, onScreen)
+    self.Occipital:Process(mousePos, sPos, targetPart, onScreen, techniqueDecision, entry)
     self.Frontal:Execute(targetPos, targetPart, entry, dt, rawTargetPos)
 end
 

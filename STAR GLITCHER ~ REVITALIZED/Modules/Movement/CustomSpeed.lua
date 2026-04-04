@@ -3,14 +3,16 @@ local RunService = game:GetService("RunService")
 local CustomSpeed = {}
 CustomSpeed.__index = CustomSpeed
 
-function CustomSpeed.new(options, localCharacter)
+function CustomSpeed.new(options, localCharacter, movementArbiter)
     local self = setmetatable({}, CustomSpeed)
     self.Options = options
     self.LocalCharacter = localCharacter
+    self.MovementArbiter = movementArbiter
     self.Connection = nil
     self.TrackedHumanoid = nil
     self.BaseWalkSpeed = 16
     self._wasEnabled = false
+    self._arbiterKey = "__STAR_GLITCHER_CUSTOM_SPEED"
     return self
 end
 
@@ -22,6 +24,11 @@ function CustomSpeed:_captureBaseSpeed(humanoid)
 end
 
 function CustomSpeed:_restoreBaseSpeed(humanoid)
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
+        return
+    end
+
     if humanoid and math.abs(humanoid.WalkSpeed - self.BaseWalkSpeed) > 0.1 then
         humanoid.WalkSpeed = self.BaseWalkSpeed
     end
@@ -39,11 +46,17 @@ function CustomSpeed:Init()
             if hum and self._wasEnabled then
                 self:_restoreBaseSpeed(hum)
             end
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self._wasEnabled = false
             return
         end
 
         if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self._wasEnabled = false
             return
         end
@@ -57,7 +70,9 @@ function CustomSpeed:Init()
             self._wasEnabled = true
         end
 
-        if math.abs(hum.WalkSpeed - self.Options.CustomMoveSpeed) > 0.1 then
+        if self.MovementArbiter then
+            self.MovementArbiter:SetWalkExact(self._arbiterKey, self.Options.CustomMoveSpeed, 100)
+        elseif math.abs(hum.WalkSpeed - self.Options.CustomMoveSpeed) > 0.1 then
             hum.WalkSpeed = self.Options.CustomMoveSpeed
         end
     end)
@@ -67,6 +82,10 @@ function CustomSpeed:Destroy()
     if self.Connection then
         self.Connection:Disconnect()
         self.Connection = nil
+    end
+
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
     end
 
     local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()

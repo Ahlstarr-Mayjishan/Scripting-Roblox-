@@ -26,6 +26,35 @@ return function(Window, Options)
         end,
     })
 
+    Tab:CreateDropdown({
+        Name = "Technique Control",
+        Options = {"Assisted", "Manual"},
+        CurrentOption = {Options.PredictionTechniqueMode or "Assisted"},
+        Flag = "PredictionTechniqueModeFlag",
+        Callback = function(Value)
+            Options.PredictionTechniqueMode = type(Value) == "table" and Value[1] or Value
+        end,
+    })
+
+    Tab:CreateDropdown({
+        Name = "Manual Technique",
+        Options = {"Linear", "Strafe", "Orbit", "Airborne", "Dash Recovery"},
+        CurrentOption = {Options.PredictionTechnique or "Linear"},
+        Flag = "PredictionTechniqueFlag",
+        Callback = function(Value)
+            Options.PredictionTechnique = type(Value) == "table" and Value[1] or Value
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Technique Debug Overlay",
+        CurrentValue = Options.PredictionTechniqueDebug == true,
+        Flag = "PredictionTechniqueDebugFlag",
+        Callback = function(Value)
+            Options.PredictionTechniqueDebug = Value
+        end,
+    })
+
     Tab:CreateSlider({
         Name = "Projectile Velocity",
         Range = {50, 5000},

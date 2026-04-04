@@ -19,6 +19,9 @@ Config.Options = {
     PredictionEnabled = true,
     TargetPlayersToggle = false,
     SmartPrediction = true,
+    PredictionTechniqueMode = "Assisted",
+    PredictionTechnique = "Linear",
+    PredictionTechniqueDebug = false,
     TargetPart = "HumanoidRootPart",
     TargetingMethod = "FOV",
     AimOffset = 0,
@@ -375,7 +378,64 @@ function Engine:_IsBeamLike(projectileSpeed)
     return projectileSpeed >= beamFloor
 end
 
-function Engine:Calculate(origin, targetPos, est, dt, entry, part)
+function Engine:_getTechniqueProfile(decision)
+    local technique = decision and decision.Technique or "Linear"
+
+    if technique == "Strafe" then
+        return {
+            TimeScale = 1.02,
+            LateralScale = 1.22,
+            AccelScale = 1.04,
+            JerkScale = 0.92,
+            VerticalScale = 0.95,
+            TrustBias = 0.03,
+        }
+    end
+
+    if technique == "Orbit" then
+        return {
+            TimeScale = 1.04,
+            LateralScale = 1.34,
+            AccelScale = 0.98,
+            JerkScale = 0.82,
+            VerticalScale = 0.92,
+            TrustBias = 0.04,
+        }
+    end
+
+    if technique == "Airborne" then
+        return {
+            TimeScale = 1.01,
+            LateralScale = 0.9,
+            AccelScale = 1.12,
+            JerkScale = 0.88,
+            VerticalScale = 1.26,
+            TrustBias = 0.02,
+        }
+    end
+
+    if technique == "Dash Recovery" then
+        return {
+            TimeScale = 0.82,
+            LateralScale = 0.72,
+            AccelScale = 0.42,
+            JerkScale = 0.18,
+            VerticalScale = 0.84,
+            TrustBias = -0.12,
+        }
+    end
+
+    return {
+        TimeScale = 0.98,
+        LateralScale = 0.86,
+        AccelScale = 0.74,
+        JerkScale = 0.52,
+        VerticalScale = 0.94,
+        TrustBias = 0.01,
+    }
+end
+
+function Engine:Calculate(origin, targetPos, est, dt, entry, part, techniqueDecision)
     local Options = self.Options
     if not Options.PredictionEnabled then
         return targetPos
@@ -387,6 +447,7 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
     local confidence = math.clamp(est.Confidence or 0, 0, 1)
     local motionShock = est.MotionShock or 0
     local speed = velocity.Magnitude
+    local technique = self:_getTechniqueProfile(techniqueDecision)
     local targetProfile, aimBiasY = self:_ResolveTargetProfile(entry, part)
 
     if aimBiasY ~= 0 then
@@ -406,7 +467,7 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
     local travelTime = distance / projectileSpeed
     local latency = self:_GetLatency() * self:_GetPingMultiplier()
     local frameComp = math.min(math.max(est.TimeDelta or dt or 0, 0), 1 / 20) * 0.5
-    local totalTime = travelTime + latency + frameComp
+    local totalTime = (travelTime + latency + frameComp) * technique.TimeScale
 
     local shotDir = toTarget.Unit
     local forwardSpeed = velocity:Dot(shotDir)
@@ -448,7 +509,7 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
     -- Strafing targets often miss because lateral movement needs slightly more
     -- aggressive lead than front/back motion under frame + ping delay.
     if lateralSpeed > 0.01 then
-        local lateralTrust = self:_GetLateralTrust(targetProfile, confidence, lateralAlpha, shockAlpha)
+        local lateralTrust = self:_GetLateralTrust(targetProfile, confidence, lateralAlpha, shockAlpha) * technique.LateralScale
         local distanceStrafeGain = 1 + ((self.Prediction.DISTANCE_STRAFE_GAIN or 1.2) - 1) * distanceRatio * 0.35
         if beamLike then
             distanceStrafeGain = distanceStrafeGain * math.clamp(self.Prediction.BEAM_STRAFE_BIAS or 0.78, 0.5, 1.05)
@@ -465,11 +526,19 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
         local jerkTrust = math.clamp(accelTrust * (1 - shockAlpha * 0.45), 0, 1)
 
         local profileBonus = targetProfile == TARGET_PROFILE_MINI_HUMANOID and 0.08 or (targetProfile == TARGET_PROFILE_BOX and 0.04 or 0)
-        local accelWeight = math.clamp((1.08 - (totalTime * 0.3)) * (0.65 + (speedAlpha * 0.45) + (lateralAlpha * 0.2) + profileBonus), 0.24, 1.34) * accelTrust
-        local jerkWeight = math.clamp((0.58 - totalTime) * (0.45 + (speedAlpha * 0.35) + (lateralAlpha * 0.15) + (profileBonus * 0.5)), 0.05, 0.6) * jerkTrust
+        local accelWeight = math.clamp((1.08 - (totalTime * 0.3)) * (0.65 + (speedAlpha * 0.45) + (lateralAlpha * 0.2) + profileBonus), 0.24, 1.34) * accelTrust * technique.AccelScale
+        local jerkWeight = math.clamp((0.58 - totalTime) * (0.45 + (speedAlpha * 0.35) + (lateralAlpha * 0.15) + (profileBonus * 0.5)), 0.05, 0.6) * jerkTrust * technique.JerkScale
 
         predictedOffset = predictedOffset + ((0.5 * accel * (totalTime ^ 2)) * accelWeight)
         predictedOffset = predictedOffset + (((1 / 6) * jerk * (totalTime ^ 3)) * jerkWeight)
+    end
+
+    if technique.VerticalScale ~= 1 then
+        predictedOffset = Vector3.new(
+            predictedOffset.X,
+            predictedOffset.Y * technique.VerticalScale,
+            predictedOffset.Z
+        )
     end
 
     if forwardSpeed > 0.01 and accel.Magnitude > 0.01 then
@@ -505,7 +574,7 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
 
     local predictedPos = targetPos + predictedOffset
     local trustFactor = math.clamp(
-        (confidence * 0.75) + ((est.Stable and 0.15) or 0) + (speedAlpha * 0.12) + (lateralAlpha * 0.12) - (shockAlpha * 0.2),
+        (confidence * 0.75) + ((est.Stable and 0.15) or 0) + (speedAlpha * 0.12) + (lateralAlpha * 0.12) - (shockAlpha * 0.2) + technique.TrustBias,
         0.12,
         1
     )
@@ -548,6 +617,7 @@ function Estimator.new(kalman, config)
         Confidence = 1,
         Stable = true,
         MotionShock = 0,
+        IsTeleport = false,
         RawVelocity = ZERO,
         PhysicsVelocity = ZERO,
         TimeDelta = DEFAULT_DT,
@@ -639,6 +709,7 @@ function Estimator:Estimate(raw, dt)
     result.Confidence = score
     result.Stable = score > 0.72 and motionShock < 110
     result.MotionShock = motionShock
+    result.IsTeleport = raw.IsTeleport == true
     result.RawVelocity = measurement
     result.PhysicsVelocity = physicsVelocity
     result.TimeDelta = sampleDt
@@ -904,6 +975,246 @@ end
 
 return Stabilizer
 ]====],
+    ["Modules/Combat/Prediction/TechniqueSelector.lua"] = [====[local TechniqueSelector = {}
+TechniqueSelector.__index = TechniqueSelector
+
+local ZERO = Vector3.zero
+
+local TECHNIQUE_LINEAR = "Linear"
+local TECHNIQUE_STRAFE = "Strafe"
+local TECHNIQUE_ORBIT = "Orbit"
+local TECHNIQUE_AIRBORNE = "Airborne"
+local TECHNIQUE_DASH = "Dash Recovery"
+
+function TechniqueSelector.new(config)
+    local self = setmetatable({}, TechniqueSelector)
+    self.Options = config.Options
+    self.Prediction = config.Prediction or {}
+    self._states = setmetatable({}, { __mode = "k" })
+    self._holdTime = 0.22
+    self._stickMargin = 0.08
+    return self
+end
+
+function TechniqueSelector:_getState(entry)
+    if not entry then
+        return nil
+    end
+
+    local state = self._states[entry]
+    if state then
+        return state
+    end
+
+    state = {
+        Technique = nil,
+        LastSwitch = 0,
+        LastReason = nil,
+    }
+    self._states[entry] = state
+    return state
+end
+
+function TechniqueSelector:_makeDecision(technique, reason, score, confidence)
+    return {
+        Technique = technique,
+        Reason = reason,
+        Score = score or 0,
+        Confidence = confidence or 0,
+    }
+end
+
+function TechniqueSelector:_getMode()
+    local mode = tostring(self.Options.PredictionTechniqueMode or "Assisted")
+    if mode == "Manual" then
+        return "Manual"
+    end
+    return "Assisted"
+end
+
+function TechniqueSelector:_getManualTechnique()
+    local technique = tostring(self.Options.PredictionTechnique or TECHNIQUE_LINEAR)
+    if technique == TECHNIQUE_STRAFE
+        or technique == TECHNIQUE_ORBIT
+        or technique == TECHNIQUE_AIRBORNE
+        or technique == TECHNIQUE_DASH then
+        return technique
+    end
+    return TECHNIQUE_LINEAR
+end
+
+function TechniqueSelector:_collectMetrics(origin, targetPos, est)
+    local velocity = est.Velocity or ZERO
+    local accel = est.Acceleration or ZERO
+    local jerk = est.Jerk or ZERO
+    local confidence = math.clamp(est.Confidence or 0, 0, 1)
+    local shockAlpha = math.clamp((est.MotionShock or 0) / 180, 0, 1)
+    local toTarget = targetPos - origin
+    local distance = toTarget.Magnitude
+    local shotDir = distance > 0.001 and toTarget.Unit or Vector3.new(0, 0, 1)
+
+    local forwardSpeed = velocity:Dot(shotDir)
+    local lateralVelocity = velocity - (shotDir * forwardSpeed)
+    local lateralSpeed = lateralVelocity.Magnitude
+    local verticalSpeed = math.abs(velocity.Y)
+    local verticalAccel = math.abs(accel.Y)
+    local speed = velocity.Magnitude
+    local distanceRatio = 0
+
+    local startDist = self.Prediction.DISTANCE_PREDICTION_START or 180
+    local maxDist = self.Prediction.DISTANCE_PREDICTION_MAX or math.max(startDist + 1, 1800)
+    if distance > startDist then
+        distanceRatio = math.clamp((distance - startDist) / math.max(maxDist - startDist, 1), 0, 1)
+    end
+
+    local orbitDistance = self.Prediction.CLOSE_ORBIT_DISTANCE or 135
+    local orbitRatio = 0
+    if distance <= orbitDistance * 1.2 then
+        orbitRatio = math.clamp(1 - (distance / math.max(orbitDistance * 1.2, 1)), 0, 1)
+    end
+
+    return {
+        Confidence = confidence,
+        ShockAlpha = shockAlpha,
+        Speed = speed,
+        ForwardSpeed = forwardSpeed,
+        LateralSpeed = lateralSpeed,
+        VerticalSpeed = verticalSpeed,
+        VerticalAccel = verticalAccel,
+        Distance = distance,
+        DistanceRatio = distanceRatio,
+        OrbitRatio = orbitRatio,
+        IsTeleport = est.IsTeleport == true,
+        AccelMagnitude = accel.Magnitude,
+        JerkMagnitude = jerk.Magnitude,
+    }
+end
+
+function TechniqueSelector:_scoreLinear(metrics)
+    local score = 0.38
+        + (metrics.Confidence * 0.34)
+        + ((1 - metrics.ShockAlpha) * 0.18)
+        + ((1 - math.clamp(metrics.LateralSpeed / 120, 0, 1)) * 0.12)
+    return score, "stable forward motion"
+end
+
+function TechniqueSelector:_scoreStrafe(metrics)
+    local lateralAlpha = math.clamp(metrics.LateralSpeed / 110, 0, 1)
+    local score = 0.18
+        + (lateralAlpha * 0.46)
+        + (metrics.Confidence * 0.16)
+        + ((1 - metrics.ShockAlpha) * 0.08)
+        + (metrics.DistanceRatio * 0.06)
+    return score, "high lateral movement"
+end
+
+function TechniqueSelector:_scoreOrbit(metrics)
+    local orbitiness = math.clamp(metrics.LateralSpeed / math.max(metrics.Speed, 1), 0, 1)
+    local lowForward = 1 - math.clamp(math.abs(metrics.ForwardSpeed) / math.max(metrics.Speed, 1), 0, 1)
+    local score = 0.12
+        + (metrics.OrbitRatio * 0.28)
+        + (orbitiness * 0.26)
+        + (lowForward * 0.16)
+        + (metrics.Confidence * 0.12)
+    return score, "close circular strafe"
+end
+
+function TechniqueSelector:_scoreAirborne(metrics, entry)
+    local airborneAlpha = math.clamp(metrics.VerticalSpeed / 50, 0, 1)
+    local accelAlpha = math.clamp(metrics.VerticalAccel / 120, 0, 1)
+    local score = 0.14
+        + (airborneAlpha * 0.42)
+        + (accelAlpha * 0.16)
+        + (metrics.Confidence * 0.14)
+
+    if entry and entry.PrimaryPart and math.abs(entry.PrimaryPart.AssemblyLinearVelocity.Y) > 6 then
+        score = score + 0.08
+    end
+
+    return score, "strong vertical motion"
+end
+
+function TechniqueSelector:_scoreDash(metrics)
+    local score = 0.08
+        + (metrics.ShockAlpha * 0.44)
+        + (math.clamp(metrics.AccelMagnitude / 260, 0, 1) * 0.14)
+        + (math.clamp(metrics.JerkMagnitude / 2200, 0, 1) * 0.14)
+
+    if metrics.IsTeleport then
+        score = score + 0.22
+    end
+
+    return score, metrics.IsTeleport and "teleport / blink shock" or "dash or hard direction break"
+end
+
+function TechniqueSelector:_pickAssisted(entry, metrics)
+    local scores = {}
+
+    local linearScore, linearReason = self:_scoreLinear(metrics)
+    scores[#scores + 1] = self:_makeDecision(TECHNIQUE_LINEAR, linearReason, linearScore, metrics.Confidence)
+
+    local strafeScore, strafeReason = self:_scoreStrafe(metrics)
+    scores[#scores + 1] = self:_makeDecision(TECHNIQUE_STRAFE, strafeReason, strafeScore, metrics.Confidence)
+
+    local orbitScore, orbitReason = self:_scoreOrbit(metrics)
+    scores[#scores + 1] = self:_makeDecision(TECHNIQUE_ORBIT, orbitReason, orbitScore, metrics.Confidence)
+
+    local airborneScore, airborneReason = self:_scoreAirborne(metrics, entry)
+    scores[#scores + 1] = self:_makeDecision(TECHNIQUE_AIRBORNE, airborneReason, airborneScore, metrics.Confidence)
+
+    local dashScore, dashReason = self:_scoreDash(metrics)
+    scores[#scores + 1] = self:_makeDecision(TECHNIQUE_DASH, dashReason, dashScore, metrics.Confidence)
+
+    local best = scores[1]
+    local byTechnique = {}
+    for i = 1, #scores do
+        local decision = scores[i]
+        byTechnique[decision.Technique] = decision
+        if decision.Score > best.Score then
+            best = decision
+        end
+    end
+
+    local state = self:_getState(entry)
+    local now = os.clock()
+    if state and state.Technique then
+        local current = byTechnique[state.Technique]
+        if current then
+            local withinHold = (now - state.LastSwitch) < self._holdTime
+            local closeEnough = current.Score >= (best.Score - self._stickMargin)
+            if withinHold or closeEnough then
+                current.Reason = withinHold and ("holding " .. string.lower(state.Technique)) or current.Reason
+                best = current
+            end
+        end
+    end
+
+    if state then
+        if state.Technique ~= best.Technique then
+            state.Technique = best.Technique
+            state.LastSwitch = now
+        end
+        state.LastReason = best.Reason
+    end
+
+    return best
+end
+
+function TechniqueSelector:Decide(origin, targetPos, est, entry)
+    if not entry or not targetPos then
+        return self:_makeDecision(TECHNIQUE_LINEAR, "no target", 0, 0)
+    end
+
+    if self:_getMode() == "Manual" then
+        return self:_makeDecision(self:_getManualTechnique(), "manual override", 1, math.clamp(est.Confidence or 0, 0, 1))
+    end
+
+    local metrics = self:_collectMetrics(origin, targetPos, est)
+    return self:_pickAssisted(entry, metrics)
+end
+
+return TechniqueSelector
+]====],
     ["Modules/Combat/Predictor.lua"] = [====[--[[
     Predictor.lua - High-Performance Layered Orchestrator
     Analogy: The Neural Motor Network.
@@ -925,10 +1236,12 @@ function Predictor.new(config, loader, kalman)
     local Estimator  = loader(Path.."Estimator.lua")
     local Engine     = loader(Path.."Engine.lua")
     local Stabilizer = loader(Path.."Stabilizer.lua")
+    local TechniqueSelector = loader(Path.."TechniqueSelector.lua")
     
     -- Instantiate shared stateless layers
     self.Sampler = Sampler.new(config)
     self.Engine = Engine.new(config)
+    self.TechniqueSelector = TechniqueSelector.new(config)
 
     -- Keep stateful layers isolated per target so target switching does not
     -- bleed velocity smoothing or screen stabilization across different entries.
@@ -987,11 +1300,14 @@ function Predictor:Predict(origin, part, entry, dt)
     entry.LastPos = raw.Position
     entry.LastTime = raw.Time
     
-    -- 3. PREDICTION (Exactly one strategy)
-    local predicted = self.Engine:Calculate(origin, raw.Position, est, dt, entry, part)
+    -- 3. TECHNIQUE SELECTION
+    local techniqueDecision = self.TechniqueSelector:Decide(origin, raw.Position, est, entry)
+
+    -- 4. PREDICTION (Exactly one strategy profile)
+    local predicted = self.Engine:Calculate(origin, raw.Position, est, dt, entry, part, techniqueDecision)
     
-    -- 4. PRESENTATION (Smoothing)
-    return state.Stabilizer:Smooth(predicted, dt), predicted
+    -- 5. PRESENTATION (Smoothing)
+    return state.Stabilizer:Smooth(predicted, dt), predicted, techniqueDecision
 end
 
 return Predictor
@@ -1594,7 +1910,7 @@ function Brain:Update(dt, mousePos, camCFrame)
         return
     end
 
-    local targetPart, targetPos, rawTargetPos = self.Temporal:Process(camCFrame.Position, dt)
+    local targetPart, targetPos, rawTargetPos, techniqueDecision = self.Temporal:Process(camCFrame.Position, dt)
 
     if not targetPart or not targetPos then
         self.Occipital:Clear()
@@ -1603,7 +1919,7 @@ function Brain:Update(dt, mousePos, camCFrame)
     end
 
     local sPos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(targetPos)
-    self.Occipital:Process(mousePos, sPos, targetPart, onScreen)
+    self.Occipital:Process(mousePos, sPos, targetPart, onScreen, techniqueDecision, entry)
     self.Frontal:Execute(targetPos, targetPart, entry, dt, rawTargetPos)
 end
 
@@ -1684,12 +2000,17 @@ function OccipitalLobe.new(visuals)
     self.fov = visuals.fov
     self.highlight = visuals.highlight
     self.dot = visuals.dot
+    self.technique = visuals.technique
     return self
 end
 
-function OccipitalLobe:Process(mousePos, targetPos, targetPart, onScreen)
+function OccipitalLobe:Process(mousePos, targetPos, targetPart, onScreen, techniqueDecision, entry)
     -- GUARD: FOV Update should always happen to ensure crosshair feedback
     self.fov:Update(mousePos)
+
+    if self.technique then
+        self.technique:Update(techniqueDecision, entry)
+    end
     
     -- GUARD: Resolution findings (Fragility fixes)
     -- Only set dot/highlight if we have a valid onscreen target
@@ -1709,6 +2030,9 @@ function OccipitalLobe:Clear()
     -- Safe cleanup: Ensure no trailing highlights or disconnected dots
     self.highlight:Clear()
     self.dot:Set(nil, false)
+    if self.technique then
+        self.technique:Clear()
+    end
 end
 
 return OccipitalLobe
@@ -1759,6 +2083,7 @@ function TemporalLobe.new(selector, predictor)
     self._targetPart = nil
     self._prediction = nil
     self._rawPrediction = nil
+    self._techniqueDecision = nil
     self._lastEntry = nil
     self._lastPart = nil
     return self
@@ -1786,6 +2111,7 @@ function TemporalLobe:Process(originPos, dt)
         self._targetPart = nil
         self._prediction = nil
         self._rawPrediction = nil
+        self._techniqueDecision = nil
         return nil, nil
     end
 
@@ -1794,6 +2120,7 @@ function TemporalLobe:Process(originPos, dt)
         self._targetPart = nil
         self._prediction = nil
         self._rawPrediction = nil
+        self._techniqueDecision = nil
         if self._lastEntry then
             self.Predictor:NotifyTargetChanged(nil)
             self._lastEntry = nil
@@ -1807,6 +2134,7 @@ function TemporalLobe:Process(originPos, dt)
         self._targetEntry = nil
         self._prediction = nil
         self._rawPrediction = nil
+        self._techniqueDecision = nil
         if self._lastEntry then
             self.Predictor:NotifyTargetChanged(nil)
             self._lastEntry = nil
@@ -1821,9 +2149,9 @@ function TemporalLobe:Process(originPos, dt)
         self._lastPart = self._targetPart
     end
 
-    self._prediction, self._rawPrediction = self.Predictor:Predict(originPos, self._targetPart, self._targetEntry, dt)
+    self._prediction, self._rawPrediction, self._techniqueDecision = self.Predictor:Predict(originPos, self._targetPart, self._targetEntry, dt)
 
-    return self._targetPart, self._prediction, self._rawPrediction
+    return self._targetPart, self._prediction, self._rawPrediction, self._techniqueDecision
 end
 
 return TemporalLobe
@@ -1880,10 +2208,11 @@ local clock = os.clock
 local AntiSlowdown = {}
 AntiSlowdown.__index = AntiSlowdown
 
-function AntiSlowdown.new(options, localCharacter)
+function AntiSlowdown.new(options, localCharacter, movementArbiter)
     local self = setmetatable({}, AntiSlowdown)
     self.Options = options
     self.LocalCharacter = localCharacter
+    self.MovementArbiter = movementArbiter
     self.Connection = nil
     self.BaseWalkSpeed = 16
     self.BaseJumpPower = 50
@@ -1893,6 +2222,7 @@ function AntiSlowdown.new(options, localCharacter)
     self._lastAction = 0
     self._lastWriteTime = 0
     self._yieldingToSpeedOverride = false
+    self._arbiterKey = "__STAR_GLITCHER_ANTI_SLOWDOWN"
     return self
 end
 
@@ -1931,12 +2261,18 @@ end
 function AntiSlowdown:Init()
     self.Connection = RunService.Heartbeat:Connect(function()
         if not self.Options.NoSlowdown then
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self:_setStatus("Disabled")
             return
         end
 
         local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
         if not hum then
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self:_setStatus("Hum Missing")
             return
         end
@@ -1945,6 +2281,9 @@ function AntiSlowdown:Init()
             if hum ~= self.TrackedHumanoid then
                 self:CaptureBaseStats(hum)
             end
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self._yieldingToSpeedOverride = false
             self:_setStatus("Respawn Grace")
             return
@@ -1952,6 +2291,9 @@ function AntiSlowdown:Init()
 
         if self.Options.CustomMoveSpeedEnabled or self.Options.SpeedMultiplierEnabled then
             self._yieldingToSpeedOverride = true
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self:_setStatus("Yielding to Speed Override")
             return
         end
@@ -1972,16 +2314,22 @@ function AntiSlowdown:Init()
         self:_learnLegitMovement(hum)
 
         local actionTaken = false
-        if hum.WalkSpeed < self.BaseWalkSpeed then
-            hum.WalkSpeed = self.BaseWalkSpeed
-            self._lastWriteTime = clock()
-            actionTaken = true
-        end
+        if self.MovementArbiter then
+            self.MovementArbiter:SetWalkMinimum(self._arbiterKey, self.BaseWalkSpeed)
+            self.MovementArbiter:SetJumpMinimum(self._arbiterKey, self.BaseJumpPower)
+            actionTaken = hum.WalkSpeed < self.BaseWalkSpeed or hum.JumpPower < self.BaseJumpPower
+        else
+            if hum.WalkSpeed < self.BaseWalkSpeed then
+                hum.WalkSpeed = self.BaseWalkSpeed
+                self._lastWriteTime = clock()
+                actionTaken = true
+            end
 
-        if hum.JumpPower < self.BaseJumpPower then
-            hum.JumpPower = self.BaseJumpPower
-            self._lastWriteTime = clock()
-            actionTaken = true
+            if hum.JumpPower < self.BaseJumpPower then
+                hum.JumpPower = self.BaseJumpPower
+                self._lastWriteTime = clock()
+                actionTaken = true
+            end
         end
 
         if actionTaken then
@@ -1998,6 +2346,10 @@ function AntiSlowdown:Destroy()
     if self.Connection then
         self.Connection:Disconnect()
         self.Connection = nil
+    end
+
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
     end
 end
 
@@ -2215,14 +2567,16 @@ return AttributeCleaner
 local CustomSpeed = {}
 CustomSpeed.__index = CustomSpeed
 
-function CustomSpeed.new(options, localCharacter)
+function CustomSpeed.new(options, localCharacter, movementArbiter)
     local self = setmetatable({}, CustomSpeed)
     self.Options = options
     self.LocalCharacter = localCharacter
+    self.MovementArbiter = movementArbiter
     self.Connection = nil
     self.TrackedHumanoid = nil
     self.BaseWalkSpeed = 16
     self._wasEnabled = false
+    self._arbiterKey = "__STAR_GLITCHER_CUSTOM_SPEED"
     return self
 end
 
@@ -2234,6 +2588,11 @@ function CustomSpeed:_captureBaseSpeed(humanoid)
 end
 
 function CustomSpeed:_restoreBaseSpeed(humanoid)
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
+        return
+    end
+
     if humanoid and math.abs(humanoid.WalkSpeed - self.BaseWalkSpeed) > 0.1 then
         humanoid.WalkSpeed = self.BaseWalkSpeed
     end
@@ -2251,11 +2610,17 @@ function CustomSpeed:Init()
             if hum and self._wasEnabled then
                 self:_restoreBaseSpeed(hum)
             end
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self._wasEnabled = false
             return
         end
 
         if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self._wasEnabled = false
             return
         end
@@ -2269,7 +2634,9 @@ function CustomSpeed:Init()
             self._wasEnabled = true
         end
 
-        if math.abs(hum.WalkSpeed - self.Options.CustomMoveSpeed) > 0.1 then
+        if self.MovementArbiter then
+            self.MovementArbiter:SetWalkExact(self._arbiterKey, self.Options.CustomMoveSpeed, 100)
+        elseif math.abs(hum.WalkSpeed - self.Options.CustomMoveSpeed) > 0.1 then
             hum.WalkSpeed = self.Options.CustomMoveSpeed
         end
     end)
@@ -2279,6 +2646,10 @@ function CustomSpeed:Destroy()
     if self.Connection then
         self.Connection:Disconnect()
         self.Connection = nil
+    end
+
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
     end
 
     local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
@@ -2426,15 +2797,17 @@ JumpBoost.__index = JumpBoost
 
 local DEFAULT_JUMP_POWER = 50
 
-function JumpBoost.new(options, localCharacter)
+function JumpBoost.new(options, localCharacter, movementArbiter)
     local self = setmetatable({}, JumpBoost)
     self.Options = options
     self.LocalCharacter = localCharacter
+    self.MovementArbiter = movementArbiter
     self.Status = "Idle"
     self.TrackedHumanoid = nil
     self.BaseJumpPower = DEFAULT_JUMP_POWER
     self._connection = nil
     self._applied = false
+    self._arbiterKey = "__STAR_GLITCHER_JUMP_BOOST"
     return self
 end
 
@@ -2445,6 +2818,12 @@ function JumpBoost:_captureBaseJump(humanoid)
 end
 
 function JumpBoost:_restore()
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
+        self._applied = false
+        return
+    end
+
     local humanoid = self.TrackedHumanoid
     if humanoid and humanoid.Parent and self._applied then
         if math.abs(humanoid.JumpPower - self.BaseJumpPower) > 0.1 then
@@ -2473,6 +2852,10 @@ function JumpBoost:Init()
         end
 
         if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
+            self._applied = false
             self.Status = "Respawn grace"
             return
         end
@@ -2480,6 +2863,9 @@ function JumpBoost:Init()
         if not self.Options.JumpBoostEnabled then
             if not self._applied then
                 self.BaseJumpPower = math.max(humanoid.JumpPower, DEFAULT_JUMP_POWER)
+                if self.MovementArbiter then
+                    self.MovementArbiter:ClearSource(self._arbiterKey)
+                end
                 self.Status = "Idle"
                 return
             end
@@ -2490,11 +2876,15 @@ function JumpBoost:Init()
         end
 
         local desired = math.clamp(tonumber(self.Options.JumpBoostPower) or DEFAULT_JUMP_POWER, 1, 300)
-        if not humanoid.UseJumpPower then
-            humanoid.UseJumpPower = true
-        end
-        if math.abs(humanoid.JumpPower - desired) > 0.1 then
-            humanoid.JumpPower = desired
+        if self.MovementArbiter then
+            self.MovementArbiter:SetJumpExact(self._arbiterKey, desired, 50)
+        else
+            if not humanoid.UseJumpPower then
+                humanoid.UseJumpPower = true
+            end
+            if math.abs(humanoid.JumpPower - desired) > 0.1 then
+                humanoid.JumpPower = desired
+            end
         end
         self._applied = true
         self.Status = string.format("Active: %.0f", desired)
@@ -2506,20 +2896,283 @@ function JumpBoost:Destroy()
         self._connection:Disconnect()
         self._connection = nil
     end
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
+    end
     self:_restore()
 end
 
 return JumpBoost
+]====],
+    ["Modules/Movement/MovementArbiter.lua"] = [====[local RunService = game:GetService("RunService")
+
+local MovementArbiter = {}
+MovementArbiter.__index = MovementArbiter
+
+local DEFAULT_WALK_SPEED = 16
+local DEFAULT_JUMP_POWER = 50
+
+function MovementArbiter.new(options, localCharacter)
+    local self = setmetatable({}, MovementArbiter)
+    self.Options = options
+    self.LocalCharacter = localCharacter
+    self.Connection = nil
+    self.TrackedHumanoid = nil
+    self.BaseWalkSpeed = DEFAULT_WALK_SPEED
+    self.BaseJumpPower = DEFAULT_JUMP_POWER
+    self._requests = {}
+    self._appliedWalk = false
+    self._appliedJump = false
+    self._lastWriteAt = 0
+    self.Status = "Idle"
+    return self
+end
+
+function MovementArbiter:_ensureRequest(source)
+    local request = self._requests[source]
+    if not request then
+        request = {}
+        self._requests[source] = request
+    end
+    return request
+end
+
+function MovementArbiter:SetWalkExact(source, value, priority)
+    if not source then
+        return
+    end
+
+    local request = self:_ensureRequest(source)
+    request.WalkExact = tonumber(value)
+    request.WalkPriority = tonumber(priority) or 0
+end
+
+function MovementArbiter:SetWalkMinimum(source, value)
+    if not source then
+        return
+    end
+
+    local request = self:_ensureRequest(source)
+    request.WalkMin = tonumber(value)
+end
+
+function MovementArbiter:SetJumpExact(source, value, priority)
+    if not source then
+        return
+    end
+
+    local request = self:_ensureRequest(source)
+    request.JumpExact = tonumber(value)
+    request.JumpPriority = tonumber(priority) or 0
+end
+
+function MovementArbiter:SetJumpMinimum(source, value)
+    if not source then
+        return
+    end
+
+    local request = self:_ensureRequest(source)
+    request.JumpMin = tonumber(value)
+end
+
+function MovementArbiter:ClearSource(source)
+    if not source then
+        return
+    end
+    self._requests[source] = nil
+end
+
+function MovementArbiter:_captureBase(humanoid)
+    if not humanoid then
+        return
+    end
+
+    self.TrackedHumanoid = humanoid
+    self.BaseWalkSpeed = math.max(humanoid.WalkSpeed, DEFAULT_WALK_SPEED)
+    self.BaseJumpPower = math.max(humanoid.JumpPower, DEFAULT_JUMP_POWER)
+end
+
+function MovementArbiter:_learnBase(humanoid, hasWalkExact, hasWalkMin, hasJumpExact, hasJumpMin)
+    if not humanoid or (os.clock() - self._lastWriteAt) < 0.3 then
+        return
+    end
+
+    if not hasWalkExact and not hasWalkMin and humanoid.WalkSpeed > (self.BaseWalkSpeed + 0.75) then
+        self.BaseWalkSpeed = humanoid.WalkSpeed
+    end
+
+    if not hasJumpExact and not hasJumpMin and humanoid.JumpPower > (self.BaseJumpPower + 1) then
+        self.BaseJumpPower = humanoid.JumpPower
+    end
+end
+
+function MovementArbiter:_pickExact(kind)
+    local bestValue = nil
+    local bestPriority = -math.huge
+
+    for _, request in pairs(self._requests) do
+        local value = request[kind]
+        if value ~= nil then
+            local priorityKey = (kind == "WalkExact") and "WalkPriority" or "JumpPriority"
+            local priority = request[priorityKey] or 0
+            if priority > bestPriority then
+                bestPriority = priority
+                bestValue = value
+            end
+        end
+    end
+
+    return bestValue ~= nil, bestValue
+end
+
+function MovementArbiter:_pickMinimum(kind)
+    local best = nil
+    for _, request in pairs(self._requests) do
+        local value = request[kind]
+        if value ~= nil then
+            best = best and math.max(best, value) or value
+        end
+    end
+    return best ~= nil, best
+end
+
+function MovementArbiter:_writeHumanoidProperty(humanoid, propertyName, value)
+    if not humanoid or value == nil then
+        return false
+    end
+
+    if math.abs((humanoid[propertyName] or 0) - value) <= 0.1 then
+        return false
+    end
+
+    humanoid[propertyName] = value
+    self._lastWriteAt = os.clock()
+    return true
+end
+
+function MovementArbiter:_applyWalk(humanoid)
+    local hasExact, exactValue = self:_pickExact("WalkExact")
+    local hasMin, minValue = self:_pickMinimum("WalkMin")
+
+    if hasExact then
+        self._appliedWalk = self:_writeHumanoidProperty(humanoid, "WalkSpeed", exactValue) or self._appliedWalk
+        return hasExact, hasMin
+    end
+
+    if hasMin and humanoid.WalkSpeed < minValue then
+        self._appliedWalk = self:_writeHumanoidProperty(humanoid, "WalkSpeed", minValue) or self._appliedWalk
+        return hasExact, hasMin
+    end
+
+    if self._appliedWalk then
+        self:_writeHumanoidProperty(humanoid, "WalkSpeed", self.BaseWalkSpeed)
+        self._appliedWalk = false
+    end
+
+    return hasExact, hasMin
+end
+
+function MovementArbiter:_applyJump(humanoid)
+    local hasExact, exactValue = self:_pickExact("JumpExact")
+    local hasMin, minValue = self:_pickMinimum("JumpMin")
+
+    if hasExact then
+        if not humanoid.UseJumpPower then
+            humanoid.UseJumpPower = true
+        end
+        self._appliedJump = self:_writeHumanoidProperty(humanoid, "JumpPower", exactValue) or self._appliedJump
+        return hasExact, hasMin
+    end
+
+    if hasMin and humanoid.JumpPower < minValue then
+        if not humanoid.UseJumpPower then
+            humanoid.UseJumpPower = true
+        end
+        self._appliedJump = self:_writeHumanoidProperty(humanoid, "JumpPower", minValue) or self._appliedJump
+        return hasExact, hasMin
+    end
+
+    if self._appliedJump then
+        if not humanoid.UseJumpPower then
+            humanoid.UseJumpPower = true
+        end
+        self:_writeHumanoidProperty(humanoid, "JumpPower", self.BaseJumpPower)
+        self._appliedJump = false
+    end
+
+    return hasExact, hasMin
+end
+
+function MovementArbiter:_step()
+    local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
+    if humanoid ~= self.TrackedHumanoid then
+        self:_captureBase(humanoid)
+    end
+
+    if not humanoid then
+        self.Status = "Hum Missing"
+        return
+    end
+
+    local hasWalkExact, hasWalkMin = self:_applyWalk(humanoid)
+    local hasJumpExact, hasJumpMin = self:_applyJump(humanoid)
+    self:_learnBase(humanoid, hasWalkExact, hasWalkMin, hasJumpExact, hasJumpMin)
+
+    if hasWalkExact or hasJumpExact then
+        self.Status = "Override Active"
+    elseif hasWalkMin or hasJumpMin then
+        self.Status = "Protection Active"
+    else
+        self.Status = "Idle"
+    end
+end
+
+function MovementArbiter:Init()
+    if self.Connection then
+        return
+    end
+
+    self.Connection = RunService.Heartbeat:Connect(function()
+        self:_step()
+    end)
+end
+
+function MovementArbiter:Destroy()
+    if self.Connection then
+        self.Connection:Disconnect()
+        self.Connection = nil
+    end
+
+    local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
+    if humanoid then
+        if self._appliedWalk then
+            self:_writeHumanoidProperty(humanoid, "WalkSpeed", self.BaseWalkSpeed)
+        end
+        if self._appliedJump then
+            if not humanoid.UseJumpPower then
+                humanoid.UseJumpPower = true
+            end
+            self:_writeHumanoidProperty(humanoid, "JumpPower", self.BaseJumpPower)
+        end
+    end
+
+    self._appliedWalk = false
+    self._appliedJump = false
+    table.clear(self._requests)
+end
+
+return MovementArbiter
 ]====],
     ["Modules/Movement/SpeedMultiplier.lua"] = [====[local RunService = game:GetService("RunService")
 
 local SpeedMultiplier = {}
 SpeedMultiplier.__index = SpeedMultiplier
 
-function SpeedMultiplier.new(options, localCharacter)
+function SpeedMultiplier.new(options, localCharacter, movementArbiter)
     local self = setmetatable({}, SpeedMultiplier)
     self.Options = options
     self.LocalCharacter = localCharacter
+    self.MovementArbiter = movementArbiter
     self.Connection = nil
     self.BaseWalkSpeed = 16
     self.TrackedHumanoid = nil
@@ -2529,6 +3182,7 @@ function SpeedMultiplier.new(options, localCharacter)
     self._fallbackWarmupUntil = 0
     self._wasEnabled = false
     self._preEnableBaseSpeed = 16
+    self._arbiterKey = "__STAR_GLITCHER_SPEED_MULTIPLIER"
     return self
 end
 
@@ -2538,6 +3192,12 @@ function SpeedMultiplier:_captureBaseSpeed(humanoid)
 end
 
 function SpeedMultiplier:_writeWalkSpeed(humanoid, value)
+    if self.MovementArbiter then
+        self.MovementArbiter:SetWalkExact(self._arbiterKey, value, 20)
+        self._lastWalkWriteTime = os.clock()
+        return
+    end
+
     if not humanoid then
         return
     end
@@ -2549,6 +3209,11 @@ function SpeedMultiplier:_writeWalkSpeed(humanoid, value)
 end
 
 function SpeedMultiplier:_restoreBaseSpeed(humanoid)
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
+        return
+    end
+
     if not humanoid then
         return
     end
@@ -2626,6 +3291,9 @@ function SpeedMultiplier:Init()
             if hum ~= self.TrackedHumanoid then
                 self:_captureBaseSpeed(hum)
             end
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self._fallbackWarmupUntil = 0
             self._wasEnabled = false
             self.Status = "Respawn Grace"
@@ -2642,6 +3310,9 @@ function SpeedMultiplier:Init()
                 self:_restoreBaseSpeed(hum)
             else
                 self.BaseWalkSpeed = math.max(hum.WalkSpeed, 16)
+                if self.MovementArbiter then
+                    self.MovementArbiter:ClearSource(self._arbiterKey)
+                end
             end
             self._wasEnabled = false
             self.Status = self.Options.CustomMoveSpeedEnabled and "Blocked by Fixed Speed" or "Disabled"
@@ -2683,6 +3354,10 @@ function SpeedMultiplier:Destroy()
     if self.Connection then
         self.Connection:Disconnect()
         self.Connection = nil
+    end
+
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
     end
 
     local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
@@ -5770,6 +6445,61 @@ end
 
 return TargetDot
 ]====],
+    ["Modules/Visuals/TechniqueOverlay.lua"] = [====[local TechniqueOverlay = {}
+TechniqueOverlay.__index = TechniqueOverlay
+
+function TechniqueOverlay.new(options)
+    local self = setmetatable({}, TechniqueOverlay)
+    self.Options = options
+    self.Drawing = Drawing.new("Text")
+    self.Drawing.Visible = false
+    self.Drawing.Size = 16
+    self.Drawing.Color = Color3.fromRGB(255, 236, 236)
+    self.Drawing.Outline = true
+    self.Drawing.Center = false
+    self.Drawing.Font = 2
+    return self
+end
+
+function TechniqueOverlay:Update(decision, entry)
+    if not self.Options.PredictionTechniqueDebug then
+        self.Drawing.Visible = false
+        return
+    end
+
+    if not decision then
+        self.Drawing.Visible = false
+        return
+    end
+
+    local technique = tostring(decision.Technique or "Unknown")
+    local reason = tostring(decision.Reason or "n/a")
+    local confidence = math.floor(((decision.Confidence or 0) * 100) + 0.5)
+    local targetName = entry and entry.Name or "No target"
+
+    self.Drawing.Position = Vector2.new(18, 160)
+    self.Drawing.Text = string.format(
+        "Technique: %s\nTarget: %s\nConfidence: %d%%\nReason: %s",
+        technique,
+        targetName,
+        confidence,
+        reason
+    )
+    self.Drawing.Visible = true
+end
+
+function TechniqueOverlay:Clear()
+    self.Drawing.Visible = false
+end
+
+function TechniqueOverlay:Destroy()
+    pcall(function()
+        self.Drawing:Remove()
+    end)
+end
+
+return TechniqueOverlay
+]====],
     ["Tools/HitConfidenceProbe.lua"] = [====[--[[
     HitConfidenceProbe.lua
     Standalone internal test helper for validating "did my shot likely deal damage?"
@@ -6738,6 +7468,35 @@ return function(Window, Options)
         end,
     })
 
+    Tab:CreateDropdown({
+        Name = "Technique Control",
+        Options = {"Assisted", "Manual"},
+        CurrentOption = {Options.PredictionTechniqueMode or "Assisted"},
+        Flag = "PredictionTechniqueModeFlag",
+        Callback = function(Value)
+            Options.PredictionTechniqueMode = type(Value) == "table" and Value[1] or Value
+        end,
+    })
+
+    Tab:CreateDropdown({
+        Name = "Manual Technique",
+        Options = {"Linear", "Strafe", "Orbit", "Airborne", "Dash Recovery"},
+        CurrentOption = {Options.PredictionTechnique or "Linear"},
+        Flag = "PredictionTechniqueFlag",
+        Callback = function(Value)
+            Options.PredictionTechnique = type(Value) == "table" and Value[1] or Value
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Technique Debug Overlay",
+        CurrentValue = Options.PredictionTechniqueDebug == true,
+        Flag = "PredictionTechniqueDebugFlag",
+        Callback = function(Value)
+            Options.PredictionTechniqueDebug = Value
+        end,
+    })
+
     Tab:CreateSlider({
         Name = "Projectile Velocity",
         Range = {50, 5000},
@@ -7138,6 +7897,7 @@ local Aimbot          = requireModule("Modules/Combat/Aimbot.lua")
 local SilentAim       = requireModule("Modules/Combat/SilentAim.lua")
 
 local SpeedSpoof      = requireModule("Modules/Movement/SpeedSpoof.lua")
+local MovementArbiter = requireModule("Modules/Movement/MovementArbiter.lua")
 local SpeedMultiplier = requireModule("Modules/Movement/SpeedMultiplier.lua")
 local CustomSpeed     = requireModule("Modules/Movement/CustomSpeed.lua")
 local GravityController = requireModule("Modules/Movement/GravityController.lua")
@@ -7149,6 +7909,7 @@ local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
 
 local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
 local Highlight       = requireModule("Modules/Visuals/Highlight.lua")
+local TechniqueOverlay = requireModule("Modules/Visuals/TechniqueOverlay.lua")
 local TargetDot       = requireModule("Modules/Visuals/TargetDot.lua")
 local PlayerLabelUtils = requireModule("UI/Tabs/Player/LabelUtils.lua")
 local PlayerLayout = requireModule("UI/Tabs/Player/Layout.lua")
@@ -7162,6 +7923,7 @@ local synapse    = Synapse
 local taskScheduler = TaskScheduler.new(Options)
 local input      = InputHandler.new(Config)
 local localCharacter = LocalCharacter.new(taskScheduler)
+local movementArbiter = MovementArbiter.new(Options, localCharacter)
 local detector   = Detector.new()
 local tracker    = Tracker.new(Config, detector, taskScheduler)
 local aimbot     = Aimbot.new(Config)
@@ -7177,17 +7939,19 @@ local selector   = Selector.new(Config, tracker, pred)
 local visuals = {
     fov = FOVCircle.new(Options),
     highlight = Highlight.new(),
+    technique = TechniqueOverlay.new(Options),
     dot = TargetDot.new()
 }
 
 local movementSuite = {
     spoof = SpeedSpoof.new(Options, localCharacter),
-    multi = SpeedMultiplier.new(Options, localCharacter),
-    fixed = CustomSpeed.new(Options, localCharacter),
+    arbiter = movementArbiter,
+    multi = SpeedMultiplier.new(Options, localCharacter, movementArbiter),
+    fixed = CustomSpeed.new(Options, localCharacter, movementArbiter),
     gravity = GravityController.new(Options),
     float = FloatController.new(Options, localCharacter),
-    jump = JumpBoost.new(Options, localCharacter),
-    slow  = AntiSlowdown.new(Options, localCharacter),
+    jump = JumpBoost.new(Options, localCharacter, movementArbiter),
+    slow  = AntiSlowdown.new(Options, localCharacter, movementArbiter),
     stun  = AntiStun.new(Options, localCharacter),
     clean = Cleaner.new(Options, localCharacter)
 }
@@ -7251,7 +8015,7 @@ local function performCleanup(fullSweep)
 
     local objs = {
         input, localCharacter, tracker, aimbot, silentAim,
-        cleaner, visuals.fov, visuals.highlight, visuals.dot, brain,
+        cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
         taskScheduler,
         playerTabController, settingsTabController
     }

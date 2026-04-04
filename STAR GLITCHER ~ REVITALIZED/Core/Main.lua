@@ -193,6 +193,7 @@ local Aimbot          = requireModule("Modules/Combat/Aimbot.lua")
 local SilentAim       = requireModule("Modules/Combat/SilentAim.lua")
 
 local SpeedSpoof      = requireModule("Modules/Movement/SpeedSpoof.lua")
+local MovementArbiter = requireModule("Modules/Movement/MovementArbiter.lua")
 local SpeedMultiplier = requireModule("Modules/Movement/SpeedMultiplier.lua")
 local CustomSpeed     = requireModule("Modules/Movement/CustomSpeed.lua")
 local GravityController = requireModule("Modules/Movement/GravityController.lua")
@@ -204,6 +205,7 @@ local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
 
 local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
 local Highlight       = requireModule("Modules/Visuals/Highlight.lua")
+local TechniqueOverlay = requireModule("Modules/Visuals/TechniqueOverlay.lua")
 local TargetDot       = requireModule("Modules/Visuals/TargetDot.lua")
 local PlayerLabelUtils = requireModule("UI/Tabs/Player/LabelUtils.lua")
 local PlayerLayout = requireModule("UI/Tabs/Player/Layout.lua")
@@ -217,6 +219,7 @@ local synapse    = Synapse
 local taskScheduler = TaskScheduler.new(Options)
 local input      = InputHandler.new(Config)
 local localCharacter = LocalCharacter.new(taskScheduler)
+local movementArbiter = MovementArbiter.new(Options, localCharacter)
 local detector   = Detector.new()
 local tracker    = Tracker.new(Config, detector, taskScheduler)
 local aimbot     = Aimbot.new(Config)
@@ -232,17 +235,19 @@ local selector   = Selector.new(Config, tracker, pred)
 local visuals = {
     fov = FOVCircle.new(Options),
     highlight = Highlight.new(),
+    technique = TechniqueOverlay.new(Options),
     dot = TargetDot.new()
 }
 
 local movementSuite = {
     spoof = SpeedSpoof.new(Options, localCharacter),
-    multi = SpeedMultiplier.new(Options, localCharacter),
-    fixed = CustomSpeed.new(Options, localCharacter),
+    arbiter = movementArbiter,
+    multi = SpeedMultiplier.new(Options, localCharacter, movementArbiter),
+    fixed = CustomSpeed.new(Options, localCharacter, movementArbiter),
     gravity = GravityController.new(Options),
     float = FloatController.new(Options, localCharacter),
-    jump = JumpBoost.new(Options, localCharacter),
-    slow  = AntiSlowdown.new(Options, localCharacter),
+    jump = JumpBoost.new(Options, localCharacter, movementArbiter),
+    slow  = AntiSlowdown.new(Options, localCharacter, movementArbiter),
     stun  = AntiStun.new(Options, localCharacter),
     clean = Cleaner.new(Options, localCharacter)
 }
@@ -306,7 +311,7 @@ local function performCleanup(fullSweep)
 
     local objs = {
         input, localCharacter, tracker, aimbot, silentAim,
-        cleaner, visuals.fov, visuals.highlight, visuals.dot, brain,
+        cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
         taskScheduler,
         playerTabController, settingsTabController
     }

@@ -19,10 +19,12 @@ function Predictor.new(config, loader, kalman)
     local Estimator  = loader(Path.."Estimator.lua")
     local Engine     = loader(Path.."Engine.lua")
     local Stabilizer = loader(Path.."Stabilizer.lua")
+    local TechniqueSelector = loader(Path.."TechniqueSelector.lua")
     
     -- Instantiate shared stateless layers
     self.Sampler = Sampler.new(config)
     self.Engine = Engine.new(config)
+    self.TechniqueSelector = TechniqueSelector.new(config)
 
     -- Keep stateful layers isolated per target so target switching does not
     -- bleed velocity smoothing or screen stabilization across different entries.
@@ -81,11 +83,14 @@ function Predictor:Predict(origin, part, entry, dt)
     entry.LastPos = raw.Position
     entry.LastTime = raw.Time
     
-    -- 3. PREDICTION (Exactly one strategy)
-    local predicted = self.Engine:Calculate(origin, raw.Position, est, dt, entry, part)
+    -- 3. TECHNIQUE SELECTION
+    local techniqueDecision = self.TechniqueSelector:Decide(origin, raw.Position, est, entry)
+
+    -- 4. PREDICTION (Exactly one strategy profile)
+    local predicted = self.Engine:Calculate(origin, raw.Position, est, dt, entry, part, techniqueDecision)
     
-    -- 4. PRESENTATION (Smoothing)
-    return state.Stabilizer:Smooth(predicted, dt), predicted
+    -- 5. PRESENTATION (Smoothing)
+    return state.Stabilizer:Smooth(predicted, dt), predicted, techniqueDecision
 end
 
 return Predictor

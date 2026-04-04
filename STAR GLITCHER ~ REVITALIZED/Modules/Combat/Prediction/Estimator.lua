@@ -32,6 +32,7 @@ function Estimator.new(kalman, config)
         Confidence = 1,
         Stable = true,
         MotionShock = 0,
+        IsTeleport = false,
         RawVelocity = ZERO,
         PhysicsVelocity = ZERO,
         TimeDelta = DEFAULT_DT,
@@ -123,6 +124,7 @@ function Estimator:Estimate(raw, dt)
     result.Confidence = score
     result.Stable = score > 0.72 and motionShock < 110
     result.MotionShock = motionShock
+    result.IsTeleport = raw.IsTeleport == true
     result.RawVelocity = measurement
     result.PhysicsVelocity = physicsVelocity
     result.TimeDelta = sampleDt

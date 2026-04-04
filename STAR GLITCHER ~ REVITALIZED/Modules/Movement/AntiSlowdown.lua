@@ -10,10 +10,11 @@ local clock = os.clock
 local AntiSlowdown = {}
 AntiSlowdown.__index = AntiSlowdown
 
-function AntiSlowdown.new(options, localCharacter)
+function AntiSlowdown.new(options, localCharacter, movementArbiter)
     local self = setmetatable({}, AntiSlowdown)
     self.Options = options
     self.LocalCharacter = localCharacter
+    self.MovementArbiter = movementArbiter
     self.Connection = nil
     self.BaseWalkSpeed = 16
     self.BaseJumpPower = 50
@@ -23,6 +24,7 @@ function AntiSlowdown.new(options, localCharacter)
     self._lastAction = 0
     self._lastWriteTime = 0
     self._yieldingToSpeedOverride = false
+    self._arbiterKey = "__STAR_GLITCHER_ANTI_SLOWDOWN"
     return self
 end
 
@@ -61,12 +63,18 @@ end
 function AntiSlowdown:Init()
     self.Connection = RunService.Heartbeat:Connect(function()
         if not self.Options.NoSlowdown then
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self:_setStatus("Disabled")
             return
         end
 
         local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
         if not hum then
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self:_setStatus("Hum Missing")
             return
         end
@@ -75,6 +83,9 @@ function AntiSlowdown:Init()
             if hum ~= self.TrackedHumanoid then
                 self:CaptureBaseStats(hum)
             end
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self._yieldingToSpeedOverride = false
             self:_setStatus("Respawn Grace")
             return
@@ -82,6 +93,9 @@ function AntiSlowdown:Init()
 
         if self.Options.CustomMoveSpeedEnabled or self.Options.SpeedMultiplierEnabled then
             self._yieldingToSpeedOverride = true
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
             self:_setStatus("Yielding to Speed Override")
             return
         end
@@ -102,16 +116,22 @@ function AntiSlowdown:Init()
         self:_learnLegitMovement(hum)
 
         local actionTaken = false
-        if hum.WalkSpeed < self.BaseWalkSpeed then
-            hum.WalkSpeed = self.BaseWalkSpeed
-            self._lastWriteTime = clock()
-            actionTaken = true
-        end
+        if self.MovementArbiter then
+            self.MovementArbiter:SetWalkMinimum(self._arbiterKey, self.BaseWalkSpeed)
+            self.MovementArbiter:SetJumpMinimum(self._arbiterKey, self.BaseJumpPower)
+            actionTaken = hum.WalkSpeed < self.BaseWalkSpeed or hum.JumpPower < self.BaseJumpPower
+        else
+            if hum.WalkSpeed < self.BaseWalkSpeed then
+                hum.WalkSpeed = self.BaseWalkSpeed
+                self._lastWriteTime = clock()
+                actionTaken = true
+            end
 
-        if hum.JumpPower < self.BaseJumpPower then
-            hum.JumpPower = self.BaseJumpPower
-            self._lastWriteTime = clock()
-            actionTaken = true
+            if hum.JumpPower < self.BaseJumpPower then
+                hum.JumpPower = self.BaseJumpPower
+                self._lastWriteTime = clock()
+                actionTaken = true
+            end
         end
 
         if actionTaken then
@@ -128,6 +148,10 @@ function AntiSlowdown:Destroy()
     if self.Connection then
         self.Connection:Disconnect()
         self.Connection = nil
+    end
+
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
     end
 end
 

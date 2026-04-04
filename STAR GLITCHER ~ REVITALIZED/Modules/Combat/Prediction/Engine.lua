@@ -126,7 +126,64 @@ function Engine:_IsBeamLike(projectileSpeed)
     return projectileSpeed >= beamFloor
 end
 
-function Engine:Calculate(origin, targetPos, est, dt, entry, part)
+function Engine:_getTechniqueProfile(decision)
+    local technique = decision and decision.Technique or "Linear"
+
+    if technique == "Strafe" then
+        return {
+            TimeScale = 1.02,
+            LateralScale = 1.22,
+            AccelScale = 1.04,
+            JerkScale = 0.92,
+            VerticalScale = 0.95,
+            TrustBias = 0.03,
+        }
+    end
+
+    if technique == "Orbit" then
+        return {
+            TimeScale = 1.04,
+            LateralScale = 1.34,
+            AccelScale = 0.98,
+            JerkScale = 0.82,
+            VerticalScale = 0.92,
+            TrustBias = 0.04,
+        }
+    end
+
+    if technique == "Airborne" then
+        return {
+            TimeScale = 1.01,
+            LateralScale = 0.9,
+            AccelScale = 1.12,
+            JerkScale = 0.88,
+            VerticalScale = 1.26,
+            TrustBias = 0.02,
+        }
+    end
+
+    if technique == "Dash Recovery" then
+        return {
+            TimeScale = 0.82,
+            LateralScale = 0.72,
+            AccelScale = 0.42,
+            JerkScale = 0.18,
+            VerticalScale = 0.84,
+            TrustBias = -0.12,
+        }
+    end
+
+    return {
+        TimeScale = 0.98,
+        LateralScale = 0.86,
+        AccelScale = 0.74,
+        JerkScale = 0.52,
+        VerticalScale = 0.94,
+        TrustBias = 0.01,
+    }
+end
+
+function Engine:Calculate(origin, targetPos, est, dt, entry, part, techniqueDecision)
     local Options = self.Options
     if not Options.PredictionEnabled then
         return targetPos
@@ -138,6 +195,7 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
     local confidence = math.clamp(est.Confidence or 0, 0, 1)
     local motionShock = est.MotionShock or 0
     local speed = velocity.Magnitude
+    local technique = self:_getTechniqueProfile(techniqueDecision)
     local targetProfile, aimBiasY = self:_ResolveTargetProfile(entry, part)
 
     if aimBiasY ~= 0 then
@@ -157,7 +215,7 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
     local travelTime = distance / projectileSpeed
     local latency = self:_GetLatency() * self:_GetPingMultiplier()
     local frameComp = math.min(math.max(est.TimeDelta or dt or 0, 0), 1 / 20) * 0.5
-    local totalTime = travelTime + latency + frameComp
+    local totalTime = (travelTime + latency + frameComp) * technique.TimeScale
 
     local shotDir = toTarget.Unit
     local forwardSpeed = velocity:Dot(shotDir)
@@ -199,7 +257,7 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
     -- Strafing targets often miss because lateral movement needs slightly more
     -- aggressive lead than front/back motion under frame + ping delay.
     if lateralSpeed > 0.01 then
-        local lateralTrust = self:_GetLateralTrust(targetProfile, confidence, lateralAlpha, shockAlpha)
+        local lateralTrust = self:_GetLateralTrust(targetProfile, confidence, lateralAlpha, shockAlpha) * technique.LateralScale
         local distanceStrafeGain = 1 + ((self.Prediction.DISTANCE_STRAFE_GAIN or 1.2) - 1) * distanceRatio * 0.35
         if beamLike then
             distanceStrafeGain = distanceStrafeGain * math.clamp(self.Prediction.BEAM_STRAFE_BIAS or 0.78, 0.5, 1.05)
@@ -216,11 +274,19 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
         local jerkTrust = math.clamp(accelTrust * (1 - shockAlpha * 0.45), 0, 1)
 
         local profileBonus = targetProfile == TARGET_PROFILE_MINI_HUMANOID and 0.08 or (targetProfile == TARGET_PROFILE_BOX and 0.04 or 0)
-        local accelWeight = math.clamp((1.08 - (totalTime * 0.3)) * (0.65 + (speedAlpha * 0.45) + (lateralAlpha * 0.2) + profileBonus), 0.24, 1.34) * accelTrust
-        local jerkWeight = math.clamp((0.58 - totalTime) * (0.45 + (speedAlpha * 0.35) + (lateralAlpha * 0.15) + (profileBonus * 0.5)), 0.05, 0.6) * jerkTrust
+        local accelWeight = math.clamp((1.08 - (totalTime * 0.3)) * (0.65 + (speedAlpha * 0.45) + (lateralAlpha * 0.2) + profileBonus), 0.24, 1.34) * accelTrust * technique.AccelScale
+        local jerkWeight = math.clamp((0.58 - totalTime) * (0.45 + (speedAlpha * 0.35) + (lateralAlpha * 0.15) + (profileBonus * 0.5)), 0.05, 0.6) * jerkTrust * technique.JerkScale
 
         predictedOffset = predictedOffset + ((0.5 * accel * (totalTime ^ 2)) * accelWeight)
         predictedOffset = predictedOffset + (((1 / 6) * jerk * (totalTime ^ 3)) * jerkWeight)
+    end
+
+    if technique.VerticalScale ~= 1 then
+        predictedOffset = Vector3.new(
+            predictedOffset.X,
+            predictedOffset.Y * technique.VerticalScale,
+            predictedOffset.Z
+        )
     end
 
     if forwardSpeed > 0.01 and accel.Magnitude > 0.01 then
@@ -256,7 +322,7 @@ function Engine:Calculate(origin, targetPos, est, dt, entry, part)
 
     local predictedPos = targetPos + predictedOffset
     local trustFactor = math.clamp(
-        (confidence * 0.75) + ((est.Stable and 0.15) or 0) + (speedAlpha * 0.12) + (lateralAlpha * 0.12) - (shockAlpha * 0.2),
+        (confidence * 0.75) + ((est.Stable and 0.15) or 0) + (speedAlpha * 0.12) + (lateralAlpha * 0.12) - (shockAlpha * 0.2) + technique.TrustBias,
         0.12,
         1
     )

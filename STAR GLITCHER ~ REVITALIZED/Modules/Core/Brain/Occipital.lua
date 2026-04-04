@@ -12,12 +12,17 @@ function OccipitalLobe.new(visuals)
     self.fov = visuals.fov
     self.highlight = visuals.highlight
     self.dot = visuals.dot
+    self.technique = visuals.technique
     return self
 end
 
-function OccipitalLobe:Process(mousePos, targetPos, targetPart, onScreen)
+function OccipitalLobe:Process(mousePos, targetPos, targetPart, onScreen, techniqueDecision, entry)
     -- GUARD: FOV Update should always happen to ensure crosshair feedback
     self.fov:Update(mousePos)
+
+    if self.technique then
+        self.technique:Update(techniqueDecision, entry)
+    end
     
     -- GUARD: Resolution findings (Fragility fixes)
     -- Only set dot/highlight if we have a valid onscreen target
@@ -37,6 +42,9 @@ function OccipitalLobe:Clear()
     -- Safe cleanup: Ensure no trailing highlights or disconnected dots
     self.highlight:Clear()
     self.dot:Set(nil, false)
+    if self.technique then
+        self.technique:Clear()
+    end
 end
 
 return OccipitalLobe
