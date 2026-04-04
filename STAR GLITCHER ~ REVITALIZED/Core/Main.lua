@@ -187,7 +187,6 @@ local TaskScheduler   = requireModule("Modules/Utils/TaskScheduler.lua")
 local BasePred        = requireModule("Modules/Combat/Prediction/Base.lua")
 local Predictor       = requireModule("Modules/Combat/Predictor.lua")
 local SilentResolver  = requireModule("Modules/Combat/Prediction/SilentResolver.lua")
-local Apocalypse      = requireModule("Modules/Combat/Hijackers/Apocalypse.lua")
 local GarbageCollector = requireModule("Modules/Utils/GarbageCollector.lua")
 local Selector        = requireModule("Modules/Combat/TargetSelector.lua")
 local Aimbot          = requireModule("Modules/Combat/Aimbot.lua")
@@ -216,18 +215,16 @@ local PlayerController = requireModule("UI/Tabs/Player/Controller.lua")
 -- INSTANTIATE (OOP Injection)
 -- ===================================================
 local synapse    = Synapse
+local taskScheduler = TaskScheduler.new(Options)
 local input      = InputHandler.new(Config)
-local localCharacter = LocalCharacter.new()
+local localCharacter = LocalCharacter.new(taskScheduler)
 local detector   = Detector.new()
-local tracker    = Tracker.new(Config, detector)
+local tracker    = Tracker.new(Config, detector, taskScheduler)
 local aimbot     = Aimbot.new(Config)
 local silentResolver = SilentResolver.new(Config)
 local silentAim  = SilentAim.new(Config, synapse, silentResolver) 
 local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
 local resourceManager = ResourceManager.new(Options)
-local taskScheduler = TaskScheduler.new(Options)
-Config.TaskScheduler = taskScheduler
-local apocalypse = Apocalypse.new(Config)
 local cleaner    = GarbageCollector.new(Options, resourceManager)
 
 local pred       = Predictor.new(Config, loadModule, Kalman)
@@ -262,12 +259,11 @@ local brain = Brain.new(Config, {
 -- INITIALIZE & SETUP UI
 -- ===================================================
 input:Init()
+taskScheduler:Init()
 localCharacter:Init()
 tracker:Init()
 silentAim:Init()
-apocalypse:Init()
 resourceManager:Init()
-taskScheduler:Init()
 cleaner:Init()
 visuals.hit:Init()
 
@@ -276,7 +272,7 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, playerTabController)
-requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, apocalypse)
+requireModule("UI/Tabs/BlatantTab.lua")(Window, Options)
 local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager)
 
 local loadConfigOk, loadConfigErr = RayfieldUI.SafeLoadConfiguration(Rayfield)
@@ -313,7 +309,7 @@ local function performCleanup(fullSweep)
     table.clear(_conns)
 
     local objs = {
-        input, localCharacter, tracker, aimbot, silentAim, apocalypse,
+        input, localCharacter, tracker, aimbot, silentAim,
         cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain,
         taskScheduler,
         playerTabController, settingsTabController

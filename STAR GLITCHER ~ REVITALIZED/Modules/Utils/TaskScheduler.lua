@@ -3,7 +3,7 @@ local RunService = game:GetService("RunService")
 local TaskScheduler = {}
 TaskScheduler.__index = TaskScheduler
 
-local DEFAULT_FRAME_BUDGET = 0.0012
+local DEFAULT_FRAME_BUDGET = 0.001
 
 function TaskScheduler.new(options)
     local self = setmetatable({}, TaskScheduler)
@@ -91,7 +91,6 @@ function TaskScheduler:_runJob(job)
     if not ok then
         warn("[TaskScheduler] Job failed | Error: " .. tostring(err))
     end
-
     return ok
 end
 

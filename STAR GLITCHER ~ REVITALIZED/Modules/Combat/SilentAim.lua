@@ -16,7 +16,8 @@ local REDIRECT_WINDOW = 0.35
 local clock = os.clock
 
 local REMOTE_BLACKLIST = {
-    "sprint", "speed", "walk", "jump", "action", "interact", "dialogue", "inventory", "tab"
+    "sprint", "speed", "walk", "jump", "action", "interact", "dialogue", "inventory", "tab",
+    "shop", "trade", "quest", "mission", "chat", "menu", "equip", "unequip"
 }
 
 local function isCombatRemote(remote)
@@ -30,6 +31,40 @@ local function isCombatRemote(remote)
         or mName:find("hit")
         or mName:find("damage")
         or mName:find("impact")
+end
+
+local function isSpatialArg(value)
+    local valueType = typeof(value)
+    if valueType == "Vector3" or valueType == "CFrame" or valueType == "Ray" then
+        return true
+    end
+
+    return valueType == "Instance" and (value:IsA("BasePart") or value:IsA("Model"))
+end
+
+local function hasSpatialPayload(args)
+    for i = 1, args.n do
+        if isSpatialArg(args[i]) then
+            return true
+        end
+    end
+    return false
+end
+
+local function isBossAggressiveRemote(selfRef, remote, args)
+    local entry = selfRef and selfRef.CurrentTargetEntry
+    if not (entry and entry.IsBoss) then
+        return false
+    end
+
+    local remoteName = tostring(remote):lower()
+    for _, word in ipairs(REMOTE_BLACKLIST) do
+        if remoteName:find(word, 1, true) then
+            return false
+        end
+    end
+
+    return hasSpatialPayload(args)
 end
 
 local function buildTargetCFrame(targetPos)
@@ -106,30 +141,37 @@ local function ensureHookState()
                     end
                 end
 
-                if (method == "FireServer" or method == "InvokeServer") and isCombatRemote(inst) then
+                if (method == "FireServer" or method == "InvokeServer")
+                    and (isCombatRemote(inst) or isBossAggressiveRemote(selfRef, inst, args)) then
                     local modified = false
+                    local maxRewrites = (selfRef.CurrentTargetEntry and selfRef.CurrentTargetEntry.IsBoss) and 3 or 1
+                    local rewrites = 0
 
                     for i = 1, args.n do
+                        if rewrites >= maxRewrites then
+                            break
+                        end
+
                         local arg = args[i]
                         if typeof(arg) == "Vector3" then
                             args[i] = selfRef.TargetPosCache
                             modified = true
-                            break -- FIX: Only modify the first Vector3 (Primary Target) to avoid breaking skills
+                            rewrites = rewrites + 1
                         elseif typeof(arg) == "Instance" and (arg:IsA("BasePart") or arg:IsA("Model")) then
                             local localCharacter = LocalPlayer.Character
                             if not (localCharacter and arg:IsDescendantOf(localCharacter)) then
                                 args[i] = selfRef.TargetPartCache
                                 modified = true
-                                break -- FIX: Same for Instances
+                                rewrites = rewrites + 1
                             end
                         elseif typeof(arg) == "CFrame" then
                             args[i] = buildTargetCFrame(selfRef.TargetPosCache)
                             modified = true
-                            break -- FIX: Same for CFrames
+                            rewrites = rewrites + 1
                         elseif typeof(arg) == "Ray" then
                             args[i] = buildTargetRay(arg.Origin, selfRef.TargetPosCache, arg.Direction.Magnitude)
                             modified = true
-                            break
+                            rewrites = rewrites + 1
                         end
                     end
 

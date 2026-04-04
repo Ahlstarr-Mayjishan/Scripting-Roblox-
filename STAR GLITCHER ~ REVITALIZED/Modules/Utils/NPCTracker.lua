@@ -10,12 +10,13 @@ local Players = game:GetService("Players")
 local NPCTracker = {}
 NPCTracker.__index = NPCTracker
 
-function NPCTracker.new(config, detector)
+function NPCTracker.new(config, detector, taskScheduler)
     local self = setmetatable({}, NPCTracker)
     self.Options = config.Options
     self.Blacklist = config.Blacklist or {"statue", "tuong", "monument", "altar", "dummy", "board", "spawn", "shop", "gui", "display", "map", "portal"}
     self._blacklistLower = {}
     self.Detector = detector
+    self.TaskScheduler = taskScheduler
     
     self.CurrentTargetEntry = nil
     self._entries = {}
@@ -28,6 +29,9 @@ function NPCTracker.new(config, detector)
     self._folderRefs = {}
     self._lastFolderRefresh = 0
     self._folderRefreshInterval = 2
+    self._lastStaleSweep = 0
+    self._staleSweepInterval = 3
+    self._schedulerAlive = false
 
     for i, keyword in ipairs(self.Blacklist) do
         self._blacklistLower[i] = string.lower(keyword)
@@ -37,6 +41,59 @@ function NPCTracker.new(config, detector)
 end
 
 function NPCTracker:Init()
+    self._schedulerAlive = true
+    self:_refreshFolderRefs()
+    self:_queueStaleSweep()
+end
+
+function NPCTracker:_refreshFolderRefs()
+    for i = 1, #self._folders do
+        self._folderRefs[i] = Workspace:FindFirstChild(self._folders[i])
+    end
+end
+
+function NPCTracker:_queueFolderRefresh()
+    if not self.TaskScheduler or not self._schedulerAlive then
+        self:_refreshFolderRefs()
+        return
+    end
+
+    local selfRef = self
+    self.TaskScheduler:Enqueue(function()
+        if selfRef._schedulerAlive then
+            selfRef:_refreshFolderRefs()
+        end
+    end, "__STAR_GLITCHER_TRACKER_FOLDER_REFRESH")
+end
+
+function NPCTracker:_queueStaleSweep()
+    if not self.TaskScheduler or not self._schedulerAlive then
+        return
+    end
+
+    local selfRef = self
+    self.TaskScheduler:Enqueue(function()
+        if not selfRef._schedulerAlive then
+            return
+        end
+
+        for model, entry in pairs(selfRef._entries) do
+            if not model
+                or not model.Parent
+                or not entry
+                or not entry.PrimaryPart
+                or not entry.PrimaryPart.Parent
+                or selfRef:_HasBlacklistedName(model) then
+                selfRef._entries[model] = nil
+            end
+        end
+
+        task.delay(selfRef._staleSweepInterval, function()
+            if selfRef._schedulerAlive then
+                selfRef:_queueStaleSweep()
+            end
+        end)
+    end, "__STAR_GLITCHER_TRACKER_STALE_SWEEP")
 end
 
 function NPCTracker:IsLocalCharacterModel(model)
@@ -111,9 +168,12 @@ function NPCTracker:GetTargets()
 
     if (now - self._lastFolderRefresh) >= self._folderRefreshInterval then
         self._lastFolderRefresh = now
-        for i = 1, #self._folders do
-            self._folderRefs[i] = Workspace:FindFirstChild(self._folders[i])
-        end
+        self:_queueFolderRefresh()
+    end
+
+    if (now - self._lastStaleSweep) >= self._staleSweepInterval then
+        self._lastStaleSweep = now
+        self:_queueStaleSweep()
     end
 
     local function trackModel(model)
@@ -214,6 +274,11 @@ function NPCTracker:ClearCache()
     table.clear(self._entries)
     table.clear(self._cachedTargets)
     self.CurrentTargetEntry = nil
+end
+
+function NPCTracker:Destroy()
+    self._schedulerAlive = false
+    self:ClearCache()
 end
 
 return NPCTracker

@@ -42,7 +42,6 @@ Config.Options = {
     SpeedMultiplierEnabled = false,
     SpeedMultiplier = 1.0,
     SpeedSpoofEnabled = false,
-    ApocalypseEnabled = false,
     AutoCleanEnabled = true,
     SmartCleanupEnabled = true,
     AutoUpdateEnabled = false,
@@ -181,474 +180,6 @@ function Aimbot:SetState(active)
 end
 
 return Aimbot
-]====],
-    ["Modules/Combat/Hijackers/Apocalypse.lua"] = [====[--[[
-    Apocalypse.lua - The Ultimate Neural Hijacker
-    Job: Parasitic locking of game projectiles and beams to boss entities.
-    Notes: Uses a singleton hook state to avoid stacking hooks across reloads.
-]]
-
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-local Camera = Workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
-
-local Apocalypse = {}
-Apocalypse.__index = Apocalypse
-
-local GLOBAL_HOOK_KEY = "__STAR_GLITCHER_APOCALYPSE_HOOK"
-local BOSS_HINTS = { "boss", "king", "queen", "lord", "orb", "sphere", "core" }
-local HEALTH_HINTS = { "Health", "HP", "HitPoints", "BossHealth", "EnemyHealth", "HealthValue" }
-
-local function containsBossHint(text)
-    local lowered = string.lower(tostring(text or ""))
-    for _, hint in ipairs(BOSS_HINTS) do
-        if lowered:find(hint, 1, true) then
-            return true
-        end
-    end
-    return false
-end
-
-local function getLargestPart(model)
-    local bestPart = nil
-    local bestVolume = -1
-    if not model then
-        return nil
-    end
-
-    for _, descendant in ipairs(model:GetDescendants()) do
-        if descendant:IsA("BasePart") then
-            local volume = descendant.Size.X * descendant.Size.Y * descendant.Size.Z
-            if volume > bestVolume then
-                bestPart = descendant
-                bestVolume = volume
-            end
-        end
-    end
-
-    return bestPart
-end
-
-local function getPrimaryPart(model)
-    if not model then
-        return nil
-    end
-
-    return model:FindFirstChild("HumanoidRootPart")
-        or model.PrimaryPart
-        or model:FindFirstChild("Torso")
-        or model:FindFirstChild("Head")
-        or getLargestPart(model)
-end
-
-local function getHealthLikeValue(model)
-    if not model then
-        return nil, nil
-    end
-
-    local humanoid = model:FindFirstChildOfClass("Humanoid")
-    if humanoid then
-        return humanoid.Health, humanoid.MaxHealth, humanoid
-    end
-
-    for _, hint in ipairs(HEALTH_HINTS) do
-        local child = model:FindFirstChild(hint, true)
-        if child and (child:IsA("NumberValue") or child:IsA("IntValue")) then
-            local value = tonumber(child.Value)
-            if value then
-                return value, value, nil
-            end
-        end
-    end
-
-    local attrHealth = tonumber(model:GetAttribute("Health")) or tonumber(model:GetAttribute("HP"))
-    local attrMaxHealth = tonumber(model:GetAttribute("MaxHealth")) or tonumber(model:GetAttribute("MaxHP"))
-    if attrHealth or attrMaxHealth then
-        return attrHealth or attrMaxHealth, attrMaxHealth or attrHealth, nil
-    end
-
-    return nil, nil, nil
-end
-
-local function getBoundsInfo(model)
-    if not model then
-        return Vector3.zero, 0
-    end
-
-    local ok, _, size = pcall(model.GetBoundingBox, model)
-    if ok and typeof(size) == "Vector3" then
-        return size, size.X * size.Y * size.Z
-    end
-
-    return Vector3.zero, 0
-end
-
-local function scoreBossModel(model)
-    if not model or not model:IsA("Model") or model == LocalPlayer.Character then
-        return nil, nil
-    end
-
-    local primary = getPrimaryPart(model)
-    if not primary then
-        return nil, nil
-    end
-
-    local health, maxHealth, humanoid = getHealthLikeValue(model)
-    if humanoid and humanoid.Health <= 0 then
-        return nil, nil
-    end
-    if not humanoid and health and health <= 0 then
-        return nil, nil
-    end
-
-    local size, volume = getBoundsInfo(model)
-    local score = 0
-    local primaryIsBall = primary.Shape == Enum.PartType.Ball
-
-    if containsBossHint(model.Name) then
-        score = score + 6
-    end
-
-    if humanoid and containsBossHint(humanoid.DisplayName) then
-        score = score + 5
-    end
-
-    if maxHealth and maxHealth > 500 then
-        score = score + 5
-    elseif maxHealth and maxHealth > 150 then
-        score = score + 2
-    end
-
-    if volume > 70 then
-        score = score + 4
-    elseif volume > 30 then
-        score = score + 2
-    end
-
-    if primaryIsBall then
-        score = score + 3
-        local axis = math.max(size.X, size.Y, size.Z, primary.Size.X, primary.Size.Y, primary.Size.Z)
-        if axis >= 5 then
-            score = score + 2
-        end
-    end
-
-    if humanoid then
-        score = score + 1
-    end
-
-    if score < 4 then
-        return nil, nil
-    end
-
-    return score, primary
-end
-
-local function ensureHookState()
-    local hookState = getgenv()[GLOBAL_HOOK_KEY]
-    if hookState then
-        return hookState
-    end
-
-    local mouse = LocalPlayer:GetMouse()
-    hookState = {
-        Instance = nil,
-        Mouse = mouse,
-    }
-
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(inst, ...)
-        local selfRef = hookState.Instance
-        local method = getnamecallmethod()
-        local args = table.pack(...)
-
-        if selfRef
-            and not selfRef._destroyed
-            and not checkcaller()
-            and selfRef.Active
-            and selfRef._bossExists then
-            if method == "FireServer" or method == "InvokeServer" then
-                for i = 1, args.n do
-                    local value = args[i]
-                    if typeof(value) == "Vector3" then
-                        args[i] = selfRef._bossPos
-                    elseif typeof(value) == "CFrame" then
-                        args[i] = CFrame.new(selfRef._bossPos)
-                    end
-                end
-                return oldNamecall(inst, unpack(args, 1, args.n))
-            end
-
-            if (method == "ViewportPointToRay" or method == "ScreenPointToRay") and inst == Camera then
-                return Ray.new(Camera.CFrame.Position, (selfRef._bossPos - Camera.CFrame.Position).Unit)
-            end
-        end
-
-        return oldNamecall(inst, unpack(args, 1, args.n))
-    end))
-
-    local oldIndex
-    oldIndex = hookmetamethod(game, "__index", newcclosure(function(inst, index)
-        local selfRef = hookState.Instance
-        if selfRef
-            and not selfRef._destroyed
-            and not checkcaller()
-            and selfRef.Active
-            and selfRef._bossExists
-            and inst == hookState.Mouse then
-            if index == "Hit" then
-                return CFrame.new(selfRef._bossPos)
-            end
-            if index == "Target" then
-                return selfRef._bossModel
-            end
-        end
-
-        return oldIndex(inst, index)
-    end))
-
-    getgenv()[GLOBAL_HOOK_KEY] = hookState
-    return hookState
-end
-
-function Apocalypse.new(config)
-    local self = setmetatable({}, Apocalypse)
-    self.Options = config.Options
-    self.Active = config.Options.ApocalypseEnabled == true
-    self.Scheduler = config.TaskScheduler
-
-    self._bossPos = Vector3.zero
-    self._bossModel = nil
-    self._bossScore = -math.huge
-    self._bossExists = false
-    self._connections = {}
-    self._destroyed = false
-    self._hookState = nil
-    self._deepScanPending = false
-    self._childScanInterval = 0.12
-
-    return self
-end
-
-function Apocalypse:_scheduleDeepScan(root)
-    if not self.Scheduler or self._deepScanPending or not root then
-        return
-    end
-
-    self._deepScanPending = true
-
-    local queue = { root }
-    local cursor = 1
-    local bestScore = self._bossScore or -math.huge
-    local bestPrimary = nil
-    local jobKey = "__STAR_GLITCHER_APOCALYPSE_DEEP_SCAN"
-    local selfRef = self
-
-    local function step()
-        if selfRef._destroyed or not selfRef.Active then
-            selfRef._deepScanPending = false
-            return
-        end
-
-        local processed = 0
-        while cursor <= #queue and processed < 24 do
-            local node = queue[cursor]
-            cursor = cursor + 1
-            processed = processed + 1
-
-            if node:IsA("Model") then
-                local score, primary = scoreBossModel(node)
-                if score and primary and score > bestScore then
-                    bestScore = score
-                    bestPrimary = primary
-                end
-            end
-
-            local children = node:GetChildren()
-            for i = 1, #children do
-                queue[#queue + 1] = children[i]
-            end
-        end
-
-        if cursor <= #queue then
-            selfRef.Scheduler:Enqueue(step, jobKey)
-            return
-        end
-
-        selfRef._deepScanPending = false
-        if bestPrimary and bestScore > (selfRef._bossScore or -math.huge) then
-            selfRef._bossPos = bestPrimary.Position
-            selfRef._bossModel = bestPrimary.Parent
-            selfRef._bossScore = bestScore
-            selfRef._bossExists = true
-        end
-    end
-
-    self.Scheduler:Enqueue(step, jobKey)
-end
-
-function Apocalypse:Init()
-    if not (hookmetamethod or hookfunction) then
-        return
-    end
-
-    self._destroyed = false
-    self._hookState = ensureHookState()
-    self._hookState.Instance = self
-
-    local selfRef = self
-    local lastTrackerUpdate = 0
-    local lastFullScan = 0
-
-    table.insert(self._connections, RunService.Heartbeat:Connect(function()
-        if selfRef._destroyed or not selfRef.Active then
-            selfRef._bossExists = false
-            selfRef._bossScore = -math.huge
-            return
-        end
-
-        local now = os.clock()
-        if now - lastTrackerUpdate < selfRef._childScanInterval then
-            return
-        end
-        lastTrackerUpdate = now
-
-        local found = nil
-        local foundScore = -math.huge
-        local entities = Workspace:FindFirstChild("Entities")
-
-        if entities then
-            for _, model in ipairs(entities:GetChildren()) do
-                if model:IsA("Model") then
-                    local score, primary = scoreBossModel(model)
-                    if score and primary and score > foundScore then
-                        found = primary
-                        foundScore = score
-                    end
-                end
-            end
-        end
-
-        if found then
-            selfRef._bossPos = found.Position
-            selfRef._bossModel = found.Parent
-            selfRef._bossScore = foundScore
-            selfRef._bossExists = true
-        elseif selfRef._bossModel and selfRef._bossModel.Parent then
-            local currentPrimary = getPrimaryPart(selfRef._bossModel)
-            if currentPrimary then
-                selfRef._bossPos = currentPrimary.Position
-                selfRef._bossExists = true
-            else
-                selfRef._bossExists = false
-                selfRef._bossModel = nil
-                selfRef._bossScore = -math.huge
-            end
-        else
-            selfRef._bossExists = false
-            selfRef._bossModel = nil
-            selfRef._bossScore = -math.huge
-        end
-
-        if (not found or foundScore < 6) and (now - lastFullScan > 1.5) then
-            lastFullScan = now
-            selfRef:_scheduleDeepScan(entities)
-        end
-    end))
-
-    local activeProjectiles = {}
-    local effectCache = {}
-
-    table.insert(self._connections, Workspace.ChildAdded:Connect(function(child)
-        if child.Name == "BallOfLight" then
-            activeProjectiles[#activeProjectiles + 1] = child
-        end
-    end))
-
-    local function updateEffectCache()
-        table.clear(effectCache)
-        local char = LocalPlayer.Character
-        if char then
-            for _, descendant in ipairs(char:GetDescendants()) do
-                if descendant:IsA("Beam") or descendant:IsA("Trail") then
-                    effectCache[#effectCache + 1] = descendant
-                end
-            end
-        end
-    end
-
-    table.insert(self._connections, LocalPlayer.CharacterAdded:Connect(function()
-        task.wait(0.5)
-        if not selfRef._destroyed then
-            updateEffectCache()
-        end
-    end))
-    updateEffectCache()
-
-    table.insert(self._connections, RunService.RenderStepped:Connect(function()
-        if selfRef._destroyed or not selfRef.Active or not selfRef._bossExists then
-            return
-        end
-
-        local bossPos = selfRef._bossPos
-        for i = #activeProjectiles, 1, -1 do
-            local projectile = activeProjectiles[i]
-            if projectile and projectile.Parent then
-                pcall(function()
-                    local attachment = projectile:FindFirstChild("Attachment1")
-                    if attachment then
-                        attachment.WorldPosition = bossPos
-                    end
-                    local targetCFrame = projectile:FindFirstChild("TargCF")
-                    if targetCFrame then
-                        targetCFrame.Value = CFrame.new(bossPos)
-                    end
-                end)
-            else
-                table.remove(activeProjectiles, i)
-            end
-        end
-
-        for _, effect in ipairs(effectCache) do
-            pcall(function()
-                if effect.Attachment1 then
-                    effect.Attachment1.WorldPosition = bossPos
-                end
-            end)
-        end
-    end))
-end
-
-function Apocalypse:SetState(active)
-    self.Active = active
-    if not active then
-        self._bossExists = false
-        self._bossModel = nil
-        self._bossScore = -math.huge
-    end
-end
-
-function Apocalypse:Destroy()
-    self._destroyed = true
-    self.Active = false
-    self._bossExists = false
-    self._bossModel = nil
-    self._bossScore = -math.huge
-    self._deepScanPending = false
-
-    if self._hookState and self._hookState.Instance == self then
-        self._hookState.Instance = nil
-    end
-
-    for _, connection in ipairs(self._connections) do
-        connection:Disconnect()
-    end
-    table.clear(self._connections)
-end
-
-return Apocalypse
 ]====],
     ["Modules/Combat/Prediction/Base.lua"] = [====[--[[
     Base.lua - Scientific Physics Core (Smart Prediction)
@@ -1484,7 +1015,8 @@ local REDIRECT_WINDOW = 0.35
 local clock = os.clock
 
 local REMOTE_BLACKLIST = {
-    "sprint", "speed", "walk", "jump", "action", "interact", "dialogue", "inventory", "tab"
+    "sprint", "speed", "walk", "jump", "action", "interact", "dialogue", "inventory", "tab",
+    "shop", "trade", "quest", "mission", "chat", "menu", "equip", "unequip"
 }
 
 local function isCombatRemote(remote)
@@ -1498,6 +1030,40 @@ local function isCombatRemote(remote)
         or mName:find("hit")
         or mName:find("damage")
         or mName:find("impact")
+end
+
+local function isSpatialArg(value)
+    local valueType = typeof(value)
+    if valueType == "Vector3" or valueType == "CFrame" or valueType == "Ray" then
+        return true
+    end
+
+    return valueType == "Instance" and (value:IsA("BasePart") or value:IsA("Model"))
+end
+
+local function hasSpatialPayload(args)
+    for i = 1, args.n do
+        if isSpatialArg(args[i]) then
+            return true
+        end
+    end
+    return false
+end
+
+local function isBossAggressiveRemote(selfRef, remote, args)
+    local entry = selfRef and selfRef.CurrentTargetEntry
+    if not (entry and entry.IsBoss) then
+        return false
+    end
+
+    local remoteName = tostring(remote):lower()
+    for _, word in ipairs(REMOTE_BLACKLIST) do
+        if remoteName:find(word, 1, true) then
+            return false
+        end
+    end
+
+    return hasSpatialPayload(args)
 end
 
 local function buildTargetCFrame(targetPos)
@@ -1574,30 +1140,37 @@ local function ensureHookState()
                     end
                 end
 
-                if (method == "FireServer" or method == "InvokeServer") and isCombatRemote(inst) then
+                if (method == "FireServer" or method == "InvokeServer")
+                    and (isCombatRemote(inst) or isBossAggressiveRemote(selfRef, inst, args)) then
                     local modified = false
+                    local maxRewrites = (selfRef.CurrentTargetEntry and selfRef.CurrentTargetEntry.IsBoss) and 3 or 1
+                    local rewrites = 0
 
                     for i = 1, args.n do
+                        if rewrites >= maxRewrites then
+                            break
+                        end
+
                         local arg = args[i]
                         if typeof(arg) == "Vector3" then
                             args[i] = selfRef.TargetPosCache
                             modified = true
-                            break -- FIX: Only modify the first Vector3 (Primary Target) to avoid breaking skills
+                            rewrites = rewrites + 1
                         elseif typeof(arg) == "Instance" and (arg:IsA("BasePart") or arg:IsA("Model")) then
                             local localCharacter = LocalPlayer.Character
                             if not (localCharacter and arg:IsDescendantOf(localCharacter)) then
                                 args[i] = selfRef.TargetPartCache
                                 modified = true
-                                break -- FIX: Same for Instances
+                                rewrites = rewrites + 1
                             end
                         elseif typeof(arg) == "CFrame" then
                             args[i] = buildTargetCFrame(selfRef.TargetPosCache)
                             modified = true
-                            break -- FIX: Same for CFrames
+                            rewrites = rewrites + 1
                         elseif typeof(arg) == "Ray" then
                             args[i] = buildTargetRay(arg.Origin, selfRef.TargetPosCache, arg.Direction.Magnitude)
                             modified = true
-                            break
+                            rewrites = rewrites + 1
                         end
                     end
 
@@ -4952,9 +4525,10 @@ local clock = os.clock
 local LocalCharacter = {}
 LocalCharacter.__index = LocalCharacter
 
-function LocalCharacter.new()
+function LocalCharacter.new(taskScheduler)
     local self = setmetatable({}, LocalCharacter)
     self.Player = Players.LocalPlayer
+    self.TaskScheduler = taskScheduler
     self.Character = nil
     self.Humanoid = nil
     self.RootPart = nil
@@ -4962,6 +4536,7 @@ function LocalCharacter.new()
     self.LastSpawnTime = 0
     self.RespawnGracePeriod = 1.25
     self._connections = {}
+    self._schedulerAlive = false
     return self
 end
 
@@ -4976,8 +4551,31 @@ function LocalCharacter:_refresh(character)
     self.PlayerGui = self.Player and self.Player:FindFirstChildOfClass("PlayerGui") or nil
 end
 
+function LocalCharacter:_queueRefresh()
+    if not self.TaskScheduler or not self._schedulerAlive then
+        return
+    end
+
+    local selfRef = self
+    self.TaskScheduler:Enqueue(function()
+        if not selfRef._schedulerAlive then
+            return
+        end
+
+        local currentCharacter = selfRef.Player and selfRef.Player.Character or nil
+        selfRef:_refresh(currentCharacter)
+
+        task.delay(0.25, function()
+            if selfRef._schedulerAlive then
+                selfRef:_queueRefresh()
+            end
+        end)
+    end, "__STAR_GLITCHER_LOCAL_CHARACTER_REFRESH")
+end
+
 function LocalCharacter:Init()
     self:_refresh(self.Player and self.Player.Character or nil)
+    self._schedulerAlive = true
 
     if self.Character then
         self.LastSpawnTime = clock()
@@ -4997,6 +4595,8 @@ function LocalCharacter:Init()
             self:_refresh(nil)
         end
     end))
+
+    self:_queueRefresh()
 end
 
 function LocalCharacter:GetCharacter()
@@ -5049,6 +4649,8 @@ function LocalCharacter:IsRespawning()
 end
 
 function LocalCharacter:Destroy()
+    self._schedulerAlive = false
+
     for _, connection in ipairs(self._connections) do
         connection:Disconnect()
     end
@@ -5150,12 +4752,13 @@ local Players = game:GetService("Players")
 local NPCTracker = {}
 NPCTracker.__index = NPCTracker
 
-function NPCTracker.new(config, detector)
+function NPCTracker.new(config, detector, taskScheduler)
     local self = setmetatable({}, NPCTracker)
     self.Options = config.Options
     self.Blacklist = config.Blacklist or {"statue", "tuong", "monument", "altar", "dummy", "board", "spawn", "shop", "gui", "display", "map", "portal"}
     self._blacklistLower = {}
     self.Detector = detector
+    self.TaskScheduler = taskScheduler
     
     self.CurrentTargetEntry = nil
     self._entries = {}
@@ -5168,6 +4771,9 @@ function NPCTracker.new(config, detector)
     self._folderRefs = {}
     self._lastFolderRefresh = 0
     self._folderRefreshInterval = 2
+    self._lastStaleSweep = 0
+    self._staleSweepInterval = 3
+    self._schedulerAlive = false
 
     for i, keyword in ipairs(self.Blacklist) do
         self._blacklistLower[i] = string.lower(keyword)
@@ -5177,6 +4783,59 @@ function NPCTracker.new(config, detector)
 end
 
 function NPCTracker:Init()
+    self._schedulerAlive = true
+    self:_refreshFolderRefs()
+    self:_queueStaleSweep()
+end
+
+function NPCTracker:_refreshFolderRefs()
+    for i = 1, #self._folders do
+        self._folderRefs[i] = Workspace:FindFirstChild(self._folders[i])
+    end
+end
+
+function NPCTracker:_queueFolderRefresh()
+    if not self.TaskScheduler or not self._schedulerAlive then
+        self:_refreshFolderRefs()
+        return
+    end
+
+    local selfRef = self
+    self.TaskScheduler:Enqueue(function()
+        if selfRef._schedulerAlive then
+            selfRef:_refreshFolderRefs()
+        end
+    end, "__STAR_GLITCHER_TRACKER_FOLDER_REFRESH")
+end
+
+function NPCTracker:_queueStaleSweep()
+    if not self.TaskScheduler or not self._schedulerAlive then
+        return
+    end
+
+    local selfRef = self
+    self.TaskScheduler:Enqueue(function()
+        if not selfRef._schedulerAlive then
+            return
+        end
+
+        for model, entry in pairs(selfRef._entries) do
+            if not model
+                or not model.Parent
+                or not entry
+                or not entry.PrimaryPart
+                or not entry.PrimaryPart.Parent
+                or selfRef:_HasBlacklistedName(model) then
+                selfRef._entries[model] = nil
+            end
+        end
+
+        task.delay(selfRef._staleSweepInterval, function()
+            if selfRef._schedulerAlive then
+                selfRef:_queueStaleSweep()
+            end
+        end)
+    end, "__STAR_GLITCHER_TRACKER_STALE_SWEEP")
 end
 
 function NPCTracker:IsLocalCharacterModel(model)
@@ -5251,9 +4910,12 @@ function NPCTracker:GetTargets()
 
     if (now - self._lastFolderRefresh) >= self._folderRefreshInterval then
         self._lastFolderRefresh = now
-        for i = 1, #self._folders do
-            self._folderRefs[i] = Workspace:FindFirstChild(self._folders[i])
-        end
+        self:_queueFolderRefresh()
+    end
+
+    if (now - self._lastStaleSweep) >= self._staleSweepInterval then
+        self._lastStaleSweep = now
+        self:_queueStaleSweep()
     end
 
     local function trackModel(model)
@@ -5354,6 +5016,11 @@ function NPCTracker:ClearCache()
     table.clear(self._entries)
     table.clear(self._cachedTargets)
     self.CurrentTargetEntry = nil
+end
+
+function NPCTracker:Destroy()
+    self._schedulerAlive = false
+    self:ClearCache()
 end
 
 return NPCTracker
@@ -5627,7 +5294,7 @@ return Synapse
 local TaskScheduler = {}
 TaskScheduler.__index = TaskScheduler
 
-local DEFAULT_FRAME_BUDGET = 0.0012
+local DEFAULT_FRAME_BUDGET = 0.001
 
 function TaskScheduler.new(options)
     local self = setmetatable({}, TaskScheduler)
@@ -5715,7 +5382,6 @@ function TaskScheduler:_runJob(job)
     if not ok then
         warn("[TaskScheduler] Job failed | Error: " .. tostring(err))
     end
-
     return ok
 end
 
@@ -6371,30 +6037,8 @@ end
     Contains only explicit bypass-style options.
 ]]
 
-return function(Window, Options, apocalypse)
+return function(Window, Options)
     local Tab = Window:CreateTab("Blatant & Bypass", 4483362458)
-
-    Tab:CreateSection("Universal Hijacking")
-
-    Tab:CreateToggle({
-        Name = "Apocalypse Lock (Brilliance)",
-        CurrentValue = Options.ApocalypseEnabled,
-        Flag = "ApocalypseFlag",
-        Callback = function(Value)
-            Options.ApocalypseEnabled = Value
-            if apocalypse then
-                apocalypse:SetState(Value)
-            end
-            if Value then
-                Rayfield:Notify({
-                    Title = "Apocalypse Active",
-                    Content = "Projectiles & Beams are now parasitically locked to bosses.",
-                    Duration = 3,
-                    Image = 4483362458,
-                })
-            end
-        end,
-    })
 
     Tab:CreateSection("Client Masking")
 
@@ -7178,7 +6822,6 @@ local TaskScheduler   = requireModule("Modules/Utils/TaskScheduler.lua")
 local BasePred        = requireModule("Modules/Combat/Prediction/Base.lua")
 local Predictor       = requireModule("Modules/Combat/Predictor.lua")
 local SilentResolver  = requireModule("Modules/Combat/Prediction/SilentResolver.lua")
-local Apocalypse      = requireModule("Modules/Combat/Hijackers/Apocalypse.lua")
 local GarbageCollector = requireModule("Modules/Utils/GarbageCollector.lua")
 local Selector        = requireModule("Modules/Combat/TargetSelector.lua")
 local Aimbot          = requireModule("Modules/Combat/Aimbot.lua")
@@ -7207,18 +6850,16 @@ local PlayerController = requireModule("UI/Tabs/Player/Controller.lua")
 -- INSTANTIATE (OOP Injection)
 -- ===================================================
 local synapse    = Synapse
+local taskScheduler = TaskScheduler.new(Options)
 local input      = InputHandler.new(Config)
-local localCharacter = LocalCharacter.new()
+local localCharacter = LocalCharacter.new(taskScheduler)
 local detector   = Detector.new()
-local tracker    = Tracker.new(Config, detector)
+local tracker    = Tracker.new(Config, detector, taskScheduler)
 local aimbot     = Aimbot.new(Config)
 local silentResolver = SilentResolver.new(Config)
 local silentAim  = SilentAim.new(Config, synapse, silentResolver) 
 local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
 local resourceManager = ResourceManager.new(Options)
-local taskScheduler = TaskScheduler.new(Options)
-Config.TaskScheduler = taskScheduler
-local apocalypse = Apocalypse.new(Config)
 local cleaner    = GarbageCollector.new(Options, resourceManager)
 
 local pred       = Predictor.new(Config, loadModule, Kalman)
@@ -7253,12 +6894,11 @@ local brain = Brain.new(Config, {
 -- INITIALIZE & SETUP UI
 -- ===================================================
 input:Init()
+taskScheduler:Init()
 localCharacter:Init()
 tracker:Init()
 silentAim:Init()
-apocalypse:Init()
 resourceManager:Init()
-taskScheduler:Init()
 cleaner:Init()
 visuals.hit:Init()
 
@@ -7267,7 +6907,7 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, playerTabController)
-requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, apocalypse)
+requireModule("UI/Tabs/BlatantTab.lua")(Window, Options)
 local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager)
 
 local loadConfigOk, loadConfigErr = RayfieldUI.SafeLoadConfiguration(Rayfield)
@@ -7304,7 +6944,7 @@ local function performCleanup(fullSweep)
     table.clear(_conns)
 
     local objs = {
-        input, localCharacter, tracker, aimbot, silentAim, apocalypse,
+        input, localCharacter, tracker, aimbot, silentAim,
         cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain,
         taskScheduler,
         playerTabController, settingsTabController

@@ -4,9 +4,10 @@ local clock = os.clock
 local LocalCharacter = {}
 LocalCharacter.__index = LocalCharacter
 
-function LocalCharacter.new()
+function LocalCharacter.new(taskScheduler)
     local self = setmetatable({}, LocalCharacter)
     self.Player = Players.LocalPlayer
+    self.TaskScheduler = taskScheduler
     self.Character = nil
     self.Humanoid = nil
     self.RootPart = nil
@@ -14,6 +15,7 @@ function LocalCharacter.new()
     self.LastSpawnTime = 0
     self.RespawnGracePeriod = 1.25
     self._connections = {}
+    self._schedulerAlive = false
     return self
 end
 
@@ -28,8 +30,31 @@ function LocalCharacter:_refresh(character)
     self.PlayerGui = self.Player and self.Player:FindFirstChildOfClass("PlayerGui") or nil
 end
 
+function LocalCharacter:_queueRefresh()
+    if not self.TaskScheduler or not self._schedulerAlive then
+        return
+    end
+
+    local selfRef = self
+    self.TaskScheduler:Enqueue(function()
+        if not selfRef._schedulerAlive then
+            return
+        end
+
+        local currentCharacter = selfRef.Player and selfRef.Player.Character or nil
+        selfRef:_refresh(currentCharacter)
+
+        task.delay(0.25, function()
+            if selfRef._schedulerAlive then
+                selfRef:_queueRefresh()
+            end
+        end)
+    end, "__STAR_GLITCHER_LOCAL_CHARACTER_REFRESH")
+end
+
 function LocalCharacter:Init()
     self:_refresh(self.Player and self.Player.Character or nil)
+    self._schedulerAlive = true
 
     if self.Character then
         self.LastSpawnTime = clock()
@@ -49,6 +74,8 @@ function LocalCharacter:Init()
             self:_refresh(nil)
         end
     end))
+
+    self:_queueRefresh()
 end
 
 function LocalCharacter:GetCharacter()
@@ -101,6 +128,8 @@ function LocalCharacter:IsRespawning()
 end
 
 function LocalCharacter:Destroy()
+    self._schedulerAlive = false
+
     for _, connection in ipairs(self._connections) do
         connection:Disconnect()
     end

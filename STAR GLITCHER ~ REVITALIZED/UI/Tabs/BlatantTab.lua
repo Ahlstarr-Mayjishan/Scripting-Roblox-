@@ -3,30 +3,8 @@
     Contains only explicit bypass-style options.
 ]]
 
-return function(Window, Options, apocalypse)
+return function(Window, Options)
     local Tab = Window:CreateTab("Blatant & Bypass", 4483362458)
-
-    Tab:CreateSection("Universal Hijacking")
-
-    Tab:CreateToggle({
-        Name = "Apocalypse Lock (Brilliance)",
-        CurrentValue = Options.ApocalypseEnabled,
-        Flag = "ApocalypseFlag",
-        Callback = function(Value)
-            Options.ApocalypseEnabled = Value
-            if apocalypse then
-                apocalypse:SetState(Value)
-            end
-            if Value then
-                Rayfield:Notify({
-                    Title = "Apocalypse Active",
-                    Content = "Projectiles & Beams are now parasitically locked to bosses.",
-                    Duration = 3,
-                    Image = 4483362458,
-                })
-            end
-        end,
-    })
 
     Tab:CreateSection("Client Masking")
 

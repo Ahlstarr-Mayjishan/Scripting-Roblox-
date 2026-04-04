@@ -34,7 +34,6 @@ Config.Options = {
     SpeedMultiplierEnabled = false,
     SpeedMultiplier = 1.0,
     SpeedSpoofEnabled = false,
-    ApocalypseEnabled = false,
     AutoCleanEnabled = true,
     SmartCleanupEnabled = true,
     AutoUpdateEnabled = false,
