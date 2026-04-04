@@ -63,6 +63,10 @@ function Predictor:NotifyTargetChanged(entry, part)
 end
 
 function Predictor:Predict(origin, part, entry, dt)
+    if not part then
+        return nil, nil
+    end
+
     -- GUARD: Ensure entry exists
     if not entry then return part.Position end
     local state = self:_GetState(entry)

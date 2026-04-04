@@ -17,7 +17,7 @@ function CompatAdapter:PredictTargetPosition(origin, part, entry, dt)
         return part and part.Position or nil
     end
 
-    local predicted = self.Predictor:Predict(origin, part, entry, dt or (1 / 60))
+    local predicted = select(1, self.Predictor:Predict(origin, part, entry, dt or (1 / 60)))
     return predicted
 end
 

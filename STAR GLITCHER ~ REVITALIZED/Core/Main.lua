@@ -273,7 +273,7 @@ requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, playerTabController)
 requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, apocalypse)
-requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager)
+local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager)
 
 local loadConfigOk, loadConfigErr = RayfieldUI.SafeLoadConfiguration(Rayfield)
 if not loadConfigOk then
@@ -310,7 +310,8 @@ local function performCleanup(fullSweep)
 
     local objs = {
         input, localCharacter, tracker, aimbot, silentAim, apocalypse,
-        cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain
+        cleaner, visuals.fov, visuals.hit, visuals.highlight, visuals.dot, brain,
+        playerTabController, settingsTabController
     }
     for _, obj in pairs(movementSuite) do
         objs[#objs + 1] = obj

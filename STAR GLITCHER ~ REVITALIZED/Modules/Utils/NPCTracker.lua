@@ -83,12 +83,13 @@ function NPCTracker:_IsTargetCandidate(model)
     -- UNIVERSAL TARGETING: Support both Humanoid va Non-Humanoid (Bosses)
     local humanoid = model:FindFirstChildOfClass("Humanoid")
     local primary = self:_GetPrimaryPart(model)
+    local isBoss = self.Detector and self.Detector.IsBoss and self.Detector:IsBoss(model, humanoid)
     
     if not primary then return false end
 
     -- STATIC OBJECT FILTER: Boss boards, shops, etc.
     -- Mobs/Bosses (even custom ones) usually have unanchored root parts.
-    if not humanoid and primary.Anchored and not model:FindFirstChild("Health") then
+    if not humanoid and primary.Anchored and not isBoss and not model:FindFirstChild("Health", true) then
         -- Only ignore if it has no health indicators va is anchored
         return false
     end

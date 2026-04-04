@@ -1,10 +1,129 @@
 --[[
     BossDetector.lua - OOP Target Classification Class
-    Identifies if an NPC is a boss based on common properties (Size, Health, Height).
+    Identifies bosses across humanoid and non-humanoid enemy types.
 ]]
 
 local BossDetector = {}
 BossDetector.__index = BossDetector
+
+local NAME_HINTS = {
+    "boss", "king", "queen", "lord", "orb", "sphere", "core",
+}
+
+local HEALTH_HINTS = {
+    "Health", "HP", "HitPoints", "BossHealth", "EnemyHealth", "HealthValue",
+}
+
+local function containsBossHint(text)
+    local lowered = string.lower(tostring(text or ""))
+    for _, hint in ipairs(NAME_HINTS) do
+        if lowered:find(hint, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function getModelBounds(model)
+    if not model or not model:IsA("Model") then
+        return Vector3.new(0, 0, 0), 0
+    end
+
+    local ok, _, size = pcall(model.GetBoundingBox, model)
+    if ok and typeof(size) == "Vector3" then
+        return size, size.X * size.Y * size.Z
+    end
+
+    local minPos = Vector3.new(math.huge, math.huge, math.huge)
+    local maxPos = Vector3.new(-math.huge, -math.huge, -math.huge)
+    local foundPart = false
+
+    for _, descendant in ipairs(model:GetDescendants()) do
+        if descendant:IsA("BasePart") then
+            foundPart = true
+            local half = descendant.Size * 0.5
+            local pos = descendant.Position
+            minPos = Vector3.new(
+                math.min(minPos.X, pos.X - half.X),
+                math.min(minPos.Y, pos.Y - half.Y),
+                math.min(minPos.Z, pos.Z - half.Z)
+            )
+            maxPos = Vector3.new(
+                math.max(maxPos.X, pos.X + half.X),
+                math.max(maxPos.Y, pos.Y + half.Y),
+                math.max(maxPos.Z, pos.Z + half.Z)
+            )
+        end
+    end
+
+    if not foundPart then
+        return Vector3.new(0, 0, 0), 0
+    end
+
+    local size = maxPos - minPos
+    return size, size.X * size.Y * size.Z
+end
+
+local function getLargestPart(model)
+    local bestPart = nil
+    local bestVolume = -1
+
+    if not model then
+        return nil
+    end
+
+    for _, descendant in ipairs(model:GetDescendants()) do
+        if descendant:IsA("BasePart") then
+            local volume = descendant.Size.X * descendant.Size.Y * descendant.Size.Z
+            if volume > bestVolume then
+                bestPart = descendant
+                bestVolume = volume
+            end
+        end
+    end
+
+    return bestPart
+end
+
+local function getPrimaryPart(model)
+    if not model then
+        return nil
+    end
+
+    return model:FindFirstChild("HumanoidRootPart")
+        or model.PrimaryPart
+        or model:FindFirstChild("Torso")
+        or model:FindFirstChild("Head")
+        or getLargestPart(model)
+end
+
+local function readHealthLikeValue(model, humanoid)
+    if humanoid then
+        return humanoid.Health, humanoid.MaxHealth
+    end
+
+    if not model then
+        return nil, nil
+    end
+
+    for _, hint in ipairs(HEALTH_HINTS) do
+        local child = model:FindFirstChild(hint, true)
+        if child and (child:IsA("NumberValue") or child:IsA("IntValue")) then
+            local value = tonumber(child.Value)
+            if value then
+                return value, value
+            end
+        end
+    end
+
+    local attrHealth = tonumber(model:GetAttribute("Health")) or tonumber(model:GetAttribute("HP"))
+    local attrMaxHealth = tonumber(model:GetAttribute("MaxHealth")) or tonumber(model:GetAttribute("MaxHP"))
+    if attrHealth or attrMaxHealth then
+        return attrHealth or attrMaxHealth, attrMaxHealth or attrHealth
+    end
+
+    return nil, nil
+end
 
 function BossDetector.new()
     local self = setmetatable({}, BossDetector)
@@ -13,28 +132,43 @@ function BossDetector.new()
 end
 
 function BossDetector:IsBoss(model, humanoid)
-    local humanoid = humanoid or (model and model:FindFirstChildOfClass("Humanoid"))
-    if not humanoid then return false end
-    
-    -- Size-based Boss check
-    local cf, size = model:GetBoundingBox()
-    local boundsScale = size.X * size.Y * size.Z
-    
-    -- Simple thresholds:
-    -- Standard NPC Vol ~ 8-15
-    -- Bosses usually scale > 2x
-    if boundsScale > 70 then return true end
-    
-    -- Health-based check
-    if humanoid.MaxHealth > 500 then return true end
-    
-    -- DisplayName check
-    if humanoid.DisplayName:lower():find("boss") or humanoid.DisplayName:lower():find("king") then
+    if not model or not model:IsA("Model") then
+        return false
+    end
+
+    local primary = getPrimaryPart(model)
+    local size, boundsScale = getModelBounds(model)
+    local health, maxHealth = readHealthLikeValue(model, humanoid or model:FindFirstChildOfClass("Humanoid"))
+    local nameHint = containsBossHint(model.Name)
+    local displayHint = humanoid and containsBossHint(humanoid.DisplayName)
+    local primaryIsBall = primary and primary:IsA("BasePart") and primary.Shape == Enum.PartType.Ball
+
+    if displayHint or nameHint then
         return true
     end
-    
+
+    if maxHealth and maxHealth > 500 then
+        return true
+    end
+
+    if boundsScale > 70 then
+        return true
+    end
+
+    if primaryIsBall then
+        local maxAxis = math.max(size.X, size.Y, size.Z, primary.Size.X, primary.Size.Y, primary.Size.Z)
+        local minAxis = math.min(primary.Size.X, primary.Size.Y, primary.Size.Z)
+
+        if maxAxis >= 5 then
+            return true
+        end
+
+        if minAxis >= 3.5 and (health or 0) > 150 then
+            return true
+        end
+    end
+
     return false
 end
 
 return BossDetector
-

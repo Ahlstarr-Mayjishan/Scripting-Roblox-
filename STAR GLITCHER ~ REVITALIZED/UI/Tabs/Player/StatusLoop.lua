@@ -5,6 +5,10 @@
 local StatusLoop = {}
 
 function StatusLoop.Start(refs, deps, labelUtils)
+    local handle = {
+        Alive = true,
+    }
+
     task.spawn(function()
         local lastSlowdownText
         local lastStunText
@@ -13,7 +17,7 @@ function StatusLoop.Start(refs, deps, labelUtils)
         local lastFloatText
         local lastGravityText
 
-        while true do
+        while handle.Alive do
             if deps.noSlowdown then
                 local nextText = "Slowdown Status: " .. tostring(deps.noSlowdown.Status)
                 if nextText ~= lastSlowdownText then
@@ -65,6 +69,12 @@ function StatusLoop.Start(refs, deps, labelUtils)
             task.wait(0.5)
         end
     end)
+
+    function handle:Destroy()
+        self.Alive = false
+    end
+
+    return handle
 end
 
 return StatusLoop

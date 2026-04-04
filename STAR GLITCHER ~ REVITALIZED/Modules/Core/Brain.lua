@@ -56,6 +56,8 @@ function Brain:Scan(mousePos, originPos)
 end
 
 function Brain:Update(dt, mousePos, camCFrame)
+    self.Occipital:UpdateFOV(mousePos)
+
     local shouldAssist = self.Parietal.Input:ShouldAssist()
     local entry = self.Parietal.Tracker.CurrentTargetEntry
     local maintainDeadlock = self:_isDeadlockMode() and self.Options.AssistMode ~= "Off" and entry ~= nil

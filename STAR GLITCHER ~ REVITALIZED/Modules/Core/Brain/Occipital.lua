@@ -30,6 +30,10 @@ function OccipitalLobe:Process(mousePos, targetPos, targetPart, onScreen)
     end
 end
 
+function OccipitalLobe:UpdateFOV(mousePos)
+    self.fov:Update(mousePos)
+end
+
 function OccipitalLobe:Clear()
     -- Safe cleanup: Ensure no trailing highlights or disconnected dots
     self.highlight:Clear()

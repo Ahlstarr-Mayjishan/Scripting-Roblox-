@@ -11,6 +11,7 @@ function Controller.new(layout, statusLoop, labelUtils)
     self.Layout = layout
     self.StatusLoop = statusLoop
     self.LabelUtils = labelUtils
+    self._statusLoopHandle = nil
     return self
 end
 
@@ -18,7 +19,11 @@ function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, 
     local Tab = Window:CreateTab("Player", 4483362458)
     local refs = self.Layout.Build(Tab, Options)
 
-    self.StatusLoop.Start(refs, {
+    if self._statusLoopHandle and self._statusLoopHandle.Destroy then
+        self._statusLoopHandle:Destroy()
+    end
+
+    self._statusLoopHandle = self.StatusLoop.Start(refs, {
         noSlowdown = noSlowdown,
         noStun = noStun,
         speedMultiplier = speedMultiplier,
@@ -28,6 +33,13 @@ function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, 
     }, self.LabelUtils)
 
     return Tab
+end
+
+function Controller:Destroy()
+    if self._statusLoopHandle and self._statusLoopHandle.Destroy then
+        self._statusLoopHandle:Destroy()
+        self._statusLoopHandle = nil
+    end
 end
 
 return Controller

@@ -22,6 +22,8 @@ function Hitmarker.new(synapse)
     self._pendingShots = {}
     self._fadeConnection = nil
     self._fadeUntil = 0
+    self._synapseConnections = {}
+    self._destroyed = false
 
     self.Part = nil
     self.Drawing = nil
@@ -30,6 +32,11 @@ function Hitmarker.new(synapse)
 end
 
 function Hitmarker:Init()
+    if self.Lines then
+        return
+    end
+
+    self._destroyed = false
     self.Line1 = Drawing.new("Line")
     self.Line2 = Drawing.new("Line")
     self.Line3 = Drawing.new("Line")
@@ -43,7 +50,10 @@ function Hitmarker:Init()
         line.Visible = false
     end
 
-    self.Synapse.on("ShotFired", function(targetId, shotTime, muzzlePos)
+    self._synapseConnections[#self._synapseConnections + 1] = self.Synapse.on("ShotFired", function(targetId, shotTime, muzzlePos)
+        if self._destroyed then
+            return
+        end
         if not targetId then
             return
         end
@@ -55,6 +65,9 @@ function Hitmarker:Init()
         }
 
         task.delay(self.ConfirmWindow, function()
+            if self._destroyed then
+                return
+            end
             local pending = self._pendingShots[targetId]
             if pending and pending.status == "ShotPending" then
                 self._pendingShots[targetId] = nil
@@ -62,7 +75,10 @@ function Hitmarker:Init()
         end)
     end)
 
-    self.Synapse.on("DamageApplied", function(targetId, hitTime)
+    self._synapseConnections[#self._synapseConnections + 1] = self.Synapse.on("DamageApplied", function(targetId, hitTime)
+        if self._destroyed then
+            return
+        end
         local pending = self._pendingShots[targetId]
         if pending and pending.status == "ShotPending" then
             local timeDiff = hitTime - pending.shotTime
@@ -76,7 +92,7 @@ function Hitmarker:Init()
 end
 
 function Hitmarker:Show()
-    if not self.Enabled or not self.Lines then
+    if self._destroyed or not self.Enabled or not self.Lines then
         return
     end
 
@@ -119,15 +135,27 @@ function Hitmarker:Show()
 end
 
 function Hitmarker:Destroy()
+    self._destroyed = true
+
     if self._fadeConnection then
         self._fadeConnection:Disconnect()
         self._fadeConnection = nil
     end
+
+    for _, connection in ipairs(self._synapseConnections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+    table.clear(self._synapseConnections)
+    table.clear(self._pendingShots)
+
     for _, line in ipairs(self.Lines or {}) do
         pcall(function()
             line:Remove()
         end)
     end
+    self.Lines = nil
 end
 
 return Hitmarker

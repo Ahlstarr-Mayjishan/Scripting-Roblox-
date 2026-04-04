@@ -14,6 +14,153 @@ local Apocalypse = {}
 Apocalypse.__index = Apocalypse
 
 local GLOBAL_HOOK_KEY = "__STAR_GLITCHER_APOCALYPSE_HOOK"
+local BOSS_HINTS = { "boss", "king", "queen", "lord", "orb", "sphere", "core" }
+local HEALTH_HINTS = { "Health", "HP", "HitPoints", "BossHealth", "EnemyHealth", "HealthValue" }
+
+local function containsBossHint(text)
+    local lowered = string.lower(tostring(text or ""))
+    for _, hint in ipairs(BOSS_HINTS) do
+        if lowered:find(hint, 1, true) then
+            return true
+        end
+    end
+    return false
+end
+
+local function getLargestPart(model)
+    local bestPart = nil
+    local bestVolume = -1
+    if not model then
+        return nil
+    end
+
+    for _, descendant in ipairs(model:GetDescendants()) do
+        if descendant:IsA("BasePart") then
+            local volume = descendant.Size.X * descendant.Size.Y * descendant.Size.Z
+            if volume > bestVolume then
+                bestPart = descendant
+                bestVolume = volume
+            end
+        end
+    end
+
+    return bestPart
+end
+
+local function getPrimaryPart(model)
+    if not model then
+        return nil
+    end
+
+    return model:FindFirstChild("HumanoidRootPart")
+        or model.PrimaryPart
+        or model:FindFirstChild("Torso")
+        or model:FindFirstChild("Head")
+        or getLargestPart(model)
+end
+
+local function getHealthLikeValue(model)
+    if not model then
+        return nil, nil
+    end
+
+    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        return humanoid.Health, humanoid.MaxHealth, humanoid
+    end
+
+    for _, hint in ipairs(HEALTH_HINTS) do
+        local child = model:FindFirstChild(hint, true)
+        if child and (child:IsA("NumberValue") or child:IsA("IntValue")) then
+            local value = tonumber(child.Value)
+            if value then
+                return value, value, nil
+            end
+        end
+    end
+
+    local attrHealth = tonumber(model:GetAttribute("Health")) or tonumber(model:GetAttribute("HP"))
+    local attrMaxHealth = tonumber(model:GetAttribute("MaxHealth")) or tonumber(model:GetAttribute("MaxHP"))
+    if attrHealth or attrMaxHealth then
+        return attrHealth or attrMaxHealth, attrMaxHealth or attrHealth, nil
+    end
+
+    return nil, nil, nil
+end
+
+local function getBoundsInfo(model)
+    if not model then
+        return Vector3.zero, 0
+    end
+
+    local ok, _, size = pcall(model.GetBoundingBox, model)
+    if ok and typeof(size) == "Vector3" then
+        return size, size.X * size.Y * size.Z
+    end
+
+    return Vector3.zero, 0
+end
+
+local function scoreBossModel(model)
+    if not model or not model:IsA("Model") or model == LocalPlayer.Character then
+        return nil, nil
+    end
+
+    local primary = getPrimaryPart(model)
+    if not primary then
+        return nil, nil
+    end
+
+    local health, maxHealth, humanoid = getHealthLikeValue(model)
+    if humanoid and humanoid.Health <= 0 then
+        return nil, nil
+    end
+    if not humanoid and health and health <= 0 then
+        return nil, nil
+    end
+
+    local size, volume = getBoundsInfo(model)
+    local score = 0
+    local primaryIsBall = primary.Shape == Enum.PartType.Ball
+
+    if containsBossHint(model.Name) then
+        score = score + 6
+    end
+
+    if humanoid and containsBossHint(humanoid.DisplayName) then
+        score = score + 5
+    end
+
+    if maxHealth and maxHealth > 500 then
+        score = score + 5
+    elseif maxHealth and maxHealth > 150 then
+        score = score + 2
+    end
+
+    if volume > 70 then
+        score = score + 4
+    elseif volume > 30 then
+        score = score + 2
+    end
+
+    if primaryIsBall then
+        score = score + 3
+        local axis = math.max(size.X, size.Y, size.Z, primary.Size.X, primary.Size.Y, primary.Size.Z)
+        if axis >= 5 then
+            score = score + 2
+        end
+    end
+
+    if humanoid then
+        score = score + 1
+    end
+
+    if score < 4 then
+        return nil, nil
+    end
+
+    return score, primary
+end
 
 local function ensureHookState()
     local hookState = getgenv()[GLOBAL_HOOK_KEY]
@@ -123,31 +270,30 @@ function Apocalypse:Init()
         lastTrackerUpdate = now
 
         local found = nil
+        local foundScore = -math.huge
         local entities = Workspace:FindFirstChild("Entities")
 
         if entities then
             for _, model in ipairs(entities:GetChildren()) do
                 if model:IsA("Model") then
-                    local hum = model:FindFirstChildOfClass("Humanoid")
-                    if hum and hum.Health > 0 and model ~= LocalPlayer.Character then
-                        found = model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart
-                        if found then
-                            break
-                        end
+                    local score, primary = scoreBossModel(model)
+                    if score and primary and score > foundScore then
+                        found = primary
+                        foundScore = score
                     end
                 end
             end
         end
 
-        if not found and (now - lastFullScan > 1.5) then
+        if (not found or foundScore < 6) and (now - lastFullScan > 1.5) then
             lastFullScan = now
             if entities then
                 for _, descendant in ipairs(entities:GetDescendants()) do
-                    if descendant:IsA("Humanoid") and descendant.Parent ~= LocalPlayer.Character and descendant.Health > 0 then
-                        found = descendant.Parent:FindFirstChild("HumanoidRootPart") or descendant.Parent.PrimaryPart
-                        if found then
-                            break
-                        end
+                    local model = descendant:IsA("Model") and descendant or descendant:FindFirstAncestorOfClass("Model")
+                    local score, primary = scoreBossModel(model)
+                    if score and primary and score > foundScore then
+                        found = primary
+                        foundScore = score
                     end
                 end
             end

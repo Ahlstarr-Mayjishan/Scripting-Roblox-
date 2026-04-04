@@ -5,6 +5,10 @@
 
 return function(Window, Options, cleaner, resourceManager)
     local Tab = Window:CreateTab("Settings", 4483362458)
+    local controller = {
+        Tab = Tab,
+        Alive = true,
+    }
 
     local function setLabelText(label, text)
         if not label then
@@ -196,7 +200,7 @@ return function(Window, Options, cleaner, resourceManager)
         local lastCleanerText
         local lastResourceText
 
-        while true do
+        while controller.Alive do
             if cleaner then
                 local nextText = "Cleanup Status: " .. tostring(cleaner.Status)
                 if nextText ~= lastCleanerText then
@@ -274,5 +278,9 @@ return function(Window, Options, cleaner, resourceManager)
         end,
     })
 
-    return Tab
+    function controller:Destroy()
+        self.Alive = false
+    end
+
+    return controller
 end
