@@ -340,7 +340,7 @@ function Engine:_ResolveTargetProfile(entry, part)
         return TARGET_PROFILE_HUMANOID, math.clamp(size.Y * 0.08, 0.08, 0.3)
     end
 
-    if part.Shape == Enum.PartType.Ball then
+    if part:IsA("Part") and part.Shape == Enum.PartType.Ball then
         return TARGET_PROFILE_SPHERE, 0
     end
 
@@ -852,7 +852,7 @@ local function getEntryExtents(entry, part)
 end
 
 local function classifyAimProfile(entry, part, extents)
-    if part and part.Shape == Enum.PartType.Ball then
+    if part and part:IsA("Part") and part.Shape == Enum.PartType.Ball then
         return "sphere"
     end
 
@@ -4948,7 +4948,7 @@ function BossDetector:IsBoss(model, humanoid)
     local health, maxHealth = readHealthLikeValue(model, humanoid or model:FindFirstChildOfClass("Humanoid"))
     local nameHint = containsBossHint(model.Name)
     local displayHint = humanoid and containsBossHint(humanoid.DisplayName)
-    local primaryIsBall = primary and primary:IsA("BasePart") and primary.Shape == Enum.PartType.Ball
+    local primaryIsBall = primary and primary:IsA("Part") and primary.Shape == Enum.PartType.Ball
     local isBoss = false
 
     if displayHint or nameHint then

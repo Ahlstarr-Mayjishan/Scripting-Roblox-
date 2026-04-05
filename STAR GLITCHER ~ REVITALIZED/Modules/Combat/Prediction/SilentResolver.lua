@@ -26,7 +26,7 @@ local function getEntryExtents(entry, part)
 end
 
 local function classifyAimProfile(entry, part, extents)
-    if part and part.Shape == Enum.PartType.Ball then
+    if part and part:IsA("Part") and part.Shape == Enum.PartType.Ball then
         return "sphere"
     end
 

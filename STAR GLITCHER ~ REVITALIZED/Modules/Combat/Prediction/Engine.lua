@@ -74,7 +74,7 @@ function Engine:_ResolveTargetProfile(entry, part)
         return TARGET_PROFILE_HUMANOID, math.clamp(size.Y * 0.08, 0.08, 0.3)
     end
 
-    if part.Shape == Enum.PartType.Ball then
+    if part:IsA("Part") and part.Shape == Enum.PartType.Ball then
         return TARGET_PROFILE_SPHERE, 0
     end
 

@@ -157,7 +157,7 @@ function BossDetector:IsBoss(model, humanoid)
     local health, maxHealth = readHealthLikeValue(model, humanoid or model:FindFirstChildOfClass("Humanoid"))
     local nameHint = containsBossHint(model.Name)
     local displayHint = humanoid and containsBossHint(humanoid.DisplayName)
-    local primaryIsBall = primary and primary:IsA("BasePart") and primary.Shape == Enum.PartType.Ball
+    local primaryIsBall = primary and primary:IsA("Part") and primary.Shape == Enum.PartType.Ball
     local isBoss = false
 
     if displayHint or nameHint then
