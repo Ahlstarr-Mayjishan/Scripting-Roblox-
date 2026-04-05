@@ -308,6 +308,8 @@ function HitboxDesync:Start(character, root, hum)
     self:_createMirrorBox()
     root.CFrame = CFrame.new(self.SafePos + Vector3.new(0, 3, 0))
     root.Transparency = 1
+    local torso = character:FindFirstChild("LowerTorso") or character:FindFirstChild("Torso")
+    if torso then pcall(function() Workspace.CurrentCamera.CameraSubject = torso end) end
 end
 
 function HitboxDesync:Stop()
@@ -316,6 +318,7 @@ function HitboxDesync:Stop()
     if self.MirrorBox then self.MirrorBox:Destroy() self.MirrorBox = nil end
     local char, hum, root = self.LocalCharacter:GetState()
     if root then root.CFrame = CFrame.new(self.NexusPos) end
+    pcall(function() Workspace.CurrentCamera.CameraSubject = hum end)
 end
 
 function HitboxDesync:Destroy() self:Stop() for _, conn in ipairs(self.Connections) do conn:Disconnect() end end

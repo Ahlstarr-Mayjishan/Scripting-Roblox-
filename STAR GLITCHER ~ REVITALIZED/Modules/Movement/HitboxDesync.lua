@@ -155,9 +155,13 @@ function HitboxDesync:Start(character, root, hum)
     
     -- 3. Lock Hitbox to Mirror Box
     root.CFrame = CFrame.new(self.SafePos + Vector3.new(0, 3, 0))
-    
-    -- Hide Root (it's already invisible usually)
     root.Transparency = 1
+    
+    -- 4. Redirect Camera to Visuals (Torso)
+    local torso = character:FindFirstChild("LowerTorso") or character:FindFirstChild("Torso")
+    if torso then
+        pcall(function() Workspace.CurrentCamera.CameraSubject = torso end)
+    end
 end
 
 function HitboxDesync:Stop()
