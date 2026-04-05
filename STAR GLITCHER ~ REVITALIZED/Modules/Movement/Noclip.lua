@@ -1,11 +1,10 @@
 --[[
-    Noclip.lua - Phase Shifting Module
+    Noclip.lua - Phase Shifting Module (Optimized)
     Job: Disabling physics collisions for the local character.
-    Status: Active frame-by-frame collision override.
+    Status: Active frame-by-frame collision override via Stepped.
 ]]
 
 local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
 
 local Noclip = {}
 Noclip.__index = Noclip
@@ -23,7 +22,9 @@ function Noclip:Init()
     -- Use Stepped to override internal engine physics before the next frame is rendered
     self.Connection = RunService.Stepped:Connect(function()
         if not self.Options.NoclipEnabled then
-            self.Status = "Disabled"
+            if self.Status ~= "Disabled" then
+                self.Status = "Disabled"
+            end
             return
         end
 
@@ -33,11 +34,12 @@ function Noclip:Init()
             return
         end
 
-        self.Status = "Active: NOCLIP ENABLED"
+        self.Status = "Active: PHASING"
         
-        for _, part in ipairs(character:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then
-                part.CanCollide = false
+        -- Aggressive noclip: Disable all BasePart collisions in character
+        for _, obj in ipairs(character:GetDescendants()) do
+            if obj:IsA("BasePart") and obj.CanCollide then
+                obj.CanCollide = false
             end
         end
     end)

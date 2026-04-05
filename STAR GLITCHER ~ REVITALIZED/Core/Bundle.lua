@@ -116,8 +116,9 @@ Config.Blacklist = {
 return Config
 ]====],
     ["Modules/Movement/Noclip.lua"] = [====[--[[
-    Noclip.lua - Phase Shifting Module
-    Job: Disabling character collisions via Stepped loop.
+    Noclip.lua - Phase Shifting Module (Optimized)
+    Job: Disabling physics collisions for the local character.
+    Status: Active frame-by-frame collision override via Stepped.
 ]]
 
 local RunService = game:GetService("RunService")
@@ -135,24 +136,29 @@ function Noclip.new(options, localCharacter)
 end
 
 function Noclip:Init()
+    -- Use Stepped to override internal engine physics before the next frame is rendered
     self.Connection = RunService.Stepped:Connect(function()
         if not self.Options.NoclipEnabled then
-            self.Status = "Disabled"
+            if self.Status ~= "Disabled" then
+                self.Status = "Disabled"
+            end
             return
         end
 
-        local char = self.LocalCharacter and self.LocalCharacter.Instance
-        if not char then
+        local character = self.LocalCharacter and self.LocalCharacter:GetCharacter()
+        if not character then
             self.Status = "Char Missing"
             return
         end
 
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then
-                part.CanCollide = false
+        self.Status = "Active: PHASING"
+        
+        -- Aggressive noclip: Disable all BasePart collisions in character
+        for _, obj in ipairs(character:GetDescendants()) do
+            if obj:IsA("BasePart") and obj.CanCollide then
+                obj.CanCollide = false
             end
         end
-        self.Status = "Active: PHASING"
     end)
 end
 
@@ -166,8 +172,9 @@ end
 return Noclip
 ]====],
     ["Modules/Movement/GodMode.lua"] = [====[--[[
-    GodMode.lua - Biological Preservation Module
-    Job: Locking health and preventing the Dead state without character reset.
+    GodMode.lua - Biological Preservation Module (Ultimate Upgrade)
+    Job: Locking health, preventing Dead state, and preserving joints.
+    Logic: Disables the 'Dead' state and neck requirements to prevent BreakJoints success.
 ]]
 
 local RunService = game:GetService("RunService")
@@ -197,22 +204,30 @@ function GodMode:Init()
             return
         end
 
-        -- Lock Health to Max
-        if humanoid.Health < humanoid.MaxHealth then
+        -- 1. Ultimate Health Lock (Prevent Zero-HP flags)
+        if humanoid.Health < 0.1 then
+            humanoid.Health = humanoid.MaxHealth
+        elseif humanoid.Health < humanoid.MaxHealth then
             humanoid.Health = humanoid.MaxHealth
         end
 
-        -- Disable Dead state to prevent reset on lethal damage
+        -- 2. Joint Preservation (Prevents dying from head-loss/BreakJoints)
+        if humanoid.RequiresNeck then
+            humanoid.RequiresNeck = false
+        end
+
+        -- 3. State Lockdown (Disable Dead state)
         if humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead) then
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         end
         
-        -- Force state away from dead if it somehow reaches it
-        if humanoid:GetState() == Enum.HumanoidStateType.Dead then
-            humanoid:ChangeState(Enum.HumanoidStateType.None)
+        -- 4. Force State Recovery (If server pushes a dead state)
+        local state = humanoid:GetState()
+        if state == Enum.HumanoidStateType.Dead then
+            humanoid:ChangeState(Enum.HumanoidStateType.Physics) -- Alternative to None for better hit feedback
         end
 
-        self.Status = "Active: GOD MODE ENABLED"
+        self.Status = "Active: ULTIMATE GOD MODE"
     end)
 end
 
@@ -222,10 +237,11 @@ function GodMode:Destroy()
         self.Connection = nil
     end
     
-    -- Try to restore state if humanoid still exists
+    -- Restore defaults if possible
     local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
     if humanoid then
         pcall(function()
+            humanoid.RequiresNeck = true
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
         end)
     end

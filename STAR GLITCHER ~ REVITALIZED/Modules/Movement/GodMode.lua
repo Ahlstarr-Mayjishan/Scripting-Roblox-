@@ -1,6 +1,7 @@
 --[[
-    GodMode.lua - Biological Preservation Module
-    Job: Locking health and preventing the Dead state without character reset.
+    GodMode.lua - Biological Preservation Module (Ultimate Upgrade)
+    Job: Locking health, preventing Dead state, and preserving joints.
+    Logic: Disables the 'Dead' state and neck requirements to prevent BreakJoints success.
 ]]
 
 local RunService = game:GetService("RunService")
@@ -30,22 +31,30 @@ function GodMode:Init()
             return
         end
 
-        -- Lock Health to Max
-        if humanoid.Health < humanoid.MaxHealth then
+        -- 1. Ultimate Health Lock (Prevent Zero-HP flags)
+        if humanoid.Health < 0.1 then
+            humanoid.Health = humanoid.MaxHealth
+        elseif humanoid.Health < humanoid.MaxHealth then
             humanoid.Health = humanoid.MaxHealth
         end
 
-        -- Disable Dead state to prevent reset on lethal damage
+        -- 2. Joint Preservation (Prevents dying from head-loss/BreakJoints)
+        if humanoid.RequiresNeck then
+            humanoid.RequiresNeck = false
+        end
+
+        -- 3. State Lockdown (Disable Dead state)
         if humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead) then
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         end
         
-        -- Force state away from dead if it somehow reaches it
-        if humanoid:GetState() == Enum.HumanoidStateType.Dead then
-            humanoid:ChangeState(Enum.HumanoidStateType.None)
+        -- 4. Force State Recovery (If server pushes a dead state)
+        local state = humanoid:GetState()
+        if state == Enum.HumanoidStateType.Dead then
+            humanoid:ChangeState(Enum.HumanoidStateType.Physics) -- Alternative to None for better hit feedback
         end
 
-        self.Status = "Active: GOD MODE ENABLED"
+        self.Status = "Active: ULTIMATE GOD MODE"
     end)
 end
 
@@ -55,10 +64,11 @@ function GodMode:Destroy()
         self.Connection = nil
     end
     
-    -- Try to restore state if humanoid still exists
+    -- Restore defaults if possible
     local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
     if humanoid then
         pcall(function()
+            humanoid.RequiresNeck = true
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
         end)
     end
