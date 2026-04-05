@@ -117,7 +117,7 @@ Config.Blacklist = {
 return Config
 ]====],
     ["Modules/Movement/Noclip.lua"] = [====[--[[
-    Noclip.lua - Phase Shifting Module (Deep v5)
+    Noclip.lua - Phase Shifting Module (Deep v6)
     Job: Disabling physics collisions AND touch sensors.
     Status: Active frame-by-frame override via Stepped.
 ]]
@@ -146,6 +146,8 @@ function Noclip:Init()
         end
 
         local character = self.LocalCharacter and self.LocalCharacter:GetCharacter()
+        local rootPart = self.LocalCharacter and self.LocalCharacter:GetRootPart()
+        
         if not character then
             self.Status = "Char Missing"
             return
@@ -153,14 +155,14 @@ function Noclip:Init()
 
         self.Status = "Active: DEEP PHASING"
         
-        -- Deep Noclip: Disable collisions, touch sensors, and raycasters
+        -- Override CanTouch/CanQuery for all descendants
         for _, obj in ipairs(character:GetDescendants()) do
             if obj:IsA("BasePart") then
                 if obj.CanCollide then
                     obj.CanCollide = false
                 end
                 
-                -- NEW 2024/2025 Property: Prevents .Touched events from firing
+                -- NEW 2024/2025 Property
                 pcall(function()
                     if obj.CanTouch then
                         obj.CanTouch = false
@@ -170,6 +172,15 @@ function Noclip:Init()
                     end
                 end)
             end
+        end
+
+        -- Explicitly lock RootPart to ensure zero collision window
+        if rootPart then
+            rootPart.CanCollide = false
+            pcall(function()
+                rootPart.CanTouch = false
+                rootPart.CanQuery = false
+            end)
         end
     end)
 end
@@ -184,13 +195,13 @@ end
 return Noclip
 ]====],
     ["Modules/Movement/GodMode.lua"] = [====[--[[
-    GodMode.lua - Biological Preservation Module (v5 Ghost Edition)
-    Job: Locking health and HIDING the humanoid from game sensors.
-    Logic: Renames Humanoid to a random string to bypass FindFirstChild("Humanoid").
+    GodMode.lua - Biological Preservation Module (v6 Ultimate Balance)
+    Job: Locking health AND protecting against Void death.
+    Logic: Uses Void Guard (height override) and Auto-Rescue (teleport).
 ]]
 
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
+local Workspace = game:GetService("Workspace")
 
 local GodMode = {}
 GodMode.__index = GodMode
@@ -200,42 +211,50 @@ function GodMode.new(options, localCharacter)
     self.Options = options
     self.LocalCharacter = localCharacter
     self.Connection = nil
-    self.OriginalName = "Humanoid"
-    self.GhostName = "_SG_" .. string.sub(HttpService:GenerateGUID(false), 1, 8)
     self.Status = "Idle"
+    self._lastSafePosition = Vector3.new(0, 10, 0)
     return self
-end
-
-function GodMode:_rename(humanoid, toName)
-    if not humanoid then return end
-    if humanoid.Name ~= toName then
-        pcall(function()
-            humanoid.Name = toName
-        end)
-    end
 end
 
 function GodMode:Init()
     self.Connection = RunService.Heartbeat:Connect(function()
-        local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
-        
         if not self.Options.GodModeEnabled then
-            if humanoid and humanoid.Name ~= self.OriginalName then
-                self:_rename(humanoid, self.OriginalName)
-            end
             self.Status = "Disabled"
             return
         end
 
+        local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
+        local rootPart = self.LocalCharacter and self.LocalCharacter:GetRootPart()
+        
         if not humanoid then
             self.Status = "Hum Missing"
             return
         end
 
-        -- 1. Stealth Mode: Rename to hide from game scripts
-        self:_rename(humanoid, self.GhostName)
+        -- 1. Void Guard (Engine Override)
+        pcall(function()
+            if Workspace.FallenPartsDestroyHeight ~= -99999 then
+                Workspace.FallenPartsDestroyHeight = -99999
+            end
+        end)
 
-        -- 2. Void Health Lock
+        -- 2. Void Rescue (Auto-Teleport)
+        if rootPart then
+            local pos = rootPart.Position
+            if pos.Y > -400 then
+                -- Store safe position while on/above the map
+                self._lastSafePosition = pos + Vector3.new(0, 5, 0)
+            elseif pos.Y < -480 then
+                -- TRIGGER RESCUE: Teleport back to safety before engine-death or infinite fall
+                rootPart.Velocity = Vector3.zero
+                rootPart.AssemblyLinearVelocity = Vector3.zero
+                rootPart.CFrame = CFrame.new(self._lastSafePosition)
+                self.Status = "Active: VOID RESCUED"
+                return
+            end
+        end
+
+        -- 3. Ultimate Health Lock
         humanoid.MaxHealth = 9e18
         humanoid.Health = 9e18
         
@@ -243,7 +262,7 @@ function GodMode:Init()
             humanoid.Health = 9e18
         end
 
-        -- 3. physical Reinforcement
+        -- 4. physical Reinforcement (Joints)
         humanoid.RequiresNeck = false
         
         local character = self.LocalCharacter:GetCharacter()
@@ -257,16 +276,16 @@ function GodMode:Init()
             end
         end
 
-        -- 4. State Lockdown
+        -- 5. State Lockdown
         if humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead) then
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         end
         
         if humanoid:GetState() == Enum.HumanoidStateType.Dead then
-            humanoid:ChangeState(Enum.HumanoidStateType.Physics)
+            humanoid:ChangeState(Enum.HumanoidStateType.Running)
         end
 
-        self.Status = "Active: GHOST MODE v5"
+        self.Status = "Active: BALANCED GOD v6"
     end)
 end
 
@@ -276,9 +295,12 @@ function GodMode:Destroy()
         self.Connection = nil
     end
     
+    pcall(function()
+        Workspace.FallenPartsDestroyHeight = -500 -- Restore default
+    end)
+
     local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
     if humanoid then
-        self:_rename(humanoid, self.OriginalName)
         pcall(function()
             humanoid.MaxHealth = 100
             humanoid.Health = 100

@@ -1,5 +1,5 @@
 --[[
-    Noclip.lua - Phase Shifting Module (Deep v5)
+    Noclip.lua - Phase Shifting Module (Deep v6)
     Job: Disabling physics collisions AND touch sensors.
     Status: Active frame-by-frame override via Stepped.
 ]]
@@ -28,6 +28,8 @@ function Noclip:Init()
         end
 
         local character = self.LocalCharacter and self.LocalCharacter:GetCharacter()
+        local rootPart = self.LocalCharacter and self.LocalCharacter:GetRootPart()
+        
         if not character then
             self.Status = "Char Missing"
             return
@@ -35,14 +37,14 @@ function Noclip:Init()
 
         self.Status = "Active: DEEP PHASING"
         
-        -- Deep Noclip: Disable collisions, touch sensors, and raycasters
+        -- Override CanTouch/CanQuery for all descendants
         for _, obj in ipairs(character:GetDescendants()) do
             if obj:IsA("BasePart") then
                 if obj.CanCollide then
                     obj.CanCollide = false
                 end
                 
-                -- NEW 2024/2025 Property: Prevents .Touched events from firing
+                -- NEW 2024/2025 Property
                 pcall(function()
                     if obj.CanTouch then
                         obj.CanTouch = false
@@ -52,6 +54,15 @@ function Noclip:Init()
                     end
                 end)
             end
+        end
+
+        -- Explicitly lock RootPart to ensure zero collision window
+        if rootPart then
+            rootPart.CanCollide = false
+            pcall(function()
+                rootPart.CanTouch = false
+                rootPart.CanQuery = false
+            end)
         end
     end)
 end
