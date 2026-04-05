@@ -406,7 +406,9 @@ _G.BossAimAssist_Update = function()
             warn("[Update] Reload failed after cleanup | Error: " .. tostring(result))
         end
     end)
-    performCleanup(true)
+    task.defer(function()
+        performCleanup(true)
+    end)
 end
 
 _G.BossAimAssist_CheckForUpdates = function(manual)

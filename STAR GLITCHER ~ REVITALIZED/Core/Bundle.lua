@@ -4889,6 +4889,7 @@ end
 function BossDetector.new()
     local self = setmetatable({}, BossDetector)
     self.CheckInterval = 10
+    self._cache = setmetatable({}, { __mode = "k" })
     self._destroyed = false
     return self
 end
@@ -4906,43 +4907,48 @@ function BossDetector:IsBoss(model, humanoid)
         return false
     end
 
+    local now = os.clock()
+    local cached = self._cache[model]
+    if cached and cached.ExpiresAt and cached.ExpiresAt > now then
+        return cached.Value == true
+    end
+
     local primary = getPrimaryPart(model)
     local size, boundsScale = getModelBounds(model)
     local health, maxHealth = readHealthLikeValue(model, humanoid or model:FindFirstChildOfClass("Humanoid"))
     local nameHint = containsBossHint(model.Name)
     local displayHint = humanoid and containsBossHint(humanoid.DisplayName)
     local primaryIsBall = primary and primary:IsA("BasePart") and primary.Shape == Enum.PartType.Ball
+    local isBoss = false
 
     if displayHint or nameHint then
-        return true
-    end
-
-    if maxHealth and maxHealth > 500 then
-        return true
-    end
-
-    if boundsScale > 70 then
-        return true
-    end
-
-    if primaryIsBall then
+        isBoss = true
+    elseif maxHealth and maxHealth > 500 then
+        isBoss = true
+    elseif boundsScale > 70 then
+        isBoss = true
+    elseif primaryIsBall then
         local maxAxis = math.max(size.X, size.Y, size.Z, primary.Size.X, primary.Size.Y, primary.Size.Z)
         local minAxis = math.min(primary.Size.X, primary.Size.Y, primary.Size.Z)
 
         if maxAxis >= 5 then
-            return true
-        end
-
-        if minAxis >= 3.5 and (health or 0) > 150 then
-            return true
+            isBoss = true
+        elseif minAxis >= 3.5 and (health or 0) > 150 then
+            isBoss = true
         end
     end
 
-    return false
+    self._cache[model] = {
+        Value = isBoss,
+        ExpiresAt = now + math.max(self.CheckInterval or 10, 1),
+    }
+
+    return isBoss
 end
 
 function BossDetector:Destroy()
     self._destroyed = true
+    table.clear(self._cache)
 end
 
 return BossDetector
@@ -5709,6 +5715,7 @@ function NPCTracker.new(config, detector, taskScheduler)
     self._entryExpiry = 18
     self._deadEntryExpiry = 6
     self._maxEntries = 180
+    self._bossRefreshInterval = 8
     self._schedulerAlive = false
 
     for i, keyword in ipairs(self.Blacklist) do
@@ -5820,7 +5827,7 @@ function NPCTracker:_GetPrimaryPart(model)
         or model:FindFirstChildWhichIsA("BasePart")
 end
 
-function NPCTracker:_IsTargetCandidate(model)
+function NPCTracker:_IsTargetCandidate(model, existingEntry)
     -- GUARD: Ensure model validity
     if not model or not model:IsA("Model") or self:IsLocalCharacterModel(model) or not model.Parent then
         return false
@@ -5838,9 +5845,12 @@ function NPCTracker:_IsTargetCandidate(model)
     end
 
     -- UNIVERSAL TARGETING: Support both Humanoid va Non-Humanoid (Bosses)
-    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    local humanoid = existingEntry and existingEntry.Humanoid or model:FindFirstChildOfClass("Humanoid")
     local primary = self:_GetPrimaryPart(model)
-    local isBoss = self.Detector and self.Detector.IsBoss and self.Detector:IsBoss(model, humanoid)
+    local isBoss = existingEntry and existingEntry.IsBoss
+    if isBoss == nil then
+        isBoss = self.Detector and self.Detector.IsBoss and self.Detector:IsBoss(model, humanoid)
+    end
     
     if not primary then return false end
 
@@ -5885,6 +5895,10 @@ function NPCTracker:GetTargets()
             entry.LastSeen = now
             entry.PrimaryPart = self:_GetPrimaryPart(model) or entry.PrimaryPart
             entry.Humanoid = model:FindFirstChildOfClass("Humanoid") or entry.Humanoid
+            if (entry.LastBossCheck or 0) <= 0 or (now - entry.LastBossCheck) >= self._bossRefreshInterval then
+                entry.IsBoss = self.Detector:IsBoss(model, entry.Humanoid)
+                entry.LastBossCheck = now
+            end
             if entry.PrimaryPart then
                 entry.LastPos = entry.PrimaryPart.Position
             end
@@ -5935,15 +5949,23 @@ function NPCTracker:GetTargets()
 end
 
 function NPCTracker:_GetOrCreateEntry(model)
+    local existingEntry = self._entries[model]
+    if existingEntry then
+        if not self:_IsTargetCandidate(model, existingEntry) then
+            self._entries[model] = nil
+            return nil
+        end
+        return existingEntry
+    end
+
     if not self:_IsTargetCandidate(model) then
         self._entries[model] = nil
         return nil
     end
 
-    if self._entries[model] then return self._entries[model] end
-    
     local hum = model:FindFirstChildOfClass("Humanoid")
     local primary = self:_GetPrimaryPart(model)
+    local now = os.clock()
     
     if not primary then return nil end
     
@@ -5954,8 +5976,9 @@ function NPCTracker:_GetOrCreateEntry(model)
         IsBoss = self.Detector:IsBoss(model, hum),
         Name = model.Name,
         LastPos = primary.Position,
-        LastTime = os.clock(),
-        LastSeen = os.clock(),
+        LastTime = now,
+        LastSeen = now,
+        LastBossCheck = now,
     }
     
     self._entries[model] = entry
@@ -8018,7 +8041,9 @@ return function(Window, Options, cleaner, resourceManager)
         Name = "Destroy Script (Emergency Stop)",
         Callback = function()
             if _G.BossAimAssist_Cleanup then
-                _G.BossAimAssist_Cleanup(true)
+                task.defer(function()
+                    _G.BossAimAssist_Cleanup(true)
+                end)
             end
         end,
     })
@@ -8028,9 +8053,11 @@ return function(Window, Options, cleaner, resourceManager)
         Callback = function()
             local updater = _G.BossAimAssist_Update
             if updater then
-                task.spawn(updater)
+                task.defer(updater)
             elseif _G.BossAimAssist_Cleanup then
-                _G.BossAimAssist_Cleanup(true)
+                task.defer(function()
+                    _G.BossAimAssist_Cleanup(true)
+                end)
             end
         end,
     })
@@ -8486,7 +8513,9 @@ _G.BossAimAssist_Update = function()
             warn("[Update] Reload failed after cleanup | Error: " .. tostring(result))
         end
     end)
-    performCleanup(true)
+    task.defer(function()
+        performCleanup(true)
+    end)
 end
 
 _G.BossAimAssist_CheckForUpdates = function(manual)

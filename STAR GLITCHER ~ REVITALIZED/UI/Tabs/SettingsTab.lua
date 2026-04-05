@@ -114,7 +114,9 @@ return function(Window, Options, cleaner, resourceManager)
         Name = "Destroy Script (Emergency Stop)",
         Callback = function()
             if _G.BossAimAssist_Cleanup then
-                _G.BossAimAssist_Cleanup(true)
+                task.defer(function()
+                    _G.BossAimAssist_Cleanup(true)
+                end)
             end
         end,
     })
@@ -124,9 +126,11 @@ return function(Window, Options, cleaner, resourceManager)
         Callback = function()
             local updater = _G.BossAimAssist_Update
             if updater then
-                task.spawn(updater)
+                task.defer(updater)
             elseif _G.BossAimAssist_Cleanup then
-                _G.BossAimAssist_Cleanup(true)
+                task.defer(function()
+                    _G.BossAimAssist_Cleanup(true)
+                end)
             end
         end,
     })

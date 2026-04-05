@@ -128,6 +128,7 @@ end
 function BossDetector.new()
     local self = setmetatable({}, BossDetector)
     self.CheckInterval = 10
+    self._cache = setmetatable({}, { __mode = "k" })
     self._destroyed = false
     return self
 end
@@ -145,43 +146,48 @@ function BossDetector:IsBoss(model, humanoid)
         return false
     end
 
+    local now = os.clock()
+    local cached = self._cache[model]
+    if cached and cached.ExpiresAt and cached.ExpiresAt > now then
+        return cached.Value == true
+    end
+
     local primary = getPrimaryPart(model)
     local size, boundsScale = getModelBounds(model)
     local health, maxHealth = readHealthLikeValue(model, humanoid or model:FindFirstChildOfClass("Humanoid"))
     local nameHint = containsBossHint(model.Name)
     local displayHint = humanoid and containsBossHint(humanoid.DisplayName)
     local primaryIsBall = primary and primary:IsA("BasePart") and primary.Shape == Enum.PartType.Ball
+    local isBoss = false
 
     if displayHint or nameHint then
-        return true
-    end
-
-    if maxHealth and maxHealth > 500 then
-        return true
-    end
-
-    if boundsScale > 70 then
-        return true
-    end
-
-    if primaryIsBall then
+        isBoss = true
+    elseif maxHealth and maxHealth > 500 then
+        isBoss = true
+    elseif boundsScale > 70 then
+        isBoss = true
+    elseif primaryIsBall then
         local maxAxis = math.max(size.X, size.Y, size.Z, primary.Size.X, primary.Size.Y, primary.Size.Z)
         local minAxis = math.min(primary.Size.X, primary.Size.Y, primary.Size.Z)
 
         if maxAxis >= 5 then
-            return true
-        end
-
-        if minAxis >= 3.5 and (health or 0) > 150 then
-            return true
+            isBoss = true
+        elseif minAxis >= 3.5 and (health or 0) > 150 then
+            isBoss = true
         end
     end
 
-    return false
+    self._cache[model] = {
+        Value = isBoss,
+        ExpiresAt = now + math.max(self.CheckInterval or 10, 1),
+    }
+
+    return isBoss
 end
 
 function BossDetector:Destroy()
     self._destroyed = true
+    table.clear(self._cache)
 end
 
 return BossDetector

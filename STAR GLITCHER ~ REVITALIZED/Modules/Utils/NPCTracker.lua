@@ -34,6 +34,7 @@ function NPCTracker.new(config, detector, taskScheduler)
     self._entryExpiry = 18
     self._deadEntryExpiry = 6
     self._maxEntries = 180
+    self._bossRefreshInterval = 8
     self._schedulerAlive = false
 
     for i, keyword in ipairs(self.Blacklist) do
@@ -145,7 +146,7 @@ function NPCTracker:_GetPrimaryPart(model)
         or model:FindFirstChildWhichIsA("BasePart")
 end
 
-function NPCTracker:_IsTargetCandidate(model)
+function NPCTracker:_IsTargetCandidate(model, existingEntry)
     -- GUARD: Ensure model validity
     if not model or not model:IsA("Model") or self:IsLocalCharacterModel(model) or not model.Parent then
         return false
@@ -163,9 +164,12 @@ function NPCTracker:_IsTargetCandidate(model)
     end
 
     -- UNIVERSAL TARGETING: Support both Humanoid va Non-Humanoid (Bosses)
-    local humanoid = model:FindFirstChildOfClass("Humanoid")
+    local humanoid = existingEntry and existingEntry.Humanoid or model:FindFirstChildOfClass("Humanoid")
     local primary = self:_GetPrimaryPart(model)
-    local isBoss = self.Detector and self.Detector.IsBoss and self.Detector:IsBoss(model, humanoid)
+    local isBoss = existingEntry and existingEntry.IsBoss
+    if isBoss == nil then
+        isBoss = self.Detector and self.Detector.IsBoss and self.Detector:IsBoss(model, humanoid)
+    end
     
     if not primary then return false end
 
@@ -210,6 +214,10 @@ function NPCTracker:GetTargets()
             entry.LastSeen = now
             entry.PrimaryPart = self:_GetPrimaryPart(model) or entry.PrimaryPart
             entry.Humanoid = model:FindFirstChildOfClass("Humanoid") or entry.Humanoid
+            if (entry.LastBossCheck or 0) <= 0 or (now - entry.LastBossCheck) >= self._bossRefreshInterval then
+                entry.IsBoss = self.Detector:IsBoss(model, entry.Humanoid)
+                entry.LastBossCheck = now
+            end
             if entry.PrimaryPart then
                 entry.LastPos = entry.PrimaryPart.Position
             end
@@ -260,15 +268,23 @@ function NPCTracker:GetTargets()
 end
 
 function NPCTracker:_GetOrCreateEntry(model)
+    local existingEntry = self._entries[model]
+    if existingEntry then
+        if not self:_IsTargetCandidate(model, existingEntry) then
+            self._entries[model] = nil
+            return nil
+        end
+        return existingEntry
+    end
+
     if not self:_IsTargetCandidate(model) then
         self._entries[model] = nil
         return nil
     end
 
-    if self._entries[model] then return self._entries[model] end
-    
     local hum = model:FindFirstChildOfClass("Humanoid")
     local primary = self:_GetPrimaryPart(model)
+    local now = os.clock()
     
     if not primary then return nil end
     
@@ -279,8 +295,9 @@ function NPCTracker:_GetOrCreateEntry(model)
         IsBoss = self.Detector:IsBoss(model, hum),
         Name = model.Name,
         LastPos = primary.Position,
-        LastTime = os.clock(),
-        LastSeen = os.clock(),
+        LastTime = now,
+        LastSeen = now,
+        LastBossCheck = now,
     }
     
     self._entries[model] = entry
