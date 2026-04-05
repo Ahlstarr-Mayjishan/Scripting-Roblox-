@@ -5114,6 +5114,7 @@ function GarbageCollector.new(options, resourceManager)
     self._destroyBudget = 4
     self._collectStepSize = 24
     self._manualBoostUntil = 0
+    self._manualDrainCap = 80
     self._frameBudget = 0.0008
     self.Status = "Idle"
     return self
@@ -5209,13 +5210,31 @@ function GarbageCollector:_processScan(batchSize)
     return queuedCount, done
 end
 
-function GarbageCollector:_drainQueue(destroyBudget, gcStepSize)
+function GarbageCollector:_processFullScan(batchSize)
+    local totalQueued = 0
+    local scanBatchSize = math.max(batchSize or self._scanBatchSize, 1)
+
+    while self._scanList do
+        local queuedCount = 0
+        local done = false
+        queuedCount, done = self:_processScan(scanBatchSize)
+        totalQueued = totalQueued + (queuedCount or 0)
+        if done then
+            break
+        end
+    end
+
+    return totalQueued
+end
+
+function GarbageCollector:_drainQueue(destroyBudget, gcStepSize, ignoreFrameBudget)
     local destroyed = 0
+    local deferred = 0
     local processed = 0
     local startTime = os.clock()
 
-    while self._queueSize > 0 and processed < destroyBudget do
-        if (os.clock() - startTime) >= self._frameBudget then
+    while self._queueSize > 0 and (destroyBudget == nil or processed < destroyBudget) do
+        if not ignoreFrameBudget and (os.clock() - startTime) >= self._frameBudget then
             break
         end
 
@@ -5227,11 +5246,8 @@ function GarbageCollector:_drainQueue(destroyBudget, gcStepSize)
         self._queuedMap[instance] = nil
         if instance and instance.Parent then
             if self.ResourceManager then
-                self.ResourceManager:DeferCleanup(function()
-                    if instance and instance.Parent then
-                        instance:Destroy()
-                    end
-                end)
+                self.ResourceManager:DeferDestroy(instance)
+                deferred = deferred + 1
             else
                 pcall(function()
                     instance:Destroy()
@@ -5245,32 +5261,45 @@ function GarbageCollector:_drainQueue(destroyBudget, gcStepSize)
         -- collectgarbage("step", gcStepSize) -- Restricted in some environments
     end
 
-    return destroyed
+    return destroyed, deferred, processed
 end
 
 function GarbageCollector:_stepCleanup()
     local now = os.clock()
     local manualBoost = now < self._manualBoostUntil
-    local queuePressure = self._queueSize
+    local localPressure = self._queueSize
+    local deferredPressure = 0
     if self.ResourceManager and self.ResourceManager.GetPendingCount then
-        queuePressure = queuePressure + self.ResourceManager:GetPendingCount()
+        deferredPressure = self.ResourceManager:GetPendingCount()
     end
 
-    local pressureMultiplier = 1
-    if queuePressure >= 500 then
-        pressureMultiplier = 3
-    elseif queuePressure >= 200 then
-        pressureMultiplier = 2
-    elseif queuePressure >= 80 then
-        pressureMultiplier = 1.5
+    local scanMultiplier = 1
+    local destroyMultiplier = 1
+    if localPressure >= 500 then
+        scanMultiplier = 2.2
+        destroyMultiplier = 2
+    elseif localPressure >= 200 then
+        scanMultiplier = 1.7
+        destroyMultiplier = 1.5
+    elseif localPressure >= 80 then
+        scanMultiplier = 1.3
+        destroyMultiplier = 1.2
     end
 
     local scanBatchSize = (manualBoost and math.ceil(self._scanBatchSize * 1.35) or self._scanBatchSize)
-    scanBatchSize = math.max(scanBatchSize, math.ceil(scanBatchSize * pressureMultiplier))
+    scanBatchSize = math.max(scanBatchSize, math.ceil(scanBatchSize * scanMultiplier))
 
     local destroyBudget = (manualBoost and math.ceil(self._destroyBudget * 1.5) or self._destroyBudget)
-    destroyBudget = math.max(destroyBudget, math.ceil(destroyBudget * pressureMultiplier))
+    destroyBudget = math.max(destroyBudget, math.ceil(destroyBudget * destroyMultiplier))
     local gcStepSize = manualBoost and math.ceil(self._collectStepSize * 1.5) or self._collectStepSize
+
+    if deferredPressure >= 400 then
+        destroyBudget = math.max(1, math.floor(destroyBudget * 0.25))
+    elseif deferredPressure >= 150 then
+        destroyBudget = math.max(1, math.floor(destroyBudget * 0.45))
+    elseif deferredPressure >= 50 then
+        destroyBudget = math.max(1, math.floor(destroyBudget * 0.7))
+    end
 
     if not self._scanList and self._queueSize == 0 then
         if now - self._lastClean < self._cleanInterval then
@@ -5287,13 +5316,13 @@ function GarbageCollector:_stepCleanup()
         queuedCount, scanDone = self:_processScan(scanBatchSize)
     end
 
-    local destroyed = self:_drainQueue(destroyBudget, gcStepSize)
+    local destroyed, deferred = self:_drainQueue(destroyBudget, gcStepSize, false)
 
     if self._scanList then
         self.Status = string.format("Scanning (%d queued)", self._queueSize)
     elseif self._queueSize > 0 then
         self.Status = string.format("Cleaning (%d left)", self._queueSize)
-    elseif destroyed > 0 or queuedCount > 0 or not scanDone then
+    elseif destroyed > 0 or deferred > 0 or queuedCount > 0 or not scanDone then
         self.Status = "Cleanup Settled"
     else
         self.Status = "Idle"
@@ -5309,21 +5338,23 @@ function GarbageCollector:Init()
 end
 
 function GarbageCollector:Clean()
-    self._manualBoostUntil = os.clock() + 3
+    self._manualBoostUntil = os.clock() + 4
     if self.ResourceManager then
-        self.ResourceManager:Boost(1.5)
+        self.ResourceManager:Boost(2.5)
     end
     if not self._scanList then
         self._lastClean = 0
         self:_beginScan()
     end
 
-    local queued = 0
+    local found = 0
     local destroyed = 0
+    local deferred = 0
     if self._scanList then
-        queued = select(1, self:_processScan(self._scanBatchSize))
+        found = self:_processFullScan(math.max(self._scanBatchSize * 8, 200))
     end
-    destroyed = self:_drainQueue(self._destroyBudget, self._collectStepSize)
+    local immediateDrain = math.min(self._queueSize, self._manualDrainCap)
+    destroyed, deferred = self:_drainQueue(immediateDrain, self._collectStepSize, true)
 
     if self.ResourceManager and self.ResourceManager:GetPendingCount() > 0 then
         self.Status = string.format(
@@ -5334,7 +5365,7 @@ function GarbageCollector:Clean()
     else
         self.Status = self._queueSize > 0 and string.format("Cleaning (%d left)", self._queueSize) or "Cleanup Settled"
     end
-    return destroyed, queued, self._queueSize
+    return destroyed, found, deferred, self._queueSize
 end
 
 function GarbageCollector:Destroy()
@@ -8025,14 +8056,15 @@ return function(Window, Options, cleaner, resourceManager)
         Name = "Clean Memory & Debris Now",
         Callback = function()
             if cleaner then
-                local destroyed, queued, pending = cleaner:Clean()
+                local destroyed, found, deferred, remaining = cleaner:Clean()
                 Rayfield:Notify({
                     Title = "Cleanup Scheduled",
                     Content = string.format(
-                        "Destroyed %d now, queued %d, pending %d for smoother cleanup.",
+                        "Found %d debris, destroyed %d now, deferred %d, remaining local %d.",
+                        found or 0,
                         destroyed or 0,
-                        queued or 0,
-                        pending or 0
+                        deferred or 0,
+                        remaining or 0
                     ),
                     Duration = 4,
                     Image = 4483362458,

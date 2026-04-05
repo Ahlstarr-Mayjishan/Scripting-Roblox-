@@ -187,8 +187,20 @@ function ResourceManager:_step(dt)
     local budget = self:_getBudget(dt)
     local startTime = os.clock()
     local processed = 0
+    local pendingCount = self:GetPendingCount()
+    
+    local minProcess = 0
+    if pendingCount >= 1500 then
+        minProcess = 50
+    elseif pendingCount >= 500 then
+        minProcess = 15
+    end
 
-    while self:GetPendingCount() > 0 and (os.clock() - startTime) < budget do
+    while self:GetPendingCount() > 0 do
+        if (os.clock() - startTime) >= budget and processed >= minProcess then
+            break
+        end
+
         local job = self:_popJob()
         if not job then
             break

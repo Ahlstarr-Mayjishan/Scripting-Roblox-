@@ -68,14 +68,15 @@ return function(Window, Options, cleaner, resourceManager)
         Name = "Clean Memory & Debris Now",
         Callback = function()
             if cleaner then
-                local destroyed, queued, pending = cleaner:Clean()
+                local destroyed, found, deferred, remaining = cleaner:Clean()
                 Rayfield:Notify({
                     Title = "Cleanup Scheduled",
                     Content = string.format(
-                        "Destroyed %d now, queued %d, pending %d for smoother cleanup.",
+                        "Found %d debris, destroyed %d now, deferred %d, remaining local %d.",
+                        found or 0,
                         destroyed or 0,
-                        queued or 0,
-                        pending or 0
+                        deferred or 0,
+                        remaining or 0
                     ),
                     Duration = 4,
                     Image = 4483362458,
