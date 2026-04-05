@@ -156,6 +156,7 @@ function HitboxDesync:Start(character, root, hum)
     -- 3. Lock Hitbox to Mirror Box
     root.CFrame = CFrame.new(self.SafePos + Vector3.new(0, 3, 0))
     root.Transparency = 1
+    root.Anchored = true -- Prevent engine from dragging it back
     
     -- 4. Redirect Camera to Visuals (Torso)
     local torso = character:FindFirstChild("LowerTorso") or character:FindFirstChild("Torso")
@@ -172,12 +173,11 @@ function HitboxDesync:Stop()
         self.RootJoint.Parent = self.JointParent
     end
     
-    -- 2. Clean Mirror Box
-    if self.MirrorBox then self.MirrorBox:Destroy() self.MirrorBox = nil end
-    
-    -- 3. Restore Body
     local character, hum, root = self.LocalCharacter:GetState()
-    if root then root.CFrame = CFrame.new(self.NexusPos) end
+    if root then 
+        root.Anchored = false
+        root.CFrame = CFrame.new(self.NexusPos) 
+    end
 end
 
 function HitboxDesync:Destroy()
