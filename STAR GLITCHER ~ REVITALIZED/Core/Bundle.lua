@@ -195,13 +195,12 @@ end
 return Noclip
 ]====],
     ["Modules/Movement/HitboxDesync.lua"] = [====[--[[
-    HitboxDesync.lua - Zenith Desync (Soul Mode)
-    ============================================
-    Separates visual character from physical hitbox.
-    Features:
-      * Soul Separation (Ghosting)
-      * Safe Room Anchoring (-850 studs)
-      * Silent Damage Flicker (Teleporting hitbox to target momentarily)
+    HitboxDesync.lua - True Zenith Desync (Soul Mode)
+    ================================================
+    Architecture:
+      * Soul Partition: Physical RootPart anchored at -850 studs.
+      * Ghost Mirroring: Visual representation remains on the map and mirrors inputs.
+      * Camera Hijack: Redirection of camera focus to the Soul (Ghost).
 ]]
 
 local RunService = game:GetService("RunService")
@@ -225,6 +224,26 @@ function HitboxDesync.new(options, localCharacter)
     return self
 end
 
+function HitboxDesync:_createGhost(realChar)
+    if self.Ghost then self.Ghost:Destroy() end
+    realChar.Archivable = true
+    local ghost = realChar:Clone()
+    realChar.Archivable = false
+    ghost.Name = "Zenith_Soul"
+    ghost.Parent = Workspace
+    for _, part in ipairs(ghost:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide, part.CanTouch, part.CanQuery = false, false, false
+            part.Transparency = 0.4
+            if part.Name == "HumanoidRootPart" then part.Transparency = 1 end
+        elseif part:IsA("Script") or part:IsA("LocalScript") then
+            part:Destroy()
+        end
+    end
+    self.Ghost = ghost
+    return ghost
+end
+
 function HitboxDesync:Init()
     self.Connection = RunService.Heartbeat:Connect(function()
         if not self.Options.ZenithDesyncEnabled then
@@ -232,79 +251,64 @@ function HitboxDesync:Init()
             self.Status = "Disabled"
             return
         end
+        local char, hum, root = self.LocalCharacter:GetState()
+        if not root or not hum then self.Status = "Hum Missing" return end
+        if not self.IsActive then self:Start(char, root, hum) end
 
-        local character, humanoid, root = self.LocalCharacter:GetState()
-        if not root or not humanoid then
-            self.Status = "Hum Missing"
-            return
-        end
-
-        if not self.IsActive then
-            self:Start(character, root)
-        end
-
-        -- LOCK HITBOX TO SOUL ROOM (VOID GUARD INCLUDED)
+        -- LOCK PHYSICAL BODY
         root.CFrame = CFrame.new(self.SoulRoomPos)
         root.AssemblyLinearVelocity = Vector3.zero
         
-        -- Override FallenPartsHeight for engine safety
-        if Workspace.FallenPartsDestroyHeight ~= -99999 then
-            pcall(function() Workspace.FallenPartsDestroyHeight = -99999 end)
+        -- MIRROR SOUL (GHOST)
+        if self.Ghost and self.Ghost:FindFirstChild("Humanoid") then
+            self.Ghost.Humanoid:Move(hum.MoveDirection, true)
+            if hum.Jump then self.Ghost.Humanoid.Jump = true end
+            self.Status = "Active: SOUL MODE"
         end
 
-        self.Status = "Active: SOUL SEPARATED"
-    end)
-
-    -- SILENT DAMAGE SYNC (Flicker Logic)
-    self.DamageConnection = RunService.Heartbeat:Connect(function()
-        if not self.Options.ZenithDesyncEnabled or not self.Options.SilentDamageEnabled then
-            return
-        end
-        
-        local root = self.LocalCharacter:GetRootPart()
-        if not root then return end
-        
-        -- Placeholder for target selection logic (integrated with Tracker in Main)
-        if _G.CurrentZTarget then
+        -- SILENT DAMAGE SYNC
+        if self.Options.SilentDamageEnabled and _G.CurrentZTarget then
             local target = _G.CurrentZTarget
             local oldCF = root.CFrame
             root.CFrame = target.CFrame * CFrame.new(0, 0, 1.5)
-            RunService.Heartbeat:Wait() -- 1 tick flicker
+            RunService.Heartbeat:Wait()
             root.CFrame = oldCF
         end
     end)
 end
 
-function HitboxDesync:Start(character, root)
+function HitboxDesync:Start(character, root, hum)
     self.IsActive = true
     self.LastRealCFrame = root.CFrame
-    
-    -- Visual Ghosting is handled by game engine displacement (Root is at -850, Visuals stay)
-    -- But to ensure visuals are 100% decoupled and smooth, we disable Touch/Query on physical body
+    local ghost = self:_createGhost(character)
+    ghost:SetPrimaryPartCFrame(self.LastRealCFrame)
+    pcall(function() Workspace.CurrentCamera.CameraSubject = ghost.Humanoid end)
     for _, part in ipairs(character:GetDescendants()) do
         if part:IsA("BasePart") then
-            pcall(function()
-                part.CanTouch = false
-                part.CanQuery = false
-            end)
+            part.Transparency = 1
+            part.CanTouch, part.CanQuery = false, false
         end
     end
+    pcall(function() Workspace.FallenPartsDestroyHeight = -99999 end)
 end
 
 function HitboxDesync:Stop()
     self.IsActive = false
-    local root = self.LocalCharacter:GetRootPart()
-    if root and self.LastRealCFrame then
-        root.CFrame = self.LastRealCFrame
+    if self.Ghost then self.Ghost:Destroy() self.Ghost = nil end
+    local char, hum, root = self.LocalCharacter:GetState()
+    if root and self.LastRealCFrame then root.CFrame = self.LastRealCFrame end
+    if char then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then part.Transparency = 0 part.CanTouch, part.CanQuery = true, true end
+        end
     end
-    pcall(function() Workspace.FallenPartsDestroyHeight = -500 end)
+    pcall(function() 
+        Workspace.CurrentCamera.CameraSubject = hum
+        Workspace.FallenPartsDestroyHeight = -500 
+    end)
 end
 
-function HitboxDesync:Destroy()
-    self:Stop()
-    if self.Connection then self.Connection:Disconnect() end
-    if self.DamageConnection then self.DamageConnection:Disconnect() end
-end
+function HitboxDesync:Destroy() self:Stop() if self.Connection then self.Connection:Disconnect() end end
 
 return HitboxDesync
 ]====],
@@ -8723,7 +8727,20 @@ silentAim:Init()
 dataPruner:Init()
 resourceManager:Init()
 cleaner:Init()
-for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
+
+    -- ===================================================
+    -- MAIN ORCHESTRATION LOOP (Brain Powered)
+    -- ===================================================
+    task.spawn(function()
+        while true do
+            local targetObj = selector:GetTarget()
+            _G.CurrentZTarget = targetObj and targetObj.Instance and targetObj.Instance:FindFirstChild("HumanoidRootPart")
+            
+            task.wait(0.05)
+        end
+    end)
+
+    for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
