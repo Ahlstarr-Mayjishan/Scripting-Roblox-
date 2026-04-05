@@ -1,10 +1,11 @@
 --[[
-    GodMode.lua - Biological Preservation Module (v4 Void Edition)
-    Job: Locking health at infinity, preventing Dead state, and reinforcing joints.
-    Logic: Uses math.huge and aggressive state resets to survive KillParts.
+    GodMode.lua - Biological Preservation Module (v5 Ghost Edition)
+    Job: Locking health and HIDING the humanoid from game sensors.
+    Logic: Renames Humanoid to a random string to bypass FindFirstChild("Humanoid").
 ]]
 
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 
 local GodMode = {}
 GodMode.__index = GodMode
@@ -14,40 +15,56 @@ function GodMode.new(options, localCharacter)
     self.Options = options
     self.LocalCharacter = localCharacter
     self.Connection = nil
+    self.OriginalName = "Humanoid"
+    self.GhostName = "_SG_" .. string.sub(HttpService:GenerateGUID(false), 1, 8)
     self.Status = "Idle"
     return self
 end
 
+function GodMode:_rename(humanoid, toName)
+    if not humanoid then return end
+    if humanoid.Name ~= toName then
+        pcall(function()
+            humanoid.Name = toName
+        end)
+    end
+end
+
 function GodMode:Init()
     self.Connection = RunService.Heartbeat:Connect(function()
+        local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
+        
         if not self.Options.GodModeEnabled then
+            if humanoid and humanoid.Name ~= self.OriginalName then
+                self:_rename(humanoid, self.OriginalName)
+            end
             self.Status = "Disabled"
             return
         end
 
-        local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
         if not humanoid then
             self.Status = "Hum Missing"
             return
         end
 
-        -- 1. Void Health Lock (Using extreme values)
-        humanoid.MaxHealth = 9e18 -- Set a massive MaxHealth
-        humanoid.Health = 9e18    -- Force Health to match
+        -- 1. Stealth Mode: Rename to hide from game scripts
+        self:_rename(humanoid, self.GhostName)
+
+        -- 2. Void Health Lock
+        humanoid.MaxHealth = 9e18
+        humanoid.Health = 9e18
         
-        -- Fallback check: if somehow it goes below 1, reset immediately
         if humanoid.Health < 1 then
             humanoid.Health = 9e18
         end
 
-        -- 2. Physical Reinforcement (Joints)
+        -- 3. physical Reinforcement
         humanoid.RequiresNeck = false
         
         local character = self.LocalCharacter:GetCharacter()
         if character then
             for _, part in ipairs(character:GetDescendants()) do
                 if part:IsA("Motor6D") or part:IsA("Weld") or part:IsA("ManualWeld") then
-                    -- Prevent joints from being disabled/broken
                     if part.Enabled == false then
                         part.Enabled = true
                     end
@@ -55,18 +72,16 @@ function GodMode:Init()
             end
         end
 
-        -- 3. State Lockdown (Hard Lock)
+        -- 4. State Lockdown
         if humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead) then
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         end
         
-        -- 4. Force 'Physics' state to keep hitboxes active but alive
-        local state = humanoid:GetState()
-        if state == Enum.HumanoidStateType.Dead then
+        if humanoid:GetState() == Enum.HumanoidStateType.Dead then
             humanoid:ChangeState(Enum.HumanoidStateType.Physics)
         end
 
-        self.Status = "Active: VOID MODE v4"
+        self.Status = "Active: GHOST MODE v5"
     end)
 end
 
@@ -76,9 +91,9 @@ function GodMode:Destroy()
         self.Connection = nil
     end
     
-    -- Restore defaults if possible
     local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
     if humanoid then
+        self:_rename(humanoid, self.OriginalName)
         pcall(function()
             humanoid.MaxHealth = 100
             humanoid.Health = 100

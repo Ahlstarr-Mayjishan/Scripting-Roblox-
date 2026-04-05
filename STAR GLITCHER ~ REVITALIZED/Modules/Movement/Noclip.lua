@@ -1,7 +1,7 @@
 --[[
-    Noclip.lua - Phase Shifting Module (Optimized)
-    Job: Disabling physics collisions for the local character.
-    Status: Active frame-by-frame collision override via Stepped.
+    Noclip.lua - Phase Shifting Module (Deep v5)
+    Job: Disabling physics collisions AND touch sensors.
+    Status: Active frame-by-frame override via Stepped.
 ]]
 
 local RunService = game:GetService("RunService")
@@ -19,7 +19,6 @@ function Noclip.new(options, localCharacter)
 end
 
 function Noclip:Init()
-    -- Use Stepped to override internal engine physics before the next frame is rendered
     self.Connection = RunService.Stepped:Connect(function()
         if not self.Options.NoclipEnabled then
             if self.Status ~= "Disabled" then
@@ -34,12 +33,24 @@ function Noclip:Init()
             return
         end
 
-        self.Status = "Active: PHASING"
+        self.Status = "Active: DEEP PHASING"
         
-        -- Aggressive noclip: Disable all BasePart collisions in character
+        -- Deep Noclip: Disable collisions, touch sensors, and raycasters
         for _, obj in ipairs(character:GetDescendants()) do
-            if obj:IsA("BasePart") and obj.CanCollide then
-                obj.CanCollide = false
+            if obj:IsA("BasePart") then
+                if obj.CanCollide then
+                    obj.CanCollide = false
+                end
+                
+                -- NEW 2024/2025 Property: Prevents .Touched events from firing
+                pcall(function()
+                    if obj.CanTouch then
+                        obj.CanTouch = false
+                    end
+                    if obj.CanQuery then
+                        obj.CanQuery = false
+                    end
+                end)
             end
         end
     end)
