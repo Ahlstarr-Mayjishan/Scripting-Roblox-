@@ -195,12 +195,12 @@ end
 return Noclip
 ]====],
     ["Modules/Movement/HitboxDesync.lua"] = [====[--[[
-    HitboxDesync.lua - Zenith v2: Soul Stability Fixes
-    ================================================
+    HitboxDesync.lua - Zenith v3: The Nexus Proxy
+    ============================================
     Architecture:
-      * Soul Room: Real body anchored at 50,000 studs (Safe Zone).
-      * Direct Input: Manually reads WASD to move the Soul (Ghost).
-      * Animation Sync: Mirrored Walk/Idle animations for high fidelity.
+      * Joint Decoupling: Removing connection between Hitbox and Body.
+      * Mirror Box: Local platform underground for Hitbox grounding.
+      * Nexus Sync: High-fidelity visual persistence (Uses Real Body).
 ]]
 
 local RunService = game:GetService("RunService")
@@ -216,32 +216,31 @@ function HitboxDesync.new(options, localCharacter)
     self.LocalCharacter = localCharacter
     self.IsActive = false
     self.Status = "Idle"
-    self.Ghost = nil
     self.Connections = {}
-    self.SoulRoomPos = Vector3.new(0, 50000, 0)
-    self.GhostPos = Vector3.zero
-    self.GhostRot = 0
+    self.SafePos = Vector3.new(-1000, -250, -1000)
+    self.NexusPos = Vector3.zero
+    self.NexusRot = 0
+    self.RootJoint = nil
+    self.JointParent = nil
+    self.MirrorBox = nil
     return self
 end
 
-function HitboxDesync:_createGhost(realChar)
-    if self.Ghost then self.Ghost:Destroy() end
-    realChar.Archivable = true
-    local ghost = realChar:Clone()
-    realChar.Archivable = false
-    ghost.Name = "Zenith_Soul_v2"
-    ghost.Parent = Workspace
-    for _, part in ipairs(ghost:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide, part.CanTouch, part.CanQuery = false, false, false
-            part.Transparency = 0.4
-            if part.Name == "HumanoidRootPart" then part.Transparency = 1 end
-        elseif part:IsA("Script") or part:IsA("LocalScript") then
-            part:Destroy()
+function HitboxDesync:_findRootJoint(char)
+    for _, p in ipairs(char:GetDescendants()) do
+        if p:IsA("Motor6D") and (p.Name == "Root" or p.Name == "RootJoint" or (p.Part0 and p.Part0.Name == "HumanoidRootPart")) then
+            return p
         end
     end
-    self.Ghost = ghost
-    return ghost
+    return nil
+end
+
+function HitboxDesync:_createMirrorBox()
+    if self.MirrorBox then self.MirrorBox:Destroy() end
+    local box = Instance.new("Part")
+    box.Size, box.CFrame, box.Transparency, box.Anchored = Vector3.new(10, 1, 10), CFrame.new(self.SafePos), 1, true
+    box.Parent = Workspace
+    self.MirrorBox = box
 end
 
 function HitboxDesync:Init()
@@ -255,12 +254,9 @@ function HitboxDesync:Init()
         if not root or not hum then self.Status = "Body Missing" return end
         if not self.IsActive then self:Start(char, root, hum) end
 
-        -- LOCK PHYSICAL BODY (HIGH HEAVENS SAFE ROOM)
-        root.CFrame = CFrame.new(self.SoulRoomPos)
+        root.CFrame = CFrame.new(self.SafePos + Vector3.new(0, 3, 0))
         root.AssemblyLinearVelocity = Vector3.zero
-        hum.PlatformStand = true
-
-        -- SILENT DAMAGE SYNC
+        
         if self.Options.SilentDamageEnabled and _G.CurrentZTarget then
             local target = _G.CurrentZTarget
             local oldCF = root.CFrame
@@ -268,16 +264,16 @@ function HitboxDesync:Init()
             RunService.Heartbeat:Wait()
             root.CFrame = oldCF
         end
-        self.Status = "ZENITH v2 ACTIVE"
+        self.Status = "ZENITH v3: NEXUS ACTIVE"
     end)
     
     local renderConn = RunService.RenderStepped:Connect(function(dt)
-        if not self.IsActive or not self.Ghost then return end
+        if not self.IsActive then return end
+        local char, hum, root = self.LocalCharacter:GetState()
+        if not char or not hum then return end
         local cam = Workspace.CurrentCamera
-        local ghostHum = self.Ghost:FindFirstChildOfClass("Humanoid")
         local moveVec = Vector3.zero
         
-        -- DIRECT INPUT PROXY (NO LAG)
         if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec = moveVec + cam.CFrame.LookVector end
         if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec - cam.CFrame.LookVector end
         if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec - cam.CFrame.RightVector end
@@ -287,16 +283,18 @@ function HitboxDesync:Init()
         if moveVec.Magnitude > 0 then
             moveVec = moveVec.Unit
             local speed = self.Options.CustomMoveSpeed or 16
-            self.GhostPos = self.GhostPos + (moveVec * speed * dt)
-            self.GhostRot = math.atan2(moveVec.X, moveVec.Z)
+            self.NexusPos = self.NexusPos + (moveVec * speed * dt)
+            self.NexusRot = math.atan2(moveVec.X, moveVec.Z)
+            hum:Move(Vector3.new(0, 0, -1), true)
+        else
+            hum:Move(Vector3.zero)
         end
-        
-        self.Ghost:SetPrimaryPartCFrame(CFrame.new(self.GhostPos) * CFrame.Angles(0, self.GhostRot, 0))
-        
-        -- ANIMATION SYNC
-        if ghostHum then
-            if moveVec.Magnitude > 0 then ghostHum:Move(Vector3.new(0, 0, -1), true) else ghostHum:Move(Vector3.zero) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then ghostHum.Jump = true end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then hum.Jump = true end
+
+        local torso = char:FindFirstChild("LowerTorso") or char:FindFirstChild("Torso")
+        if torso then
+            local nextCF = CFrame.new(self.NexusPos) * CFrame.Angles(0, self.NexusRot, 0)
+            torso.CFrame = nextCF
         end
     end)
     table.insert(self.Connections, heartbeat)
@@ -304,28 +302,20 @@ function HitboxDesync:Init()
 end
 
 function HitboxDesync:Start(character, root, hum)
-    self.IsActive = true
-    self.GhostPos = root.Position
-    self.GhostRot = 0
-    local ghost = self:_createGhost(character)
-    pcall(function() Workspace.CurrentCamera.CameraSubject = ghost.Humanoid end)
-    for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then part.Transparency = 1 end
-    end
+    self.IsActive, self.NexusPos, self.NexusRot = true, root.Position, 0
+    local joint = self:_findRootJoint(character)
+    if joint then self.RootJoint, self.JointParent, joint.Parent = joint, joint.Parent, nil end
+    self:_createMirrorBox()
+    root.CFrame = CFrame.new(self.SafePos + Vector3.new(0, 3, 0))
+    root.Transparency = 1
 end
 
 function HitboxDesync:Stop()
     self.IsActive = false
-    if self.Ghost then self.Ghost:Destroy() self.Ghost = nil end
+    if self.RootJoint and self.JointParent then self.RootJoint.Parent = self.JointParent end
+    if self.MirrorBox then self.MirrorBox:Destroy() self.MirrorBox = nil end
     local char, hum, root = self.LocalCharacter:GetState()
-    if root then root.CFrame = CFrame.new(self.GhostPos) end
-    if hum then hum.PlatformStand = false end
-    if char then
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then part.Transparency = 0 end
-        end
-    end
-    pcall(function() Workspace.CurrentCamera.CameraSubject = hum end)
+    if root then root.CFrame = CFrame.new(self.NexusPos) end
 end
 
 function HitboxDesync:Destroy() self:Stop() for _, conn in ipairs(self.Connections) do conn:Disconnect() end end
