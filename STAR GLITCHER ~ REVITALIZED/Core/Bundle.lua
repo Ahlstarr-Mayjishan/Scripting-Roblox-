@@ -195,17 +195,17 @@ end
 return Noclip
 ]====],
     ["Modules/Movement/HitboxDesync.lua"] = [====[--[[
-    HitboxDesync.lua - True Zenith Desync (Soul Mode)
+    HitboxDesync.lua - Zenith v2: Soul Stability Fixes
     ================================================
     Architecture:
-      * Soul Partition: Physical RootPart anchored at -850 studs.
-      * Ghost Mirroring: Visual representation remains on the map and mirrors inputs.
-      * Camera Hijack: Redirection of camera focus to the Soul (Ghost).
+      * Soul Room: Real body anchored at 50,000 studs (Safe Zone).
+      * Direct Input: Manually reads WASD to move the Soul (Ghost).
+      * Animation Sync: Mirrored Walk/Idle animations for high fidelity.
 ]]
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
-local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 
 local HitboxDesync = {}
 HitboxDesync.__index = HitboxDesync
@@ -217,10 +217,10 @@ function HitboxDesync.new(options, localCharacter)
     self.IsActive = false
     self.Status = "Idle"
     self.Ghost = nil
-    self.Connection = nil
-    self.DamageConnection = nil
-    self.SoulRoomPos = Vector3.new(0, -850, 0)
-    self.LastRealCFrame = nil
+    self.Connections = {}
+    self.SoulRoomPos = Vector3.new(0, 50000, 0)
+    self.GhostPos = Vector3.zero
+    self.GhostRot = 0
     return self
 end
 
@@ -229,7 +229,7 @@ function HitboxDesync:_createGhost(realChar)
     realChar.Archivable = true
     local ghost = realChar:Clone()
     realChar.Archivable = false
-    ghost.Name = "Zenith_Soul"
+    ghost.Name = "Zenith_Soul_v2"
     ghost.Parent = Workspace
     for _, part in ipairs(ghost:GetDescendants()) do
         if part:IsA("BasePart") then
@@ -245,26 +245,20 @@ function HitboxDesync:_createGhost(realChar)
 end
 
 function HitboxDesync:Init()
-    self.Connection = RunService.Heartbeat:Connect(function()
+    local heartbeat = RunService.Heartbeat:Connect(function()
         if not self.Options.ZenithDesyncEnabled then
             if self.IsActive then self:Stop() end
             self.Status = "Disabled"
             return
         end
         local char, hum, root = self.LocalCharacter:GetState()
-        if not root or not hum then self.Status = "Hum Missing" return end
+        if not root or not hum then self.Status = "Body Missing" return end
         if not self.IsActive then self:Start(char, root, hum) end
 
-        -- LOCK PHYSICAL BODY
+        -- LOCK PHYSICAL BODY (HIGH HEAVENS SAFE ROOM)
         root.CFrame = CFrame.new(self.SoulRoomPos)
         root.AssemblyLinearVelocity = Vector3.zero
-        
-        -- MIRROR SOUL (GHOST)
-        if self.Ghost and self.Ghost:FindFirstChild("Humanoid") then
-            self.Ghost.Humanoid:Move(hum.MoveDirection, true)
-            if hum.Jump then self.Ghost.Humanoid.Jump = true end
-            self.Status = "Active: SOUL MODE"
-        end
+        hum.PlatformStand = true
 
         -- SILENT DAMAGE SYNC
         if self.Options.SilentDamageEnabled and _G.CurrentZTarget then
@@ -274,41 +268,67 @@ function HitboxDesync:Init()
             RunService.Heartbeat:Wait()
             root.CFrame = oldCF
         end
+        self.Status = "ZENITH v2 ACTIVE"
     end)
+    
+    local renderConn = RunService.RenderStepped:Connect(function(dt)
+        if not self.IsActive or not self.Ghost then return end
+        local cam = Workspace.CurrentCamera
+        local ghostHum = self.Ghost:FindFirstChildOfClass("Humanoid")
+        local moveVec = Vector3.zero
+        
+        -- DIRECT INPUT PROXY (NO LAG)
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec = moveVec + cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec - cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec - cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + cam.CFrame.RightVector end
+        
+        moveVec = Vector3.new(moveVec.X, 0, moveVec.Z)
+        if moveVec.Magnitude > 0 then
+            moveVec = moveVec.Unit
+            local speed = self.Options.CustomMoveSpeed or 16
+            self.GhostPos = self.GhostPos + (moveVec * speed * dt)
+            self.GhostRot = math.atan2(moveVec.X, moveVec.Z)
+        end
+        
+        self.Ghost:SetPrimaryPartCFrame(CFrame.new(self.GhostPos) * CFrame.Angles(0, self.GhostRot, 0))
+        
+        -- ANIMATION SYNC
+        if ghostHum then
+            if moveVec.Magnitude > 0 then ghostHum:Move(Vector3.new(0, 0, -1), true) else ghostHum:Move(Vector3.zero) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then ghostHum.Jump = true end
+        end
+    end)
+    table.insert(self.Connections, heartbeat)
+    table.insert(self.Connections, renderConn)
 end
 
 function HitboxDesync:Start(character, root, hum)
     self.IsActive = true
-    self.LastRealCFrame = root.CFrame
+    self.GhostPos = root.Position
+    self.GhostRot = 0
     local ghost = self:_createGhost(character)
-    ghost:SetPrimaryPartCFrame(self.LastRealCFrame)
     pcall(function() Workspace.CurrentCamera.CameraSubject = ghost.Humanoid end)
     for _, part in ipairs(character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.Transparency = 1
-            part.CanTouch, part.CanQuery = false, false
-        end
+        if part:IsA("BasePart") then part.Transparency = 1 end
     end
-    pcall(function() Workspace.FallenPartsDestroyHeight = -99999 end)
 end
 
 function HitboxDesync:Stop()
     self.IsActive = false
     if self.Ghost then self.Ghost:Destroy() self.Ghost = nil end
     local char, hum, root = self.LocalCharacter:GetState()
-    if root and self.LastRealCFrame then root.CFrame = self.LastRealCFrame end
+    if root then root.CFrame = CFrame.new(self.GhostPos) end
+    if hum then hum.PlatformStand = false end
     if char then
         for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then part.Transparency = 0 part.CanTouch, part.CanQuery = true, true end
+            if part:IsA("BasePart") then part.Transparency = 0 end
         end
     end
-    pcall(function() 
-        Workspace.CurrentCamera.CameraSubject = hum
-        Workspace.FallenPartsDestroyHeight = -500 
-    end)
+    pcall(function() Workspace.CurrentCamera.CameraSubject = hum end)
 end
 
-function HitboxDesync:Destroy() self:Stop() if self.Connection then self.Connection:Disconnect() end end
+function HitboxDesync:Destroy() self:Stop() for _, conn in ipairs(self.Connections) do conn:Disconnect() end end
 
 return HitboxDesync
 ]====],
