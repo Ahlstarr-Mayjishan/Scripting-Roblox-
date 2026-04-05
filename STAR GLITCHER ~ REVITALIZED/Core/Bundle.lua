@@ -8648,7 +8648,7 @@ local JumpBoost      = requireModule("Modules/Movement/JumpBoost.lua")
 local AntiSlowdown    = requireModule("Modules/Movement/AntiSlowdown.lua")
 local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
 local Noclip          = requireModule("Modules/Movement/Noclip.lua")
-local GodMode         = requireModule("Modules/Movement/GodMode.lua")
+local HitboxDesync    = requireModule("Modules/Movement/HitboxDesync.lua")
 local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
 
 local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
