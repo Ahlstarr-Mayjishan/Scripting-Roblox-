@@ -26,7 +26,9 @@ function Brain.new(config, modules, loader)
     self.Frontal = Frontal.new(modules.Aimbot, modules.SilentAim, self.Options)
 
     self._lastScan = 0
-    self._scanInterval = 1 / 30
+    self._scanInterval = 1 / 120
+    self._scanAccumulator = 0
+    self._frameDtEma = 1 / 60
     return self
 end
 
@@ -34,7 +36,12 @@ function Brain:_isDeadlockMode()
     return tostring(self.Options.TargetingMethod or "FOV") == "Deadlock"
 end
 
-function Brain:Scan(mousePos, originPos)
+function Brain:_getScanInterval()
+    local maxHz = math.clamp(tonumber(self.Options.TargetScanHz) or 120, 30, 240)
+    return 1 / maxHz
+end
+
+function Brain:Scan(mousePos, originPos, dt)
     local shouldAssist = self.Parietal.Input:ShouldAssist()
     local deadlockMode = self:_isDeadlockMode()
     if not shouldAssist then
@@ -42,14 +49,34 @@ function Brain:Scan(mousePos, originPos)
             return
         end
         self.Parietal.Tracker.CurrentTargetEntry = nil
+        self._scanAccumulator = 0
         return
     end
 
-    local now = clock()
-    if (now - self._lastScan) < self._scanInterval then
-        return
+    local scanInterval = self:_getScanInterval()
+    self._scanInterval = scanInterval
+
+    if self.Options.AdaptiveTargetScan == false then
+        local now = clock()
+        if (now - self._lastScan) < scanInterval then
+            return
+        end
+        self._lastScan = now
+    else
+        local step = math.max(tonumber(dt) or self._frameDtEma or (1 / 60), 1 / 240)
+        self._frameDtEma = self._frameDtEma + ((step - self._frameDtEma) * 0.18)
+        self._scanAccumulator = self._scanAccumulator + step
+        if self._scanAccumulator < scanInterval then
+            return
+        end
+
+        self._scanAccumulator = math.max(0, self._scanAccumulator - scanInterval)
+        if self._scanAccumulator > (scanInterval * 1.5) then
+            self._scanAccumulator = scanInterval
+        end
+
+        self._lastScan = clock()
     end
-    self._lastScan = now
 
     local target = self.Temporal:Scan(mousePos, originPos)
     self.Parietal.Tracker.CurrentTargetEntry = target

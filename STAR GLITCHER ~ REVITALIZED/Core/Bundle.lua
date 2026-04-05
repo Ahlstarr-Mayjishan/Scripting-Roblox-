@@ -24,6 +24,8 @@ Config.Options = {
     PredictionTechniqueDebug = false,
     TargetPart = "HumanoidRootPart",
     TargetingMethod = "FOV",
+    AdaptiveTargetScan = true,
+    TargetScanHz = 120,
     AimOffset = 0,
     FOV = 150,
     ShowFOV = true,
@@ -174,10 +176,14 @@ function Aimbot:Update(targetPosition, smoothness)
         return
     end
 
-    local alpha = smoothness or self.Options.Smoothness or 0.15
+    local baseAlpha = math.clamp(smoothness or self.Options.Smoothness or 0.15, 0.01, 1)
     local targetCFrame = CFrame.lookAt(camera.CFrame.Position, targetPosition)
 
     if targetPosition.X == targetPosition.X then
+        local angleDot = math.clamp(camera.CFrame.LookVector:Dot(targetCFrame.LookVector), -1, 1)
+        local angle = math.acos(angleDot)
+        local angleBoost = math.clamp(angle / math.rad(18), 0, 1) * 0.38
+        local alpha = math.clamp(baseAlpha + angleBoost, baseAlpha, 0.82)
         camera.CFrame = camera.CFrame:Lerp(targetCFrame, alpha)
     end
 end
@@ -947,9 +953,9 @@ local ZERO = Vector3.zero
 
 function Stabilizer.new()
     local self = setmetatable({}, Stabilizer)
-    self.BaseSmoothing = 0.88
-    self.CatchupSmoothing = 3.1
-    self.SnapDistance = 7.5
+    self.BaseSmoothing = 1.55
+    self.CatchupSmoothing = 5.2
+    self.SnapDistance = 4.75
     self._lastTarget = ZERO
     return self
 end
@@ -972,7 +978,7 @@ function Stabilizer:Smooth(targetPos, dt)
         return targetPos
     end
 
-    local catchupAlpha = math.clamp((deltaMagnitude - 0.75) / 8.5, 0, 1)
+    local catchupAlpha = math.clamp((deltaMagnitude - 0.45) / 6.25, 0, 1)
     local smoothing = self.BaseSmoothing + ((self.CatchupSmoothing - self.BaseSmoothing) * catchupAlpha)
     local alpha = 1 - math.exp(-smoothing * math.max((dt or DEFAULT_DT) * 60, 1))
     local result = lastTarget:Lerp(targetPos, alpha)
@@ -999,8 +1005,8 @@ function TechniqueSelector.new(config)
     self.Options = config.Options
     self.Prediction = config.Prediction or {}
     self._states = setmetatable({}, { __mode = "k" })
-    self._holdTime = 0.22
-    self._stickMargin = 0.08
+    self._holdTime = 0.12
+    self._stickMargin = 0.04
     return self
 end
 
@@ -1952,7 +1958,9 @@ function Brain.new(config, modules, loader)
     self.Frontal = Frontal.new(modules.Aimbot, modules.SilentAim, self.Options)
 
     self._lastScan = 0
-    self._scanInterval = 1 / 30
+    self._scanInterval = 1 / 120
+    self._scanAccumulator = 0
+    self._frameDtEma = 1 / 60
     return self
 end
 
@@ -1960,7 +1968,12 @@ function Brain:_isDeadlockMode()
     return tostring(self.Options.TargetingMethod or "FOV") == "Deadlock"
 end
 
-function Brain:Scan(mousePos, originPos)
+function Brain:_getScanInterval()
+    local maxHz = math.clamp(tonumber(self.Options.TargetScanHz) or 120, 30, 240)
+    return 1 / maxHz
+end
+
+function Brain:Scan(mousePos, originPos, dt)
     local shouldAssist = self.Parietal.Input:ShouldAssist()
     local deadlockMode = self:_isDeadlockMode()
     if not shouldAssist then
@@ -1968,14 +1981,34 @@ function Brain:Scan(mousePos, originPos)
             return
         end
         self.Parietal.Tracker.CurrentTargetEntry = nil
+        self._scanAccumulator = 0
         return
     end
 
-    local now = clock()
-    if (now - self._lastScan) < self._scanInterval then
-        return
+    local scanInterval = self:_getScanInterval()
+    self._scanInterval = scanInterval
+
+    if self.Options.AdaptiveTargetScan == false then
+        local now = clock()
+        if (now - self._lastScan) < scanInterval then
+            return
+        end
+        self._lastScan = now
+    else
+        local step = math.max(tonumber(dt) or self._frameDtEma or (1 / 60), 1 / 240)
+        self._frameDtEma = self._frameDtEma + ((step - self._frameDtEma) * 0.18)
+        self._scanAccumulator = self._scanAccumulator + step
+        if self._scanAccumulator < scanInterval then
+            return
+        end
+
+        self._scanAccumulator = math.max(0, self._scanAccumulator - scanInterval)
+        if self._scanAccumulator > (scanInterval * 1.5) then
+            self._scanAccumulator = scanInterval
+        end
+
+        self._lastScan = clock()
     end
-    self._lastScan = now
 
     local target = self.Temporal:Scan(mousePos, originPos)
     self.Parietal.Tracker.CurrentTargetEntry = target
@@ -2702,6 +2735,17 @@ function CustomSpeed:Init()
             return
         end
 
+        if self.Options.SpeedMultiplierEnabled then
+            if hum and self._wasEnabled then
+                self:_restoreBaseSpeed(hum)
+            end
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
+            self._wasEnabled = false
+            return
+        end
+
         if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
             if self.MovementArbiter then
                 self.MovementArbiter:ClearSource(self._arbiterKey)
@@ -3067,6 +3111,10 @@ function MovementArbiter:ClearSource(source)
     self._requests[source] = nil
 end
 
+function MovementArbiter:GetBaseWalkSpeed()
+    return self.BaseWalkSpeed
+end
+
 function MovementArbiter:_captureBase(humanoid)
     if not humanoid then
         return
@@ -3271,9 +3319,22 @@ function SpeedMultiplier.new(options, localCharacter, movementArbiter)
     return self
 end
 
+function SpeedMultiplier:_getBaselineWalkSpeed(humanoid)
+    local arbiterBase = self.MovementArbiter and self.MovementArbiter.GetBaseWalkSpeed and self.MovementArbiter:GetBaseWalkSpeed() or nil
+    if arbiterBase and arbiterBase > 0 then
+        return math.max(arbiterBase, 16)
+    end
+
+    if humanoid then
+        return math.max(humanoid.WalkSpeed, 16)
+    end
+
+    return math.max(self.BaseWalkSpeed or 16, 16)
+end
+
 function SpeedMultiplier:_captureBaseSpeed(humanoid)
     self.TrackedHumanoid = humanoid
-    self.BaseWalkSpeed = math.max(humanoid.WalkSpeed, 16)
+    self.BaseWalkSpeed = self:_getBaselineWalkSpeed(humanoid)
 end
 
 function SpeedMultiplier:_writeWalkSpeed(humanoid, value)
@@ -3389,23 +3450,27 @@ function SpeedMultiplier:Init()
             self:_captureBaseSpeed(hum)
         end
 
-        if not self.Options.SpeedMultiplierEnabled or self.Options.CustomMoveSpeedEnabled then
+        if self.Options.SpeedMultiplierEnabled and self.Options.CustomMoveSpeedEnabled then
+            self.Options.CustomMoveSpeedEnabled = false
+        end
+
+        if not self.Options.SpeedMultiplierEnabled then
             self._fallbackWarmupUntil = 0
             if self._wasEnabled then
                 self:_restoreBaseSpeed(hum)
             else
-                self.BaseWalkSpeed = math.max(hum.WalkSpeed, 16)
+                self.BaseWalkSpeed = self:_getBaselineWalkSpeed(hum)
                 if self.MovementArbiter then
                     self.MovementArbiter:ClearSource(self._arbiterKey)
                 end
             end
             self._wasEnabled = false
-            self.Status = self.Options.CustomMoveSpeedEnabled and "Blocked by Fixed Speed" or "Disabled"
+            self.Status = "Disabled"
             return
         end
 
         if not self._wasEnabled then
-            self._preEnableBaseSpeed = math.max(hum.WalkSpeed, 16)
+            self._preEnableBaseSpeed = self:_getBaselineWalkSpeed(hum)
             self.BaseWalkSpeed = self._preEnableBaseSpeed
             self._fallbackWarmupUntil = 0
             self._wasEnabled = true
@@ -3429,6 +3494,8 @@ function SpeedMultiplier:Init()
             self.Status = "Active: Velocity Fallback"
         elseif math.abs(hum.WalkSpeed - desiredSpeed) <= 0.1 then
             self.Status = "Active: WalkSpeed"
+        elseif self.MovementArbiter and (os.clock() - self._lastWalkWriteTime) < 0.35 then
+            self.Status = "Active: Arbiter Sync"
         else
             self.Status = "Contested"
         end
@@ -7322,6 +7389,27 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
+    Tab:CreateToggle({
+        Name = "Adaptive Target Scan",
+        CurrentValue = Options.AdaptiveTargetScan ~= false,
+        Flag = "AdaptiveTargetScanToggle",
+        Callback = function(Value)
+            Options.AdaptiveTargetScan = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Target Scan Cap",
+        Range = {30, 240},
+        Increment = 5,
+        Suffix = " Hz",
+        CurrentValue = Options.TargetScanHz or 120,
+        Flag = "TargetScanHzSlider",
+        Callback = function(Value)
+            Options.TargetScanHz = Value
+        end,
+    })
+
     -- ===================================================
     -- SECTION: CAMERA SETTINGS
     -- ===================================================
@@ -8489,8 +8577,8 @@ if not autoUpdateLoopStarted then
 end
 
 -- Scanning (Heartbeat, Off render)
-reg(RunService.Heartbeat:Connect(function()
-    brain:Scan(UserInputService:GetMouseLocation(), Camera.CFrame.Position)
+reg(RunService.Heartbeat:Connect(function(dt)
+    brain:Scan(UserInputService:GetMouseLocation(), Camera.CFrame.Position, dt)
 end))
 
 reg(UserInputService.InputBegan:Connect(function(input, gameProcessed)

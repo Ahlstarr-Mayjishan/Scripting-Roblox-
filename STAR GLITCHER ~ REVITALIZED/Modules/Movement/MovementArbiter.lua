@@ -76,6 +76,10 @@ function MovementArbiter:ClearSource(source)
     self._requests[source] = nil
 end
 
+function MovementArbiter:GetBaseWalkSpeed()
+    return self.BaseWalkSpeed
+end
+
 function MovementArbiter:_captureBase(humanoid)
     if not humanoid then
         return

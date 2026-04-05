@@ -12,9 +12,9 @@ local ZERO = Vector3.zero
 
 function Stabilizer.new()
     local self = setmetatable({}, Stabilizer)
-    self.BaseSmoothing = 0.88
-    self.CatchupSmoothing = 3.1
-    self.SnapDistance = 7.5
+    self.BaseSmoothing = 1.55
+    self.CatchupSmoothing = 5.2
+    self.SnapDistance = 4.75
     self._lastTarget = ZERO
     return self
 end
@@ -37,7 +37,7 @@ function Stabilizer:Smooth(targetPos, dt)
         return targetPos
     end
 
-    local catchupAlpha = math.clamp((deltaMagnitude - 0.75) / 8.5, 0, 1)
+    local catchupAlpha = math.clamp((deltaMagnitude - 0.45) / 6.25, 0, 1)
     local smoothing = self.BaseSmoothing + ((self.CatchupSmoothing - self.BaseSmoothing) * catchupAlpha)
     local alpha = 1 - math.exp(-smoothing * math.max((dt or DEFAULT_DT) * 60, 1))
     local result = lastTarget:Lerp(targetPos, alpha)

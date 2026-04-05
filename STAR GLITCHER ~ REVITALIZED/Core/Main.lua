@@ -497,8 +497,8 @@ if not autoUpdateLoopStarted then
 end
 
 -- Scanning (Heartbeat, Off render)
-reg(RunService.Heartbeat:Connect(function()
-    brain:Scan(UserInputService:GetMouseLocation(), Camera.CFrame.Position)
+reg(RunService.Heartbeat:Connect(function(dt)
+    brain:Scan(UserInputService:GetMouseLocation(), Camera.CFrame.Position, dt)
 end))
 
 reg(UserInputService.InputBegan:Connect(function(input, gameProcessed)

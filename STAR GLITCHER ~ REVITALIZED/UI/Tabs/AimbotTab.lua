@@ -105,6 +105,27 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
+    Tab:CreateToggle({
+        Name = "Adaptive Target Scan",
+        CurrentValue = Options.AdaptiveTargetScan ~= false,
+        Flag = "AdaptiveTargetScanToggle",
+        Callback = function(Value)
+            Options.AdaptiveTargetScan = Value
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Target Scan Cap",
+        Range = {30, 240},
+        Increment = 5,
+        Suffix = " Hz",
+        CurrentValue = Options.TargetScanHz or 120,
+        Flag = "TargetScanHzSlider",
+        Callback = function(Value)
+            Options.TargetScanHz = Value
+        end,
+    })
+
     -- ===================================================
     -- SECTION: CAMERA SETTINGS
     -- ===================================================

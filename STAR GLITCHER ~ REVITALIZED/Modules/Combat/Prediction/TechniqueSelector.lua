@@ -14,8 +14,8 @@ function TechniqueSelector.new(config)
     self.Options = config.Options
     self.Prediction = config.Prediction or {}
     self._states = setmetatable({}, { __mode = "k" })
-    self._holdTime = 0.22
-    self._stickMargin = 0.08
+    self._holdTime = 0.12
+    self._stickMargin = 0.04
     return self
 end
 

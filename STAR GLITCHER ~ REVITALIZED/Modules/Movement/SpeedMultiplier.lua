@@ -21,9 +21,22 @@ function SpeedMultiplier.new(options, localCharacter, movementArbiter)
     return self
 end
 
+function SpeedMultiplier:_getBaselineWalkSpeed(humanoid)
+    local arbiterBase = self.MovementArbiter and self.MovementArbiter.GetBaseWalkSpeed and self.MovementArbiter:GetBaseWalkSpeed() or nil
+    if arbiterBase and arbiterBase > 0 then
+        return math.max(arbiterBase, 16)
+    end
+
+    if humanoid then
+        return math.max(humanoid.WalkSpeed, 16)
+    end
+
+    return math.max(self.BaseWalkSpeed or 16, 16)
+end
+
 function SpeedMultiplier:_captureBaseSpeed(humanoid)
     self.TrackedHumanoid = humanoid
-    self.BaseWalkSpeed = math.max(humanoid.WalkSpeed, 16)
+    self.BaseWalkSpeed = self:_getBaselineWalkSpeed(humanoid)
 end
 
 function SpeedMultiplier:_writeWalkSpeed(humanoid, value)
@@ -139,23 +152,27 @@ function SpeedMultiplier:Init()
             self:_captureBaseSpeed(hum)
         end
 
-        if not self.Options.SpeedMultiplierEnabled or self.Options.CustomMoveSpeedEnabled then
+        if self.Options.SpeedMultiplierEnabled and self.Options.CustomMoveSpeedEnabled then
+            self.Options.CustomMoveSpeedEnabled = false
+        end
+
+        if not self.Options.SpeedMultiplierEnabled then
             self._fallbackWarmupUntil = 0
             if self._wasEnabled then
                 self:_restoreBaseSpeed(hum)
             else
-                self.BaseWalkSpeed = math.max(hum.WalkSpeed, 16)
+                self.BaseWalkSpeed = self:_getBaselineWalkSpeed(hum)
                 if self.MovementArbiter then
                     self.MovementArbiter:ClearSource(self._arbiterKey)
                 end
             end
             self._wasEnabled = false
-            self.Status = self.Options.CustomMoveSpeedEnabled and "Blocked by Fixed Speed" or "Disabled"
+            self.Status = "Disabled"
             return
         end
 
         if not self._wasEnabled then
-            self._preEnableBaseSpeed = math.max(hum.WalkSpeed, 16)
+            self._preEnableBaseSpeed = self:_getBaselineWalkSpeed(hum)
             self.BaseWalkSpeed = self._preEnableBaseSpeed
             self._fallbackWarmupUntil = 0
             self._wasEnabled = true
@@ -179,6 +196,8 @@ function SpeedMultiplier:Init()
             self.Status = "Active: Velocity Fallback"
         elseif math.abs(hum.WalkSpeed - desiredSpeed) <= 0.1 then
             self.Status = "Active: WalkSpeed"
+        elseif self.MovementArbiter and (os.clock() - self._lastWalkWriteTime) < 0.35 then
+            self.Status = "Active: Arbiter Sync"
         else
             self.Status = "Contested"
         end

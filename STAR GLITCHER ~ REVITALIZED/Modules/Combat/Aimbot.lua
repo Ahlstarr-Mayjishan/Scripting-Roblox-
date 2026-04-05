@@ -25,10 +25,14 @@ function Aimbot:Update(targetPosition, smoothness)
         return
     end
 
-    local alpha = smoothness or self.Options.Smoothness or 0.15
+    local baseAlpha = math.clamp(smoothness or self.Options.Smoothness or 0.15, 0.01, 1)
     local targetCFrame = CFrame.lookAt(camera.CFrame.Position, targetPosition)
 
     if targetPosition.X == targetPosition.X then
+        local angleDot = math.clamp(camera.CFrame.LookVector:Dot(targetCFrame.LookVector), -1, 1)
+        local angle = math.acos(angleDot)
+        local angleBoost = math.clamp(angle / math.rad(18), 0, 1) * 0.38
+        local alpha = math.clamp(baseAlpha + angleBoost, baseAlpha, 0.82)
         camera.CFrame = camera.CFrame:Lerp(targetCFrame, alpha)
     end
 end

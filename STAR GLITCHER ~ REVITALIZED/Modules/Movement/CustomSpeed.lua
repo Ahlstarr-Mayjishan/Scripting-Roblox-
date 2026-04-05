@@ -53,6 +53,17 @@ function CustomSpeed:Init()
             return
         end
 
+        if self.Options.SpeedMultiplierEnabled then
+            if hum and self._wasEnabled then
+                self:_restoreBaseSpeed(hum)
+            end
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
+            self._wasEnabled = false
+            return
+        end
+
         if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
             if self.MovementArbiter then
                 self.MovementArbiter:ClearSource(self._arbiterKey)
