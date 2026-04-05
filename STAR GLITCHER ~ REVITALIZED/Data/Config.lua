@@ -102,6 +102,7 @@ Config.Blacklist = {
     "bullet", "mine", "trap", "spawn", "debris",
     "decoration", "sculpture", "deco", "prop", "marker", "part",
     "object", "model", "tree", "rock", "stone", "grass",
+    "tele", "rsbroad", "landscape", "terrain", "sign", "board",
 }
 
 return Config

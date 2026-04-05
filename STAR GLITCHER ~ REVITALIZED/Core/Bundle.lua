@@ -51,6 +51,8 @@ Config.Options = {
     SmartCleanupEnabled = true,
     AutoUpdateEnabled = false,
     AutoUpdateIntervalMinutes = 5,
+    NoclipEnabled = false,
+    GodModeEnabled = false,
 }
 
 Config.Prediction = {
@@ -108,9 +110,128 @@ Config.Blacklist = {
     "bullet", "mine", "trap", "spawn", "debris",
     "decoration", "sculpture", "deco", "prop", "marker", "part",
     "object", "model", "tree", "rock", "stone", "grass",
+    "tele", "rsbroad", "landscape", "terrain", "sign", "board",
 }
 
 return Config
+]====],
+    ["Modules/Movement/Noclip.lua"] = [====[--[[
+    Noclip.lua - Phase Shifting Module
+    Job: Disabling character collisions via Stepped loop.
+]]
+
+local RunService = game:GetService("RunService")
+
+local Noclip = {}
+Noclip.__index = Noclip
+
+function Noclip.new(options, localCharacter)
+    local self = setmetatable({}, Noclip)
+    self.Options = options
+    self.LocalCharacter = localCharacter
+    self.Connection = nil
+    self.Status = "Idle"
+    return self
+end
+
+function Noclip:Init()
+    self.Connection = RunService.Stepped:Connect(function()
+        if not self.Options.NoclipEnabled then
+            self.Status = "Disabled"
+            return
+        end
+
+        local char = self.LocalCharacter and self.LocalCharacter.Instance
+        if not char then
+            self.Status = "Char Missing"
+            return
+        end
+
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+        self.Status = "Active: PHASING"
+    end)
+end
+
+function Noclip:Destroy()
+    if self.Connection then
+        self.Connection:Disconnect()
+        self.Connection = nil
+    end
+end
+
+return Noclip
+]====],
+    ["Modules/Movement/GodMode.lua"] = [====[--[[
+    GodMode.lua - Biological Preservation Module
+    Job: Locking health and preventing the Dead state without character reset.
+]]
+
+local RunService = game:GetService("RunService")
+
+local GodMode = {}
+GodMode.__index = GodMode
+
+function GodMode.new(options, localCharacter)
+    local self = setmetatable({}, GodMode)
+    self.Options = options
+    self.LocalCharacter = localCharacter
+    self.Connection = nil
+    self.Status = "Idle"
+    return self
+end
+
+function GodMode:Init()
+    self.Connection = RunService.Heartbeat:Connect(function()
+        if not self.Options.GodModeEnabled then
+            self.Status = "Disabled"
+            return
+        end
+
+        local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
+        if not humanoid then
+            self.Status = "Hum Missing"
+            return
+        end
+
+        -- Lock Health to Max
+        if humanoid.Health < humanoid.MaxHealth then
+            humanoid.Health = humanoid.MaxHealth
+        end
+
+        -- Disable Dead state to prevent reset on lethal damage
+        if humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead) then
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        end
+        
+        -- Force state away from dead if it somehow reaches it
+        if humanoid:GetState() == Enum.HumanoidStateType.Dead then
+            humanoid:ChangeState(Enum.HumanoidStateType.None)
+        end
+
+        self.Status = "Active: GOD MODE ENABLED"
+    end)
+end
+
+function GodMode:Destroy()
+    if self.Connection then
+        self.Connection:Disconnect()
+        self.Connection = nil
+    end
+    
+    -- Try to restore state if humanoid still exists
+    local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
+    if humanoid then
+        pcall(function()
+            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
+        end)
+    end
+end
+
+return GodMode
 ]====],
     ["Data/Version.lua"] = [====[return 130 -- Version 1.2.0 (Auto Update Runtime / Player Mobility Additions)
 ]====],
@@ -5755,7 +5876,7 @@ NPCTracker.__index = NPCTracker
 function NPCTracker.new(config, detector, taskScheduler)
     local self = setmetatable({}, NPCTracker)
     self.Options = config.Options
-    self.Blacklist = config.Blacklist or {"statue", "tuong", "monument", "altar", "dummy", "board", "spawn", "shop", "gui", "display", "map", "portal"}
+    self.Blacklist = config.Blacklist or {"statue", "tuong", "monument", "altar", "dummy", "board", "spawn", "shop", "gui", "display", "map", "portal", "tele", "rsbroad", "landscape", "terrain", "sign"}
     self._blacklistLower = {}
     self.Detector = detector
     self.TaskScheduler = taskScheduler
@@ -7579,7 +7700,7 @@ function Controller.new(layout, statusLoop, labelUtils)
     return self
 end
 
-function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost)
+function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, god)
     local Tab = Window:CreateTab("Player", 4483362458)
     local refs = self.Layout.Build(Tab, Options)
 
@@ -7594,6 +7715,8 @@ function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, 
         gravityController = gravityController,
         floatController = floatController,
         jumpBoost = jumpBoost,
+        noclip = noclip,
+        god = god,
     }, self.LabelUtils)
 
     return Tab
@@ -7689,6 +7812,17 @@ function Layout.Build(Tab, Options)
     })
 
     Tab:CreateToggle({
+        Name = "Noclip",
+        CurrentValue = Options.NoclipEnabled,
+        Flag = "NoclipEnabledFlag",
+        Callback = function(Value)
+            Options.NoclipEnabled = Value
+        end,
+    })
+    
+    refs.noclipLabel = Tab:CreateLabel("Noclip Status: Idle")
+
+    Tab:CreateToggle({
         Name = "Float",
         CurrentValue = Options.FloatEnabled,
         Flag = "FloatEnabledFlag",
@@ -7740,6 +7874,17 @@ function Layout.Build(Tab, Options)
             Options.NoDelay = Value
         end,
     })
+
+    Tab:CreateToggle({
+        Name = "God Mode (No Reset)",
+        CurrentValue = Options.GodModeEnabled,
+        Flag = "GodModeEnabledFlag",
+        Callback = function(Value)
+            Options.GodModeEnabled = Value
+        end,
+    })
+
+    refs.godLabel = Tab:CreateLabel("God Mode Status: Idle")
 
     Tab:CreateSection("Custom")
 
@@ -7824,6 +7969,8 @@ function StatusLoop.Start(refs, deps, labelUtils)
         local lastJumpText
         local lastFloatText
         local lastGravityText
+        local lastNoclipText
+        local lastGodText
 
         while handle.Alive do
             if deps.noSlowdown then
@@ -7874,6 +8021,22 @@ function StatusLoop.Start(refs, deps, labelUtils)
                 end
             end
 
+            if deps.noclip then
+                local nextText = "Noclip Status: " .. tostring(deps.noclip.Status)
+                if nextText ~= lastNoclipText then
+                    labelUtils.SetText(refs.noclipLabel, nextText)
+                    lastNoclipText = nextText
+                end
+            end
+
+            if deps.god then
+                local nextText = "God Mode Status: " .. tostring(deps.god.Status)
+                if nextText ~= lastGodText then
+                    labelUtils.SetText(refs.godLabel, nextText)
+                    lastGodText = nextText
+                end
+            end
+
             task.wait(0.5)
         end
     end)
@@ -7892,9 +8055,9 @@ return StatusLoop
     Job: Delegate Player tab construction to an injected controller.
 ]]
 
-return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, controller)
+return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, god, controller)
     if controller and controller.Build then
-        return controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost)
+        return controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, god)
     end
 
     error("PlayerTab controller was not provided", 2)
@@ -8370,6 +8533,8 @@ local FloatController = requireModule("Modules/Movement/FloatController.lua")
 local JumpBoost      = requireModule("Modules/Movement/JumpBoost.lua")
 local AntiSlowdown    = requireModule("Modules/Movement/AntiSlowdown.lua")
 local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
+local Noclip          = requireModule("Modules/Movement/Noclip.lua")
+local GodMode         = requireModule("Modules/Movement/GodMode.lua")
 local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
 
 local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
@@ -8419,6 +8584,8 @@ local movementSuite = {
     jump = JumpBoost.new(Options, localCharacter, movementArbiter),
     slow  = AntiSlowdown.new(Options, localCharacter, movementArbiter),
     stun  = AntiStun.new(Options, localCharacter),
+    noclip = Noclip.new(Options, localCharacter),
+    god = GodMode.new(Options, localCharacter),
     clean = Cleaner.new(Options, localCharacter)
 }
 
@@ -8446,7 +8613,7 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
-requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, playerTabController)
+requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.god, playerTabController)
 requireModule("UI/Tabs/BlatantTab.lua")(Window, Options)
 local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager)
 
