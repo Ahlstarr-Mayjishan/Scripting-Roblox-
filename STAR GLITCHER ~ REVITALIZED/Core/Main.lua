@@ -203,6 +203,8 @@ local FloatController = requireModule("Modules/Movement/FloatController.lua")
 local JumpBoost      = requireModule("Modules/Movement/JumpBoost.lua")
 local AntiSlowdown    = requireModule("Modules/Movement/AntiSlowdown.lua")
 local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
+local Noclip          = requireModule("Modules/Movement/Noclip.lua")
+local GodMode         = requireModule("Modules/Movement/GodMode.lua")
 local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
 
 local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
@@ -252,6 +254,8 @@ local movementSuite = {
     jump = JumpBoost.new(Options, localCharacter, movementArbiter),
     slow  = AntiSlowdown.new(Options, localCharacter, movementArbiter),
     stun  = AntiStun.new(Options, localCharacter),
+    noclip = Noclip.new(Options, localCharacter),
+    god = GodMode.new(Options, localCharacter),
     clean = Cleaner.new(Options, localCharacter)
 }
 
@@ -279,7 +283,7 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
-requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, playerTabController)
+requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.god, playerTabController)
 requireModule("UI/Tabs/BlatantTab.lua")(Window, Options)
 local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager)
 

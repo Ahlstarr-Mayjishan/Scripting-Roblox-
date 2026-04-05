@@ -49,6 +49,17 @@ function Layout.Build(Tab, Options)
     })
 
     Tab:CreateToggle({
+        Name = "Noclip",
+        CurrentValue = Options.NoclipEnabled,
+        Flag = "NoclipEnabledFlag",
+        Callback = function(Value)
+            Options.NoclipEnabled = Value
+        end,
+    })
+    
+    refs.noclipLabel = Tab:CreateLabel("Noclip Status: Idle")
+
+    Tab:CreateToggle({
         Name = "Float",
         CurrentValue = Options.FloatEnabled,
         Flag = "FloatEnabledFlag",
@@ -100,6 +111,17 @@ function Layout.Build(Tab, Options)
             Options.NoDelay = Value
         end,
     })
+
+    Tab:CreateToggle({
+        Name = "God Mode (No Reset)",
+        CurrentValue = Options.GodModeEnabled,
+        Flag = "GodModeEnabledFlag",
+        Callback = function(Value)
+            Options.GodModeEnabled = Value
+        end,
+    })
+
+    refs.godLabel = Tab:CreateLabel("God Mode Status: Idle")
 
     Tab:CreateSection("Custom")
 

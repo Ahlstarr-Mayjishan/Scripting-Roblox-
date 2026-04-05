@@ -43,6 +43,8 @@ Config.Options = {
     SmartCleanupEnabled = true,
     AutoUpdateEnabled = false,
     AutoUpdateIntervalMinutes = 5,
+    NoclipEnabled = false,
+    GodModeEnabled = false,
 }
 
 Config.Prediction = {

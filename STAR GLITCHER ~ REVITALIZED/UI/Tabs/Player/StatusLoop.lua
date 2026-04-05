@@ -16,6 +16,8 @@ function StatusLoop.Start(refs, deps, labelUtils)
         local lastJumpText
         local lastFloatText
         local lastGravityText
+        local lastNoclipText
+        local lastGodText
 
         while handle.Alive do
             if deps.noSlowdown then
@@ -63,6 +65,22 @@ function StatusLoop.Start(refs, deps, labelUtils)
                 if nextText ~= lastGravityText then
                     labelUtils.SetText(refs.gravityLabel, nextText)
                     lastGravityText = nextText
+                end
+            end
+
+            if deps.noclip then
+                local nextText = "Noclip Status: " .. tostring(deps.noclip.Status)
+                if nextText ~= lastNoclipText then
+                    labelUtils.SetText(refs.noclipLabel, nextText)
+                    lastNoclipText = nextText
+                end
+            end
+
+            if deps.god then
+                local nextText = "God Mode Status: " .. tostring(deps.god.Status)
+                if nextText ~= lastGodText then
+                    labelUtils.SetText(refs.godLabel, nextText)
+                    lastGodText = nextText
                 end
             end
 
