@@ -3316,6 +3316,8 @@ function SpeedMultiplier.new(options, localCharacter, movementArbiter)
     self._wasEnabled = false
     self._preEnableBaseSpeed = 16
     self._arbiterKey = "__STAR_GLITCHER_SPEED_MULTIPLIER"
+    self._respawnRecoveryUntil = 0
+    self._respawnRecoveryDuration = 1.1
     return self
 end
 
@@ -3335,6 +3337,31 @@ end
 function SpeedMultiplier:_captureBaseSpeed(humanoid)
     self.TrackedHumanoid = humanoid
     self.BaseWalkSpeed = self:_getBaselineWalkSpeed(humanoid)
+end
+
+function SpeedMultiplier:_beginRespawnRecovery(humanoid)
+    if humanoid and humanoid ~= self.TrackedHumanoid then
+        self:_captureBaseSpeed(humanoid)
+    end
+
+    self._respawnRecoveryUntil = os.clock() + self._respawnRecoveryDuration
+    self._fallbackWarmupUntil = 0
+    self._wasEnabled = false
+
+    if self.MovementArbiter then
+        self.MovementArbiter:ClearSource(self._arbiterKey)
+    end
+end
+
+function SpeedMultiplier:_learnRespawnBase(humanoid)
+    if not humanoid then
+        return
+    end
+
+    local observed = math.max(humanoid.WalkSpeed or 0, 16)
+    if observed > self.BaseWalkSpeed then
+        self.BaseWalkSpeed = observed
+    end
 end
 
 function SpeedMultiplier:_writeWalkSpeed(humanoid, value)
@@ -3427,27 +3454,30 @@ end
 
 function SpeedMultiplier:Init()
     self.Connection = RunService.Heartbeat:Connect(function()
+        local now = os.clock()
         local hum = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
         if not hum then
             self.Status = "Hum Missing"
             return
         end
 
+        if hum ~= self.TrackedHumanoid then
+            self:_beginRespawnRecovery(hum)
+        end
+
         if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
-            if hum ~= self.TrackedHumanoid then
-                self:_captureBaseSpeed(hum)
-            end
-            if self.MovementArbiter then
-                self.MovementArbiter:ClearSource(self._arbiterKey)
-            end
-            self._fallbackWarmupUntil = 0
-            self._wasEnabled = false
+            self:_beginRespawnRecovery(hum)
             self.Status = "Respawn Grace"
             return
         end
 
-        if hum ~= self.TrackedHumanoid then
-            self:_captureBaseSpeed(hum)
+        if now < self._respawnRecoveryUntil then
+            self:_learnRespawnBase(hum)
+            if self.MovementArbiter then
+                self.MovementArbiter:ClearSource(self._arbiterKey)
+            end
+            self.Status = "Rebuilding Sprint"
+            return
         end
 
         if self.Options.SpeedMultiplierEnabled and self.Options.CustomMoveSpeedEnabled then
