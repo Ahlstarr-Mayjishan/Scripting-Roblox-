@@ -127,14 +127,22 @@ end
 function GarbageCollector:_processFullScan(batchSize)
     local totalQueued = 0
     local scanBatchSize = math.max(batchSize or self._scanBatchSize, 1)
+    local startTime = os.clock()
 
     while self._scanList do
         local queuedCount = 0
         local done = false
         queuedCount, done = self:_processScan(scanBatchSize)
         totalQueued = totalQueued + (queuedCount or 0)
+        
         if done then
             break
+        end
+
+        -- Time-slicing: yield to avoid freezing the main thread
+        if (os.clock() - startTime) >= 0.0022 then
+            task.wait()
+            startTime = os.clock() -- Reset timer after yield
         end
     end
 

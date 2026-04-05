@@ -12,9 +12,9 @@ local ZERO = Vector3.zero
 
 function Stabilizer.new()
     local self = setmetatable({}, Stabilizer)
-    self.BaseSmoothing = 1.55
-    self.CatchupSmoothing = 5.2
-    self.SnapDistance = 4.75
+    self.BaseSmoothing = 2.45
+    self.CatchupSmoothing = 6.8
+    self.SnapDistance = 4.25
     self._lastTarget = ZERO
     return self
 end

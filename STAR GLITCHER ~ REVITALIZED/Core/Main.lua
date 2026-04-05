@@ -57,10 +57,12 @@ local function parseRemoteVersion(content)
 end
 
 local function fetchRemoteVersion()
-    local timestamp = tostring(os.time())
+    -- Enhanced Cache Buster: Use redundant timestamp + random string to bypass GitHub Raw CDN caching
+    local timestamp = os.date("%Y%m%d%H%M")
+    local buster = tostring(os.clock()):gsub("%.", "") .. tostring(math.random(100000, 999999))
     local sources = {
-        VERSION_URL .. "?check=" .. timestamp,
-        BUNDLE_URL .. "?check=" .. timestamp,
+        VERSION_URL .. "?check=" .. timestamp .. "&r=" .. buster,
+        BUNDLE_URL .. "?check=" .. timestamp .. "&r=" .. buster,
     }
 
     local lastError = nil

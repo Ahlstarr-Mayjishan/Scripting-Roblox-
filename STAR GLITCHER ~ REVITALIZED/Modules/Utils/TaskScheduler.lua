@@ -133,7 +133,19 @@ function TaskScheduler:_step(dt)
     local budget = self:_getBudget(dt)
     local processed = 0
 
-    while self:GetPendingCount() > 0 and (os.clock() - startTime) < budget do
+    local iterations = 0
+    local maxIterations = 100
+
+    while self:GetPendingCount() > 0 do
+        iterations = iterations + 1
+        if iterations > maxIterations then
+            break
+        end
+
+        if (os.clock() - startTime) >= budget then
+            break
+        end
+
         local job = self:_pop()
         if not job then
             break

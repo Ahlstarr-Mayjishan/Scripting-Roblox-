@@ -186,10 +186,6 @@ end
 function NPCTracker:GetTargets()
     local now = os.clock()
     
-    if (now - self._lastScan) < self._scanInterval then
-        return self._cachedTargets
-    end
-    
     self._lastScan = now
     local result = self._cachedTargets
     table.clear(result)

@@ -196,7 +196,15 @@ function ResourceManager:_step(dt)
         minProcess = 15
     end
 
+    local iterations = 0
+    local maxIterations = math.max(minProcess, 150)
+
     while self:GetPendingCount() > 0 do
+        iterations = iterations + 1
+        if iterations > maxIterations then
+            break
+        end
+
         if (os.clock() - startTime) >= budget and processed >= minProcess then
             break
         end
