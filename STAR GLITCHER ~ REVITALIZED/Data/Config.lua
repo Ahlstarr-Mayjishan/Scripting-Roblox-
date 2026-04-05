@@ -44,7 +44,8 @@ Config.Options = {
     AutoUpdateEnabled = false,
     AutoUpdateIntervalMinutes = 5,
     NoclipEnabled = false,
-    GodModeEnabled = false,
+    ZenithDesyncEnabled = false,
+    SilentDamageEnabled = false,
 }
 
 Config.Prediction = {

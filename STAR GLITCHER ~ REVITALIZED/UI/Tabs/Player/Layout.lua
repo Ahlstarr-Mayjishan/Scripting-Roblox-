@@ -112,17 +112,6 @@ function Layout.Build(Tab, Options)
         end,
     })
 
-    Tab:CreateToggle({
-        Name = "God Mode (No Reset)",
-        CurrentValue = Options.GodModeEnabled,
-        Flag = "GodModeEnabledFlag",
-        Callback = function(Value)
-            Options.GodModeEnabled = Value
-        end,
-    })
-
-    refs.godLabel = Tab:CreateLabel("God Mode Status: Idle")
-
     Tab:CreateSection("Custom")
 
     Tab:CreateSlider({
