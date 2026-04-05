@@ -16,7 +16,12 @@ function TargetSelector.new(config, tracker, predictor)
     self.Tracker = tracker
     self.Predictor = predictor
     self._stickyBias = 1.12
+    self._destroyed = false
     return self
+end
+
+function TargetSelector:Init()
+    self._destroyed = false
 end
 
 function TargetSelector:_getMethod()
@@ -67,6 +72,10 @@ function TargetSelector:_scoreEntry(entry, localCharacter, mouseX, mouseY, origi
 end
 
 function TargetSelector:GetClosestTarget(mousePos, originPos, preferredEntry)
+    if self._destroyed then
+        return nil
+    end
+
     local bestTarget = nil
     local localCharacter = Players.LocalPlayer.Character
     local mouseX = mousePos.X
@@ -106,6 +115,10 @@ function TargetSelector:GetClosestTarget(mousePos, originPos, preferredEntry)
     end
 
     return bestTarget
+end
+
+function TargetSelector:Destroy()
+    self._destroyed = true
 end
 
 return TargetSelector

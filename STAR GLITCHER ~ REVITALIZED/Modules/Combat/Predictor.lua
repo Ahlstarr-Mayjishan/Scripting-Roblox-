@@ -57,6 +57,10 @@ function Predictor:_PruneStates(now)
     end
 end
 
+function Predictor:Prune(now)
+    self:_PruneStates(now or os.clock())
+end
+
 function Predictor:_GetState(entry)
     local state = self._EntryStates[entry]
     if state then

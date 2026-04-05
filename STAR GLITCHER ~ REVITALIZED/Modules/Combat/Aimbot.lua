@@ -11,6 +11,10 @@ function Aimbot.new(config)
     return self
 end
 
+function Aimbot:Init()
+    self.Active = false
+end
+
 function Aimbot:Update(targetPosition, smoothness)
     if not targetPosition then
         return
@@ -31,6 +35,10 @@ end
 
 function Aimbot:SetState(active)
     self.Active = active
+end
+
+function Aimbot:Destroy()
+    self.Active = false
 end
 
 return Aimbot

@@ -73,4 +73,15 @@ function SpeedSpoof:Init()
     self._isHooked = true
 end
 
+function SpeedSpoof:Destroy()
+    local hookState = getgenv and getgenv().__STAR_GLITCHER_SPEED_SPOOF_HOOK
+    if hookState and hookState.LocalCharacter == self.LocalCharacter then
+        hookState.Options = nil
+        hookState.LocalCharacter = nil
+    end
+
+    self._isHooked = false
+    self.LocalCharacter = nil
+end
+
 return SpeedSpoof

@@ -15,9 +15,17 @@ function Synapse.on(name, callback)
     
     return {
         Disconnect = function()
-            for i, cb in ipairs(_events[name]) do
+            local listeners = _events[name]
+            if not listeners then
+                return
+            end
+
+            for i, cb in ipairs(listeners) do
                 if cb == callback then
-                    table.remove(_events[name], i)
+                    table.remove(listeners, i)
+                    if #listeners == 0 then
+                        _events[name] = nil
+                    end
                     break
                 end
             end
@@ -27,9 +35,27 @@ end
 
 function Synapse.fire(name, ...)
     if not _events[name] then return end
-    for _, callback in ipairs(_events[name]) do
+    local listeners = table.clone and table.clone(_events[name]) or {table.unpack(_events[name])}
+    for _, callback in ipairs(listeners) do
         task.spawn(callback, ...)
     end
+end
+
+function Synapse.clear(name)
+    if name == nil then
+        return
+    end
+
+    _events[name] = nil
+end
+
+function Synapse.clearAll()
+    table.clear(_events)
+end
+
+function Synapse.getListenerCount(name)
+    local listeners = _events[name]
+    return listeners and #listeners or 0
 end
 
 return Synapse

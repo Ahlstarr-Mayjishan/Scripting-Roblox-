@@ -128,10 +128,19 @@ end
 function BossDetector.new()
     local self = setmetatable({}, BossDetector)
     self.CheckInterval = 10
+    self._destroyed = false
     return self
 end
 
+function BossDetector:Init()
+    self._destroyed = false
+end
+
 function BossDetector:IsBoss(model, humanoid)
+    if self._destroyed then
+        return false
+    end
+
     if not model or not model:IsA("Model") then
         return false
     end
@@ -169,6 +178,10 @@ function BossDetector:IsBoss(model, humanoid)
     end
 
     return false
+end
+
+function BossDetector:Destroy()
+    self._destroyed = true
 end
 
 return BossDetector

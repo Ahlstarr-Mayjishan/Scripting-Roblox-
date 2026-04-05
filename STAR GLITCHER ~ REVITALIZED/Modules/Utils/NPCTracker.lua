@@ -49,6 +49,37 @@ function NPCTracker:Init()
     self:_queueStaleSweep()
 end
 
+function NPCTracker:Prune(now)
+    now = now or os.clock()
+    local entryCount = 0
+
+    for model, entry in pairs(self._entries) do
+        entryCount = entryCount + 1
+        local lastSeen = entry and entry.LastSeen or 0
+        local isDead = entry and entry.Humanoid and entry.Humanoid.Health <= 0
+        local expiry = isDead and self._deadEntryExpiry or self._entryExpiry
+
+        if not model
+            or not model.Parent
+            or not entry
+            or not entry.PrimaryPart
+            or not entry.PrimaryPart.Parent
+            or self:_HasBlacklistedName(model) then
+            self._entries[model] = nil
+        elseif lastSeen > 0 and (now - lastSeen) > expiry then
+            self._entries[model] = nil
+        end
+    end
+
+    if entryCount > self._maxEntries then
+        for model, entry in pairs(self._entries) do
+            if not entry or (entry.LastSeen or 0) < (now - 4) then
+                self._entries[model] = nil
+            end
+        end
+    end
+end
+
 function NPCTracker:_refreshFolderRefs()
     for i = 1, #self._folders do
         self._folderRefs[i] = Workspace:FindFirstChild(self._folders[i])
@@ -80,32 +111,7 @@ function NPCTracker:_queueStaleSweep()
             return
         end
 
-        local now = os.clock()
-        local entryCount = 0
-        for model, entry in pairs(selfRef._entries) do
-            entryCount = entryCount + 1
-            local lastSeen = entry and entry.LastSeen or 0
-            local isDead = entry and entry.Humanoid and entry.Humanoid.Health <= 0
-            local expiry = isDead and selfRef._deadEntryExpiry or selfRef._entryExpiry
-            if not model
-                or not model.Parent
-                or not entry
-                or not entry.PrimaryPart
-                or not entry.PrimaryPart.Parent
-                or selfRef:_HasBlacklistedName(model) then
-                selfRef._entries[model] = nil
-            elseif lastSeen > 0 and (now - lastSeen) > expiry then
-                selfRef._entries[model] = nil
-            end
-        end
-
-        if entryCount > selfRef._maxEntries then
-            for model, entry in pairs(selfRef._entries) do
-                if not entry or (entry.LastSeen or 0) < (now - 4) then
-                    selfRef._entries[model] = nil
-                end
-            end
-        end
+        selfRef:Prune(os.clock())
 
         task.delay(selfRef._staleSweepInterval, function()
             if selfRef._schedulerAlive then

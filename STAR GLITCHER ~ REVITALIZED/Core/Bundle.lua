@@ -160,6 +160,10 @@ function Aimbot.new(config)
     return self
 end
 
+function Aimbot:Init()
+    self.Active = false
+end
+
 function Aimbot:Update(targetPosition, smoothness)
     if not targetPosition then
         return
@@ -180,6 +184,10 @@ end
 
 function Aimbot:SetState(active)
     self.Active = active
+end
+
+function Aimbot:Destroy()
+    self.Active = false
 end
 
 return Aimbot
@@ -1292,6 +1300,10 @@ function Predictor:_PruneStates(now)
     end
 end
 
+function Predictor:Prune(now)
+    self:_PruneStates(now or os.clock())
+end
+
 function Predictor:_GetState(entry)
     local state = self._EntryStates[entry]
     if state then
@@ -1674,7 +1686,12 @@ function TargetSelector.new(config, tracker, predictor)
     self.Tracker = tracker
     self.Predictor = predictor
     self._stickyBias = 1.12
+    self._destroyed = false
     return self
+end
+
+function TargetSelector:Init()
+    self._destroyed = false
 end
 
 function TargetSelector:_getMethod()
@@ -1725,6 +1742,10 @@ function TargetSelector:_scoreEntry(entry, localCharacter, mouseX, mouseY, origi
 end
 
 function TargetSelector:GetClosestTarget(mousePos, originPos, preferredEntry)
+    if self._destroyed then
+        return nil
+    end
+
     local bestTarget = nil
     local localCharacter = Players.LocalPlayer.Character
     local mouseX = mousePos.X
@@ -1764,6 +1785,10 @@ function TargetSelector:GetClosestTarget(mousePos, originPos, preferredEntry)
     end
 
     return bestTarget
+end
+
+function TargetSelector:Destroy()
+    self._destroyed = true
 end
 
 return TargetSelector
@@ -3503,6 +3528,17 @@ function SpeedSpoof:Init()
     self._isHooked = true
 end
 
+function SpeedSpoof:Destroy()
+    local hookState = getgenv and getgenv().__STAR_GLITCHER_SPEED_SPOOF_HOOK
+    if hookState and hookState.LocalCharacter == self.LocalCharacter then
+        hookState.Options = nil
+        hookState.LocalCharacter = nil
+    end
+
+    self._isHooked = false
+    self.LocalCharacter = nil
+end
+
 return SpeedSpoof
 ]====],
     ["Modules/NPCPrediction.lua"] = [====[--[[
@@ -4786,10 +4822,19 @@ end
 function BossDetector.new()
     local self = setmetatable({}, BossDetector)
     self.CheckInterval = 10
+    self._destroyed = false
     return self
 end
 
+function BossDetector:Init()
+    self._destroyed = false
+end
+
 function BossDetector:IsBoss(model, humanoid)
+    if self._destroyed then
+        return false
+    end
+
     if not model or not model:IsA("Model") then
         return false
     end
@@ -4829,6 +4874,10 @@ function BossDetector:IsBoss(model, humanoid)
     return false
 end
 
+function BossDetector:Destroy()
+    self._destroyed = true
+end
+
 return BossDetector
 ]====],
     ["Modules/Utils/CheckGame.lua"] = [====[--[[
@@ -4865,6 +4914,72 @@ end
 
 return Check()
 
+]====],
+    ["Modules/Utils/DataPruner.lua"] = [====[local DataPruner = {}
+DataPruner.__index = DataPruner
+
+function DataPruner.new(taskScheduler, tracker, predictor)
+    local self = setmetatable({}, DataPruner)
+    self.TaskScheduler = taskScheduler
+    self.Tracker = tracker
+    self.Predictor = predictor
+    self.Interval = 4
+    self._alive = false
+    return self
+end
+
+function DataPruner:Init()
+    if self._alive then
+        return
+    end
+
+    self._alive = true
+    self:_queue()
+end
+
+function DataPruner:_run()
+    local now = os.clock()
+
+    if self.Tracker and self.Tracker.Prune then
+        self.Tracker:Prune(now)
+    end
+
+    if self.Predictor and self.Predictor.Prune then
+        self.Predictor:Prune(now)
+    end
+end
+
+function DataPruner:_queue()
+    if not self._alive then
+        return
+    end
+
+    if not self.TaskScheduler then
+        self:_run()
+        task.delay(self.Interval, function()
+            self:_queue()
+        end)
+        return
+    end
+
+    local selfRef = self
+    self.TaskScheduler:Enqueue(function()
+        if not selfRef._alive then
+            return
+        end
+
+        selfRef:_run()
+        task.delay(selfRef.Interval, function()
+            selfRef:_queue()
+        end)
+    end, "__STAR_GLITCHER_DATA_PRUNER")
+end
+
+function DataPruner:Destroy()
+    self._alive = false
+end
+
+return DataPruner
 ]====],
     ["Modules/Utils/GarbageCollector.lua"] = [====[--[[
     GarbageCollector.lua - Memory & Workspace Optimization v1.0
@@ -5542,6 +5657,37 @@ function NPCTracker:Init()
     self:_queueStaleSweep()
 end
 
+function NPCTracker:Prune(now)
+    now = now or os.clock()
+    local entryCount = 0
+
+    for model, entry in pairs(self._entries) do
+        entryCount = entryCount + 1
+        local lastSeen = entry and entry.LastSeen or 0
+        local isDead = entry and entry.Humanoid and entry.Humanoid.Health <= 0
+        local expiry = isDead and self._deadEntryExpiry or self._entryExpiry
+
+        if not model
+            or not model.Parent
+            or not entry
+            or not entry.PrimaryPart
+            or not entry.PrimaryPart.Parent
+            or self:_HasBlacklistedName(model) then
+            self._entries[model] = nil
+        elseif lastSeen > 0 and (now - lastSeen) > expiry then
+            self._entries[model] = nil
+        end
+    end
+
+    if entryCount > self._maxEntries then
+        for model, entry in pairs(self._entries) do
+            if not entry or (entry.LastSeen or 0) < (now - 4) then
+                self._entries[model] = nil
+            end
+        end
+    end
+end
+
 function NPCTracker:_refreshFolderRefs()
     for i = 1, #self._folders do
         self._folderRefs[i] = Workspace:FindFirstChild(self._folders[i])
@@ -5573,32 +5719,7 @@ function NPCTracker:_queueStaleSweep()
             return
         end
 
-        local now = os.clock()
-        local entryCount = 0
-        for model, entry in pairs(selfRef._entries) do
-            entryCount = entryCount + 1
-            local lastSeen = entry and entry.LastSeen or 0
-            local isDead = entry and entry.Humanoid and entry.Humanoid.Health <= 0
-            local expiry = isDead and selfRef._deadEntryExpiry or selfRef._entryExpiry
-            if not model
-                or not model.Parent
-                or not entry
-                or not entry.PrimaryPart
-                or not entry.PrimaryPart.Parent
-                or selfRef:_HasBlacklistedName(model) then
-                selfRef._entries[model] = nil
-            elseif lastSeen > 0 and (now - lastSeen) > expiry then
-                selfRef._entries[model] = nil
-            end
-        end
-
-        if entryCount > selfRef._maxEntries then
-            for model, entry in pairs(selfRef._entries) do
-                if not entry or (entry.LastSeen or 0) < (now - 4) then
-                    selfRef._entries[model] = nil
-                end
-            end
-        end
+        selfRef:Prune(os.clock())
 
         task.delay(selfRef._staleSweepInterval, function()
             if selfRef._schedulerAlive then
@@ -6095,9 +6216,17 @@ function Synapse.on(name, callback)
     
     return {
         Disconnect = function()
-            for i, cb in ipairs(_events[name]) do
+            local listeners = _events[name]
+            if not listeners then
+                return
+            end
+
+            for i, cb in ipairs(listeners) do
                 if cb == callback then
-                    table.remove(_events[name], i)
+                    table.remove(listeners, i)
+                    if #listeners == 0 then
+                        _events[name] = nil
+                    end
                     break
                 end
             end
@@ -6107,9 +6236,27 @@ end
 
 function Synapse.fire(name, ...)
     if not _events[name] then return end
-    for _, callback in ipairs(_events[name]) do
+    local listeners = table.clone and table.clone(_events[name]) or {table.unpack(_events[name])}
+    for _, callback in ipairs(listeners) do
         task.spawn(callback, ...)
     end
+end
+
+function Synapse.clear(name)
+    if name == nil then
+        return
+    end
+
+    _events[name] = nil
+end
+
+function Synapse.clearAll()
+    table.clear(_events)
+end
+
+function Synapse.getListenerCount(name)
+    local listeners = _events[name]
+    return listeners and #listeners or 0
 end
 
 return Synapse
@@ -8028,8 +8175,8 @@ local Synapse         = requireModule("Modules/Utils/Synapse.lua")
 local Kalman          = requireModule("Modules/Utils/Math/Kalman.lua")
 local ResourceManager = requireModule("Modules/Utils/ResourceManager.lua")
 local TaskScheduler   = requireModule("Modules/Utils/TaskScheduler.lua")
+local DataPruner      = requireModule("Modules/Utils/DataPruner.lua")
 
-local BasePred        = requireModule("Modules/Combat/Prediction/Base.lua")
 local Predictor       = requireModule("Modules/Combat/Predictor.lua")
 local SilentResolver  = requireModule("Modules/Combat/Prediction/SilentResolver.lua")
 local GarbageCollector = requireModule("Modules/Utils/GarbageCollector.lua")
@@ -8076,6 +8223,7 @@ local cleaner    = GarbageCollector.new(Options, resourceManager)
 
 local pred       = Predictor.new(Config, loadModule, Kalman)
 local selector   = Selector.new(Config, tracker, pred)
+local dataPruner = DataPruner.new(taskScheduler, tracker, pred)
 
 local visuals = {
     fov = FOVCircle.new(Options),
@@ -8109,8 +8257,12 @@ local brain = Brain.new(Config, {
 input:Init()
 taskScheduler:Init()
 localCharacter:Init()
+detector:Init()
 tracker:Init()
+aimbot:Init()
+selector:Init()
 silentAim:Init()
+dataPruner:Init()
 resourceManager:Init()
 cleaner:Init()
 for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
@@ -8155,9 +8307,9 @@ local function performCleanup(fullSweep)
     table.clear(_conns)
 
     local objs = {
-        input, localCharacter, tracker, aimbot, silentAim,
+        input, localCharacter, detector, tracker, pred, selector, aimbot, silentAim,
         cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
-        taskScheduler,
+        taskScheduler, dataPruner,
         playerTabController, settingsTabController
     }
     for _, obj in pairs(movementSuite) do
@@ -8165,6 +8317,10 @@ local function performCleanup(fullSweep)
     end
 
     if resourceManager then
+        resourceManager:DeferCleanup(function()
+            Synapse.clearAll()
+        end)
+
         for _, obj in ipairs(objs) do
             resourceManager:TrackObject(obj)
         end
@@ -8178,6 +8334,8 @@ local function performCleanup(fullSweep)
                 end)
             end
         end
+
+        Synapse.clearAll()
     end
 
     _G.BossAimAssist_SessionID = nil

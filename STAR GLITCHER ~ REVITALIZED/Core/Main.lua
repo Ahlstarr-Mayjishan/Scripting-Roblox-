@@ -183,8 +183,8 @@ local Synapse         = requireModule("Modules/Utils/Synapse.lua")
 local Kalman          = requireModule("Modules/Utils/Math/Kalman.lua")
 local ResourceManager = requireModule("Modules/Utils/ResourceManager.lua")
 local TaskScheduler   = requireModule("Modules/Utils/TaskScheduler.lua")
+local DataPruner      = requireModule("Modules/Utils/DataPruner.lua")
 
-local BasePred        = requireModule("Modules/Combat/Prediction/Base.lua")
 local Predictor       = requireModule("Modules/Combat/Predictor.lua")
 local SilentResolver  = requireModule("Modules/Combat/Prediction/SilentResolver.lua")
 local GarbageCollector = requireModule("Modules/Utils/GarbageCollector.lua")
@@ -231,6 +231,7 @@ local cleaner    = GarbageCollector.new(Options, resourceManager)
 
 local pred       = Predictor.new(Config, loadModule, Kalman)
 local selector   = Selector.new(Config, tracker, pred)
+local dataPruner = DataPruner.new(taskScheduler, tracker, pred)
 
 local visuals = {
     fov = FOVCircle.new(Options),
@@ -264,8 +265,12 @@ local brain = Brain.new(Config, {
 input:Init()
 taskScheduler:Init()
 localCharacter:Init()
+detector:Init()
 tracker:Init()
+aimbot:Init()
+selector:Init()
 silentAim:Init()
+dataPruner:Init()
 resourceManager:Init()
 cleaner:Init()
 for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
@@ -310,9 +315,9 @@ local function performCleanup(fullSweep)
     table.clear(_conns)
 
     local objs = {
-        input, localCharacter, tracker, aimbot, silentAim,
+        input, localCharacter, detector, tracker, pred, selector, aimbot, silentAim,
         cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
-        taskScheduler,
+        taskScheduler, dataPruner,
         playerTabController, settingsTabController
     }
     for _, obj in pairs(movementSuite) do
@@ -320,6 +325,10 @@ local function performCleanup(fullSweep)
     end
 
     if resourceManager then
+        resourceManager:DeferCleanup(function()
+            Synapse.clearAll()
+        end)
+
         for _, obj in ipairs(objs) do
             resourceManager:TrackObject(obj)
         end
@@ -333,6 +342,8 @@ local function performCleanup(fullSweep)
                 end)
             end
         end
+
+        Synapse.clearAll()
     end
 
     _G.BossAimAssist_SessionID = nil
