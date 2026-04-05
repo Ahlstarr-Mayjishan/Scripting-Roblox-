@@ -194,123 +194,119 @@ end
 
 return Noclip
 ]====],
-    ["Modules/Movement/GodMode.lua"] = [====[--[[
-    GodMode.lua - Biological Preservation Module (v6 Ultimate Balance)
-    Job: Locking health AND protecting against Void death.
-    Logic: Uses Void Guard (height override) and Auto-Rescue (teleport).
+    ["Modules/Movement/HitboxDesync.lua"] = [====[--[[
+    HitboxDesync.lua - Zenith Desync (Soul Mode)
+    ============================================
+    Separates visual character from physical hitbox.
+    Features:
+      * Soul Separation (Ghosting)
+      * Safe Room Anchoring (-850 studs)
+      * Silent Damage Flicker (Teleporting hitbox to target momentarily)
 ]]
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
 
-local GodMode = {}
-GodMode.__index = GodMode
+local HitboxDesync = {}
+HitboxDesync.__index = HitboxDesync
 
-function GodMode.new(options, localCharacter)
-    local self = setmetatable({}, GodMode)
+function HitboxDesync.new(options, localCharacter)
+    local self = setmetatable({}, HitboxDesync)
     self.Options = options
     self.LocalCharacter = localCharacter
-    self.Connection = nil
+    self.IsActive = false
     self.Status = "Idle"
-    self._lastSafePosition = Vector3.new(0, 10, 0)
+    self.Ghost = nil
+    self.Connection = nil
+    self.DamageConnection = nil
+    self.SoulRoomPos = Vector3.new(0, -850, 0)
+    self.LastRealCFrame = nil
     return self
 end
 
-function GodMode:Init()
+function HitboxDesync:Init()
     self.Connection = RunService.Heartbeat:Connect(function()
-        if not self.Options.GodModeEnabled then
+        if not self.Options.ZenithDesyncEnabled then
+            if self.IsActive then self:Stop() end
             self.Status = "Disabled"
             return
         end
 
-        local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
-        local rootPart = self.LocalCharacter and self.LocalCharacter:GetRootPart()
-        
-        if not humanoid then
+        local character, humanoid, root = self.LocalCharacter:GetState()
+        if not root or not humanoid then
             self.Status = "Hum Missing"
             return
         end
 
-        -- 1. Void Guard (Engine Override)
-        pcall(function()
-            if Workspace.FallenPartsDestroyHeight ~= -99999 then
-                Workspace.FallenPartsDestroyHeight = -99999
-            end
-        end)
-
-        -- 2. Void Rescue (Auto-Teleport)
-        if rootPart then
-            local pos = rootPart.Position
-            if pos.Y > -400 then
-                -- Store safe position while on/above the map
-                self._lastSafePosition = pos + Vector3.new(0, 5, 0)
-            elseif pos.Y < -480 then
-                -- TRIGGER RESCUE: Teleport back to safety before engine-death or infinite fall
-                rootPart.Velocity = Vector3.zero
-                rootPart.AssemblyLinearVelocity = Vector3.zero
-                rootPart.CFrame = CFrame.new(self._lastSafePosition)
-                self.Status = "Active: VOID RESCUED"
-                return
-            end
+        if not self.IsActive then
+            self:Start(character, root)
         end
 
-        -- 3. Ultimate Health Lock
-        humanoid.MaxHealth = 9e18
-        humanoid.Health = 9e18
+        -- LOCK HITBOX TO SOUL ROOM (VOID GUARD INCLUDED)
+        root.CFrame = CFrame.new(self.SoulRoomPos)
+        root.AssemblyLinearVelocity = Vector3.zero
         
-        if humanoid.Health < 1 then
-            humanoid.Health = 9e18
+        -- Override FallenPartsHeight for engine safety
+        if Workspace.FallenPartsDestroyHeight ~= -99999 then
+            pcall(function() Workspace.FallenPartsDestroyHeight = -99999 end)
         end
 
-        -- 4. physical Reinforcement (Joints)
-        humanoid.RequiresNeck = false
-        
-        local character = self.LocalCharacter:GetCharacter()
-        if character then
-            for _, part in ipairs(character:GetDescendants()) do
-                if part:IsA("Motor6D") or part:IsA("Weld") or part:IsA("ManualWeld") then
-                    if part.Enabled == false then
-                        part.Enabled = true
-                    end
-                end
-            end
-        end
+        self.Status = "Active: SOUL SEPARATED"
+    end)
 
-        -- 5. State Lockdown
-        if humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead) then
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    -- SILENT DAMAGE SYNC (Flicker Logic)
+    self.DamageConnection = RunService.Heartbeat:Connect(function()
+        if not self.Options.ZenithDesyncEnabled or not self.Options.SilentDamageEnabled then
+            return
         end
         
-        if humanoid:GetState() == Enum.HumanoidStateType.Dead then
-            humanoid:ChangeState(Enum.HumanoidStateType.Running)
+        local root = self.LocalCharacter:GetRootPart()
+        if not root then return end
+        
+        -- Placeholder for target selection logic (integrated with Tracker in Main)
+        if _G.CurrentZTarget then
+            local target = _G.CurrentZTarget
+            local oldCF = root.CFrame
+            root.CFrame = target.CFrame * CFrame.new(0, 0, 1.5)
+            RunService.Heartbeat:Wait() -- 1 tick flicker
+            root.CFrame = oldCF
         end
-
-        self.Status = "Active: BALANCED GOD v6"
     end)
 end
 
-function GodMode:Destroy()
-    if self.Connection then
-        self.Connection:Disconnect()
-        self.Connection = nil
-    end
+function HitboxDesync:Start(character, root)
+    self.IsActive = true
+    self.LastRealCFrame = root.CFrame
     
-    pcall(function()
-        Workspace.FallenPartsDestroyHeight = -500 -- Restore default
-    end)
-
-    local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
-    if humanoid then
-        pcall(function()
-            humanoid.MaxHealth = 100
-            humanoid.Health = 100
-            humanoid.RequiresNeck = true
-            humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
-        end)
+    -- Visual Ghosting is handled by game engine displacement (Root is at -850, Visuals stay)
+    -- But to ensure visuals are 100% decoupled and smooth, we disable Touch/Query on physical body
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            pcall(function()
+                part.CanTouch = false
+                part.CanQuery = false
+            end)
+        end
     end
 end
 
-return GodMode
+function HitboxDesync:Stop()
+    self.IsActive = false
+    local root = self.LocalCharacter:GetRootPart()
+    if root and self.LastRealCFrame then
+        root.CFrame = self.LastRealCFrame
+    end
+    pcall(function() Workspace.FallenPartsDestroyHeight = -500 end)
+end
+
+function HitboxDesync:Destroy()
+    self:Stop()
+    if self.Connection then self.Connection:Disconnect() end
+    if self.DamageConnection then self.DamageConnection:Disconnect() end
+end
+
+return HitboxDesync
 ]====],
     ["Data/Version.lua"] = [====[return 130 -- Version 1.2.0 (Auto Update Runtime / Player Mobility Additions)
 ]====],
@@ -7748,6 +7744,43 @@ end
 
 return function(Window, Options)
     local Tab = Window:CreateTab("Blatant & Bypass", 4483362458)
+    local statusLabel = Tab:CreateLabel("Zenith Status: Idle")
+
+    Tab:CreateSection("Zenith Desync Architecture")
+
+    Tab:CreateToggle({
+        Name = "Zenith Desync (Soul Mode)",
+        CurrentValue = Options.ZenithDesyncEnabled,
+        Flag = "ZenithDesyncFlag",
+        Callback = function(Value)
+            Options.ZenithDesyncEnabled = Value
+            if Value then
+                Rayfield:Notify({
+                    Title = "Soul Separated",
+                    Content = "Your physical hitbox is now hidden. You are visually desynced.",
+                    Duration = 4,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Silent Damage Sync",
+        CurrentValue = Options.SilentDamageEnabled,
+        Flag = "SilentDamageFlag",
+        Callback = function(Value)
+            Options.SilentDamageEnabled = Value
+            if Value then
+                Rayfield:Notify({
+                    Title = "Combat Sync Active",
+                    Content = "Hitbox will flicker to targets for damage registration.",
+                    Duration = 3,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
 
     Tab:CreateSection("Client Masking")
 
@@ -7757,14 +7790,6 @@ return function(Window, Options)
         Flag = "SpeedSpoofFlag",
         Callback = function(Value)
             Options.SpeedSpoofEnabled = Value
-            if Value then
-                Rayfield:Notify({
-                    Title = "Bypass Active",
-                    Content = "Client-side WalkSpeed is now masked from server checks.",
-                    Duration = 3,
-                    Image = 4483362458,
-                })
-            end
         end,
     })
 
@@ -7963,16 +7988,16 @@ function Layout.Build(Tab, Options)
         end,
     })
 
+    Tab:CreateSection("Biological Preservation")
+
     Tab:CreateToggle({
-        Name = "God Mode (No Reset)",
-        CurrentValue = Options.GodModeEnabled,
-        Flag = "GodModeEnabledFlag",
+        Name = "Anti-Slowdown",
+        CurrentValue = Options.AntiSlowdownEnabled,
+        Flag = "AntiSlowdownFlag",
         Callback = function(Value)
-            Options.GodModeEnabled = Value
+            Options.AntiSlowdownEnabled = Value
         end,
     })
-
-    refs.godLabel = Tab:CreateLabel("God Mode Status: Idle")
 
     Tab:CreateSection("Custom")
 
@@ -8117,10 +8142,11 @@ function StatusLoop.Start(refs, deps, labelUtils)
                 end
             end
 
-            if deps.god then
-                local nextText = "God Mode Status: " .. tostring(deps.god.Status)
+            if deps.zenith then
+                local nextText = "Zenith Desync: " .. tostring(deps.zenith.Status)
                 if nextText ~= lastGodText then
-                    labelUtils.SetText(refs.godLabel, nextText)
+                    -- We don't have a label in Player tab anymore, 
+                    -- so we just track status or optionally update a global
                     lastGodText = nextText
                 end
             end
@@ -8673,7 +8699,7 @@ local movementSuite = {
     slow  = AntiSlowdown.new(Options, localCharacter, movementArbiter),
     stun  = AntiStun.new(Options, localCharacter),
     noclip = Noclip.new(Options, localCharacter),
-    god = GodMode.new(Options, localCharacter),
+    zenith = requireModule("Modules/Movement/HitboxDesync.lua").new(Options, localCharacter),
     clean = Cleaner.new(Options, localCharacter)
 }
 
