@@ -1,9 +1,10 @@
---[[
-    ===============================================================
-         Boss Aim Assist - Centralized Brain Orchestration v6       
-      Scientifically Reorganized | Fully Decoupled | Brain Driven  
-    ===============================================================
-]]
+-- ===============================================================
+--      Boss Aim Assist - Centralized Brain Orchestration v6       
+--   Scientifically Reorganized | Fully Decoupled | Brain Driven  
+-- ===============================================================
+
+local UPDATE_ENTRY_URL = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Core/Bundle.lua"
+local UPDATE_VERSION_URL = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Data/Version.lua"
 
 local BUNDLED_SOURCES = {
     ["Data/Config.lua"] = [====[--[[
@@ -172,9 +173,9 @@ end
 return Noclip
 ]====],
     ["Modules/Movement/GodMode.lua"] = [====[--[[
-    GodMode.lua - Biological Preservation Module (Ultimate Upgrade)
-    Job: Locking health, preventing Dead state, and preserving joints.
-    Logic: Disables the 'Dead' state and neck requirements to prevent BreakJoints success.
+    GodMode.lua - Biological Preservation Module (v4 Void Edition)
+    Job: Locking health at infinity, preventing Dead state, and reinforcing joints.
+    Logic: Uses math.huge and aggressive state resets to survive KillParts.
 ]]
 
 local RunService = game:GetService("RunService")
@@ -204,30 +205,42 @@ function GodMode:Init()
             return
         end
 
-        -- 1. Ultimate Health Lock (Prevent Zero-HP flags)
-        if humanoid.Health < 0.1 then
-            humanoid.Health = humanoid.MaxHealth
-        elseif humanoid.Health < humanoid.MaxHealth then
-            humanoid.Health = humanoid.MaxHealth
+        -- 1. Void Health Lock (Using extreme values)
+        humanoid.MaxHealth = 9e18 -- Set a massive MaxHealth
+        humanoid.Health = 9e18    -- Force Health to match
+        
+        -- Fallback check: if somehow it goes below 1, reset immediately
+        if humanoid.Health < 1 then
+            humanoid.Health = 9e18
         end
 
-        -- 2. Joint Preservation (Prevents dying from head-loss/BreakJoints)
-        if humanoid.RequiresNeck then
-            humanoid.RequiresNeck = false
+        -- 2. Physical Reinforcement (Joints)
+        humanoid.RequiresNeck = false
+        
+        local character = self.LocalCharacter:GetCharacter()
+        if character then
+            for _, part in ipairs(character:GetDescendants()) do
+                if part:IsA("Motor6D") or part:IsA("Weld") or part:IsA("ManualWeld") then
+                    -- Prevent joints from being disabled/broken
+                    if part.Enabled == false then
+                        part.Enabled = true
+                    end
+                end
+            end
         end
 
-        -- 3. State Lockdown (Disable Dead state)
+        -- 3. State Lockdown (Hard Lock)
         if humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead) then
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         end
         
-        -- 4. Force State Recovery (If server pushes a dead state)
+        -- 4. Force 'Physics' state to keep hitboxes active but alive
         local state = humanoid:GetState()
         if state == Enum.HumanoidStateType.Dead then
-            humanoid:ChangeState(Enum.HumanoidStateType.Physics) -- Alternative to None for better hit feedback
+            humanoid:ChangeState(Enum.HumanoidStateType.Physics)
         end
 
-        self.Status = "Active: ULTIMATE GOD MODE"
+        self.Status = "Active: VOID MODE v4"
     end)
 end
 
@@ -241,6 +254,8 @@ function GodMode:Destroy()
     local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
     if humanoid then
         pcall(function()
+            humanoid.MaxHealth = 100
+            humanoid.Health = 100
             humanoid.RequiresNeck = true
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
         end)
@@ -2611,12 +2626,13 @@ end
 return AntiSlowdown
 ]====],
     ["Modules/Movement/AntiStun.lua"] = [====[--[[
-    AntiStun.lua - Neurological Defense Module
+    AntiStun.lua - Neurological Defense Module (Bug Fixed)
     Job: Preventing character CC (Stun, Ragdoll, Sit, Fall).
     Status: Fully decoupled with active monitoring.
 ]]
 
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 local clock = os.clock
 
 local AntiStun = {}
@@ -2665,6 +2681,13 @@ end
 function AntiStun:Init()
     self.Connection = RunService.Heartbeat:Connect(function()
         local _, hum = self.LocalCharacter and self.LocalCharacter:GetState()
+        
+        -- PROACTIVE SCAN: If module says hum is missing, check the direct player object
+        if not hum then
+            local lp = Players.LocalPlayer
+            local char = lp.Character
+            hum = char and char:FindFirstChildOfClass("Humanoid")
+        end
 
         if not self.Options.NoStun then
             self:_setStatus("Disabled")
@@ -2742,6 +2765,7 @@ end
 
 return AntiStun
 ]====],
+
     ["Modules/Movement/AttributeCleaner.lua"] = [====[local RunService = game:GetService("RunService")
 
 local AttributeCleaner = {}
@@ -8656,7 +8680,9 @@ end
 
 local function performCleanup(fullSweep)
     pcall(function()
-        Rayfield:Destroy()
+        if Rayfield then
+            Rayfield:Destroy()
+        end
     end)
 
     for _, connection in ipairs(_conns) do

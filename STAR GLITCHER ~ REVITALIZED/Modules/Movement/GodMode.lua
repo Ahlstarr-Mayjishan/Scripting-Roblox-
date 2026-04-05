@@ -1,7 +1,7 @@
 --[[
-    GodMode.lua - Biological Preservation Module (Ultimate Upgrade)
-    Job: Locking health, preventing Dead state, and preserving joints.
-    Logic: Disables the 'Dead' state and neck requirements to prevent BreakJoints success.
+    GodMode.lua - Biological Preservation Module (v4 Void Edition)
+    Job: Locking health at infinity, preventing Dead state, and reinforcing joints.
+    Logic: Uses math.huge and aggressive state resets to survive KillParts.
 ]]
 
 local RunService = game:GetService("RunService")
@@ -31,30 +31,42 @@ function GodMode:Init()
             return
         end
 
-        -- 1. Ultimate Health Lock (Prevent Zero-HP flags)
-        if humanoid.Health < 0.1 then
-            humanoid.Health = humanoid.MaxHealth
-        elseif humanoid.Health < humanoid.MaxHealth then
-            humanoid.Health = humanoid.MaxHealth
+        -- 1. Void Health Lock (Using extreme values)
+        humanoid.MaxHealth = 9e18 -- Set a massive MaxHealth
+        humanoid.Health = 9e18    -- Force Health to match
+        
+        -- Fallback check: if somehow it goes below 1, reset immediately
+        if humanoid.Health < 1 then
+            humanoid.Health = 9e18
         end
 
-        -- 2. Joint Preservation (Prevents dying from head-loss/BreakJoints)
-        if humanoid.RequiresNeck then
-            humanoid.RequiresNeck = false
+        -- 2. Physical Reinforcement (Joints)
+        humanoid.RequiresNeck = false
+        
+        local character = self.LocalCharacter:GetCharacter()
+        if character then
+            for _, part in ipairs(character:GetDescendants()) do
+                if part:IsA("Motor6D") or part:IsA("Weld") or part:IsA("ManualWeld") then
+                    -- Prevent joints from being disabled/broken
+                    if part.Enabled == false then
+                        part.Enabled = true
+                    end
+                end
+            end
         end
 
-        -- 3. State Lockdown (Disable Dead state)
+        -- 3. State Lockdown (Hard Lock)
         if humanoid:GetStateEnabled(Enum.HumanoidStateType.Dead) then
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
         end
         
-        -- 4. Force State Recovery (If server pushes a dead state)
+        -- 4. Force 'Physics' state to keep hitboxes active but alive
         local state = humanoid:GetState()
         if state == Enum.HumanoidStateType.Dead then
-            humanoid:ChangeState(Enum.HumanoidStateType.Physics) -- Alternative to None for better hit feedback
+            humanoid:ChangeState(Enum.HumanoidStateType.Physics)
         end
 
-        self.Status = "Active: ULTIMATE GOD MODE"
+        self.Status = "Active: VOID MODE v4"
     end)
 end
 
@@ -68,6 +80,8 @@ function GodMode:Destroy()
     local humanoid = self.LocalCharacter and self.LocalCharacter:GetHumanoid()
     if humanoid then
         pcall(function()
+            humanoid.MaxHealth = 100
+            humanoid.Health = 100
             humanoid.RequiresNeck = true
             humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, true)
         end)

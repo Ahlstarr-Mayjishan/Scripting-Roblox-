@@ -1,10 +1,11 @@
 --[[
-    AntiStun.lua - Neurological Defense Module
+    AntiStun.lua - Neurological Defense Module (Bug Fixed)
     Job: Preventing character CC (Stun, Ragdoll, Sit, Fall).
     Status: Fully decoupled with active monitoring.
 ]]
 
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 local clock = os.clock
 
 local AntiStun = {}
@@ -53,6 +54,13 @@ end
 function AntiStun:Init()
     self.Connection = RunService.Heartbeat:Connect(function()
         local _, hum = self.LocalCharacter and self.LocalCharacter:GetState()
+        
+        -- PROACTIVE SCAN: If module says hum is missing, check the direct player object
+        if not hum then
+            local lp = Players.LocalPlayer
+            local char = lp.Character
+            hum = char and char:FindFirstChildOfClass("Humanoid")
+        end
 
         if not self.Options.NoStun then
             self:_setStatus("Disabled")
