@@ -39,6 +39,7 @@ Config.Options = {
     SpeedMultiplierEnabled = false,
     SpeedMultiplier = 1.0,
     SpeedSpoofEnabled = false,
+    RuntimeStatsDebug = false,
     AutoCleanEnabled = true,
     SmartCleanupEnabled = true,
     AutoUpdateEnabled = false,

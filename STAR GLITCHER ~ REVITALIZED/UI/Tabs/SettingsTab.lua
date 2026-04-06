@@ -3,7 +3,7 @@
     UI toggle key, config actions, and maintenance tools.
 ]]
 
-return function(Window, Options, cleaner, resourceManager)
+return function(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
     local Tab = Window:CreateTab("Settings", 4483362458)
     local controller = {
         Tab = Tab,
@@ -36,6 +36,9 @@ return function(Window, Options, cleaner, resourceManager)
 
     local cleanerLabel = Tab:CreateLabel("Cleanup Status: Idle")
     local resourceLabel = Tab:CreateLabel("Resource Manager: Idle")
+    local trackerLabel = Tab:CreateLabel("Tracker Entries: Hidden")
+    local schedulerLabel = Tab:CreateLabel("Task Scheduler: Hidden")
+    local resourcePendingLabel = Tab:CreateLabel("Resource Pending: Hidden")
 
     Tab:CreateToggle({
         Name = "Auto-Clean Debris",
@@ -52,6 +55,15 @@ return function(Window, Options, cleaner, resourceManager)
         Flag = "SmartCleanupEnabledFlag",
         Callback = function(Value)
             Options.SmartCleanupEnabled = Value
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Runtime Stats Debug",
+        CurrentValue = Options.RuntimeStatsDebug == true,
+        Flag = "RuntimeStatsDebugFlag",
+        Callback = function(Value)
+            Options.RuntimeStatsDebug = Value
         end,
     })
 
@@ -204,6 +216,9 @@ return function(Window, Options, cleaner, resourceManager)
     task.spawn(function()
         local lastCleanerText
         local lastResourceText
+        local lastTrackerText
+        local lastSchedulerText
+        local lastResourcePendingText
 
         while controller.Alive do
             if cleaner then
@@ -223,6 +238,32 @@ return function(Window, Options, cleaner, resourceManager)
                     lastResourceText = nextText
                 end
             end
+
+            local statsEnabled = Options.RuntimeStatsDebug == true
+            local trackerText = statsEnabled
+                and string.format("Tracker Entries: %d", tracker and tracker.GetEntryCount and tracker:GetEntryCount() or 0)
+                or "Tracker Entries: Hidden"
+            if trackerText ~= lastTrackerText then
+                setLabelText(trackerLabel, trackerText)
+                lastTrackerText = trackerText
+            end
+
+            local schedulerText = statsEnabled
+                and string.format("Task Scheduler: %d pending", taskScheduler and taskScheduler.GetPendingCount and taskScheduler:GetPendingCount() or 0)
+                or "Task Scheduler: Hidden"
+            if schedulerText ~= lastSchedulerText then
+                setLabelText(schedulerLabel, schedulerText)
+                lastSchedulerText = schedulerText
+            end
+
+            local resourcePendingText = statsEnabled
+                and string.format("Resource Pending: %d", resourceManager and resourceManager.GetPendingCount and resourceManager:GetPendingCount() or 0)
+                or "Resource Pending: Hidden"
+            if resourcePendingText ~= lastResourcePendingText then
+                setLabelText(resourcePendingLabel, resourcePendingText)
+                lastResourcePendingText = resourcePendingText
+            end
+
             task.wait(0.5)
         end
     end)

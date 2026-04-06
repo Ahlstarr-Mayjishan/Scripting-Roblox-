@@ -1,10 +1,9 @@
--- ===============================================================
---      Boss Aim Assist - Centralized Brain Orchestration v6       
---   Scientifically Reorganized | Fully Decoupled | Brain Driven  
--- ===============================================================
-
-local UPDATE_ENTRY_URL = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Core/Bundle.lua"
-local UPDATE_VERSION_URL = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Data/Version.lua"
+--[[
+    ===============================================================
+         Boss Aim Assist - Centralized Brain Orchestration v6       
+      Scientifically Reorganized | Fully Decoupled | Brain Driven  
+    ===============================================================
+]]
 
 local BUNDLED_SOURCES = {
     ["Data/Config.lua"] = [====[--[[
@@ -48,12 +47,14 @@ Config.Options = {
     SpeedMultiplierEnabled = false,
     SpeedMultiplier = 1.0,
     SpeedSpoofEnabled = false,
+    RuntimeStatsDebug = false,
     AutoCleanEnabled = true,
     SmartCleanupEnabled = true,
     AutoUpdateEnabled = false,
     AutoUpdateIntervalMinutes = 5,
     NoclipEnabled = false,
-    GodModeEnabled = false,
+    ZenithDesyncEnabled = false,
+    SilentDamageEnabled = false,
 }
 
 Config.Prediction = {
@@ -115,219 +116,6 @@ Config.Blacklist = {
 }
 
 return Config
-]====],
-    ["Modules/Movement/Noclip.lua"] = [====[--[[
-    Noclip.lua - Phase Shifting Module (Deep v6)
-    Job: Disabling physics collisions AND touch sensors.
-    Status: Active frame-by-frame override via Stepped.
-]]
-
-local RunService = game:GetService("RunService")
-
-local Noclip = {}
-Noclip.__index = Noclip
-
-function Noclip.new(options, localCharacter)
-    local self = setmetatable({}, Noclip)
-    self.Options = options
-    self.LocalCharacter = localCharacter
-    self.Connection = nil
-    self.Status = "Idle"
-    return self
-end
-
-function Noclip:Init()
-    self.Connection = RunService.Stepped:Connect(function()
-        if not self.Options.NoclipEnabled then
-            if self.Status ~= "Disabled" then
-                self.Status = "Disabled"
-            end
-            return
-        end
-
-        local character = self.LocalCharacter and self.LocalCharacter:GetCharacter()
-        local rootPart = self.LocalCharacter and self.LocalCharacter:GetRootPart()
-        
-        if not character then
-            self.Status = "Char Missing"
-            return
-        end
-
-        self.Status = "Active: DEEP PHASING"
-        
-        -- Override CanTouch/CanQuery for all descendants
-        for _, obj in ipairs(character:GetDescendants()) do
-            if obj:IsA("BasePart") then
-                if obj.CanCollide then
-                    obj.CanCollide = false
-                end
-                
-                -- NEW 2024/2025 Property
-                pcall(function()
-                    if obj.CanTouch then
-                        obj.CanTouch = false
-                    end
-                    if obj.CanQuery then
-                        obj.CanQuery = false
-                    end
-                end)
-            end
-        end
-
-        -- Explicitly lock RootPart to ensure zero collision window
-        if rootPart then
-            rootPart.CanCollide = false
-            pcall(function()
-                rootPart.CanTouch = false
-                rootPart.CanQuery = false
-            end)
-        end
-    end)
-end
-
-function Noclip:Destroy()
-    if self.Connection then
-        self.Connection:Disconnect()
-        self.Connection = nil
-    end
-end
-
-return Noclip
-]====],
-    ["Modules/Movement/HitboxDesync.lua"] = [====[--[[
-    HitboxDesync.lua - Zenith v3: The Nexus Proxy
-    ============================================
-    Architecture:
-      * Joint Decoupling: Removing connection between Hitbox and Body.
-      * Mirror Box: Local platform underground for Hitbox grounding.
-      * Nexus Sync: High-fidelity visual persistence (Uses Real Body).
-]]
-
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
-
-local HitboxDesync = {}
-HitboxDesync.__index = HitboxDesync
-
-function HitboxDesync.new(options, localCharacter)
-    local self = setmetatable({}, HitboxDesync)
-    self.Options = options
-    self.LocalCharacter = localCharacter
-    self.IsActive = false
-    self.Status = "Idle"
-    self.Connections = {}
-    self.SafePos = Vector3.new(-1000, -250, -1000)
-    self.NexusPos = Vector3.zero
-    self.NexusRot = 0
-    self.RootJoint = nil
-    self.JointParent = nil
-    self.MirrorBox = nil
-    return self
-end
-
-function HitboxDesync:_findRootJoint(char)
-    for _, p in ipairs(char:GetDescendants()) do
-        if p:IsA("Motor6D") and (p.Name == "Root" or p.Name == "RootJoint" or (p.Part0 and p.Part0.Name == "HumanoidRootPart")) then
-            return p
-        end
-    end
-    return nil
-end
-
-function HitboxDesync:_createMirrorBox()
-    if self.MirrorBox then self.MirrorBox:Destroy() end
-    local box = Instance.new("Part")
-    box.Size, box.CFrame, box.Transparency, box.Anchored = Vector3.new(10, 1, 10), CFrame.new(self.SafePos), 1, true
-    box.Parent = Workspace
-    self.MirrorBox = box
-end
-
-function HitboxDesync:Init()
-    local heartbeat = RunService.Heartbeat:Connect(function()
-        if not self.Options.ZenithDesyncEnabled then
-            if self.IsActive then self:Stop() end
-            self.Status = "Disabled"
-            return
-        end
-        local char, hum, root = self.LocalCharacter:GetState()
-        if not root or not hum then self.Status = "Body Missing" return end
-        if not self.IsActive then self:Start(char, root, hum) end
-
-        root.CFrame = CFrame.new(self.SafePos + Vector3.new(0, 3, 0))
-        root.AssemblyLinearVelocity = Vector3.zero
-        
-        if self.Options.SilentDamageEnabled and _G.CurrentZTarget then
-            local target = _G.CurrentZTarget
-            local oldCF = root.CFrame
-            root.CFrame = target.CFrame * CFrame.new(0, 0, 1.5)
-            RunService.Heartbeat:Wait()
-            root.CFrame = oldCF
-        end
-        self.Status = "ZENITH v3: NEXUS ACTIVE"
-    end)
-    
-    local renderConn = RunService.RenderStepped:Connect(function(dt)
-        if not self.IsActive then return end
-        local char, hum, root = self.LocalCharacter:GetState()
-        if not char or not hum then return end
-        local cam = Workspace.CurrentCamera
-        local moveVec = Vector3.zero
-        
-        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec = moveVec + cam.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec - cam.CFrame.LookVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec - cam.CFrame.RightVector end
-        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + cam.CFrame.RightVector end
-        
-        moveVec = Vector3.new(moveVec.X, 0, moveVec.Z)
-        if moveVec.Magnitude > 0 then
-            moveVec = moveVec.Unit
-            local speed = self.Options.CustomMoveSpeed or 16
-            self.NexusPos = self.NexusPos + (moveVec * speed * dt)
-            self.NexusRot = math.atan2(moveVec.X, moveVec.Z)
-            hum:Move(Vector3.new(0, 0, -1), true)
-        else
-            hum:Move(Vector3.zero)
-        end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then hum.Jump = true end
-
-        local torso = char:FindFirstChild("LowerTorso") or char:FindFirstChild("Torso")
-        if torso then
-            local nextCF = CFrame.new(self.NexusPos) * CFrame.Angles(0, self.NexusRot, 0)
-            torso.CFrame = nextCF
-        end
-    end)
-    table.insert(self.Connections, heartbeat)
-    table.insert(self.Connections, renderConn)
-end
-
-function HitboxDesync:Start(character, root, hum)
-    self.IsActive, self.NexusPos, self.NexusRot = true, root.Position, 0
-    local joint = self:_findRootJoint(character)
-    if joint then self.RootJoint, self.JointParent, joint.Parent = joint, joint.Parent, nil end
-    self:_createMirrorBox()
-    root.CFrame = CFrame.new(self.SafePos + Vector3.new(0, 3, 0))
-    root.Transparency = 1
-    root.Anchored = true
-    local torso = character:FindFirstChild("LowerTorso") or character:FindFirstChild("Torso")
-    if torso then pcall(function() Workspace.CurrentCamera.CameraSubject = torso end) end
-end
-
-function HitboxDesync:Stop()
-    self.IsActive = false
-    if self.RootJoint and self.JointParent then self.RootJoint.Parent = self.JointParent end
-    if self.MirrorBox then self.MirrorBox:Destroy() self.MirrorBox = nil end
-    local char, hum, root = self.LocalCharacter:GetState()
-    if root then 
-        root.Anchored = false
-        root.CFrame = CFrame.new(self.NexusPos) 
-    end
-    pcall(function() Workspace.CurrentCamera.CameraSubject = hum end)
-end
-
-function HitboxDesync:Destroy() self:Stop() for _, conn in ipairs(self.Connections) do conn:Disconnect() end end
-
-return HitboxDesync
 ]====],
     ["Data/Version.lua"] = [====[return 130 -- Version 1.2.0 (Auto Update Runtime / Player Mobility Additions)
 ]====],
@@ -399,8 +187,8 @@ function Aimbot:Update(targetPosition, smoothness)
     if targetPosition.X == targetPosition.X then
         local angleDot = math.clamp(camera.CFrame.LookVector:Dot(targetCFrame.LookVector), -1, 1)
         local angle = math.acos(angleDot)
-        local angleBoost = math.clamp(angle / math.rad(18), 0, 1) * 0.38
-        local alpha = math.clamp(baseAlpha + angleBoost, baseAlpha, 0.82)
+        local angleBoost = math.clamp(angle / math.rad(15), 0, 1) * 0.45
+        local alpha = math.clamp(baseAlpha + angleBoost, baseAlpha, 0.95)
         camera.CFrame = camera.CFrame:Lerp(targetCFrame, alpha)
     end
 end
@@ -1170,9 +958,9 @@ local ZERO = Vector3.zero
 
 function Stabilizer.new()
     local self = setmetatable({}, Stabilizer)
-    self.BaseSmoothing = 1.55
-    self.CatchupSmoothing = 5.2
-    self.SnapDistance = 4.75
+    self.BaseSmoothing = 2.45
+    self.CatchupSmoothing = 6.8
+    self.SnapDistance = 4.25
     self._lastTarget = ZERO
     return self
 end
@@ -2830,7 +2618,6 @@ end
 
 return AntiStun
 ]====],
-
     ["Modules/Movement/AttributeCleaner.lua"] = [====[local RunService = game:GetService("RunService")
 
 local AttributeCleaner = {}
@@ -3144,6 +2931,343 @@ function GravityController:Destroy()
 end
 
 return GravityController
+]====],
+    ["Modules/Movement/HitboxDesync.lua"] = [====[local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+
+local HitboxDesync = {}
+HitboxDesync.__index = HitboxDesync
+
+function HitboxDesync.new(options, localCharacter)
+    local self = setmetatable({}, HitboxDesync)
+    self.Options = options
+    self.LocalCharacter = localCharacter
+    self.IsActive = false
+    self.Status = "Idle"
+    self.Connections = {}
+    self.ActiveCharacter = nil
+    self.ActiveHumanoid = nil
+    self.ActiveRoot = nil
+    self.VisualRoot = nil
+    self.VisualParts = {}
+    self.VisualOffsets = {}
+    self.NexusPos = Vector3.zero
+    self.NexusRot = 0
+    self.RootJoint = nil
+    self.JointParent = nil
+    self.MirrorBox = nil
+    self.SafePos = Vector3.new(-1000, -250, -1000)
+    self.SafeCFrame = CFrame.new(self.SafePos + Vector3.new(0, 3, 0))
+    self.OriginalRootTransparency = 0
+    self.OriginalAutoRotate = true
+    self.OriginalCameraSubject = nil
+    self.FlickerUntil = 0
+    self.FlickerOffset = CFrame.new(0, 0, 1.5)
+    return self
+end
+
+function HitboxDesync:_findRootJoint(char)
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("Motor6D")
+            and (part.Name == "RootJoint" or part.Name == "Root")
+            and part.Part0
+            and part.Part0.Name == "HumanoidRootPart"
+            and part.Part1
+            and part.Part1.Name == "Torso"
+        then
+            return part
+        end
+    end
+    return nil
+end
+
+function HitboxDesync:_getVisualRoot(character)
+    return character:FindFirstChild("Torso")
+end
+
+function HitboxDesync:_captureVisualRig(character, visualRoot, root)
+    table.clear(self.VisualParts)
+    table.clear(self.VisualOffsets)
+
+    if not visualRoot then
+        return
+    end
+
+    for _, obj in ipairs(character:GetDescendants()) do
+        if obj:IsA("BasePart") and obj ~= root then
+            self.VisualParts[#self.VisualParts + 1] = obj
+            self.VisualOffsets[obj] = visualRoot.CFrame:ToObjectSpace(obj.CFrame)
+        end
+    end
+end
+
+function HitboxDesync:_createMirrorBox()
+    self:_destroyMirrorBox()
+
+    local box = Instance.new("Part")
+    box.Name = "Zenith_MirrorBox"
+    box.Size = Vector3.new(10, 1, 10)
+    box.CFrame = CFrame.new(self.SafePos)
+    box.Transparency = 1
+    box.Anchored = true
+    box.CanCollide = true
+    box.Parent = Workspace
+    self.MirrorBox = box
+end
+
+function HitboxDesync:_destroyMirrorBox()
+    if self.MirrorBox then
+        self.MirrorBox:Destroy()
+        self.MirrorBox = nil
+    end
+end
+
+function HitboxDesync:_clearRigState()
+    self.ActiveCharacter = nil
+    self.ActiveHumanoid = nil
+    self.ActiveRoot = nil
+    self.VisualRoot = nil
+    table.clear(self.VisualParts)
+    table.clear(self.VisualOffsets)
+    self.RootJoint = nil
+    self.JointParent = nil
+    self.OriginalCameraSubject = nil
+    self.FlickerUntil = 0
+end
+
+function HitboxDesync:_placeHitboxRoot(root)
+    local now = os.clock()
+    if self.Options.SilentDamageEnabled and self.FlickerUntil > now and _G.CurrentZTarget then
+        local target = _G.CurrentZTarget
+        if typeof(target) == "Instance" and target:IsA("BasePart") and target.Parent then
+            root.CFrame = target.CFrame * self.FlickerOffset
+            root.AssemblyLinearVelocity = Vector3.zero
+            return
+        end
+    end
+
+    root.CFrame = self.SafeCFrame
+    root.AssemblyLinearVelocity = Vector3.zero
+end
+
+function HitboxDesync:_applyVisualPose()
+    local visualRoot = self.VisualRoot
+    if not visualRoot or not visualRoot.Parent then
+        return false
+    end
+
+    local pose = CFrame.new(self.NexusPos) * CFrame.Angles(0, self.NexusRot, 0)
+    for _, part in ipairs(self.VisualParts) do
+        if part and part.Parent then
+            local offset = self.VisualOffsets[part]
+            if offset then
+                part.CFrame = pose * offset
+            end
+        end
+    end
+    return true
+end
+
+function HitboxDesync:_tickMovement(dt)
+    local character = self.ActiveCharacter
+    local hum = self.ActiveHumanoid
+    if not character or not hum or not self.VisualRoot or not self.VisualRoot.Parent then
+        self.Status = "Visual Root Missing"
+        return
+    end
+
+    local cam = Workspace.CurrentCamera
+    if not cam then
+        self.Status = "Camera Missing"
+        return
+    end
+
+    local moveVec = Vector3.zero
+    if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+        moveVec += cam.CFrame.LookVector
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+        moveVec -= cam.CFrame.LookVector
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+        moveVec -= cam.CFrame.RightVector
+    end
+    if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+        moveVec += cam.CFrame.RightVector
+    end
+
+    moveVec = Vector3.new(moveVec.X, 0, moveVec.Z)
+    if moveVec.Magnitude > 0 then
+        moveVec = moveVec.Unit
+        local speed = self.Options.CustomMoveSpeedEnabled and (self.Options.CustomMoveSpeed or 16) or 16
+        self.NexusPos += (moveVec * speed * dt)
+        self.NexusRot = math.atan2(moveVec.X, moveVec.Z)
+        hum:Move(moveVec, true)
+    else
+        hum:Move(Vector3.zero, true)
+    end
+
+    if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+        hum.Jump = true
+    end
+
+    if self:_applyVisualPose() then
+        self.Status = "Zenith Active"
+    else
+        self.Status = "Visual Sync Lost"
+    end
+end
+
+function HitboxDesync:Init()
+    local heartbeat = RunService.Heartbeat:Connect(function()
+        if not self.Options.ZenithDesyncEnabled then
+            if self.IsActive then
+                self:Stop()
+            end
+            self.Status = "Disabled"
+            return
+        end
+
+        local character, humanoid, root = self.LocalCharacter:GetState()
+        if not character or not humanoid or not root then
+            if self.IsActive then
+                self:Stop()
+            end
+            self.Status = "Body Missing"
+            return
+        end
+
+        if self.LocalCharacter and self.LocalCharacter.IsRespawning and self.LocalCharacter:IsRespawning() then
+            if self.IsActive then
+                self:Stop()
+            end
+            self.Status = "Respawn Grace"
+            return
+        end
+
+        if not self.IsActive or character ~= self.ActiveCharacter or root ~= self.ActiveRoot then
+            self:Start(character, root, humanoid)
+        end
+
+        if not self.IsActive then
+            self.Status = "Start Failed"
+            return
+        end
+
+        if self.Options.SilentDamageEnabled and _G.CurrentZTarget then
+            self.FlickerUntil = os.clock() + 0.06
+        end
+
+        root.Anchored = true
+        root.Transparency = 1
+        self:_placeHitboxRoot(root)
+    end)
+
+    local renderConn = RunService.RenderStepped:Connect(function(dt)
+        if not self.IsActive then
+            return
+        end
+        self:_tickMovement(dt)
+    end)
+
+    table.insert(self.Connections, heartbeat)
+    table.insert(self.Connections, renderConn)
+end
+
+function HitboxDesync:Start(character, root, hum)
+    if self.IsActive then
+        self:Stop()
+    end
+
+    local visualRoot = self:_getVisualRoot(character)
+    local joint = self:_findRootJoint(character)
+    if hum.RigType ~= Enum.HumanoidRigType.R6 then
+        self.Status = "R6 Only"
+        return
+    end
+
+    if not visualRoot then
+        self.Status = "R6 Torso Missing"
+        return
+    end
+
+    if not joint then
+        self.Status = "RootJoint Missing"
+        return
+    end
+
+    self.ActiveCharacter = character
+    self.ActiveHumanoid = hum
+    self.ActiveRoot = root
+    self.VisualRoot = visualRoot
+    self.NexusPos = visualRoot.Position
+    self.NexusRot = root.Orientation.Y * math.pi / 180
+    self.RootJoint = joint
+    self.JointParent = joint.Parent
+    self.OriginalRootTransparency = root.Transparency
+    self.OriginalAutoRotate = hum.AutoRotate
+    self.OriginalCameraSubject = Workspace.CurrentCamera and Workspace.CurrentCamera.CameraSubject or nil
+
+    self:_captureVisualRig(character, visualRoot, root)
+    self:_createMirrorBox()
+
+    joint.Parent = nil
+    root.Anchored = true
+    root.Transparency = 1
+    root.AssemblyLinearVelocity = Vector3.zero
+    hum.AutoRotate = false
+
+    self:_placeHitboxRoot(root)
+    self.IsActive = true
+
+    pcall(function()
+        Workspace.CurrentCamera.CameraSubject = visualRoot
+    end)
+end
+
+function HitboxDesync:Stop()
+    if self.RootJoint and self.JointParent then
+        self.RootJoint.Parent = self.JointParent
+    end
+
+    local character, hum, root = self.LocalCharacter:GetState()
+    local restoreRoot = root or self.ActiveRoot
+    local restoreHumanoid = hum or self.ActiveHumanoid
+
+    if restoreRoot then
+        restoreRoot.Anchored = false
+        restoreRoot.Transparency = self.OriginalRootTransparency or 0
+        restoreRoot.AssemblyLinearVelocity = Vector3.zero
+        restoreRoot.CFrame = CFrame.new(self.NexusPos) * CFrame.Angles(0, self.NexusRot, 0)
+    end
+
+    if restoreHumanoid then
+        restoreHumanoid.AutoRotate = self.OriginalAutoRotate
+    end
+
+    pcall(function()
+        local camera = Workspace.CurrentCamera
+        if camera then
+            camera.CameraSubject = self.OriginalCameraSubject or restoreHumanoid or camera.CameraSubject
+        end
+    end)
+
+    self:_destroyMirrorBox()
+    self:_clearRigState()
+    self.IsActive = false
+    self.Status = "Disabled"
+end
+
+function HitboxDesync:Destroy()
+    self:Stop()
+    for _, conn in ipairs(self.Connections) do
+        conn:Disconnect()
+    end
+    table.clear(self.Connections)
+end
+
+return HitboxDesync
 ]====],
     ["Modules/Movement/JumpBoost.lua"] = [====[local RunService = game:GetService("RunService")
 
@@ -3521,6 +3645,84 @@ function MovementArbiter:Destroy()
 end
 
 return MovementArbiter
+]====],
+    ["Modules/Movement/Noclip.lua"] = [====[--[[
+    Noclip.lua - Phase Shifting Module (Deep v6)
+    Job: Disabling physics collisions AND touch sensors.
+    Status: Active frame-by-frame override via Stepped.
+]]
+
+local RunService = game:GetService("RunService")
+
+local Noclip = {}
+Noclip.__index = Noclip
+
+function Noclip.new(options, localCharacter)
+    local self = setmetatable({}, Noclip)
+    self.Options = options
+    self.LocalCharacter = localCharacter
+    self.Connection = nil
+    self.Status = "Idle"
+    return self
+end
+
+function Noclip:Init()
+    self.Connection = RunService.Stepped:Connect(function()
+        if not self.Options.NoclipEnabled then
+            if self.Status ~= "Disabled" then
+                self.Status = "Disabled"
+            end
+            return
+        end
+
+        local character = self.LocalCharacter and self.LocalCharacter:GetCharacter()
+        local rootPart = self.LocalCharacter and self.LocalCharacter:GetRootPart()
+        
+        if not character then
+            self.Status = "Char Missing"
+            return
+        end
+
+        self.Status = "Active: DEEP PHASING"
+        
+        -- Override CanTouch/CanQuery for all descendants
+        for _, obj in ipairs(character:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                if obj.CanCollide then
+                    obj.CanCollide = false
+                end
+                
+                -- NEW 2024/2025 Property
+                pcall(function()
+                    if obj.CanTouch then
+                        obj.CanTouch = false
+                    end
+                    if obj.CanQuery then
+                        obj.CanQuery = false
+                    end
+                end)
+            end
+        end
+
+        -- Explicitly lock RootPart to ensure zero collision window
+        if rootPart then
+            rootPart.CanCollide = false
+            pcall(function()
+                rootPart.CanTouch = false
+                rootPart.CanQuery = false
+            end)
+        end
+    end)
+end
+
+function Noclip:Destroy()
+    if self.Connection then
+        self.Connection:Disconnect()
+        self.Connection = nil
+    end
+end
+
+return Noclip
 ]====],
     ["Modules/Movement/SpeedMultiplier.lua"] = [====[local RunService = game:GetService("RunService")
 
@@ -5439,14 +5641,22 @@ end
 function GarbageCollector:_processFullScan(batchSize)
     local totalQueued = 0
     local scanBatchSize = math.max(batchSize or self._scanBatchSize, 1)
+    local startTime = os.clock()
 
     while self._scanList do
         local queuedCount = 0
         local done = false
         queuedCount, done = self:_processScan(scanBatchSize)
         totalQueued = totalQueued + (queuedCount or 0)
+        
         if done then
             break
+        end
+
+        -- Time-slicing: yield to avoid freezing the main thread
+        if (os.clock() - startTime) >= 0.0022 then
+            task.wait()
+            startTime = os.clock() -- Reset timer after yield
         end
     end
 
@@ -5501,9 +5711,12 @@ function GarbageCollector:_stepCleanup()
 
     local scanMultiplier = 1
     local destroyMultiplier = 1
-    if localPressure >= 500 then
-        scanMultiplier = 2.2
-        destroyMultiplier = 2
+    if localPressure >= 1000 then
+        scanMultiplier = 1.0
+        destroyMultiplier = 6.0
+    elseif localPressure >= 500 then
+        scanMultiplier = 1.5
+        destroyMultiplier = 3.0
     elseif localPressure >= 200 then
         scanMultiplier = 1.7
         destroyMultiplier = 1.5
@@ -5539,7 +5752,11 @@ function GarbageCollector:_stepCleanup()
     local queuedCount = 0
     local scanDone = true
     if self._scanList then
-        queuedCount, scanDone = self:_processScan(scanBatchSize)
+        if self._queueSize < 1500 then
+            queuedCount, scanDone = self:_processScan(scanBatchSize)
+        else
+            scanDone = false
+        end
     end
 
     local destroyed, deferred = self:_drainQueue(destroyBudget, gcStepSize, false)
@@ -5994,16 +6211,18 @@ function NPCTracker.new(config, detector, taskScheduler)
     self._lastScan = 0
     self._scanInterval = 0.1 -- Scan every 100ms instead of every frame
     self._cachedTargets = {}
+    self._cacheDirty = true
     self._folderRefs = {}
     self._lastFolderRefresh = 0
     self._folderRefreshInterval = 2
-    self._lastStaleSweep = 0
     self._staleSweepInterval = 3
     self._entryExpiry = 18
     self._deadEntryExpiry = 6
     self._maxEntries = 180
     self._bossRefreshInterval = 8
     self._schedulerAlive = false
+    self._staleSweepScheduled = false
+    self._staleSweepGeneration = 0
 
     for i, keyword in ipairs(self.Blacklist) do
         self._blacklistLower[i] = string.lower(keyword)
@@ -6014,6 +6233,7 @@ end
 
 function NPCTracker:Init()
     self._schedulerAlive = true
+    self._cacheDirty = true
     self:_refreshFolderRefs()
     self:_queueStaleSweep()
 end
@@ -6053,6 +6273,7 @@ function NPCTracker:_refreshFolderRefs()
     for i = 1, #self._folders do
         self._folderRefs[i] = Workspace:FindFirstChild(self._folders[i])
     end
+    self._cacheDirty = true
 end
 
 function NPCTracker:_queueFolderRefresh()
@@ -6070,20 +6291,30 @@ function NPCTracker:_queueFolderRefresh()
 end
 
 function NPCTracker:_queueStaleSweep()
-    if not self.TaskScheduler or not self._schedulerAlive then
+    if not self.TaskScheduler or not self._schedulerAlive or self._staleSweepScheduled then
         return
     end
 
+    self._staleSweepScheduled = true
+    self._staleSweepGeneration = self._staleSweepGeneration + 1
+    local generation = self._staleSweepGeneration
     local selfRef = self
     self.TaskScheduler:Enqueue(function()
         if not selfRef._schedulerAlive then
+            selfRef._staleSweepScheduled = false
+            return
+        end
+
+        if generation ~= selfRef._staleSweepGeneration then
+            selfRef._staleSweepScheduled = false
             return
         end
 
         selfRef:Prune(os.clock())
+        selfRef._staleSweepScheduled = false
 
         task.delay(selfRef._staleSweepInterval, function()
-            if selfRef._schedulerAlive then
+            if selfRef._schedulerAlive and generation == selfRef._staleSweepGeneration then
                 selfRef:_queueStaleSweep()
             end
         end)
@@ -6153,11 +6384,11 @@ end
 
 function NPCTracker:GetTargets()
     local now = os.clock()
-    
-    if (now - self._lastScan) < self._scanInterval then
+
+    if not self._cacheDirty and (now - self._lastScan) < self._scanInterval then
         return self._cachedTargets
     end
-    
+
     self._lastScan = now
     local result = self._cachedTargets
     table.clear(result)
@@ -6166,11 +6397,6 @@ function NPCTracker:GetTargets()
     if (now - self._lastFolderRefresh) >= self._folderRefreshInterval then
         self._lastFolderRefresh = now
         self:_queueFolderRefresh()
-    end
-
-    if (now - self._lastStaleSweep) >= self._staleSweepInterval then
-        self._lastStaleSweep = now
-        self:_queueStaleSweep()
     end
 
     local function trackModel(model)
@@ -6231,7 +6457,8 @@ function NPCTracker:GetTargets()
             end
         end
     end
-    
+
+    self._cacheDirty = false
     return result
 end
 
@@ -6292,14 +6519,26 @@ function NPCTracker:GetTargetPart(entry)
     return resolvedPart
 end
 
+function NPCTracker:GetEntryCount()
+    local count = 0
+    for _ in pairs(self._entries) do
+        count = count + 1
+    end
+    return count
+end
+
 function NPCTracker:ClearCache()
     table.clear(self._entries)
     table.clear(self._cachedTargets)
     self.CurrentTargetEntry = nil
+    self._cacheDirty = true
+    self._lastScan = 0
 end
 
 function NPCTracker:Destroy()
     self._schedulerAlive = false
+    self._staleSweepScheduled = false
+    self._staleSweepGeneration = self._staleSweepGeneration + 1
     self:ClearCache()
 end
 
@@ -6495,8 +6734,28 @@ function ResourceManager:_step(dt)
     local budget = self:_getBudget(dt)
     local startTime = os.clock()
     local processed = 0
+    local pendingCount = self:GetPendingCount()
+    
+    local minProcess = 0
+    if pendingCount >= 1500 then
+        minProcess = 50
+    elseif pendingCount >= 500 then
+        minProcess = 15
+    end
 
-    while self:GetPendingCount() > 0 and (os.clock() - startTime) < budget do
+    local iterations = 0
+    local maxIterations = math.max(minProcess, 150)
+
+    while self:GetPendingCount() > 0 do
+        iterations = iterations + 1
+        if iterations > maxIterations then
+            break
+        end
+
+        if (os.clock() - startTime) >= budget and processed >= minProcess then
+            break
+        end
+
         local job = self:_popJob()
         if not job then
             break
@@ -6774,7 +7033,19 @@ function TaskScheduler:_step(dt)
     local budget = self:_getBudget(dt)
     local processed = 0
 
-    while self:GetPendingCount() > 0 and (os.clock() - startTime) < budget do
+    local iterations = 0
+    local maxIterations = 100
+
+    while self:GetPendingCount() > 0 do
+        iterations = iterations + 1
+        if iterations > maxIterations then
+            break
+        end
+
+        if (os.clock() - startTime) >= budget then
+            break
+        end
+
         local job = self:_pop()
         if not job then
             break
@@ -7834,7 +8105,7 @@ function Controller.new(layout, statusLoop, labelUtils)
     return self
 end
 
-function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, god)
+function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, zenith)
     local Tab = Window:CreateTab("Player", 4483362458)
     local refs = self.Layout.Build(Tab, Options)
 
@@ -7850,7 +8121,7 @@ function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, 
         floatController = floatController,
         jumpBoost = jumpBoost,
         noclip = noclip,
-        god = god,
+        zenith = zenith,
     }, self.LabelUtils)
 
     return Tab
@@ -7956,6 +8227,8 @@ function Layout.Build(Tab, Options)
     
     refs.noclipLabel = Tab:CreateLabel("Noclip Status: Idle")
 
+    refs.zenithLabel = Tab:CreateLabel("Zenith Desync: Idle")
+
     Tab:CreateToggle({
         Name = "Float",
         CurrentValue = Options.FloatEnabled,
@@ -8006,17 +8279,6 @@ function Layout.Build(Tab, Options)
         Flag = "NoDelayFlag",
         Callback = function(Value)
             Options.NoDelay = Value
-        end,
-    })
-
-    Tab:CreateSection("Biological Preservation")
-
-    Tab:CreateToggle({
-        Name = "Anti-Slowdown",
-        CurrentValue = Options.AntiSlowdownEnabled,
-        Flag = "AntiSlowdownFlag",
-        Callback = function(Value)
-            Options.AntiSlowdownEnabled = Value
         end,
     })
 
@@ -8166,8 +8428,7 @@ function StatusLoop.Start(refs, deps, labelUtils)
             if deps.zenith then
                 local nextText = "Zenith Desync: " .. tostring(deps.zenith.Status)
                 if nextText ~= lastGodText then
-                    -- We don't have a label in Player tab anymore, 
-                    -- so we just track status or optionally update a global
+                    labelUtils.SetText(refs.zenithLabel, nextText)
                     lastGodText = nextText
                 end
             end
@@ -8190,9 +8451,9 @@ return StatusLoop
     Job: Delegate Player tab construction to an injected controller.
 ]]
 
-return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, god, controller)
+return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, zenith, controller)
     if controller and controller.Build then
-        return controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, god)
+        return controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, zenith)
     end
 
     error("PlayerTab controller was not provided", 2)
@@ -8289,7 +8550,7 @@ end
     UI toggle key, config actions, and maintenance tools.
 ]]
 
-return function(Window, Options, cleaner, resourceManager)
+return function(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
     local Tab = Window:CreateTab("Settings", 4483362458)
     local controller = {
         Tab = Tab,
@@ -8322,6 +8583,9 @@ return function(Window, Options, cleaner, resourceManager)
 
     local cleanerLabel = Tab:CreateLabel("Cleanup Status: Idle")
     local resourceLabel = Tab:CreateLabel("Resource Manager: Idle")
+    local trackerLabel = Tab:CreateLabel("Tracker Entries: Hidden")
+    local schedulerLabel = Tab:CreateLabel("Task Scheduler: Hidden")
+    local resourcePendingLabel = Tab:CreateLabel("Resource Pending: Hidden")
 
     Tab:CreateToggle({
         Name = "Auto-Clean Debris",
@@ -8338,6 +8602,15 @@ return function(Window, Options, cleaner, resourceManager)
         Flag = "SmartCleanupEnabledFlag",
         Callback = function(Value)
             Options.SmartCleanupEnabled = Value
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Runtime Stats Debug",
+        CurrentValue = Options.RuntimeStatsDebug == true,
+        Flag = "RuntimeStatsDebugFlag",
+        Callback = function(Value)
+            Options.RuntimeStatsDebug = Value
         end,
     })
 
@@ -8490,6 +8763,9 @@ return function(Window, Options, cleaner, resourceManager)
     task.spawn(function()
         local lastCleanerText
         local lastResourceText
+        local lastTrackerText
+        local lastSchedulerText
+        local lastResourcePendingText
 
         while controller.Alive do
             if cleaner then
@@ -8509,6 +8785,32 @@ return function(Window, Options, cleaner, resourceManager)
                     lastResourceText = nextText
                 end
             end
+
+            local statsEnabled = Options.RuntimeStatsDebug == true
+            local trackerText = statsEnabled
+                and string.format("Tracker Entries: %d", tracker and tracker.GetEntryCount and tracker:GetEntryCount() or 0)
+                or "Tracker Entries: Hidden"
+            if trackerText ~= lastTrackerText then
+                setLabelText(trackerLabel, trackerText)
+                lastTrackerText = trackerText
+            end
+
+            local schedulerText = statsEnabled
+                and string.format("Task Scheduler: %d pending", taskScheduler and taskScheduler.GetPendingCount and taskScheduler:GetPendingCount() or 0)
+                or "Task Scheduler: Hidden"
+            if schedulerText ~= lastSchedulerText then
+                setLabelText(schedulerLabel, schedulerText)
+                lastSchedulerText = schedulerText
+            end
+
+            local resourcePendingText = statsEnabled
+                and string.format("Resource Pending: %d", resourceManager and resourceManager.GetPendingCount and resourceManager:GetPendingCount() or 0)
+                or "Resource Pending: Hidden"
+            if resourcePendingText ~= lastResourcePendingText then
+                setLabelText(resourcePendingLabel, resourcePendingText)
+                lastResourcePendingText = resourcePendingText
+            end
+
             task.wait(0.5)
         end
     end)
@@ -8720,7 +9022,7 @@ local movementSuite = {
     slow  = AntiSlowdown.new(Options, localCharacter, movementArbiter),
     stun  = AntiStun.new(Options, localCharacter),
     noclip = Noclip.new(Options, localCharacter),
-    zenith = requireModule("Modules/Movement/HitboxDesync.lua").new(Options, localCharacter),
+    zenith = HitboxDesync.new(Options, localCharacter),
     clean = Cleaner.new(Options, localCharacter)
 }
 
@@ -8744,26 +9046,13 @@ silentAim:Init()
 dataPruner:Init()
 resourceManager:Init()
 cleaner:Init()
-
-    -- ===================================================
-    -- MAIN ORCHESTRATION LOOP (Brain Powered)
-    -- ===================================================
-    task.spawn(function()
-        while true do
-            local targetObj = selector:GetTarget()
-            _G.CurrentZTarget = targetObj and targetObj.Instance and targetObj.Instance:FindFirstChild("HumanoidRootPart")
-            
-            task.wait(0.05)
-        end
-    end)
-
-    for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
+for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
-requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.god, playerTabController)
+requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, playerTabController)
 requireModule("UI/Tabs/BlatantTab.lua")(Window, Options)
-local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager)
+local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
 
 local loadConfigOk, loadConfigErr = RayfieldUI.SafeLoadConfiguration(Rayfield)
 if not loadConfigOk then
@@ -8788,9 +9077,7 @@ end
 
 local function performCleanup(fullSweep)
     pcall(function()
-        if Rayfield then
-            Rayfield:Destroy()
-        end
+        Rayfield:Destroy()
     end)
 
     for _, connection in ipairs(_conns) do

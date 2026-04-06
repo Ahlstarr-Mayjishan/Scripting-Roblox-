@@ -26,16 +26,18 @@ function NPCTracker.new(config, detector, taskScheduler)
     self._lastScan = 0
     self._scanInterval = 0.1 -- Scan every 100ms instead of every frame
     self._cachedTargets = {}
+    self._cacheDirty = true
     self._folderRefs = {}
     self._lastFolderRefresh = 0
     self._folderRefreshInterval = 2
-    self._lastStaleSweep = 0
     self._staleSweepInterval = 3
     self._entryExpiry = 18
     self._deadEntryExpiry = 6
     self._maxEntries = 180
     self._bossRefreshInterval = 8
     self._schedulerAlive = false
+    self._staleSweepScheduled = false
+    self._staleSweepGeneration = 0
 
     for i, keyword in ipairs(self.Blacklist) do
         self._blacklistLower[i] = string.lower(keyword)
@@ -46,6 +48,7 @@ end
 
 function NPCTracker:Init()
     self._schedulerAlive = true
+    self._cacheDirty = true
     self:_refreshFolderRefs()
     self:_queueStaleSweep()
 end
@@ -85,6 +88,7 @@ function NPCTracker:_refreshFolderRefs()
     for i = 1, #self._folders do
         self._folderRefs[i] = Workspace:FindFirstChild(self._folders[i])
     end
+    self._cacheDirty = true
 end
 
 function NPCTracker:_queueFolderRefresh()
@@ -102,20 +106,30 @@ function NPCTracker:_queueFolderRefresh()
 end
 
 function NPCTracker:_queueStaleSweep()
-    if not self.TaskScheduler or not self._schedulerAlive then
+    if not self.TaskScheduler or not self._schedulerAlive or self._staleSweepScheduled then
         return
     end
 
+    self._staleSweepScheduled = true
+    self._staleSweepGeneration = self._staleSweepGeneration + 1
+    local generation = self._staleSweepGeneration
     local selfRef = self
     self.TaskScheduler:Enqueue(function()
         if not selfRef._schedulerAlive then
+            selfRef._staleSweepScheduled = false
+            return
+        end
+
+        if generation ~= selfRef._staleSweepGeneration then
+            selfRef._staleSweepScheduled = false
             return
         end
 
         selfRef:Prune(os.clock())
+        selfRef._staleSweepScheduled = false
 
         task.delay(selfRef._staleSweepInterval, function()
-            if selfRef._schedulerAlive then
+            if selfRef._schedulerAlive and generation == selfRef._staleSweepGeneration then
                 selfRef:_queueStaleSweep()
             end
         end)
@@ -185,7 +199,11 @@ end
 
 function NPCTracker:GetTargets()
     local now = os.clock()
-    
+
+    if not self._cacheDirty and (now - self._lastScan) < self._scanInterval then
+        return self._cachedTargets
+    end
+
     self._lastScan = now
     local result = self._cachedTargets
     table.clear(result)
@@ -194,11 +212,6 @@ function NPCTracker:GetTargets()
     if (now - self._lastFolderRefresh) >= self._folderRefreshInterval then
         self._lastFolderRefresh = now
         self:_queueFolderRefresh()
-    end
-
-    if (now - self._lastStaleSweep) >= self._staleSweepInterval then
-        self._lastStaleSweep = now
-        self:_queueStaleSweep()
     end
 
     local function trackModel(model)
@@ -259,7 +272,8 @@ function NPCTracker:GetTargets()
             end
         end
     end
-    
+
+    self._cacheDirty = false
     return result
 end
 
@@ -320,14 +334,26 @@ function NPCTracker:GetTargetPart(entry)
     return resolvedPart
 end
 
+function NPCTracker:GetEntryCount()
+    local count = 0
+    for _ in pairs(self._entries) do
+        count = count + 1
+    end
+    return count
+end
+
 function NPCTracker:ClearCache()
     table.clear(self._entries)
     table.clear(self._cachedTargets)
     self.CurrentTargetEntry = nil
+    self._cacheDirty = true
+    self._lastScan = 0
 end
 
 function NPCTracker:Destroy()
     self._schedulerAlive = false
+    self._staleSweepScheduled = false
+    self._staleSweepGeneration = self._staleSweepGeneration + 1
     self:ClearCache()
 end
 
