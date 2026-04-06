@@ -25,10 +25,11 @@ local function setLabelText(label, text)
     end
 end
 
-return function(Window, Options, killPartBypass)
+return function(Window, Options, killPartBypass, proactiveEvade)
     local Tab = Window:CreateTab("Blatant & Bypass", 4483362458)
     local statusLabel = Tab:CreateLabel("Zenith Status: Idle")
     local killPartLabel = Tab:CreateLabel("Kill Part Bypass: Idle")
+    local proactiveEvadeLabel = Tab:CreateLabel("Proactive Evade: Idle")
 
     Tab:CreateSection("Zenith Desync Architecture")
 
@@ -94,14 +95,66 @@ return function(Window, Options, killPartBypass)
         end,
     })
 
+    Tab:CreateSection("Auto Evasion")
+
+    Tab:CreateToggle({
+        Name = "Proactive Evade",
+        CurrentValue = Options.ProactiveEvadeEnabled,
+        Flag = "ProactiveEvadeFlag",
+        Callback = function(Value)
+            Options.ProactiveEvadeEnabled = Value
+            if Value then
+                Rayfield:Notify({
+                    Title = "Proactive Evade Active",
+                    Content = "Your character will sidestep automatically without needing target detection.",
+                    Duration = 3,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Evade Stride",
+        Range = {2, 8},
+        Increment = 0.25,
+        Suffix = "studs",
+        CurrentValue = tonumber(Options.ProactiveEvadeStride) or 4.5,
+        Flag = "ProactiveEvadeStrideFlag",
+        Callback = function(Value)
+            Options.ProactiveEvadeStride = tonumber(Value) or 4.5
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Evade Interval",
+        Range = {0.2, 1.2},
+        Increment = 0.05,
+        Suffix = "s",
+        CurrentValue = tonumber(Options.ProactiveEvadeInterval) or 0.42,
+        Flag = "ProactiveEvadeIntervalFlag",
+        Callback = function(Value)
+            Options.ProactiveEvadeInterval = tonumber(Value) or 0.42
+        end,
+    })
+
     task.spawn(function()
         local lastKillPartText = nil
+        local lastProactiveText = nil
         while task.wait(0.2) do
             if killPartBypass then
                 local nextText = "Kill Part Bypass: " .. tostring(killPartBypass.Status or "Idle")
                 if nextText ~= lastKillPartText then
                     lastKillPartText = nextText
                     setLabelText(killPartLabel, nextText)
+                end
+            end
+
+            if proactiveEvade then
+                local nextText = "Proactive Evade: " .. tostring(proactiveEvade.Status or "Idle")
+                if nextText ~= lastProactiveText then
+                    lastProactiveText = nextText
+                    setLabelText(proactiveEvadeLabel, nextText)
                 end
             end
         end

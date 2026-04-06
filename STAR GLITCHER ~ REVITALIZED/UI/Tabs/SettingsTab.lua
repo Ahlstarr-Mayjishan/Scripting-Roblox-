@@ -76,6 +76,15 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
         end,
     })
 
+    Tab:CreateToggle({
+        Name = "Rejoin on Kick",
+        CurrentValue = Options.RejoinOnKickEnabled == true,
+        Flag = "RejoinOnKickEnabledFlag",
+        Callback = function(Value)
+            Options.RejoinOnKickEnabled = Value
+        end,
+    })
+
     Tab:CreateButton({
         Name = "Clean Memory & Debris Now",
         Callback = function()
