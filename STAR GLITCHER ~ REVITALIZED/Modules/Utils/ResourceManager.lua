@@ -1,289 +1,114 @@
-local RunService = game:GetService("RunService")
+--[[
+    ResourceManager.lua - Optimized Module Loader with Cache & Local Override
+    Handles fetching, caching, and version verification of modules.
+]]
 
 local ResourceManager = {}
 ResourceManager.__index = ResourceManager
 
-local DEFAULT_FRAME_BUDGET = 0.0008
-local DEFAULT_GC_STEP = 16
-local COMPACT_THRESHOLD = 256
+local HttpService = game:GetService("HttpService")
+local CACHE_PATH = ".star_glitcher_cache/"
+local LOCAL_PATH_KEY = "BossAimAssist_LocalPath"
 
-function ResourceManager.new(options)
+function ResourceManager.new(options, githubBase, manifest)
     local self = setmetatable({}, ResourceManager)
     self.Options = options
-    self.Status = "Idle"
-    self.Connection = nil
-    self._trackedConnections = {}
-    self._trackedObjects = {}
-    self._cleanupQueue = {}
-    self._queueHead = 1
-    self._queueTail = 0
-    self._frameBudget = DEFAULT_FRAME_BUDGET
-    self._gcStep = DEFAULT_GC_STEP
-    self._manualBoostUntil = 0
-    self._lastHitch = 0
+    self.GithubBase = githubBase
+    self.Manifest = manifest
+    self.Cache = {} -- Runtime cache
+    self.SessionID = tostring(os.time())
+    
+    -- Ensure cache directory exists if possible
+    if makefolder then
+        pcall(makefolder, CACHE_PATH)
+    end
+    
     return self
 end
 
-function ResourceManager:_compactQueue()
-    if self._queueHead <= 1 then
-        return
-    end
-
-    local pending = self:GetPendingCount()
-    if pending <= 0 then
-        self._queueHead = 1
-        self._queueTail = 0
-        return
-    end
-
-    local compacted = table.create and table.create(pending) or {}
-    local nextIndex = 1
-    for i = self._queueHead, self._queueTail do
-        local job = self._cleanupQueue[i]
-        if job ~= nil then
-            compacted[nextIndex] = job
-            nextIndex = nextIndex + 1
+function ResourceManager:GetSource(path)
+    -- 1. Check Local Workspace (Developer Mode)
+    if _G[LOCAL_PATH_KEY] then
+        local fullPath = _G[LOCAL_PATH_KEY] .. path
+        if readfile then
+            local ok, content = pcall(readfile, fullPath)
+            if ok and content then
+                -- print("[Resource] Loaded local: " .. path)
+                return content, "local"
+            end
         end
     end
 
-    self._cleanupQueue = compacted
-    self._queueHead = 1
-    self._queueTail = nextIndex - 1
-end
-
-function ResourceManager:_maybeCompactQueue()
-    if self._queueHead > COMPACT_THRESHOLD and self._queueHead > (self._queueTail * 0.5) then
-        self:_compactQueue()
-    end
-end
-
-function ResourceManager:_pushJob(kind, payload)
-    self._queueTail = self._queueTail + 1
-    self._cleanupQueue[self._queueTail] = {
-        Kind = kind,
-        Payload = payload,
-    }
-end
-
-function ResourceManager:_popJob()
-    if self._queueHead > self._queueTail then
-        return nil
-    end
-
-    local job = self._cleanupQueue[self._queueHead]
-    self._cleanupQueue[self._queueHead] = nil
-    self._queueHead = self._queueHead + 1
-
-    if self._queueHead > self._queueTail then
-        self._queueHead = 1
-        self._queueTail = 0
-    end
-
-    return job
-end
-
-function ResourceManager:GetPendingCount()
-    return math.max(0, self._queueTail - self._queueHead + 1)
-end
-
-function ResourceManager:TrackConnection(connection)
-    if connection then
-        self._trackedConnections[#self._trackedConnections + 1] = connection
-    end
-    return connection
-end
-
-function ResourceManager:TrackObject(object)
-    if object then
-        self._trackedObjects[#self._trackedObjects + 1] = object
-    end
-    return object
-end
-
-function ResourceManager:DeferDestroy(object)
-    if object then
-        self:_pushJob("destroy", object)
-    end
-end
-
-function ResourceManager:DeferDisconnect(connection)
-    if connection then
-        self:_pushJob("disconnect", connection)
-    end
-end
-
-function ResourceManager:DeferCleanup(callback)
-    if callback then
-        self:_pushJob("callback", callback)
-    end
-end
-
-function ResourceManager:_getBudget(dt)
-    local budget = self._frameBudget
-    local now = os.clock()
-    local boosted = now < self._manualBoostUntil
-    local pending = self:GetPendingCount()
-
-    if boosted then
-        budget = budget * 1.6
-    end
-
-    if pending >= 400 then
-        budget = budget * 4
-    elseif pending >= 150 then
-        budget = budget * 2.5
-    elseif pending >= 50 then
-        budget = budget * 1.6
-    end
-
-    if dt and dt > (1 / 35) then
-        self._lastHitch = now
-        budget = budget * 0.45
-    elseif (now - self._lastHitch) < 0.75 then
-        budget = budget * 0.7
-    end
-
-    return budget
-end
-
-function ResourceManager:_runJob(job)
-    if not job then
-        return false
-    end
-
-    if job.Kind == "destroy" then
-        local object = job.Payload
-        if object and object.Destroy then
-            pcall(function()
-                object:Destroy()
-            end)
-        elseif object and object.Parent then
-            pcall(function()
-                object:Destroy()
-            end)
-        end
-        return true
-    end
-
-    if job.Kind == "disconnect" then
-        local connection = job.Payload
-        if connection then
-            pcall(function()
-                connection:Disconnect()
-            end)
-        end
-        return true
-    end
-
-    if job.Kind == "callback" then
-        pcall(job.Payload)
-        return true
-    end
-
-    return false
-end
-
-function ResourceManager:_step(dt)
-    local budget = self:_getBudget(dt)
-    local startTime = os.clock()
-    local processed = 0
-    local pendingCount = self:GetPendingCount()
+    -- 2. Check Cache with Version Verification
+    local cachedFile = CACHE_PATH .. path:gsub("/", "_")
+    local fileManifest = self.Manifest.Files[path]
+    local targetVersion = fileManifest and fileManifest.Version or 0
     
-    local minProcess = 0
-    if pendingCount >= 1500 then
-        minProcess = 50
-    elseif pendingCount >= 500 then
-        minProcess = 15
-    end
-
-    local iterations = 0
-    local maxIterations = math.max(minProcess, 150)
-
-    while self:GetPendingCount() > 0 do
-        iterations = iterations + 1
-        if iterations > maxIterations then
-            break
-        end
-
-        if (os.clock() - startTime) >= budget and processed >= minProcess then
-            break
-        end
-
-        local job = self:_popJob()
-        if not job then
-            break
-        end
-        if self:_runJob(job) then
-            processed = processed + 1
+    if readfile and isfile and isfile(cachedFile) then
+        local ok, content = pcall(readfile, cachedFile)
+        if ok and content then
+            -- Verify version (Stored at top of file as comment or separate meta file)
+            local cachedVersion = content:match("-- @version%s+(%d+)")
+            if tonumber(cachedVersion) == targetVersion then
+                -- print("[Resource] Loaded from cache: " .. path)
+                return content, "cache"
+            end
         end
     end
 
-    if processed > 0 then
-        -- collectgarbage("step", self._gcStep) -- Restricted in some environments
+    -- 3. Remote Fetch from GitHub
+    local url = self.GithubBase .. path .. "?v=" .. self.SessionID
+    local lastError = nil
+    
+    for attempt = 1, 3 do
+        local ok, content = pcall(game.HttpGet, game, url)
+        if ok and content and content ~= "404: Not Found" then
+            -- Inject version metadata for next cache hit
+            local versionHeader = "-- @version " .. targetVersion .. "\n"
+            local processedContent = versionHeader .. content
+            
+            -- Save to cache
+            if writefolder and writefile then
+                pcall(function()
+                    local dir = CACHE_PATH
+                    writefile(cachedFile, processedContent)
+                end)
+            end
+            
+            -- print("[Resource] Downloaded: " .. path)
+            return processedContent, "remote"
+        end
+        lastError = content
+        task.wait(0.2 * attempt)
     end
 
-    local pending = self:GetPendingCount()
-    self:_maybeCompactQueue()
-    if pending > 0 then
-        self.Status = string.format("Draining (%d pending)", pending)
-    elseif processed > 0 then
-        self.Status = "Settled"
-    else
-        self.Status = "Idle"
+    error("[Resource] Failed to load " .. path .. " after 3 attempts: " .. tostring(lastError))
+end
+
+function ResourceManager:Load(path)
+    if self.Cache[path] then
+        return self.Cache[path]
     end
+
+    local source, method = self:GetSource(path)
+    local compiler = loadstring or load
+    if not compiler then
+        error("[Resource] No Lua compiler available")
+    end
+
+    local chunk, err = compiler(source, "=" .. path)
+    if not chunk then
+        error("[Resource] Compilation error in " .. path .. ": " .. tostring(err))
+    end
+
+    local result = chunk()
+    self.Cache[path] = result
+    return result
 end
 
 function ResourceManager:Init()
-    if self.Connection then
-        return
-    end
-
-    self.Connection = RunService.Heartbeat:Connect(function(dt)
-        if self.Options and self.Options.SmartCleanupEnabled == false then
-            return
-        end
-        self:_step(dt)
-    end)
-end
-
-function ResourceManager:ScheduleTrackedCleanup()
-    for i = #self._trackedConnections, 1, -1 do
-        local connection = self._trackedConnections[i]
-        self._trackedConnections[i] = nil
-        self:DeferDisconnect(connection)
-    end
-
-    for i = #self._trackedObjects, 1, -1 do
-        local object = self._trackedObjects[i]
-        self._trackedObjects[i] = nil
-        self:DeferDestroy(object)
-    end
-end
-
-function ResourceManager:Boost(duration)
-    self._manualBoostUntil = math.max(self._manualBoostUntil, os.clock() + (duration or 1.5))
-end
-
-function ResourceManager:Flush(maxSeconds)
-    local deadline = os.clock() + (maxSeconds or 1.25)
-    self:Boost(maxSeconds or 1.25)
-
-    while self:GetPendingCount() > 0 and os.clock() < deadline do
-        self:_step(1 / 60)
-        task.wait()
-    end
-
-    return self:GetPendingCount()
-end
-
-function ResourceManager:Destroy()
-    self:ScheduleTrackedCleanup()
-    self:Flush(0.2)
-
-    if self.Connection then
-        self.Connection:Disconnect()
-        self.Connection = nil
-    end
+    -- Initial setup if needed
+    warn("[Resource] Systems initialized (Cache: " .. CACHE_PATH .. ")")
 end
 
 return ResourceManager

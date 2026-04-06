@@ -1,164 +1,9 @@
 --[[
     ===============================================================
-         Boss Aim Assist - Centralized Brain Orchestration v6       
-      Scientifically Reorganized | Fully Decoupled | Brain Driven  
+         Boss Aim Assist - Centralized Brain Orchestration v7       
+      Scientifically Reorganized | Fully Modular | Lazy Loading  
     ===============================================================
 ]]
-
-local GITHUB_CONFIG = {
-    User = "Ahlstarr-Mayjishan",
-    Repo = "Scripting-Roblox-",
-    Branch = "main",
-    Folder = "STAR GLITCHER ~ REVITALIZED"
-}
-
-local GITHUB_BASE = string.format("https://raw.githubusercontent.com/%s/%s/%s/%s/", GITHUB_CONFIG.User, GITHUB_CONFIG.Repo, GITHUB_CONFIG.Branch, GITHUB_CONFIG.Folder:gsub(" ", "%%20"):gsub("~", "%%7E"))
-local UPDATE_ENTRY_URL = GITHUB_BASE .. "Main.lua"
-local VERSION_URL = GITHUB_BASE .. "Data/Version.lua"
-local BUNDLE_URL = GITHUB_BASE .. "Core/Bundle.lua"
-local loaderSession = tostring(os.time())
-local runtimeModuleCache = {}
-
-local function sanitizeLuaSource(content)
-    content = tostring(content or "")
-    if content:sub(1, 3) == "\239\187\191" then
-        content = content:sub(4)
-    end
-
-    if utf8 then
-        local feff = utf8.char(0xFEFF)
-        if content:sub(1, #feff) == feff then
-            content = content:sub(#feff + 1)
-        end
-    end
-
-    return content
-end
-
-local function compileChunk(content, chunkName)
-    local compiler = loadstring or load
-    if not compiler then
-        error("[compile] No Lua compiler available")
-    end
-
-    content = sanitizeLuaSource(content)
-    local chunk, compileErr = compiler(content, chunkName)
-    if not chunk then
-        error("[compile] " .. tostring(compileErr))
-    end
-    return chunk
-end
-
-local function parseRemoteVersion(content)
-    content = sanitizeLuaSource(content)
-
-    local directReturn = content:match("^%s*return%s+(%d+)")
-    if directReturn then
-        return tonumber(directReturn)
-    end
-
-    local bundledReturn = content:match('%["Data/Version%.lua"%]%s*=%s*%[====%[return%s+(%d+)')
-    if bundledReturn then
-        return tonumber(bundledReturn)
-    end
-
-    local genericReturn = content:match("return%s+(%d+)")
-    if genericReturn then
-        return tonumber(genericReturn)
-    end
-
-    local chunk = compileChunk(content, "=remote-version")
-    return tonumber(chunk())
-end
-
-local function fetchRemoteVersion()
-    -- Enhanced Cache Buster: Use redundant timestamp + random string to bypass GitHub Raw CDN caching
-    local timestamp = os.date("%Y%m%d%H%M")
-    local buster = tostring(os.clock()):gsub("%.", "") .. tostring(math.random(100000, 999999))
-    local sources = {
-        VERSION_URL .. "?check=" .. timestamp .. "&r=" .. buster,
-        BUNDLE_URL .. "?check=" .. timestamp .. "&r=" .. buster,
-    }
-
-    local lastError = nil
-    for _, url in ipairs(sources) do
-        local ok, result = pcall(function()
-            local content = game:HttpGet(url)
-            local parsedVersion = parseRemoteVersion(content)
-            if not parsedVersion then
-                error("Could not parse version from " .. url)
-            end
-            return parsedVersion
-        end)
-
-        if ok and result then
-            return result
-        end
-
-        lastError = result
-    end
-
-    error(lastError or "Remote version sources exhausted")
-end
-
-local function loadModule(path)
-    local cached = runtimeModuleCache[path]
-    if cached ~= nil then
-        return cached
-    end
-
-    local url = GITHUB_BASE .. path
-    local finalError = nil
-
-    local function compileAndCache(content)
-        local chunk = compileChunk(content, "=" .. path)
-        local value = chunk()
-        runtimeModuleCache[path] = value
-        return value
-    end
-
-    -- Local load strategy (if base path provided in _G)
-    if _G.BossAimAssist_LocalPath then
-        local localPath = _G.BossAimAssist_LocalPath .. path
-        if readfile then
-            local ok, content = pcall(readfile, localPath)
-            if ok and content then
-                local success, val = pcall(compileAndCache, content)
-                if success then return val end
-            end
-        end
-    end
-
-    -- Remote load strategy
-    for attempt = 1, 3 do
-        local ok, res = pcall(function()
-            local content = game:HttpGet(url .. "?v=" .. loaderSession .. "&attempt=" .. attempt)
-            if content == "404: Not Found" then
-                error("[http] 404: " .. path)
-            end
-
-            return compileAndCache(content)
-        end)
-
-        if ok then
-            return res
-        end
-
-        finalError = res
-        task.wait(0.15 * attempt)
-    end
-
-    warn("[Loader] Failed: " .. path .. " | Error: " .. tostring(finalError))
-    return nil
-end
-
-local function requireModule(path)
-    local module = loadModule(path)
-    if module == nil then
-        error("Required module failed to load: " .. tostring(path), 2)
-    end
-    return module
-end
 
 -- Services
 local RunService = game:GetService("RunService")
@@ -176,7 +21,22 @@ if _G.BossAimAssist_SessionID and coreBootUntil > coreBootNow then
 end
 _G.__STAR_GLITCHER_CORE_BOOT_UNTIL = coreBootNow + 8
 
--- Core Data
+-- 1. Setup Resource Manager (The Loader)
+-- These are injected by the bootstrapper (root Main.lua)
+local resourceManager = _G.StarGlitcher_ResourceManager
+if not resourceManager then
+    error("[Core] ResourceManager not found. Please ensure root Main.lua was executed correctly.")
+end
+
+local function requireModule(path)
+    return resourceManager:Load(path)
+end
+
+local function loadModule(path)
+    return resourceManager:Load(path)
+end
+
+-- 2. Initial Data Loading
 local Config  = requireModule("Data/Config.lua")
 local Version = requireModule("Data/Version.lua")
 local Options = Config.Options
@@ -184,17 +44,13 @@ local Normalize = requireModule("Modules/Core/Bootstrap/Normalize.lua")
 local RayfieldUI = requireModule("Modules/Core/Bootstrap/RayfieldUI.lua")
 local RejoinOnKick = requireModule("Modules/Core/Bootstrap/RejoinOnKick.lua")
 local RuntimeLifecycle = requireModule("Modules/Core/Bootstrap/RuntimeLifecycle.lua")
-local runtimeCompiler = loadstring or load
 
 if _G.BossAimAssist_Cleanup then
     _G.BossAimAssist_Cleanup()
 end
 
--- UI initialization
-if not runtimeCompiler then
-    error("No Lua compiler available for Rayfield bootstrap")
-end
-local Rayfield = runtimeCompiler(game:HttpGet("https://sirius.menu/rayfield"), "=Rayfield")()
+-- 3. UI Initialization (High Priority)
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
 
 Options.ToggleUIKey = Normalize.ToggleUIKey(Options.ToggleUIKey)
@@ -202,75 +58,83 @@ Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
 
 local Window = RayfieldUI.CreateWindow(Rayfield)
 
--- ===================================================
--- LOAD ALL MODULES (Scientific Order)
--- ===================================================
-local Brain          = requireModule("Modules/Core/Brain.lua")
-local InputHandler   = requireModule("Modules/Utils/Input.lua")
+-- Create a temporary loading notifier
+local loadingNotification = Rayfield:Notify({
+    Title = "Star Glitcher",
+    Content = "Initializing modular systems...",
+    Duration = 3,
+    Image = 4483362458,
+})
+
+-- 4. Component Loading (Dependency Order)
+-- Combat
+local Kalman          = requireModule("Modules/Utils/Math/Kalman.lua")
 local Tracker        = requireModule("Modules/Utils/NPCTracker.lua")
 local Detector       = requireModule("Modules/Utils/BossDetector.lua")
-local LocalCharacter = requireModule("Modules/Utils/LocalCharacter.lua")
-local Synapse         = requireModule("Modules/Utils/Synapse.lua")
-local Kalman          = requireModule("Modules/Utils/Math/Kalman.lua")
-local ResourceManager = requireModule("Modules/Utils/ResourceManager.lua")
-local TaskScheduler   = requireModule("Modules/Utils/TaskScheduler.lua")
-local DataPruner      = requireModule("Modules/Utils/DataPruner.lua")
-
 local Predictor       = requireModule("Modules/Combat/Predictor.lua")
-local SilentResolver  = requireModule("Modules/Combat/Prediction/SilentResolver.lua")
-local GarbageCollector = requireModule("Modules/Utils/GarbageCollector.lua")
-local Selector        = requireModule("Modules/Combat/TargetSelector.lua")
+local SelectiveResolver = requireModule("Modules/Combat/Prediction/SilentResolver.lua")
 local Aimbot          = requireModule("Modules/Combat/Aimbot.lua")
+local Selector        = requireModule("Modules/Combat/TargetSelector.lua")
 local SilentAim       = requireModule("Modules/Combat/SilentAim.lua")
 local UltraHell       = requireModule("Modules/Combat/UltraHell.lua")
 
-local SpeedSpoof      = requireModule("Modules/Movement/SpeedSpoof.lua")
+-- Movement Tools
+local TaskScheduler   = requireModule("Modules/Utils/TaskScheduler.lua")
+local LocalCharacter = requireModule("Modules/Utils/LocalCharacter.lua")
 local MovementArbiter = requireModule("Modules/Movement/MovementArbiter.lua")
-local SpeedMultiplier = requireModule("Modules/Movement/SpeedMultiplier.lua")
-local CustomSpeed     = requireModule("Modules/Movement/CustomSpeed.lua")
-local GravityController = requireModule("Modules/Movement/GravityController.lua")
-local FloatController = requireModule("Modules/Movement/FloatController.lua")
-local JumpBoost      = requireModule("Modules/Movement/JumpBoost.lua")
-local AntiSlowdown    = requireModule("Modules/Movement/AntiSlowdown.lua")
-local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
-local Noclip          = requireModule("Modules/Movement/Noclip.lua")
-local KillPartBypass  = requireModule("Modules/Movement/KillPartBypass.lua")
-local ProactiveEvade  = requireModule("Modules/Movement/ProactiveEvade.lua")
-local HitboxDesync    = requireModule("Modules/Movement/HitboxDesync.lua")
-local WaypointTeleport = requireModule("Modules/Movement/WaypointTeleport.lua")
-local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
+local Synapse         = requireModule("Modules/Utils/Synapse.lua")
 
+-- Logic Orchestras
+local Brain           = requireModule("Modules/Core/Brain.lua")
+local InputHandler    = requireModule("Modules/Utils/Input.lua")
+local DataPruner      = requireModule("Modules/Utils/DataPruner.lua")
+local GarbageCollector = requireModule("Modules/Utils/GarbageCollector.lua")
+
+-- Visuals
 local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
 local Highlight       = requireModule("Modules/Visuals/Highlight.lua")
 local TechniqueOverlay = requireModule("Modules/Visuals/TechniqueOverlay.lua")
 local TargetDot       = requireModule("Modules/Visuals/TargetDot.lua")
-local PlayerLabelUtils = requireModule("UI/Tabs/Player/LabelUtils.lua")
-local PlayerLayout = requireModule("UI/Tabs/Player/Layout.lua")
-local PlayerStatusLoop = requireModule("UI/Tabs/Player/StatusLoop.lua")
-local PlayerController = requireModule("UI/Tabs/Player/Controller.lua")
 
--- ===================================================
--- INSTANTIATE (OOP Injection)
--- ===================================================
-local synapse    = Synapse
+-- 5. Movement Suite (Lazy instantiate helper)
+local movementSuite = {}
+local function setupMovement()
+    local mc = LocalCharacter.new(TaskScheduler.new(Options))
+    local arb = MovementArbiter.new(Options, mc)
+    
+    movementSuite.spoof = requireModule("Modules/Movement/SpeedSpoof.lua").new(Options, mc)
+    movementSuite.arbiter = arb
+    movementSuite.multi = requireModule("Modules/Movement/SpeedMultiplier.lua").new(Options, mc, arb)
+    movementSuite.fixed = requireModule("Modules/Movement/CustomSpeed.lua").new(Options, mc, arb)
+    movementSuite.gravity = requireModule("Modules/Movement/GravityController.lua").new(Options)
+    movementSuite.float = requireModule("Modules/Movement/FloatController.lua").new(Options, mc)
+    movementSuite.jump = requireModule("Modules/Movement/JumpBoost.lua").new(Options, mc, arb)
+    movementSuite.slow  = requireModule("Modules/Movement/AntiSlowdown.lua").new(Options, mc, arb)
+    movementSuite.stun  = requireModule("Modules/Movement/AntiStun.lua").new(Options, mc)
+    movementSuite.noclip = requireModule("Modules/Movement/Noclip.lua").new(Options, mc)
+    movementSuite.killPart = requireModule("Modules/Movement/KillPartBypass.lua").new(Options, mc)
+    movementSuite.proactiveEvade = requireModule("Modules/Movement/ProactiveEvade.lua").new(Options, mc)
+    movementSuite.zenith = requireModule("Modules/Movement/HitboxDesync.lua").new(Options, mc)
+    movementSuite.clean = requireModule("Modules/Movement/AttributeCleaner.lua").new(Options, mc)
+    movementSuite.waypoint = requireModule("Modules/Movement/WaypointTeleport.lua").new(Options, mc)
+    
+    return mc, arb
+end
+
+local localChar, arbiter = setupMovement()
 local taskScheduler = TaskScheduler.new(Options)
-local input      = InputHandler.new(Config)
-local localCharacter = LocalCharacter.new(taskScheduler)
-local movementArbiter = MovementArbiter.new(Options, localCharacter)
-local detector   = Detector.new()
-local tracker    = Tracker.new(Config, detector, taskScheduler)
-local aimbot     = Aimbot.new(Config)
-local silentResolver = SilentResolver.new(Config)
-local silentAim  = SilentAim.new(Config, synapse, silentResolver) 
+local input = InputHandler.new(Config)
+local detector = Detector.new()
+local tracker = Tracker.new(Config, detector, taskScheduler)
+local aimbot = Aimbot.new(Config)
+local silentResolver = SelectiveResolver.new(Config)
+local silentAim = SilentAim.new(Config, Synapse, silentResolver)
 local ultraHell = UltraHell.new(Options)
-local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
-local waypointTeleport = WaypointTeleport.new(Options, localCharacter)
-local resourceManager = ResourceManager.new(Options)
-local cleaner    = GarbageCollector.new(Options, resourceManager)
-local rejoinOnKick = RejoinOnKick.new(Options, UPDATE_ENTRY_URL)
+local cleaner = GarbageCollector.new(Options, resourceManager)
+local rejoinOnKick = RejoinOnKick.new(Options, _G.StarGlitcher_BootloaderURL or "Main.lua")
 
-local pred       = Predictor.new(Config, loadModule, Kalman)
-local selector   = Selector.new(Config, tracker, pred)
+local pred = Predictor.new(Config, loadModule, Kalman)
+local selector = Selector.new(Config, tracker, pred)
 local dataPruner = DataPruner.new(taskScheduler, tracker, pred)
 
 local visuals = {
@@ -280,35 +144,15 @@ local visuals = {
     dot = TargetDot.new()
 }
 
-local movementSuite = {
-    spoof = SpeedSpoof.new(Options, localCharacter),
-    arbiter = movementArbiter,
-    multi = SpeedMultiplier.new(Options, localCharacter, movementArbiter),
-    fixed = CustomSpeed.new(Options, localCharacter, movementArbiter),
-    gravity = GravityController.new(Options),
-    float = FloatController.new(Options, localCharacter),
-    jump = JumpBoost.new(Options, localCharacter, movementArbiter),
-    slow  = AntiSlowdown.new(Options, localCharacter, movementArbiter),
-    stun  = AntiStun.new(Options, localCharacter),
-    noclip = Noclip.new(Options, localCharacter),
-    killPart = KillPartBypass.new(Options, localCharacter),
-    proactiveEvade = ProactiveEvade.new(Options, localCharacter),
-    zenith = HitboxDesync.new(Options, localCharacter),
-    clean = Cleaner.new(Options, localCharacter)
-}
-
--- THE CENTRAL BRAIN (CNS)
 local brain = Brain.new(Config, {
     Input = input, Tracker = tracker, Predictor = pred, Selector = selector,
     Aimbot = aimbot, SilentAim = silentAim, Visuals = visuals
 }, loadModule)
 
--- ===================================================
--- INITIALIZE & SETUP UI
--- ===================================================
+-- 6. Initialize Systems
 input:Init()
 taskScheduler:Init()
-localCharacter:Init()
+localChar:Init()
 detector:Init()
 tracker:Init()
 aimbot:Init()
@@ -320,54 +164,31 @@ resourceManager:Init()
 cleaner:Init()
 for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
+-- 7. Tabs Loading (Lazy UI strategy)
+-- Load basic tabs first
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
-requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, playerTabController)
-requireModule("UI/Tabs/TeleportTab.lua")(Window, Options, waypointTeleport)
-requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, movementSuite.killPart, movementSuite.proactiveEvade, ultraHell)
-local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
 
-local loadConfigOk, loadConfigErr = RayfieldUI.SafeLoadConfiguration(Rayfield)
-if not loadConfigOk then
-    warn("[Config] LoadConfiguration failed, continuing with runtime defaults | Error: " .. tostring(loadConfigErr))
-end
-Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
-waypointTeleport:LoadFromOptions()
+-- Load complex tabs in background
+task.spawn(function()
+    local PlayerController = requireModule("UI/Tabs/Player/Controller.lua")
+    local PlayerLayout = requireModule("UI/Tabs/Player/Layout.lua")
+    local PlayerStatusLoop = requireModule("UI/Tabs/Player/StatusLoop.lua")
+    local PlayerLabelUtils = requireModule("UI/Tabs/Player/LabelUtils.lua")
+    local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
 
--- ===================================================
--- MAIN ORCHESTRATION LOOP (Brain Powered)
--- ===================================================
-local function executeUpdatedEntry(url, chunkName)
-    local content = game:HttpGet(url)
-    local chunk = compileChunk(content, chunkName)
-    return chunk()
-end
+    requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, playerTabController)
+    requireModule("UI/Tabs/TeleportTab.lua")(Window, Options, movementSuite.waypoint)
+    requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, movementSuite.killPart, movementSuite.proactiveEvade, ultraHell)
+    
+    local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
+    
+    -- Final config load
+    RayfieldUI.SafeLoadConfiguration(Rayfield)
+    movementSuite.waypoint:LoadFromOptions()
+end)
 
-local function getCleanupObjects()
-    local objs = {
-        input, localCharacter, detector, tracker, pred, selector, aimbot, silentAim,
-        ultraHell, cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
-        taskScheduler, dataPruner, waypointTeleport, rejoinOnKick,
-        playerTabController, settingsTabController
-    }
-    for _, obj in pairs(movementSuite) do
-        objs[#objs + 1] = obj
-    end
-    return objs
-end
-
-local function resetGlobalState()
-    local silentHook = getgenv and getgenv().__STAR_GLITCHER_SILENT_AIM_HOOK
-    if silentHook then
-        silentHook.Instance = nil
-    end
-
-    local apocalypseHook = getgenv and getgenv().__STAR_GLITCHER_APOCALYPSE_HOOK
-    if apocalypseHook then
-        apocalypseHook.Instance = nil
-    end
-end
-
+-- 8. Lifecycle Management
 local runtimeLifecycle = RuntimeLifecycle.new(
     Options,
     Version,
@@ -375,60 +196,27 @@ local runtimeLifecycle = RuntimeLifecycle.new(
     resourceManager,
     cleaner,
     Synapse,
-    UPDATE_ENTRY_URL,
-    executeUpdatedEntry,
-    fetchRemoteVersion,
-    getCleanupObjects,
-    resetGlobalState
+    _G.StarGlitcher_BootloaderURL or "Main.lua",
+    function(url) return loadstring(game:HttpGet(url))() end,
+    function() return 130 end, -- Fallback version
+    function() 
+        return {
+            input, localChar, detector, tracker, pred, selector, aimbot, silentAim,
+            ultraHell, cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
+            taskScheduler, dataPruner, movementSuite.waypoint, rejoinOnKick
+        } 
+    end,
+    function() end
 )
+
 runtimeLifecycle:BindGlobals()
 runtimeLifecycle:StartAutoUpdateLoop()
 rejoinOnKick:Init()
 
-local function reg(connection)
-    return runtimeLifecycle:RegisterConnection(connection)
-end
+-- Event Connections
+local function reg(connection) return runtimeLifecycle:RegisterConnection(connection) end
+reg(RunService.Heartbeat:Connect(function(dt) brain:Scan(UserInputService:GetMouseLocation(), Camera.CFrame.Position, dt) end))
+reg(RunService.RenderStepped:Connect(function(dt) brain:Update(dt, UserInputService:GetMouseLocation(), Camera.CFrame) end))
 
--- Scanning (Heartbeat, Off render)
-reg(RunService.Heartbeat:Connect(function(dt)
-    brain:Scan(UserInputService:GetMouseLocation(), Camera.CFrame.Position, dt)
-end))
-
-reg(UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then
-        return
-    end
-
-    if input.UserInputType ~= Enum.UserInputType.Keyboard then
-        return
-    end
-
-    if input.KeyCode ~= Normalize.ToggleUIKeyCode(Options.ToggleUIKey) then
-        return
-    end
-
-    local screenGuis = RayfieldUI.GetScreenGuis(CoreGui)
-    if #screenGuis == 0 then
-        return
-    end
-
-    local nextEnabledState = true
-    for _, ui in ipairs(screenGuis) do
-        if ui.Enabled then
-            nextEnabledState = false
-            break
-        end
-    end
-
-    for _, ui in ipairs(screenGuis) do
-        ui.Enabled = nextEnabledState
-    end
-end))
-
--- Execution (RenderStepped)
-reg(RunService.RenderStepped:Connect(function(dt)
-    brain:Update(dt, UserInputService:GetMouseLocation(), Camera.CFrame)
-end))
-
-warn(" [Core] Brain Orchestration v6 Active.")
-
+warn(" [Core] Star Glitcher Modular Active (Optimized v7).")
+return _G.BossAimAssist_SessionID

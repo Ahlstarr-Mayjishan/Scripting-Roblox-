@@ -1,60 +1,48 @@
 --[[
-    Boss Aim Assist - Scientific Entry Point (Bundled Loader)
-    Version: 1.2.0
+    Boss Aim Assist - Optimized Modular Bootstrapper
+    v2.0.0 (Manifest & Cache Driven)
 ]]
 
-local entryNow = os.clock()
-local entryBootUntil = tonumber(_G.__STAR_GLITCHER_ENTRY_BOOT_UNTIL) or 0
-if entryBootUntil > entryNow then
-    warn("[Entry] Duplicate load suppressed.")
-    return _G.BossAimAssist_SessionID
-end
-_G.__STAR_GLITCHER_ENTRY_BOOT_UNTIL = entryNow + 8
+local GITHUB_CONFIG = {
+    User = "Ahlstarr-Mayjishan",
+    Repo = "Scripting-Roblox-",
+    Branch = "main",
+    Folder = "STAR GLITCHER ~ REVITALIZED"
+}
 
-local function sanitizeLuaSource(source)
-    source = tostring(source or "")
-    if source:sub(1, 3) == "\239\187\191" then
-        source = source:sub(4)
+local GITHUB_BASE = string.format(
+    "https://raw.githubusercontent.com/%s/%s/%s/%s/", 
+    GITHUB_CONFIG.User, GITHUB_CONFIG.Repo, GITHUB_CONFIG.Branch, 
+    GITHUB_CONFIG.Folder:gsub(" ", "%%20"):gsub("~", "%%7E")
+)
+
+_G.StarGlitcher_BootloaderURL = GITHUB_BASE .. "Main.lua"
+
+local function fetchRemote(path)
+    local ok, res = pcall(game.HttpGet, game, GITHUB_BASE .. path .. "?v=" .. os.time())
+    if ok and res ~= "404: Not Found" then
+        return res
     end
-
-    if utf8 then
-        local feff = utf8.char(0xFEFF)
-        if source:sub(1, #feff) == feff then
-            source = source:sub(#feff + 1)
-        end
-    end
-
-    return source
-end
-
-local function compileRemoteChunk(url, chunkName)
-    local compiler = loadstring or load
-    if not compiler then
-        error("No Lua compiler available in this executor (loadstring/load missing)")
-    end
-
-    local source = sanitizeLuaSource(game:HttpGet(url))
-    local chunk, compileErr = compiler(source, chunkName)
-    if not chunk then
-        error(string.format("Failed to compile %s: %s", chunkName, tostring(compileErr)))
-    end
-    return chunk
+    return nil
 end
 
-local cacheBust = tostring(os.time())
-local base = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/Core/"
+-- 1. Load Manifest & Resource Manager First
+print("[Boot] Initializing Resources...")
+local manifestSource = fetchRemote("Core/manifest.lua")
+local resourceManagerSource = fetchRemote("Modules/Utils/ResourceManager.lua")
 
-local primaryUrl = base .. "Bundle.lua?v=" .. cacheBust
-local fallbackUrl = base .. "Main.lua?v=" .. cacheBust
-
-local ok, result = pcall(function()
-    return compileRemoteChunk(primaryUrl, "=Bundle.lua")()
-end)
-
-if ok then
-    return result
+if manifestSource and resourceManagerSource then
+    local manifest = loadstring(manifestSource)()
+    local ResourceManager = loadstring(resourceManagerSource)()
+    
+    -- Instantiate Global Resource Manager
+    local rm = ResourceManager.new({}, GITHUB_BASE, manifest)
+    _G.StarGlitcher_ResourceManager = rm
+    
+    -- 2. Execute Core Main
+    print("[Boot] Launching Core...")
+    local coreMain = rm:Load("Core/Main.lua")
+    return coreMain
+else
+    error("[Boot] Critical failure: Could not fetch Manifest or ResourceManager from GitHub.")
 end
-
-warn("[Entry] Bundle loader failed, falling back to Core/Main.lua | Error: " .. tostring(result))
-return compileRemoteChunk(fallbackUrl, "=Core/Main.lua")()
-
