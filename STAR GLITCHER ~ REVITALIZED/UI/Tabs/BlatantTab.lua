@@ -79,11 +79,24 @@ return function(Rayfield, Window, Options, killPartBypass, proactiveEvade, ultra
     Tab:CreateSlider({
         Name = "Evade Stride",
         Range = {2, 8},
-        Increment = 0.25,
+        Increment = 1,
         Suffix = " studs",
-        CurrentValue = tonumber(Options.ProactiveEvadeStride) or 4.5,
+        CurrentValue = math.floor(tonumber(Options.ProactiveEvadeStride) or 4.5),
         Flag = "ProactiveEvadeStrideFlag",
-        Callback = function(Value) Options.ProactiveEvadeStride = Value end,
+        Callback = function(Value) Options.ProactiveEvadeStride = tonumber(Value) or 4 end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Evade Interval (x0.1s)",
+        Range = {2, 12},
+        Increment = 1,
+        Suffix = " (divide by 10)",
+        CurrentValue = math.floor((tonumber(Options.ProactiveEvadeInterval) or 0.42) * 10),
+        Flag = "ProactiveEvadeIntervalFlag",
+        Callback = function(Value)
+            local actualInterval = tonumber(Value) / 10
+            Options.ProactiveEvadeInterval = actualInterval
+        end,
     })
 
     -- CRITICAL FIX: Ensure UltraHell Section is explicitly created
