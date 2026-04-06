@@ -75,6 +75,16 @@ return function(Window, Options, killPartBypass, ultraHell, waypoint)
         end,
     })
 
+    Tab:CreateButton({
+        Name = "Get SupaGun",
+        Interact = "Instant",
+        Callback = function()
+            local cf = CFrame.new(-683.702, 2063.087, 6963.396, 0.988, -9.108e-09, -0.152, -7.943e-09, 1, -1.114e-07, 0.152, 1.113e-07, 0.988)
+            local char = game:GetService("Players").LocalPlayer.Character
+            if char then char:PivotTo(cf) end
+        end,
+    })
+
     Tab:CreateSection("Custom Value")
 
     Tab:CreateSlider({
