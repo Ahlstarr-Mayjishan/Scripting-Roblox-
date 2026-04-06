@@ -19,6 +19,7 @@ local BUNDLE_URL = GITHUB_BASE .. "Core/Bundle.lua"
 local loaderSession = tostring(os.time())
 local runtimeModuleCache = {}
 local autoUpdateLoopStarted = false
+local cleanupInProgress = false
 
 local function compileChunk(content, chunkName)
     local compiler = loadstring or load
@@ -154,6 +155,14 @@ local GuiService = game:GetService("GuiService")
 local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
 local Camera = Workspace.CurrentCamera
+
+local coreBootNow = os.clock()
+local coreBootUntil = tonumber(_G.__STAR_GLITCHER_CORE_BOOT_UNTIL) or 0
+if _G.BossAimAssist_SessionID and coreBootUntil > coreBootNow then
+    warn("[Core] Duplicate runtime load suppressed.")
+    return _G.BossAimAssist_SessionID
+end
+_G.__STAR_GLITCHER_CORE_BOOT_UNTIL = coreBootNow + 8
 
 -- Core Data
 local Config  = requireModule("Data/Config.lua")
@@ -366,6 +375,11 @@ reg(GuiService.ErrorMessageChanged:Connect(function()
 end))
 
 local function performCleanup(fullSweep)
+    if cleanupInProgress then
+        return
+    end
+    cleanupInProgress = true
+
     pcall(function()
         Rayfield:Destroy()
     end)
@@ -414,6 +428,8 @@ local function performCleanup(fullSweep)
     _G.BossAimAssist_Cleanup = nil
     _G.BossAimAssist_CheckForUpdates = nil
     _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED = nil
+    _G.__STAR_GLITCHER_CORE_BOOT_UNTIL = nil
+    _G.__STAR_GLITCHER_ENTRY_BOOT_UNTIL = nil
 
     local silentHook = getgenv and getgenv().__STAR_GLITCHER_SILENT_AIM_HOOK
     if silentHook then
@@ -446,10 +462,18 @@ local function performCleanup(fullSweep)
             resourceManager:Destroy()
         end)
     end
+
+    cleanupInProgress = false
 end
 
 _G.BossAimAssist_Cleanup = function(fullSweep)
-    performCleanup(fullSweep == true)
+    local ok, err = pcall(function()
+        performCleanup(fullSweep == true)
+    end)
+    cleanupInProgress = false
+    if not ok then
+        warn("[Cleanup] Failed | Error: " .. tostring(err))
+    end
 end
 
 local function executeUpdatedEntry(url, chunkName)

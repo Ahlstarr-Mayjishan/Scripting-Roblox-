@@ -3,6 +3,14 @@
     Version: 1.2.0
 ]]
 
+local entryNow = os.clock()
+local entryBootUntil = tonumber(_G.__STAR_GLITCHER_ENTRY_BOOT_UNTIL) or 0
+if entryBootUntil > entryNow then
+    warn("[Entry] Duplicate load suppressed.")
+    return _G.BossAimAssist_SessionID
+end
+_G.__STAR_GLITCHER_ENTRY_BOOT_UNTIL = entryNow + 8
+
 local function compileRemoteChunk(url, chunkName)
     local compiler = loadstring or load
     if not compiler then

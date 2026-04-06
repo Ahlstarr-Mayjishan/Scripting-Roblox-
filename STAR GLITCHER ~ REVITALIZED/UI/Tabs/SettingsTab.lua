@@ -136,8 +136,18 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
         Name = "Destroy Script (Emergency Stop)",
         Callback = function()
             if _G.BossAimAssist_Cleanup then
-                task.defer(function()
-                    _G.BossAimAssist_Cleanup(true)
+                task.spawn(function()
+                    local ok, err = pcall(function()
+                        _G.BossAimAssist_Cleanup(false)
+                    end)
+                    if not ok and Rayfield and Rayfield.Notify then
+                        Rayfield:Notify({
+                            Title = "Emergency Stop Failed",
+                            Content = tostring(err),
+                            Duration = 5,
+                            Image = 4483362458,
+                        })
+                    end
                 end)
             end
         end,
