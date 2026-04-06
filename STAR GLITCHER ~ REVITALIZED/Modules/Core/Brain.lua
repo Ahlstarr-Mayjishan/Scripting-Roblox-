@@ -26,7 +26,7 @@ function Brain.new(config, modules, loader)
     self.Frontal = Frontal.new(modules.Aimbot, modules.SilentAim, self.Options)
 
     self._lastScan = 0
-    self._scanInterval = 1 / 120
+    self._scanInterval = 1 / 75 -- Optimized from 120Hz to 75Hz to eliminate jitters
     self._scanAccumulator = 0
     self._frameDtEma = 1 / 60
     return self

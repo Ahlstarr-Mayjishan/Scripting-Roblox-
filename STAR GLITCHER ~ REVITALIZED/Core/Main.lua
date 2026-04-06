@@ -199,7 +199,7 @@ task.spawn(function()
 
     safeLoadTab("UI/Tabs/TeleportTab.lua", movementSuite.waypoint)
     safeLoadTab("UI/Tabs/BlatantTab.lua")
-    safeLoadTab("UI/Tabs/GamemodeTab.lua", movementSuite.killPart, ultraHell)
+    safeLoadTab("UI/Tabs/GamemodeTab.lua", movementSuite.killPart, ultraHell, movementSuite.waypoint)
     
     local settingsOk, settingsTabController = pcall(function()
         return requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)

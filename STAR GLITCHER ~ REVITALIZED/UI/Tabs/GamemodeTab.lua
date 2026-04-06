@@ -11,7 +11,7 @@ local function setLabelText(label, text)
     end
 end
 
-return function(Window, Options, killPartBypass, ultraHell)
+return function(Window, Options, killPartBypass, ultraHell, waypoint)
     local Tab = Window:CreateTab("Gamemode", 4483362458)
     
     Tab:CreateSection("Bypasses")
@@ -40,6 +40,38 @@ return function(Window, Options, killPartBypass, ultraHell)
                     Duration = 4,
                 })
             end
+        end,
+    })
+
+    Tab:CreateSection("Stage Teleports")
+
+    Tab:CreateButton({
+        Name = "Teleport to Stage 1",
+        Interact = "Instant",
+        Callback = function()
+            local cf = CFrame.new(7997.925, 707.277, 361.218, 0.203, 3.342e-08, -0.979, -3.876e-08, 1, 2.607e-08, 0.979, 3.265e-08, 0.203)
+            local char = game:GetService("Players").LocalPlayer.Character
+            if char then char:PivotTo(cf) end
+        end,
+    })
+
+    Tab:CreateButton({
+        Name = "Teleport to Stage 2",
+        Interact = "Instant",
+        Callback = function()
+            local cf = CFrame.new(8260.945, 1900.713, 640.922, 0.376, 2.271e-08, 0.926, -1.115e-08, 1, -1.998e-08, -0.926, -2.803e-09, 0.376)
+            local char = game:GetService("Players").LocalPlayer.Character
+            if char then char:PivotTo(cf) end
+        end,
+    })
+
+    Tab:CreateButton({
+        Name = "Teleport to Stage 3",
+        Interact = "Instant",
+        Callback = function()
+            local cf = CFrame.new(102.725, 2105.546, 8404.134, 0.092, -5.482e-08, 0.995, 1.118e-07, 1, 4.47e-08, -0.995, 1.072e-07, 0.092)
+            local char = game:GetService("Players").LocalPlayer.Character
+            if char then char:PivotTo(cf) end
         end,
     })
 
