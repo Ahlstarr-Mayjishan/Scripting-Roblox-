@@ -204,6 +204,7 @@ local JumpBoost      = requireModule("Modules/Movement/JumpBoost.lua")
 local AntiSlowdown    = requireModule("Modules/Movement/AntiSlowdown.lua")
 local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
 local Noclip          = requireModule("Modules/Movement/Noclip.lua")
+local KillPartBypass  = requireModule("Modules/Movement/KillPartBypass.lua")
 local HitboxDesync    = requireModule("Modules/Movement/HitboxDesync.lua")
 local WaypointTeleport = requireModule("Modules/Movement/WaypointTeleport.lua")
 local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
@@ -257,6 +258,7 @@ local movementSuite = {
     slow  = AntiSlowdown.new(Options, localCharacter, movementArbiter),
     stun  = AntiStun.new(Options, localCharacter),
     noclip = Noclip.new(Options, localCharacter),
+    killPart = KillPartBypass.new(Options, localCharacter),
     zenith = HitboxDesync.new(Options, localCharacter),
     clean = Cleaner.new(Options, localCharacter)
 }
@@ -287,7 +289,7 @@ requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, playerTabController)
 requireModule("UI/Tabs/TeleportTab.lua")(Window, Options, waypointTeleport)
-requireModule("UI/Tabs/BlatantTab.lua")(Window, Options)
+requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, movementSuite.killPart)
 local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
 
 local loadConfigOk, loadConfigErr = RayfieldUI.SafeLoadConfiguration(Rayfield)

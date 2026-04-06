@@ -45,6 +45,7 @@ Config.Options = {
     AutoUpdateEnabled = false,
     AutoUpdateIntervalMinutes = 5,
     NoclipEnabled = false,
+    KillPartBypassEnabled = false,
     ZenithDesyncEnabled = false,
     SilentDamageEnabled = false,
     TeleportMethod = "Tween",

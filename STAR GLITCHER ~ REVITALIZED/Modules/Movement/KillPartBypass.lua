@@ -1,17 +1,16 @@
 --[[
-    Noclip.lua - Phase Shifting Module
-    Job: Disable physics collisions only.
-    Notes: Kill-part touch suppression lives in KillPartBypass.lua so it can
-    be controlled independently from noclip.
+    KillPartBypass.lua
+    Job: Suppress touch/query hits on the local character so environmental
+    kill parts are less likely to register against it.
 ]]
 
 local RunService = game:GetService("RunService")
 
-local Noclip = {}
-Noclip.__index = Noclip
+local KillPartBypass = {}
+KillPartBypass.__index = KillPartBypass
 
-function Noclip.new(options, localCharacter)
-    local self = setmetatable({}, Noclip)
+function KillPartBypass.new(options, localCharacter)
+    local self = setmetatable({}, KillPartBypass)
     self.Options = options
     self.LocalCharacter = localCharacter
     self.Connection = nil
@@ -19,9 +18,20 @@ function Noclip.new(options, localCharacter)
     return self
 end
 
-function Noclip:Init()
+local function suppressPartSensors(part)
+    pcall(function()
+        if part.CanTouch then
+            part.CanTouch = false
+        end
+        if part.CanQuery then
+            part.CanQuery = false
+        end
+    end)
+end
+
+function KillPartBypass:Init()
     self.Connection = RunService.Stepped:Connect(function()
-        if not self.Options.NoclipEnabled then
+        if not self.Options.KillPartBypassEnabled then
             if self.Status ~= "Disabled" then
                 self.Status = "Disabled"
             end
@@ -30,33 +40,31 @@ function Noclip:Init()
 
         local character = self.LocalCharacter and self.LocalCharacter:GetCharacter()
         local rootPart = self.LocalCharacter and self.LocalCharacter:GetRootPart()
-        
+
         if not character then
             self.Status = "Char Missing"
             return
         end
 
-        self.Status = "Active: Noclip"
-        
+        self.Status = "Active: Touch Mask"
+
         for _, obj in ipairs(character:GetDescendants()) do
             if obj:IsA("BasePart") then
-                if obj.CanCollide then
-                    obj.CanCollide = false
-                end
+                suppressPartSensors(obj)
             end
         end
 
         if rootPart then
-            rootPart.CanCollide = false
+            suppressPartSensors(rootPart)
         end
     end)
 end
 
-function Noclip:Destroy()
+function KillPartBypass:Destroy()
     if self.Connection then
         self.Connection:Disconnect()
         self.Connection = nil
     end
 end
 
-return Noclip
+return KillPartBypass

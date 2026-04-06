@@ -53,6 +53,7 @@ Config.Options = {
     AutoUpdateEnabled = false,
     AutoUpdateIntervalMinutes = 5,
     NoclipEnabled = false,
+    KillPartBypassEnabled = false,
     ZenithDesyncEnabled = false,
     SilentDamageEnabled = false,
     TeleportMethod = "Tween",
@@ -3470,6 +3471,77 @@ end
 
 return JumpBoost
 ]====],
+    ["Modules/Movement/KillPartBypass.lua"] = [====[--[[
+    KillPartBypass.lua
+    Job: Suppress touch/query hits on the local character so environmental
+    kill parts are less likely to register against it.
+]]
+
+local RunService = game:GetService("RunService")
+
+local KillPartBypass = {}
+KillPartBypass.__index = KillPartBypass
+
+function KillPartBypass.new(options, localCharacter)
+    local self = setmetatable({}, KillPartBypass)
+    self.Options = options
+    self.LocalCharacter = localCharacter
+    self.Connection = nil
+    self.Status = "Idle"
+    return self
+end
+
+local function suppressPartSensors(part)
+    pcall(function()
+        if part.CanTouch then
+            part.CanTouch = false
+        end
+        if part.CanQuery then
+            part.CanQuery = false
+        end
+    end)
+end
+
+function KillPartBypass:Init()
+    self.Connection = RunService.Stepped:Connect(function()
+        if not self.Options.KillPartBypassEnabled then
+            if self.Status ~= "Disabled" then
+                self.Status = "Disabled"
+            end
+            return
+        end
+
+        local character = self.LocalCharacter and self.LocalCharacter:GetCharacter()
+        local rootPart = self.LocalCharacter and self.LocalCharacter:GetRootPart()
+
+        if not character then
+            self.Status = "Char Missing"
+            return
+        end
+
+        self.Status = "Active: Touch Mask"
+
+        for _, obj in ipairs(character:GetDescendants()) do
+            if obj:IsA("BasePart") then
+                suppressPartSensors(obj)
+            end
+        end
+
+        if rootPart then
+            suppressPartSensors(rootPart)
+        end
+    end)
+end
+
+function KillPartBypass:Destroy()
+    if self.Connection then
+        self.Connection:Disconnect()
+        self.Connection = nil
+    end
+end
+
+return KillPartBypass
+]====],
     ["Modules/Movement/MovementArbiter.lua"] = [====[local RunService = game:GetService("RunService")
 
 local MovementArbiter = {}
@@ -3734,9 +3806,10 @@ end
 return MovementArbiter
 ]====],
     ["Modules/Movement/Noclip.lua"] = [====[--[[
-    Noclip.lua - Phase Shifting Module (Deep v6)
-    Job: Disabling physics collisions AND touch sensors.
-    Status: Active frame-by-frame override via Stepped.
+    Noclip.lua - Phase Shifting Module
+    Job: Disable physics collisions only.
+    Notes: Kill-part touch suppression lives in KillPartBypass.lua so it can
+    be controlled independently from noclip.
 ]]
 
 local RunService = game:GetService("RunService")
@@ -3770,34 +3843,18 @@ function Noclip:Init()
             return
         end
 
-        self.Status = "Active: DEEP PHASING"
+        self.Status = "Active: Noclip"
         
-        -- Override CanTouch/CanQuery for all descendants
         for _, obj in ipairs(character:GetDescendants()) do
             if obj:IsA("BasePart") then
                 if obj.CanCollide then
                     obj.CanCollide = false
                 end
-                
-                -- NEW 2024/2025 Property
-                pcall(function()
-                    if obj.CanTouch then
-                        obj.CanTouch = false
-                    end
-                    if obj.CanQuery then
-                        obj.CanQuery = false
-                    end
-                end)
             end
         end
 
-        -- Explicitly lock RootPart to ensure zero collision window
         if rootPart then
             rootPart.CanCollide = false
-            pcall(function()
-                rootPart.CanTouch = false
-                rootPart.CanQuery = false
-            end)
         end
     end)
 end
@@ -8327,9 +8384,32 @@ end
     Contains only explicit bypass-style options.
 ]]
 
-return function(Window, Options)
+local function setLabelText(label, text)
+    if not label then
+        return
+    end
+
+    if type(label) == "table" and type(label.Set) == "function" then
+        local ok = pcall(function()
+            label:Set(text)
+        end)
+        if ok then
+            return
+        end
+    end
+
+    if typeof(label) == "Instance" then
+        local textLabel = label:IsA("TextLabel") and label or label:FindFirstChildWhichIsA("TextLabel", true)
+        if textLabel then
+            textLabel.Text = text
+        end
+    end
+end
+
+return function(Window, Options, killPartBypass)
     local Tab = Window:CreateTab("Blatant & Bypass", 4483362458)
     local statusLabel = Tab:CreateLabel("Zenith Status: Idle")
+    local killPartLabel = Tab:CreateLabel("Kill Part Bypass: Idle")
 
     Tab:CreateSection("Zenith Desync Architecture")
 
@@ -8377,6 +8457,36 @@ return function(Window, Options)
             Options.SpeedSpoofEnabled = Value
         end,
     })
+
+    Tab:CreateToggle({
+        Name = "Kill Part Bypass",
+        CurrentValue = Options.KillPartBypassEnabled,
+        Flag = "KillPartBypassFlag",
+        Callback = function(Value)
+            Options.KillPartBypassEnabled = Value
+            if Value then
+                Rayfield:Notify({
+                    Title = "Kill Part Bypass Active",
+                    Content = "Touch/query kill parts are now being masked separately from noclip.",
+                    Duration = 3,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
+
+    task.spawn(function()
+        local lastKillPartText = nil
+        while task.wait(0.2) do
+            if killPartBypass then
+                local nextText = "Kill Part Bypass: " .. tostring(killPartBypass.Status or "Idle")
+                if nextText ~= lastKillPartText then
+                    lastKillPartText = nextText
+                    setLabelText(killPartLabel, nextText)
+                end
+            end
+        end
+    end)
 
     return Tab
 end
@@ -9349,6 +9459,7 @@ local JumpBoost      = requireModule("Modules/Movement/JumpBoost.lua")
 local AntiSlowdown    = requireModule("Modules/Movement/AntiSlowdown.lua")
 local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
 local Noclip          = requireModule("Modules/Movement/Noclip.lua")
+local KillPartBypass  = requireModule("Modules/Movement/KillPartBypass.lua")
 local HitboxDesync    = requireModule("Modules/Movement/HitboxDesync.lua")
 local WaypointTeleport = requireModule("Modules/Movement/WaypointTeleport.lua")
 local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
@@ -9402,6 +9513,7 @@ local movementSuite = {
     slow  = AntiSlowdown.new(Options, localCharacter, movementArbiter),
     stun  = AntiStun.new(Options, localCharacter),
     noclip = Noclip.new(Options, localCharacter),
+    killPart = KillPartBypass.new(Options, localCharacter),
     zenith = HitboxDesync.new(Options, localCharacter),
     clean = Cleaner.new(Options, localCharacter)
 }
@@ -9432,7 +9544,7 @@ requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, playerTabController)
 requireModule("UI/Tabs/TeleportTab.lua")(Window, Options, waypointTeleport)
-requireModule("UI/Tabs/BlatantTab.lua")(Window, Options)
+requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, movementSuite.killPart)
 local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
 
 local loadConfigOk, loadConfigErr = RayfieldUI.SafeLoadConfiguration(Rayfield)
