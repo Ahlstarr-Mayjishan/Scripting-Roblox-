@@ -17,6 +17,9 @@ function ResourceManager.new(options, githubBase, manifest)
     self.Manifest = manifest
     self.Cache = {} -- Runtime cache
     self.SessionID = tostring(os.time())
+    self.TrackedObjects = {}
+    self.DeferredCleanup = {}
+    self.Status = "Idle"
     
     -- Ensure cache directory exists if possible
     if makefolder then
@@ -24,6 +27,67 @@ function ResourceManager.new(options, githubBase, manifest)
     end
     
     return self
+end
+
+function ResourceManager:TrackObject(obj)
+    if not obj then return end
+    table.insert(self.TrackedObjects, obj)
+end
+
+function ResourceManager:TrackConnection(conn)
+    if not conn then return end
+    table.insert(self.TrackedObjects, conn)
+end
+
+function ResourceManager:DeferCleanup(fn)
+    if type(fn) ~= "function" then return end
+    table.insert(self.DeferredCleanup, fn)
+end
+
+function ResourceManager:ScheduleTrackedCleanup()
+    -- Managed by RuntimeLifecycle call to Flush
+end
+
+function ResourceManager:Flush(multiplier)
+    self.Status = "Cleaning resources..."
+    local budget = math.ceil(15 * (multiplier or 1))
+    local count = 0
+    
+    -- Execute deferred functions
+    for i = #self.DeferredCleanup, 1, -1 do
+        local fn = self.DeferredCleanup[i]
+        pcall(fn)
+        self.DeferredCleanup[i] = nil
+    end
+
+    -- Cleanup tracked objects (Connections first, then Instances)
+    for i = #self.TrackedObjects, 1, -1 do
+        local obj = self.TrackedObjects[i]
+        if typeof(obj) == "RBXScriptConnection" then
+            pcall(function() obj:Disconnect() end)
+        elseif typeof(obj) == "Instance" then
+            pcall(function() obj:Destroy() end)
+        elseif type(obj) == "function" then
+            pcall(obj)
+        end
+        self.TrackedObjects[i] = nil
+        count = count + 1
+        if count >= budget then break end
+    end
+    self.Status = "Idle"
+end
+
+function ResourceManager:Boost(multiplier)
+    -- Stub for compatibility with legacy calls
+end
+
+function ResourceManager:GetPendingCount()
+    return #self.TrackedObjects + #self.DeferredCleanup
+end
+
+function ResourceManager:Destroy()
+    self:Flush(10)
+    table.clear(self.Cache)
 end
 
 function ResourceManager:GetSource(path)

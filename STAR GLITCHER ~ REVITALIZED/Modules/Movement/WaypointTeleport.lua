@@ -231,6 +231,14 @@ function WaypointTeleport:SetWaypoint(customName)
     end
 
     local name = customName or self:_formatWaypointName(root)
+    
+    -- Duplicate Name Check
+    for _, wp in ipairs(self.Waypoints) do
+        if wp.Name == name then
+            return false, "Waypoint with name '" .. name .. "' already exists."
+        end
+    end
+
     table.insert(self.Waypoints, 1, {
         Name = name,
         CFrame = root.CFrame,
