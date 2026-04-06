@@ -64,6 +64,15 @@ function Layout.Build(Tab, Options)
         end,
     })
 
+    Tab:CreateToggle({
+        Name = "Noclip",
+        CurrentValue = Options.NoclipEnabled,
+        Flag = "NoclipEnabledFlag",
+        Callback = function(Value)
+            Options.NoclipEnabled = Value
+        end,
+    })
+
     Tab:CreateSection("Anti-Debuff")
 
     Tab:CreateToggle({
