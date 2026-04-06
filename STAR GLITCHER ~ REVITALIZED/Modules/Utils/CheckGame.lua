@@ -18,7 +18,7 @@ local function Check()
                 Title = "Wrong Game Detected",
                 Content = errorMsg,
                 Duration = 10,
-                Image = 4483362458,
+                -- Image removed for compatibility
             })
         end
         

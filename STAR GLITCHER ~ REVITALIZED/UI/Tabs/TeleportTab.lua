@@ -31,7 +31,7 @@ return function(Window, Options, waypointTeleport)
                     Title = ok and "Waypoint Saved" or "Waypoint Failed",
                     Content = ok and ("Saved " .. tostring(detail)) or tostring(detail),
                     Duration = 4,
-                    Image = 4483362458,
+                    -- Image removed for compatibility
                 })
             end
         end,
@@ -50,7 +50,7 @@ return function(Window, Options, waypointTeleport)
                     Title = ok and "Teleport Started" or "Teleport Failed",
                     Content = ok and ("Heading to " .. tostring(detail) .. " via " .. tostring(Options.TeleportMethod or "Tween")) or tostring(detail),
                     Duration = 4,
-                    Image = 4483362458,
+                    -- Image removed for compatibility
                 })
             end
         end,

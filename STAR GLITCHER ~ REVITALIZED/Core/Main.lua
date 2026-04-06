@@ -63,7 +63,7 @@ local loadingNotification = Rayfield:Notify({
     Title = "Star Glitcher",
     Content = "Initializing modular systems...",
     Duration = 3,
-    Image = 4483362458,
+    -- Image removed for compatibility
 })
 
 -- 4. Component Loading (Dependency Order)
@@ -166,26 +166,50 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 
 -- 7. Tabs Loading (Lazy UI strategy)
 -- Load basic tabs first
-requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
-requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
+local function safeLoadTab(path, ...)
+    local args = {...}
+    local ok, err = pcall(function()
+        local tabFunc = requireModule(path)
+        if type(tabFunc) == "function" then
+            tabFunc(Rayfield, Window, Options, unpack(args))
+        else
+            error("Tab module did not return a function: " .. path)
+        end
+    end)
+    if not ok then
+        warn("[UI] Failed to load tab: " .. path .. " | Error: " .. tostring(err))
+    end
+end
+
+safeLoadTab("UI/Tabs/AimbotTab.lua", {FOVCircle = visuals.fov.Drawing}, tracker)
+safeLoadTab("UI/Tabs/PredictionTab.lua")
 
 -- Load complex tabs in background
 task.spawn(function()
-    local PlayerController = requireModule("UI/Tabs/Player/Controller.lua")
-    local PlayerLayout = requireModule("UI/Tabs/Player/Layout.lua")
-    local PlayerStatusLoop = requireModule("UI/Tabs/Player/StatusLoop.lua")
-    local PlayerLabelUtils = requireModule("UI/Tabs/Player/LabelUtils.lua")
-    local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
+    local ok, controller = pcall(function()
+        local PlayerController = requireModule("UI/Tabs/Player/Controller.lua")
+        local PlayerLayout = requireModule("UI/Tabs/Player/Layout.lua")
+        local PlayerStatusLoop = requireModule("UI/Tabs/Player/StatusLoop.lua")
+        local PlayerLabelUtils = requireModule("UI/Tabs/Player/LabelUtils.lua")
+        return PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
+    end)
 
-    requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, playerTabController)
-    requireModule("UI/Tabs/TeleportTab.lua")(Window, Options, movementSuite.waypoint)
-    requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, movementSuite.killPart, movementSuite.proactiveEvade, ultraHell)
+    if ok and controller then
+        safeLoadTab("UI/Tabs/PlayerTab.lua", movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, controller)
+    end
+
+    safeLoadTab("UI/Tabs/TeleportTab.lua", movementSuite.waypoint)
+    safeLoadTab("UI/Tabs/BlatantTab.lua", movementSuite.killPart, movementSuite.proactiveEvade, ultraHell)
     
-    local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
+    local settingsOk, settingsTabController = pcall(function()
+        return requireModule("UI/Tabs/SettingsTab.lua")(Rayfield, Window, Options, cleaner, resourceManager, tracker, taskScheduler)
+    end)
     
     -- Final config load
-    RayfieldUI.SafeLoadConfiguration(Rayfield)
-    movementSuite.waypoint:LoadFromOptions()
+    pcall(function()
+        RayfieldUI.SafeLoadConfiguration(Rayfield)
+        movementSuite.waypoint:LoadFromOptions()
+    end)
 end)
 
 -- 8. Lifecycle Management
@@ -218,5 +242,5 @@ local function reg(connection) return runtimeLifecycle:RegisterConnection(connec
 reg(RunService.Heartbeat:Connect(function(dt) brain:Scan(UserInputService:GetMouseLocation(), Camera.CFrame.Position, dt) end))
 reg(RunService.RenderStepped:Connect(function(dt) brain:Update(dt, UserInputService:GetMouseLocation(), Camera.CFrame) end))
 
-warn(" [Core] Star Glitcher Modular Active (Optimized v7).")
+warn(" [Core] Star Glitcher Modular Active (Optimized v7.1).")
 return _G.BossAimAssist_SessionID

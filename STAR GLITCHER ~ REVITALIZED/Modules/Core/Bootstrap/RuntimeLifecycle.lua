@@ -142,7 +142,7 @@ function RuntimeLifecycle:BindGlobals()
                     Title = "Update Check Failed",
                     Content = "Version check failed. The remote file responded, but parsing or access failed.",
                     Duration = 5,
-                    Image = 4483362458,
+                    -- Image removed for compatibility
                 })
             end
             return false
@@ -157,7 +157,7 @@ function RuntimeLifecycle:BindGlobals()
                     Title = "Update Found",
                     Content = string.format("Updating from r%d to r%d.", currentVersion, remoteVersion),
                     Duration = 3,
-                    Image = 4483362458,
+                    -- Image removed for compatibility
                 })
             end
             task.spawn(function()
@@ -175,7 +175,7 @@ function RuntimeLifecycle:BindGlobals()
                 Title = "Up To Date",
                 Content = string.format("Current runtime r%d is already the newest version.", currentVersion),
                 Duration = 4,
-                Image = 4483362458,
+                -- Image removed for compatibility
             })
         end
 

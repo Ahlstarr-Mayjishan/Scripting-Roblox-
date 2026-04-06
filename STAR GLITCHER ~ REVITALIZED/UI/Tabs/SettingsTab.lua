@@ -100,7 +100,7 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
                         remaining or 0
                     ),
                     Duration = 4,
-                    Image = 4483362458,
+                    -- Image removed for compatibility
                 })
             end
         end,
@@ -126,7 +126,7 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
                     Title = "UI Key Updated",
                     Content = "UI toggle key saved as " .. tostring(selected) .. ". It applies immediately and will persist after reload.",
                     Duration = 4,
-                    Image = 4483362458,
+                    -- Image removed for compatibility
                 })
             end
         end,
@@ -145,7 +145,7 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
                             Title = "Emergency Stop Failed",
                             Content = tostring(err),
                             Duration = 5,
-                            Image = 4483362458,
+                            -- Image removed for compatibility
                         })
                     end
                 end)
@@ -177,7 +177,7 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
                     Title = "Updater Unavailable",
                     Content = "This runtime does not expose the update checker yet. Reload from Main.lua.",
                     Duration = 4,
-                    Image = 4483362458,
+                    -- Image removed for compatibility
                 })
             end
         end,
@@ -224,7 +224,7 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
                     Title = "Server Hop Failed",
                     Content = "No suitable new servers found at this time.",
                     Duration = 4,
-                    Image = 4483362458,
+                    -- Image removed for compatibility
                 })
             end)
         end,
@@ -302,7 +302,7 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
                             Title = "Auto-Execute Enabled",
                             Content = "Loader saved to workspace/BossAimAssist_Loader.lua. Move this to your autoexec folder.",
                             Duration = 5,
-                            Image = 4483362458,
+                            -- Image removed for compatibility
                         })
                     end)
                 else
@@ -310,7 +310,7 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
                         Title = "Error",
                         Content = "Your executor does not support writefile.",
                         Duration = 5,
-                        Image = 4483362458,
+                        -- Image removed for compatibility
                     })
                 end
             else
@@ -321,7 +321,7 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
                             Title = "Auto-Execute Disabled",
                             Content = "Loader file removed from workspace.",
                             Duration = 5,
-                            Image = 4483362458,
+                            -- Image removed for compatibility
                         })
                     end)
                 end
