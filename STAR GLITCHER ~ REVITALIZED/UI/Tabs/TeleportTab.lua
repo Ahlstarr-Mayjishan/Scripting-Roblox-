@@ -18,6 +18,17 @@ return function(Window, Options, waypointTeleport)
         waypointTeleport:SetDropdown(waypointDropdown)
     end
 
+    local customNameInput = ""
+
+    Tab:CreateInput({
+        Name = "Custom Waypoint Name",
+        PlaceholderText = "Leave blank for auto-time name",
+        RemoveTextAfterFocusLost = false,
+        Callback = function(Text)
+            customNameInput = Text or ""
+        end,
+    })
+
     Tab:CreateButton({
         Name = "Set Waypoint",
         Callback = function()
@@ -25,7 +36,8 @@ return function(Window, Options, waypointTeleport)
                 return
             end
 
-            local ok, detail = waypointTeleport:SetWaypoint()
+            local nameToSet = customNameInput ~= "" and customNameInput or nil
+            local ok, detail = waypointTeleport:SetWaypoint(nameToSet)
             if Rayfield and Rayfield.Notify then
                 Rayfield:Notify({
                     Title = ok and "Waypoint Saved" or "Waypoint Failed",

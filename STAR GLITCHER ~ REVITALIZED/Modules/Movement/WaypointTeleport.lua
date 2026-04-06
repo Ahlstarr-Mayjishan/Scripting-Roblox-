@@ -223,14 +223,14 @@ function WaypointTeleport:_formatWaypointName(root)
     return string.format("%s | %.0f, %.0f, %.0f", os.date("%H:%M:%S"), pos.X, pos.Y, pos.Z)
 end
 
-function WaypointTeleport:SetWaypoint()
+function WaypointTeleport:SetWaypoint(customName)
     local _, root = self:_getRoot()
     if not root then
         self.Status = "Body Missing"
         return false, "Character body is not available."
     end
 
-    local name = self:_formatWaypointName(root)
+    local name = customName or self:_formatWaypointName(root)
     table.insert(self.Waypoints, 1, {
         Name = name,
         CFrame = root.CFrame,
