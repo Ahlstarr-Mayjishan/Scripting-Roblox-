@@ -174,6 +174,26 @@ function Layout.Build(Tab, Options)
         end,
     })
 
+    Tab:CreateSection("Maintenance")
+
+    Tab:CreateButton({
+        Name = "Clean Status Char",
+        Interact = "Click to Reset",
+        Callback = function()
+            if charCleaner then
+                charCleaner:Clean()
+                if Rayfield and Rayfield.Notify then
+                    Rayfield:Notify({
+                        Title = "Status Cleaned",
+                        Content = "Character state and environment interactions restored.",
+                        Duration = 3,
+                        Image = 4483362458,
+                    })
+                end
+            end
+        end,
+    })
+
     return refs
 end
 

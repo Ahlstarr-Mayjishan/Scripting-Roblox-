@@ -15,9 +15,9 @@ function Controller.new(layout, statusLoop, labelUtils)
     return self
 end
 
-function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, zenith)
+function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, zenith, charCleaner)
     local Tab = Window:CreateTab("Player", 4483362458)
-    local refs = self.Layout.Build(Tab, Options)
+    local refs = self.Layout.Build(Tab, Options, charCleaner)
 
     if self._statusLoopHandle and self._statusLoopHandle.Destroy then
         self._statusLoopHandle:Destroy()

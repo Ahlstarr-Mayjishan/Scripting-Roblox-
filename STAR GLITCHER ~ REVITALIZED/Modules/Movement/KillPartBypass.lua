@@ -31,19 +31,34 @@ end
 
 function KillPartBypass:Init()
     self.Connection = RunService.Stepped:Connect(function()
-        if not self.Options.KillPartBypassEnabled then
-            if self.Status ~= "Disabled" then
-                self.Status = "Disabled"
-            end
-            return
-        end
-
         local character = self.LocalCharacter and self.LocalCharacter:GetCharacter()
         local rootPart = self.LocalCharacter and self.LocalCharacter:GetRootPart()
         local parts = self.LocalCharacter and self.LocalCharacter.GetCharacterParts and self.LocalCharacter:GetCharacterParts()
 
         if not character then
             self.Status = "Char Missing"
+            return
+        end
+
+        if not self.Options.KillPartBypassEnabled then
+            if self.Status ~= "Disabled" then
+                -- Restore properties once
+                for _, obj in ipairs(parts or character:GetDescendants()) do
+                    if obj:IsA("BasePart") then
+                        pcall(function()
+                            obj.CanTouch = true
+                            obj.CanQuery = true
+                        end)
+                    end
+                end
+                if rootPart then
+                    pcall(function()
+                        rootPart.CanTouch = true
+                        rootPart.CanQuery = true
+                    end)
+                end
+                self.Status = "Disabled"
+            end
             return
         end
 

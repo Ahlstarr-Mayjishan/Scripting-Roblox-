@@ -55,6 +55,7 @@ return {
         ["Modules/Utils/TaskScheduler.lua"] = { Version = 110 },
         ["Modules/Utils/Math/Kalman.lua"] = { Version = 100 },
         
+        ["Modules/Utils/CharacterCleaner.lua"] = { Version = 100 },
         -- Modules/Visuals
         ["Modules/Visuals/FOVCircle.lua"] = { Version = 100 },
         ["Modules/Visuals/Highlight.lua"] = { Version = 100 },

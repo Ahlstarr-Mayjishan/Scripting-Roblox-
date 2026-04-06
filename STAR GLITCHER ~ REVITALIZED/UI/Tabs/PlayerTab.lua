@@ -3,9 +3,9 @@
     Job: Delegate Player tab construction to an injected controller.
 ]]
 
-return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, zenith, controller)
+return function(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, zenith, controller, charCleaner)
     if controller and controller.Build then
-        return controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, zenith)
+        return controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, zenith, charCleaner)
     end
 
     error("PlayerTab controller was not provided", 2)

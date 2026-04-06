@@ -116,6 +116,7 @@ local function setupMovement()
     movementSuite.proactiveEvade = requireModule("Modules/Movement/ProactiveEvade.lua").new(Options, mc)
     movementSuite.zenith = requireModule("Modules/Movement/HitboxDesync.lua").new(Options, mc)
     movementSuite.clean = requireModule("Modules/Movement/AttributeCleaner.lua").new(Options, mc)
+    movementSuite.charCleaner = requireModule("Modules/Utils/CharacterCleaner.lua").new(Options, mc, movementSuite.zenith)
     movementSuite.waypoint = requireModule("Modules/Movement/WaypointTeleport.lua").new(Options, mc)
     
     return mc, arb
@@ -195,7 +196,7 @@ task.spawn(function()
     end)
 
     if ok and controller then
-        safeLoadTab("UI/Tabs/PlayerTab.lua", movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, controller)
+        safeLoadTab("UI/Tabs/PlayerTab.lua", movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, controller, movementSuite.charCleaner)
     end
 
     safeLoadTab("UI/Tabs/TeleportTab.lua", movementSuite.waypoint)
