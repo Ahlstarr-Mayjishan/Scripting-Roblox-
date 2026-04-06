@@ -47,6 +47,8 @@ Config.Options = {
     NoclipEnabled = false,
     ZenithDesyncEnabled = false,
     SilentDamageEnabled = false,
+    TeleportMethod = "Tween",
+    TeleportTweenSpeed = 150,
 }
 
 Config.Prediction = {

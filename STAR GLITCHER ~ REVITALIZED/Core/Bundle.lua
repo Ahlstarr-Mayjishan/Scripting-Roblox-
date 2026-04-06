@@ -55,6 +55,8 @@ Config.Options = {
     NoclipEnabled = false,
     ZenithDesyncEnabled = false,
     SilentDamageEnabled = false,
+    TeleportMethod = "Tween",
+    TeleportTweenSpeed = 150,
 }
 
 Config.Prediction = {
@@ -4150,6 +4152,212 @@ function SpeedSpoof:Destroy()
 end
 
 return SpeedSpoof
+]====],
+    ["Modules/Movement/WaypointTeleport.lua"] = [====[local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local WaypointTeleport = {}
+WaypointTeleport.__index = WaypointTeleport
+
+local DEFAULT_SPEED = 150
+local MIN_SPEED = 10
+local MAX_SPEED = 1000
+local EMPTY_OPTION = "(No waypoints yet)"
+
+function WaypointTeleport.new(options, localCharacter)
+    local self = setmetatable({}, WaypointTeleport)
+    self.Options = options
+    self.LocalCharacter = localCharacter
+    self.Status = "Idle"
+    self.Waypoints = {}
+    self.SelectedWaypointName = nil
+    self.Dropdown = nil
+    self._tweenConnection = nil
+    return self
+end
+
+function WaypointTeleport:_getCharacterState()
+    if self.LocalCharacter and self.LocalCharacter.GetState then
+        return self.LocalCharacter:GetState()
+    end
+
+    local character = Players.LocalPlayer and Players.LocalPlayer.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    local root = character and (character.PrimaryPart or character:FindFirstChild("HumanoidRootPart"))
+    return character, humanoid, root
+end
+
+function WaypointTeleport:_getRoot()
+    local character, _, root = self:_getCharacterState()
+    return character, root
+end
+
+function WaypointTeleport:_refreshDropdown()
+    if not self.Dropdown then
+        return
+    end
+
+    local options = self:GetWaypointNames()
+    local currentOption = self.SelectedWaypointName or options[1]
+
+    local ok = pcall(function()
+        if type(self.Dropdown.Refresh) == "function" then
+            self.Dropdown:Refresh(options, true)
+        elseif type(self.Dropdown.SetOptions) == "function" then
+            self.Dropdown:SetOptions(options)
+        else
+            self.Dropdown.Options = options
+        end
+    end)
+
+    if not ok and typeof(self.Dropdown) == "Instance" then
+        local textLabel = self.Dropdown:FindFirstChildWhichIsA("TextLabel", true)
+        if textLabel then
+            textLabel.Text = tostring(currentOption)
+        end
+    end
+
+    if type(self.Dropdown.Set) == "function" then
+        pcall(function()
+            self.Dropdown:Set(currentOption)
+        end)
+    end
+end
+
+function WaypointTeleport:SetDropdown(dropdown)
+    self.Dropdown = dropdown
+    self:_refreshDropdown()
+end
+
+function WaypointTeleport:GetWaypointNames()
+    if #self.Waypoints == 0 then
+        return { EMPTY_OPTION }
+    end
+
+    local names = table.create(#self.Waypoints)
+    for i = 1, #self.Waypoints do
+        names[i] = self.Waypoints[i].Name
+    end
+    return names
+end
+
+function WaypointTeleport:SetSelectedWaypoint(name)
+    if not name or name == EMPTY_OPTION then
+        self.SelectedWaypointName = nil
+        return
+    end
+
+    self.SelectedWaypointName = name
+end
+
+function WaypointTeleport:_findWaypointByName(name)
+    if not name then
+        return self.Waypoints[1]
+    end
+
+    for i = 1, #self.Waypoints do
+        local waypoint = self.Waypoints[i]
+        if waypoint.Name == name then
+            return waypoint
+        end
+    end
+
+    return self.Waypoints[1]
+end
+
+function WaypointTeleport:_formatWaypointName(root)
+    local pos = root.Position
+    return string.format("%s | %.0f, %.0f, %.0f", os.date("%H:%M:%S"), pos.X, pos.Y, pos.Z)
+end
+
+function WaypointTeleport:SetWaypoint()
+    local _, root = self:_getRoot()
+    if not root then
+        self.Status = "Body Missing"
+        return false, "Character body is not available."
+    end
+
+    local name = self:_formatWaypointName(root)
+    table.insert(self.Waypoints, 1, {
+        Name = name,
+        CFrame = root.CFrame,
+        CreatedAt = os.clock(),
+    })
+
+    self.SelectedWaypointName = name
+    self.Status = "Saved Waypoint"
+    self:_refreshDropdown()
+    return true, name
+end
+
+function WaypointTeleport:_stopTween(status)
+    if self._tweenConnection then
+        self._tweenConnection:Disconnect()
+        self._tweenConnection = nil
+    end
+
+    if status then
+        self.Status = status
+    end
+end
+
+function WaypointTeleport:_startTween(targetCFrame)
+    self:_stopTween()
+    self.Status = "Tweening"
+
+    self._tweenConnection = RunService.Heartbeat:Connect(function(dt)
+        local character, root = self:_getRoot()
+        if not character or not root then
+            self:_stopTween("Body Missing")
+            return
+        end
+
+        local current = root.CFrame
+        local delta = targetCFrame.Position - current.Position
+        local distance = delta.Magnitude
+        if distance <= 2 then
+            character:PivotTo(targetCFrame)
+            self:_stopTween("Arrived")
+            return
+        end
+
+        local speed = math.clamp(tonumber(self.Options.TeleportTweenSpeed) or DEFAULT_SPEED, MIN_SPEED, MAX_SPEED)
+        local alpha = math.clamp((speed * dt) / math.max(distance, 0.001), 0, 1)
+        character:PivotTo(current:Lerp(targetCFrame, alpha))
+    end)
+end
+
+function WaypointTeleport:GotoSelectedWaypoint()
+    local waypoint = self:_findWaypointByName(self.SelectedWaypointName)
+    if not waypoint then
+        self.Status = "No Waypoint"
+        return false, "No waypoint has been saved yet."
+    end
+
+    local character, root = self:_getRoot()
+    if not character or not root then
+        self.Status = "Body Missing"
+        return false, "Character body is not available."
+    end
+
+    local method = tostring(self.Options.TeleportMethod or "Tween")
+    if method == "Teleport" then
+        character:PivotTo(waypoint.CFrame)
+        self.Status = "Teleported"
+        self:_stopTween()
+        return true, waypoint.Name
+    end
+
+    self:_startTween(waypoint.CFrame)
+    return true, waypoint.Name
+end
+
+function WaypointTeleport:Destroy()
+    self:_stopTween("Destroyed")
+    self.Dropdown = nil
+end
+
+return WaypointTeleport
 ]====],
     ["Modules/NPCPrediction.lua"] = [====[--[[
     NPCPrediction.lua - NPC-Specific Prediction Profile
@@ -8962,6 +9170,91 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
 
     return controller
 end
+]====],
+    ["UI/Tabs/TeleportTab.lua"] = [====[return function(Window, Options, waypointTeleport)
+    local Tab = Window:CreateTab("Teleport", 4483362458)
+
+    local waypointDropdown = Tab:CreateDropdown({
+        Name = "Waypoint List",
+        Options = waypointTeleport and waypointTeleport:GetWaypointNames() or { "(No waypoints yet)" },
+        CurrentOption = { waypointTeleport and waypointTeleport.SelectedWaypointName or "(No waypoints yet)" },
+        Flag = "TeleportWaypointDropdown",
+        Callback = function(Value)
+            local selected = type(Value) == "table" and Value[1] or Value
+            if waypointTeleport then
+                waypointTeleport:SetSelectedWaypoint(selected)
+            end
+        end,
+    })
+
+    if waypointTeleport then
+        waypointTeleport:SetDropdown(waypointDropdown)
+    end
+
+    Tab:CreateButton({
+        Name = "Set Waypoint",
+        Callback = function()
+            if not waypointTeleport then
+                return
+            end
+
+            local ok, detail = waypointTeleport:SetWaypoint()
+            if Rayfield and Rayfield.Notify then
+                Rayfield:Notify({
+                    Title = ok and "Waypoint Saved" or "Waypoint Failed",
+                    Content = ok and ("Saved " .. tostring(detail)) or tostring(detail),
+                    Duration = 4,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
+
+    Tab:CreateButton({
+        Name = "Go To Selected Waypoint",
+        Callback = function()
+            if not waypointTeleport then
+                return
+            end
+
+            local ok, detail = waypointTeleport:GotoSelectedWaypoint()
+            if Rayfield and Rayfield.Notify then
+                Rayfield:Notify({
+                    Title = ok and "Teleport Started" or "Teleport Failed",
+                    Content = ok and ("Heading to " .. tostring(detail) .. " via " .. tostring(Options.TeleportMethod or "Tween")) or tostring(detail),
+                    Duration = 4,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
+
+    Tab:CreateDropdown({
+        Name = "Method",
+        Options = { "Tween", "Teleport" },
+        CurrentOption = { Options.TeleportMethod or "Tween" },
+        Flag = "TeleportMethodDropdown",
+        Callback = function(Value)
+            Options.TeleportMethod = type(Value) == "table" and Value[1] or Value
+        end,
+    })
+
+    Tab:CreateSection("Custom")
+
+    Tab:CreateSlider({
+        Name = "Tween Speed",
+        Range = { 10, 1000 },
+        Increment = 10,
+        CurrentValue = Options.TeleportTweenSpeed or 150,
+        Flag = "TeleportTweenSpeedSlider",
+        Suffix = " studs/s",
+        Callback = function(Value)
+            Options.TeleportTweenSpeed = Value
+        end,
+    })
+
+    return Tab
+end
 ]====]
 }
 
@@ -9057,6 +9350,7 @@ local AntiSlowdown    = requireModule("Modules/Movement/AntiSlowdown.lua")
 local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
 local Noclip          = requireModule("Modules/Movement/Noclip.lua")
 local HitboxDesync    = requireModule("Modules/Movement/HitboxDesync.lua")
+local WaypointTeleport = requireModule("Modules/Movement/WaypointTeleport.lua")
 local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
 
 local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
@@ -9082,6 +9376,7 @@ local aimbot     = Aimbot.new(Config)
 local silentResolver = SilentResolver.new(Config)
 local silentAim  = SilentAim.new(Config, synapse, silentResolver) 
 local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
+local waypointTeleport = WaypointTeleport.new(Options, localCharacter)
 local resourceManager = ResourceManager.new(Options)
 local cleaner    = GarbageCollector.new(Options, resourceManager)
 
@@ -9136,6 +9431,7 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, playerTabController)
+requireModule("UI/Tabs/TeleportTab.lua")(Window, Options, waypointTeleport)
 requireModule("UI/Tabs/BlatantTab.lua")(Window, Options)
 local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
 
@@ -9175,7 +9471,7 @@ local function performCleanup(fullSweep)
     local objs = {
         input, localCharacter, detector, tracker, pred, selector, aimbot, silentAim,
         cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
-        taskScheduler, dataPruner,
+        taskScheduler, dataPruner, waypointTeleport,
         playerTabController, settingsTabController
     }
     for _, obj in pairs(movementSuite) do

@@ -205,6 +205,7 @@ local AntiSlowdown    = requireModule("Modules/Movement/AntiSlowdown.lua")
 local AntiStun        = requireModule("Modules/Movement/AntiStun.lua")
 local Noclip          = requireModule("Modules/Movement/Noclip.lua")
 local HitboxDesync    = requireModule("Modules/Movement/HitboxDesync.lua")
+local WaypointTeleport = requireModule("Modules/Movement/WaypointTeleport.lua")
 local Cleaner         = requireModule("Modules/Movement/AttributeCleaner.lua")
 
 local FOVCircle       = requireModule("Modules/Visuals/FOVCircle.lua")
@@ -230,6 +231,7 @@ local aimbot     = Aimbot.new(Config)
 local silentResolver = SilentResolver.new(Config)
 local silentAim  = SilentAim.new(Config, synapse, silentResolver) 
 local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
+local waypointTeleport = WaypointTeleport.new(Options, localCharacter)
 local resourceManager = ResourceManager.new(Options)
 local cleaner    = GarbageCollector.new(Options, resourceManager)
 
@@ -284,6 +286,7 @@ for _, m in pairs(movementSuite) do if m.Init then m:Init() end end
 requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov.Drawing}, tracker)
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, playerTabController)
+requireModule("UI/Tabs/TeleportTab.lua")(Window, Options, waypointTeleport)
 requireModule("UI/Tabs/BlatantTab.lua")(Window, Options)
 local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
 
@@ -323,7 +326,7 @@ local function performCleanup(fullSweep)
     local objs = {
         input, localCharacter, detector, tracker, pred, selector, aimbot, silentAim,
         cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
-        taskScheduler, dataPruner,
+        taskScheduler, dataPruner, waypointTeleport,
         playerTabController, settingsTabController
     }
     for _, obj in pairs(movementSuite) do
