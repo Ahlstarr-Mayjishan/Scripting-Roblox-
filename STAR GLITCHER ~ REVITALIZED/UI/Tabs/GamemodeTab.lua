@@ -14,9 +14,6 @@ end
 return function(Window, Options, killPartBypass, ultraHell)
     local Tab = Window:CreateTab("Gamemode", 4483362458)
     
-    local killPartLabel = Tab:CreateLabel("Kill Part Bypass: Idle")
-    local ultraHellLabel = Tab:CreateLabel("UltraHell: Waiting for capture...")
-
     Tab:CreateSection("Bypasses")
 
     Tab:CreateToggle({
@@ -46,6 +43,8 @@ return function(Window, Options, killPartBypass, ultraHell)
         end,
     })
 
+    Tab:CreateSection("Custom Value")
+
     Tab:CreateSlider({
         Name = "Multi Hit Rate",
         Range = {1, 100},
@@ -57,6 +56,11 @@ return function(Window, Options, killPartBypass, ultraHell)
             Options.UltraHellHitsPerSecond = Value
         end,
     })
+
+    Tab:CreateSection("Status Scripts")
+
+    local killPartLabel = Tab:CreateLabel("Kill Part Bypass: Idle")
+    local ultraHellLabel = Tab:CreateLabel("UltraHell: Waiting for capture...")
 
     -- Status Loop
     task.spawn(function()

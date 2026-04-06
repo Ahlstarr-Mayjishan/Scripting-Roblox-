@@ -47,18 +47,6 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    Tab:CreateSlider({
-        Name = "Vertical Aim Offset (Y)",
-        Range = {-50, 50},
-        Increment = 5,
-        Suffix = " (x0.1 Studs)",
-        CurrentValue = Options.AimOffset and (Options.AimOffset * 10) or 0,
-        Flag = "YOffsetSlider",
-        Callback = function(Value)
-            Options.AimOffset = Value / 10
-        end,
-    })
-
     -- ===================================================
     -- SECTION: AIM METHODS
     -- ===================================================
@@ -75,6 +63,32 @@ return function(Window, Options, Visuals, NPCTracker)
             if Visuals and Visuals.FOVCircle then
                 Visuals.FOVCircle.Visible = (selected ~= "Distance")
             end
+        end,
+    })
+
+    Tab:CreateToggle({
+        Name = "Adaptive Target Scan",
+        CurrentValue = Options.AdaptiveTargetScan ~= false,
+        Flag = "AdaptiveTargetScanToggle",
+        Callback = function(Value)
+            Options.AdaptiveTargetScan = Value
+        end,
+    })
+
+    -- ===================================================
+    -- SECTION: CUSTOM VALUE
+    -- ===================================================
+    Tab:CreateSection("Custom Value")
+
+    Tab:CreateSlider({
+        Name = "Vertical Aim Offset (Y)",
+        Range = {-50, 50},
+        Increment = 5,
+        Suffix = " (x0.1 Studs)",
+        CurrentValue = Options.AimOffset and (Options.AimOffset * 10) or 0,
+        Flag = "YOffsetSlider",
+        Callback = function(Value)
+            Options.AimOffset = Value / 10
         end,
     })
 
@@ -105,15 +119,6 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    Tab:CreateToggle({
-        Name = "Adaptive Target Scan",
-        CurrentValue = Options.AdaptiveTargetScan ~= false,
-        Flag = "AdaptiveTargetScanToggle",
-        Callback = function(Value)
-            Options.AdaptiveTargetScan = Value
-        end,
-    })
-
     Tab:CreateSlider({
         Name = "Target Scan Cap",
         Range = {30, 240},
@@ -126,11 +131,6 @@ return function(Window, Options, Visuals, NPCTracker)
         end,
     })
 
-    -- ===================================================
-    -- SECTION: CAMERA SETTINGS
-    -- ===================================================
-    Tab:CreateSection("Camera Lock (Aimbot)")
-
     Tab:CreateSlider({
         Name = "Lock Smoothness",
         Range = {1, 100},
@@ -142,6 +142,11 @@ return function(Window, Options, Visuals, NPCTracker)
             Options.Smoothness = math.clamp(Value / 100, 0.01, 1)
         end,
     })
+
+    -- ===================================================
+    -- SECTION: STATUS SCRIPTS
+    -- ===================================================
+    Tab:CreateSection("Status Scripts")
 
     -- ===================================================
     -- SECTION: TARGET SOURCE

@@ -35,8 +35,6 @@ function Layout.Build(Tab, Options)
         end,
     })
 
-    refs.speedMultiplierLabel = Tab:CreateLabel("Multi Speed Status: Idle")
-
     Tab:CreateSection("Mobility")
 
     Tab:CreateToggle({
@@ -47,17 +45,6 @@ function Layout.Build(Tab, Options)
             Options.JumpBoostEnabled = Value
         end,
     })
-
-    Tab:CreateToggle({
-        Name = "Noclip",
-        CurrentValue = Options.NoclipEnabled,
-        Flag = "NoclipEnabledFlag",
-        Callback = function(Value)
-            Options.NoclipEnabled = Value
-        end,
-    })
-    
-    refs.noclipLabel = Tab:CreateLabel("Noclip Status: Idle")
 
     Tab:CreateToggle({
         Name = "Float",
@@ -77,13 +64,8 @@ function Layout.Build(Tab, Options)
         end,
     })
 
-    refs.jumpBoostLabel = Tab:CreateLabel("Jump Boost Status: Idle")
-    refs.floatLabel = Tab:CreateLabel("Float Status: Idle")
-    refs.gravityLabel = Tab:CreateLabel("Gravity Status: Idle")
-
     Tab:CreateSection("Anti-Debuff")
 
-    refs.slowdownLabel = Tab:CreateLabel("No Slowdown: Idle")
     Tab:CreateToggle({
         Name = "No Slowdown",
         CurrentValue = Options.NoSlowdown,
@@ -93,7 +75,6 @@ function Layout.Build(Tab, Options)
         end,
     })
 
-    refs.stunLabel = Tab:CreateLabel("No Stun: Idle")
     Tab:CreateToggle({
         Name = "No Stun",
         CurrentValue = Options.NoStun,
@@ -112,7 +93,7 @@ function Layout.Build(Tab, Options)
         end,
     })
 
-    Tab:CreateSection("Custom")
+    Tab:CreateSection("Custom Value")
 
     Tab:CreateSlider({
         Name = "Walk Speed (Fixed)",
@@ -171,6 +152,16 @@ function Layout.Build(Tab, Options)
             Options.GravityValue = Value
         end,
     })
+
+    Tab:CreateSection("Status Scripts")
+
+    refs.speedMultiplierLabel = Tab:CreateLabel("Multi Speed Status: Idle")
+    refs.noclipLabel = Tab:CreateLabel("Noclip Status: Idle")
+    refs.jumpBoostLabel = Tab:CreateLabel("Jump Boost Status: Idle")
+    refs.floatLabel = Tab:CreateLabel("Float Status: Idle")
+    refs.gravityLabel = Tab:CreateLabel("Gravity Status: Idle")
+    refs.slowdownLabel = Tab:CreateLabel("No Slowdown: Idle")
+    refs.stunLabel = Tab:CreateLabel("No Stun: Idle")
 
     Tab:CreateSection("Maintenance")
 

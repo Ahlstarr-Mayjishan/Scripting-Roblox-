@@ -34,11 +34,7 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
 
     Tab:CreateSection("Optimization & Safety")
 
-    local cleanerLabel = Tab:CreateLabel("Cleanup Status: Idle")
-    local resourceLabel = Tab:CreateLabel("Resource Manager: Idle")
-    local trackerLabel = Tab:CreateLabel("Tracker Entries: Hidden")
-    local schedulerLabel = Tab:CreateLabel("Task Scheduler: Hidden")
-    local resourcePendingLabel = Tab:CreateLabel("Resource Pending: Hidden")
+    local cleanerLabel, resourceLabel, trackerLabel, schedulerLabel, resourcePendingLabel
 
     Tab:CreateToggle({
         Name = "Auto-Clean Debris",
@@ -329,7 +325,7 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
         end,
     })
 
-    Tab:CreateSection("Custom")
+    Tab:CreateSection("Custom Value")
 
     Tab:CreateSlider({
         Name = "Update Check Interval",
@@ -342,6 +338,14 @@ return function(Window, Options, cleaner, resourceManager, tracker, taskSchedule
             Options.AutoUpdateIntervalMinutes = Value
         end,
     })
+
+    Tab:CreateSection("Status Scripts")
+
+    cleanerLabel = Tab:CreateLabel("Cleanup Status: Idle")
+    resourceLabel = Tab:CreateLabel("Resource Manager: Idle")
+    trackerLabel = Tab:CreateLabel("Tracker Entries: Hidden")
+    schedulerLabel = Tab:CreateLabel("Task Scheduler: Hidden")
+    resourcePendingLabel = Tab:CreateLabel("Resource Pending: Hidden")
 
     function controller:Destroy()
         self.Alive = false

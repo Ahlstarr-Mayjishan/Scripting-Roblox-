@@ -35,12 +35,17 @@ function CharacterCleaner:Clean()
 
     -- 4. Restore Interaction (CanTouch/CanQuery)
     if character then
+        if root then
+            pcall(function()
+                root.CanTouch = true
+                root.CanQuery = true
+            end)
+        end
         for _, obj in ipairs(character:GetDescendants()) do
             if obj:IsA("BasePart") then
                 pcall(function()
                     obj.CanTouch = true
                     obj.CanQuery = true
-                    -- obj.CanCollide = true -- Caution: Noclip might still be desirable if inside a wall
                 end)
             end
         end

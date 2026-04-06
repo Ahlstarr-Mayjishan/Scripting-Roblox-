@@ -15,5 +15,8 @@ return function(Window, Options)
         Callback = function(Value) Options.SpeedSpoofEnabled = Value end,
     })
 
+    Tab:CreateSection("Custom Value")
+    Tab:CreateSection("Status Scripts")
+
     return Tab
 end

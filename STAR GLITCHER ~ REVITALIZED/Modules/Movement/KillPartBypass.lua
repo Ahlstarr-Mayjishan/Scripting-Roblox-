@@ -42,22 +42,24 @@ function KillPartBypass:Init()
 
         if not self.Options.KillPartBypassEnabled then
             if self.Status ~= "Disabled" then
-                -- Restore properties once
-                for _, obj in ipairs(parts or character:GetDescendants()) do
-                    if obj:IsA("BasePart") then
-                        pcall(function()
-                            obj.CanTouch = true
-                            obj.CanQuery = true
-                        end)
-                    end
-                end
-                if rootPart then
-                    pcall(function()
-                        rootPart.CanTouch = true
-                        rootPart.CanQuery = true
-                    end)
-                end
                 self.Status = "Disabled"
+                task.spawn(function()
+                    for i = 1, 5 do
+                        local char = self.LocalCharacter and self.LocalCharacter:GetCharacter()
+                        local parts = self.LocalCharacter and self.LocalCharacter.GetCharacterParts and self.LocalCharacter:GetCharacterParts()
+                        if char then
+                            for _, obj in ipairs(parts or char:GetDescendants()) do
+                                if obj:IsA("BasePart") then
+                                    pcall(function()
+                                        obj.CanTouch = true
+                                        obj.CanQuery = true
+                                    end)
+                                end
+                            end
+                        end
+                        task.wait(0.2)
+                    end
+                end)
             end
             return
         end

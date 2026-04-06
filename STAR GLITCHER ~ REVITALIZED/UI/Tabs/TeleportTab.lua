@@ -78,7 +78,7 @@ return function(Window, Options, waypointTeleport)
         end,
     })
 
-    Tab:CreateSection("Custom")
+    Tab:CreateSection("Custom Value")
 
     Tab:CreateSlider({
         Name = "Tween Speed",
@@ -91,6 +91,8 @@ return function(Window, Options, waypointTeleport)
             Options.TeleportTweenSpeed = Value
         end,
     })
+
+    Tab:CreateSection("Status Scripts")
 
     return Tab
 end
