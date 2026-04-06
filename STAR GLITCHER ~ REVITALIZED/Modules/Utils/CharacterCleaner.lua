@@ -3,11 +3,10 @@ local Players = game:GetService("Players")
 local CharacterCleaner = {}
 CharacterCleaner.__index = CharacterCleaner
 
-function CharacterCleaner.new(options, localCharacter, hitboxDesync)
+function CharacterCleaner.new(options, localCharacter)
     local self = setmetatable({}, CharacterCleaner)
     self.Options = options
     self.LocalCharacter = localCharacter
-    self.HitboxDesync = hitboxDesync
     return self
 end
 
@@ -18,21 +17,13 @@ function CharacterCleaner:Clean()
 
     -- 1. Disable Toggles in Options
     self.Options.KillPartBypassEnabled = false
-    self.Options.ZenithDesyncEnabled = false
     self.Options.NoclipEnabled = false
     self.Options.CustomMoveSpeedEnabled = false
     self.Options.InfiniteJumpEnabled = false
     self.Options.HighGravityEnabled = false
     self.Options.FlightEnabled = false
 
-    -- 2. Force Stop Zenith Desync
-    if self.HitboxDesync then
-        pcall(function()
-            self.HitboxDesync:Stop()
-        end)
-    end
-
-    -- 3. Reset Humanoid Properties
+    -- 2. Reset Humanoid Properties
     if humanoid then
         pcall(function()
             humanoid.WalkSpeed = 16

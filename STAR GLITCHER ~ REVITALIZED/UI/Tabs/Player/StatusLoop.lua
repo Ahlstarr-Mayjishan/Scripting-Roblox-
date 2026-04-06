@@ -76,14 +76,6 @@ function StatusLoop.Start(refs, deps, labelUtils)
                 end
             end
 
-            if deps.zenith then
-                local nextText = "Zenith Desync: " .. tostring(deps.zenith.Status)
-                if nextText ~= lastGodText then
-                    labelUtils.SetText(refs.zenithLabel, nextText)
-                    lastGodText = nextText
-                end
-            end
-
             task.wait(0.5)
         end
     end)

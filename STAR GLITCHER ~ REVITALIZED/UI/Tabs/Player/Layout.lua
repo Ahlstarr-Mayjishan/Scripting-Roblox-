@@ -59,8 +59,6 @@ function Layout.Build(Tab, Options)
     
     refs.noclipLabel = Tab:CreateLabel("Noclip Status: Idle")
 
-    refs.zenithLabel = Tab:CreateLabel("Zenith Desync: Idle")
-
     Tab:CreateToggle({
         Name = "Float",
         CurrentValue = Options.FloatEnabled,
