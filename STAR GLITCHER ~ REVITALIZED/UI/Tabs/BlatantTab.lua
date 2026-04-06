@@ -15,7 +15,7 @@ local function setLabelText(label, text)
     end
 end
 
-return function(Rayfield, Window, Options, killPartBypass, proactiveEvade, ultraHell)
+return function(Window, Options, killPartBypass, proactiveEvade, ultraHell)
     local Tab = Window:CreateTab("Blatant & Bypass", 4483362458)
     
     -- Status Labels

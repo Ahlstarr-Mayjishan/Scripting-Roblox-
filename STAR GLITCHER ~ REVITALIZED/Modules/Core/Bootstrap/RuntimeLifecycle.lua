@@ -23,9 +23,6 @@ end
 
 function RuntimeLifecycle:RegisterConnection(connection)
     self._connections[#self._connections + 1] = connection
-    if self.ResourceManager then
-        self.ResourceManager:TrackConnection(connection)
-    end
     return connection
 end
 

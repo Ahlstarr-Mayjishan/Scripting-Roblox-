@@ -171,7 +171,7 @@ local function safeLoadTab(path, ...)
     local ok, err = pcall(function()
         local tabFunc = requireModule(path)
         if type(tabFunc) == "function" then
-            tabFunc(Rayfield, Window, Options, unpack(args))
+            tabFunc(Window, Options, unpack(args))
         else
             error("Tab module did not return a function: " .. path)
         end
@@ -202,7 +202,7 @@ task.spawn(function()
     safeLoadTab("UI/Tabs/BlatantTab.lua", movementSuite.killPart, movementSuite.proactiveEvade, ultraHell)
     
     local settingsOk, settingsTabController = pcall(function()
-        return requireModule("UI/Tabs/SettingsTab.lua")(Rayfield, Window, Options, cleaner, resourceManager, tracker, taskScheduler)
+        return requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
     end)
     
     -- Final config load
