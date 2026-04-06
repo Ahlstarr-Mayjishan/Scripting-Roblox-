@@ -139,14 +139,14 @@ function ResourceManager:GetSource(path)
                 end)
             end
             
-            -- print("[Resource] Downloaded: " .. path)
+            -- warn("[Resource] Downloaded: " .. path)
             return processedContent, "remote"
         end
         lastError = content
         task.wait(0.2 * attempt)
     end
 
-    error("[Resource] Failed to load " .. path .. " after 3 attempts: " .. tostring(lastError))
+    error("[Resource] Fatal fetch error: Failed to load " .. path .. " after 3 attempts. Target URL: " .. url .. " | Error: " .. tostring(lastError))
 end
 
 function ResourceManager:Load(path)

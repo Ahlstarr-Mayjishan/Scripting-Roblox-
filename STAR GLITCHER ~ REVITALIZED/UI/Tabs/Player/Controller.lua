@@ -15,7 +15,7 @@ function Controller.new(layout, statusLoop, labelUtils)
     return self
 end
 
-function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, zenith, charCleaner)
+function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, gravityController, floatController, jumpBoost, noclip, charCleaner)
     local Tab = Window:CreateTab("Player", 4483362458)
     local refs = self.Layout.Build(Tab, Options, charCleaner)
 
@@ -31,7 +31,6 @@ function Controller:Build(Window, Options, noSlowdown, noStun, speedMultiplier, 
         floatController = floatController,
         jumpBoost = jumpBoost,
         noclip = noclip,
-        zenith = zenith,
     }, self.LabelUtils)
 
     return Tab

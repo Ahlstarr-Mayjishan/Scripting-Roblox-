@@ -5,6 +5,9 @@
 
 local Config = {}
 
+Config.VERSION = "1.3.0"
+Config.GITHUB_BASE = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/STAR%20GLITCHER%20~%20REVITALIZED/"
+
 Config.Options = {
     AssistMode = "Off",
     HoldMouse2ToAssist = true,

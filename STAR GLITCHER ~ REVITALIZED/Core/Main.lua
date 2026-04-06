@@ -220,9 +220,9 @@ local runtimeLifecycle = RuntimeLifecycle.new(
     resourceManager,
     cleaner,
     Synapse,
-    _G.StarGlitcher_BootloaderURL or "Main.lua",
+    Config.GITHUB_BASE .. (_G.StarGlitcher_BootloaderURL or "Main.lua"),
     function(url) return loadstring(game:HttpGet(url))() end,
-    function() return 130 end, -- Fallback version
+    function() return tonumber(Config.VERSION:gsub("%.", "")) or 130 end, -- Fallback version
     function() 
         return {
             input, localChar, detector, tracker, pred, selector, aimbot, silentAim,
