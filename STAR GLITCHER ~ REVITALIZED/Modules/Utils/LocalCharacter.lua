@@ -15,11 +15,73 @@ function LocalCharacter.new(taskScheduler)
     self.LastSpawnTime = 0
     self.RespawnGracePeriod = 1.25
     self._connections = {}
+    self._characterConnections = {}
+    self._characterParts = {}
+    self._characterPartIndex = {}
     self._schedulerAlive = false
     return self
 end
 
+function LocalCharacter:_disconnectCharacterSignals()
+    for _, connection in ipairs(self._characterConnections) do
+        connection:Disconnect()
+    end
+    table.clear(self._characterConnections)
+end
+
+function LocalCharacter:_clearPartCache()
+    table.clear(self._characterParts)
+    table.clear(self._characterPartIndex)
+end
+
+function LocalCharacter:_trackPart(part)
+    if not part or not part:IsA("BasePart") or self._characterPartIndex[part] then
+        return
+    end
+
+    self._characterParts[#self._characterParts + 1] = part
+    self._characterPartIndex[part] = #self._characterParts
+end
+
+function LocalCharacter:_untrackPart(part)
+    local index = self._characterPartIndex[part]
+    if not index then
+        return
+    end
+
+    local lastIndex = #self._characterParts
+    local lastPart = self._characterParts[lastIndex]
+    self._characterParts[index] = lastPart
+    self._characterParts[lastIndex] = nil
+    self._characterPartIndex[part] = nil
+
+    if lastPart and lastPart ~= part then
+        self._characterPartIndex[lastPart] = index
+    end
+end
+
+function LocalCharacter:_rebuildPartCache(character)
+    self:_disconnectCharacterSignals()
+    self:_clearPartCache()
+
+    if not character then
+        return
+    end
+
+    for _, descendant in ipairs(character:GetDescendants()) do
+        self:_trackPart(descendant)
+    end
+
+    self._characterConnections[#self._characterConnections + 1] = character.DescendantAdded:Connect(function(descendant)
+        self:_trackPart(descendant)
+    end)
+    self._characterConnections[#self._characterConnections + 1] = character.DescendantRemoving:Connect(function(descendant)
+        self:_untrackPart(descendant)
+    end)
+end
+
 function LocalCharacter:_refresh(character)
+    local characterChanged = character ~= self.Character
     self.Character = character
     self.Humanoid = character and character:FindFirstChildOfClass("Humanoid") or nil
     self.RootPart = character and (
@@ -28,6 +90,10 @@ function LocalCharacter:_refresh(character)
         or character:FindFirstChildWhichIsA("BasePart")
     ) or nil
     self.PlayerGui = self.Player and self.Player:FindFirstChildOfClass("PlayerGui") or nil
+
+    if characterChanged then
+        self:_rebuildPartCache(character)
+    end
 end
 
 function LocalCharacter:_queueRefresh()
@@ -115,6 +181,11 @@ function LocalCharacter:GetState()
     return self:GetCharacter(), self:GetHumanoid(), self:GetRootPart()
 end
 
+function LocalCharacter:GetCharacterParts()
+    self:GetCharacter()
+    return self._characterParts
+end
+
 function LocalCharacter:IsLocalHumanoid(instance)
     local humanoid = self:GetHumanoid()
     return humanoid ~= nil and instance == humanoid
@@ -134,6 +205,8 @@ function LocalCharacter:Destroy()
         connection:Disconnect()
     end
     table.clear(self._connections)
+    self:_disconnectCharacterSignals()
+    self:_clearPartCache()
 end
 
 return LocalCharacter

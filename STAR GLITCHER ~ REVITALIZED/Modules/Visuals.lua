@@ -9,6 +9,7 @@ local CoreGui = game:GetService("CoreGui")
 
 local Visuals = {}
 Visuals.__index = Visuals
+Visuals.__Legacy = true
 
 function Visuals.new(config)
     local self = setmetatable({}, Visuals)

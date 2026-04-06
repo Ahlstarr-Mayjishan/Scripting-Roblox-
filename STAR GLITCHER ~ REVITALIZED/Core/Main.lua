@@ -18,8 +18,22 @@ local VERSION_URL = GITHUB_BASE .. "Data/Version.lua"
 local BUNDLE_URL = GITHUB_BASE .. "Core/Bundle.lua"
 local loaderSession = tostring(os.time())
 local runtimeModuleCache = {}
-local autoUpdateLoopStarted = false
-local cleanupInProgress = false
+
+local function sanitizeLuaSource(content)
+    content = tostring(content or "")
+    if content:sub(1, 3) == "\239\187\191" then
+        content = content:sub(4)
+    end
+
+    if utf8 then
+        local feff = utf8.char(0xFEFF)
+        if content:sub(1, #feff) == feff then
+            content = content:sub(#feff + 1)
+        end
+    end
+
+    return content
+end
 
 local function compileChunk(content, chunkName)
     local compiler = loadstring or load
@@ -27,7 +41,7 @@ local function compileChunk(content, chunkName)
         error("[compile] No Lua compiler available")
     end
 
-    content = tostring(content):gsub("^\239\187\191", ""):gsub("^", "")
+    content = sanitizeLuaSource(content)
     local chunk, compileErr = compiler(content, chunkName)
     if not chunk then
         error("[compile] " .. tostring(compileErr))
@@ -36,7 +50,7 @@ local function compileChunk(content, chunkName)
 end
 
 local function parseRemoteVersion(content)
-    content = tostring(content or ""):gsub("^\239\187\191", ""):gsub("^", "")
+    content = sanitizeLuaSource(content)
 
     local directReturn = content:match("^%s*return%s+(%d+)")
     if directReturn then
@@ -150,8 +164,6 @@ end
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
-local TeleportService = game:GetService("TeleportService")
-local GuiService = game:GetService("GuiService")
 local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
 local Camera = Workspace.CurrentCamera
@@ -170,13 +182,19 @@ local Version = requireModule("Data/Version.lua")
 local Options = Config.Options
 local Normalize = requireModule("Modules/Core/Bootstrap/Normalize.lua")
 local RayfieldUI = requireModule("Modules/Core/Bootstrap/RayfieldUI.lua")
+local RejoinOnKick = requireModule("Modules/Core/Bootstrap/RejoinOnKick.lua")
+local RuntimeLifecycle = requireModule("Modules/Core/Bootstrap/RuntimeLifecycle.lua")
+local runtimeCompiler = loadstring or load
 
 if _G.BossAimAssist_Cleanup then
     _G.BossAimAssist_Cleanup()
 end
 
 -- UI initialization
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+if not runtimeCompiler then
+    error("No Lua compiler available for Rayfield bootstrap")
+end
+local Rayfield = runtimeCompiler(game:HttpGet("https://sirius.menu/rayfield"), "=Rayfield")()
 getgenv().Rayfield = Rayfield
 
 Options.ToggleUIKey = Normalize.ToggleUIKey(Options.ToggleUIKey)
@@ -247,6 +265,7 @@ local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop,
 local waypointTeleport = WaypointTeleport.new(Options, localCharacter)
 local resourceManager = ResourceManager.new(Options)
 local cleaner    = GarbageCollector.new(Options, resourceManager)
+local rejoinOnKick = RejoinOnKick.new(Options, UPDATE_ENTRY_URL)
 
 local pred       = Predictor.new(Config, loadModule, Kalman)
 local selector   = Selector.new(Config, tracker, pred)
@@ -314,123 +333,26 @@ Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
 -- ===================================================
 -- MAIN ORCHESTRATION LOOP (Brain Powered)
 -- ===================================================
-local SESSION_ID = os.time()
-_G.BossAimAssist_SessionID = SESSION_ID
-
-local _conns = {}
-local function reg(c)
-    table.insert(_conns, c)
-    if resourceManager then
-        resourceManager:TrackConnection(c)
-    end
-    return c
+local function executeUpdatedEntry(url, chunkName)
+    local content = game:HttpGet(url)
+    local chunk = compileChunk(content, chunkName)
+    return chunk()
 end
 
-local function attemptRejoinAfterKick(reason)
-    if Options.RejoinOnKickEnabled ~= true then
-        return
-    end
-
-    local player = Players.LocalPlayer
-    if not player then
-        return
-    end
-
-    task.spawn(function()
-        task.wait(1.5)
-
-        local teleported = false
-        local ok, err = pcall(function()
-            TeleportService:Teleport(game.PlaceId, player)
-            teleported = true
-        end)
-
-        if not ok or not teleported then
-            warn("[KickRejoin] Teleport failed, trying same instance | Error: " .. tostring(err))
-            pcall(function()
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, player)
-            end)
-        end
-    end)
-end
-
-local function isKickLikeMessage(message)
-    local text = string.lower(tostring(message or ""))
-    if text == "" then
-        return false
-    end
-
-    return text:find("kick", 1, true) ~= nil
-        or text:find("kicked", 1, true) ~= nil
-        or text:find("banned", 1, true) ~= nil
-        or text:find("disconnected", 1, true) ~= nil
-        or text:find("connection error", 1, true) ~= nil
-end
-
-reg(GuiService.ErrorMessageChanged:Connect(function()
-    local message = GuiService:GetErrorMessage()
-    if isKickLikeMessage(message) then
-        attemptRejoinAfterKick(message)
-    end
-end))
-
-local function performCleanup(fullSweep)
-    if cleanupInProgress then
-        return
-    end
-    cleanupInProgress = true
-
-    pcall(function()
-        Rayfield:Destroy()
-    end)
-
-    for _, connection in ipairs(_conns) do
-        pcall(function()
-            connection:Disconnect()
-        end)
-    end
-    table.clear(_conns)
-
+local function getCleanupObjects()
     local objs = {
         input, localCharacter, detector, tracker, pred, selector, aimbot, silentAim,
         cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
-        taskScheduler, dataPruner, waypointTeleport,
+        taskScheduler, dataPruner, waypointTeleport, rejoinOnKick,
         playerTabController, settingsTabController
     }
     for _, obj in pairs(movementSuite) do
         objs[#objs + 1] = obj
     end
+    return objs
+end
 
-    if resourceManager then
-        resourceManager:DeferCleanup(function()
-            Synapse.clearAll()
-        end)
-
-        for _, obj in ipairs(objs) do
-            resourceManager:TrackObject(obj)
-        end
-        resourceManager:ScheduleTrackedCleanup()
-        resourceManager:Flush(fullSweep and 1.5 or 0.75)
-    else
-        for _, obj in ipairs(objs) do
-            if obj and obj.Destroy then
-                pcall(function()
-                    obj:Destroy()
-                end)
-            end
-        end
-
-        Synapse.clearAll()
-    end
-
-    _G.BossAimAssist_SessionID = nil
-    _G.BossAimAssist_Update = nil
-    _G.BossAimAssist_Cleanup = nil
-    _G.BossAimAssist_CheckForUpdates = nil
-    _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED = nil
-    _G.__STAR_GLITCHER_CORE_BOOT_UNTIL = nil
-    _G.__STAR_GLITCHER_ENTRY_BOOT_UNTIL = nil
-
+local function resetGlobalState()
     local silentHook = getgenv and getgenv().__STAR_GLITCHER_SILENT_AIM_HOOK
     if silentHook then
         silentHook.Instance = nil
@@ -440,149 +362,27 @@ local function performCleanup(fullSweep)
     if apocalypseHook then
         apocalypseHook.Instance = nil
     end
-
-    if fullSweep then
-        pcall(function()
-            if cleaner and cleaner.Clean then
-                cleaner:Clean()
-            end
-        end)
-        if resourceManager then
-            resourceManager:Boost(1.5)
-            resourceManager:Flush(1.5)
-        end
-        pcall(function()
-            collectgarbage("count")
-            collectgarbage("count")
-        end)
-    end
-
-    if resourceManager then
-        pcall(function()
-            resourceManager:Destroy()
-        end)
-    end
-
-    cleanupInProgress = false
 end
 
-_G.BossAimAssist_Cleanup = function(fullSweep)
-    local ok, err = pcall(function()
-        performCleanup(fullSweep == true)
-    end)
-    cleanupInProgress = false
-    if not ok then
-        warn("[Cleanup] Failed | Error: " .. tostring(err))
-    end
-end
+local runtimeLifecycle = RuntimeLifecycle.new(
+    Options,
+    Version,
+    Rayfield,
+    resourceManager,
+    cleaner,
+    Synapse,
+    UPDATE_ENTRY_URL,
+    executeUpdatedEntry,
+    fetchRemoteVersion,
+    getCleanupObjects,
+    resetGlobalState
+)
+runtimeLifecycle:BindGlobals()
+runtimeLifecycle:StartAutoUpdateLoop()
+rejoinOnKick:Init()
 
-local function executeUpdatedEntry(url, chunkName)
-    local content = game:HttpGet(url)
-    local chunk = compileChunk(content, chunkName)
-    return chunk()
-end
-
-_G.BossAimAssist_Update = function()
-    local updateUrl = UPDATE_ENTRY_URL .. "?update=" .. tostring(os.time())
-    task.spawn(function()
-        task.wait(0.15)
-        local ok, result = pcall(function()
-            return executeUpdatedEntry(updateUrl, "=updated-entry")
-        end)
-        if not ok then
-            warn("[Update] Reload failed after cleanup | Error: " .. tostring(result))
-        end
-    end)
-    task.defer(function()
-        performCleanup(true)
-    end)
-end
-
-_G.BossAimAssist_CheckForUpdates = function(manual)
-    local ok, remoteVersion = pcall(fetchRemoteVersion)
-
-    if not ok then
-        if manual and Rayfield and Rayfield.Notify then
-            Rayfield:Notify({
-                Title = "Update Check Failed",
-                Content = "Version check failed. The remote file responded, but parsing or access failed.",
-                Duration = 5,
-                Image = 4483362458,
-            })
-        end
-        return false
-    end
-
-    remoteVersion = tonumber(remoteVersion) or 0
-    local currentVersion = tonumber(Version) or 0
-
-    if remoteVersion > currentVersion then
-        if Rayfield and Rayfield.Notify then
-            Rayfield:Notify({
-                Title = "Update Found",
-                Content = string.format("Updating from r%d to r%d.", currentVersion, remoteVersion),
-                Duration = 3,
-                Image = 4483362458,
-            })
-        end
-        task.spawn(function()
-            task.wait(0.35)
-            local updater = _G.BossAimAssist_Update
-            if updater then
-                updater()
-            end
-        end)
-        return true
-    end
-
-    if manual and Rayfield and Rayfield.Notify then
-        Rayfield:Notify({
-            Title = "Up To Date",
-            Content = string.format("Current runtime r%d is already the newest version.", currentVersion),
-            Duration = 4,
-            Image = 4483362458,
-        })
-    end
-
-    return false
-end
-
-if not _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED then
-    _G.__STAR_GLITCHER_AUTOUPDATE_BOOTED = true
-    task.spawn(function()
-        task.wait(1)
-        if _G.BossAimAssist_CheckForUpdates then
-            _G.BossAimAssist_CheckForUpdates(false)
-        end
-    end)
-end
-
-if not autoUpdateLoopStarted then
-    autoUpdateLoopStarted = true
-    task.spawn(function()
-        local lastCheck = 0
-
-        while _G.BossAimAssist_SessionID == SESSION_ID do
-            task.wait(5)
-
-            if not Options.AutoUpdateEnabled then
-                lastCheck = os.clock()
-                continue
-            end
-
-            local now = os.clock()
-            local intervalSeconds = math.max(1, tonumber(Options.AutoUpdateIntervalMinutes) or 5) * 60
-            if (now - lastCheck) < intervalSeconds then
-                continue
-            end
-
-            lastCheck = now
-            local checker = _G.BossAimAssist_CheckForUpdates
-            if checker then
-                checker(false)
-            end
-        end
-    end)
+local function reg(connection)
+    return runtimeLifecycle:RegisterConnection(connection)
 end
 
 -- Scanning (Heartbeat, Off render)

@@ -21,7 +21,13 @@ end
 local mainContent = loadLocalFile("Core/Main.lua")
 if mainContent then
     print(" [Loader] Loading Star Glitcher from local workspace...")
-    local chunk, err = loadstring(mainContent, "=Core/Main.lua")
+    local compiler = loadstring or load
+    local chunk, err
+    if compiler then
+        chunk, err = compiler(mainContent, "=Core/Main.lua")
+    else
+        err = "No Lua compiler available"
+    end
     if chunk then
         chunk()
     else

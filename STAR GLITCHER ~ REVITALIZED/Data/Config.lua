@@ -44,6 +44,7 @@ Config.Options = {
     SmartCleanupEnabled = true,
     AutoUpdateEnabled = false,
     AutoUpdateIntervalMinutes = 5,
+    AutoExecuteEnabled = false,
     RejoinOnKickEnabled = false,
     NoclipEnabled = false,
     KillPartBypassEnabled = false,

@@ -30,6 +30,7 @@ function Noclip:Init()
 
         local character = self.LocalCharacter and self.LocalCharacter:GetCharacter()
         local rootPart = self.LocalCharacter and self.LocalCharacter:GetRootPart()
+        local parts = self.LocalCharacter and self.LocalCharacter.GetCharacterParts and self.LocalCharacter:GetCharacterParts()
         
         if not character then
             self.Status = "Char Missing"
@@ -38,7 +39,7 @@ function Noclip:Init()
 
         self.Status = "Active: Noclip"
         
-        for _, obj in ipairs(character:GetDescendants()) do
+        for _, obj in ipairs(parts or character:GetDescendants()) do
             if obj:IsA("BasePart") then
                 if obj.CanCollide then
                     obj.CanCollide = false

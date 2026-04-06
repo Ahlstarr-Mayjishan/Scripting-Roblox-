@@ -20,7 +20,12 @@ local function loadBundledModule(path)
         error("Missing bundled module: " .. tostring(path))
     end
 
-    local chunk, compileErr = loadstring(source, "=" .. path)
+    local compiler = loadstring or load
+    if not compiler then
+        error("No Lua compiler available for bundled module: " .. tostring(path))
+    end
+
+    local chunk, compileErr = compiler(source, "=" .. path)
     if not chunk then
         error("Bundled compile failed for " .. tostring(path) .. ": " .. tostring(compileErr))
     end
@@ -53,7 +58,11 @@ $moduleFiles = Get-ChildItem -Path $root -Recurse -File -Filter "*.lua" |
     Where-Object {
         $_.FullName -ne (Join-Path $root "Main.lua") -and
         $_.FullName -ne $mainPath -and
-        $_.FullName -ne $bundlePath
+        $_.FullName -ne $bundlePath -and
+        $_.FullName -ne (Join-Path $root "Modules\PredictionCore.lua") -and
+        $_.FullName -ne (Join-Path $root "Modules\NPCPrediction.lua") -and
+        $_.FullName -ne (Join-Path $root "Modules\PvPPrediction.lua") -and
+        $_.FullName -ne (Join-Path $root "Modules\Visuals.lua")
     } |
     Sort-Object FullName
 
