@@ -107,18 +107,22 @@ function RuntimeLifecycle:BindGlobals()
     _G.BossAimAssist_SessionID = self.SessionId
 
     _G.BossAimAssist_Cleanup = function(fullSweep)
-        local ok, err = pcall(function()
-            self:PerformCleanup(fullSweep == true)
+        task.spawn(function()
+            task.wait(0.25) -- Allow UI click animations to finish
+            local ok, err = pcall(function()
+                self:PerformCleanup(fullSweep == true)
+            end)
+            self.CleanupInProgress = false
+            if not ok then
+                warn("[Cleanup] Failed | Error: " .. tostring(err))
+            end
         end)
-        self.CleanupInProgress = false
-        if not ok then
-            warn("[Cleanup] Failed | Error: " .. tostring(err))
-        end
     end
 
     _G.BossAimAssist_Update = function()
         local updateUrl = self.UpdateEntryUrl .. "?update=" .. tostring(os.time())
         task.spawn(function()
+            task.wait(0.25) -- Allow UI click animations to finish
             self:PerformCleanup(true)
             task.wait(0.2)
             local ok, result = pcall(function()
