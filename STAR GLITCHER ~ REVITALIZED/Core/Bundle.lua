@@ -9611,6 +9611,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
+local GuiService = game:GetService("GuiService")
 local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
 local Camera = Workspace.CurrentCamera
@@ -9805,8 +9806,24 @@ local function attemptRejoinAfterKick(reason)
     end)
 end
 
-reg(Players.LocalPlayer.Kicked:Connect(function(reason)
-    attemptRejoinAfterKick(reason)
+local function isKickLikeMessage(message)
+    local text = string.lower(tostring(message or ""))
+    if text == "" then
+        return false
+    end
+
+    return text:find("kick", 1, true) ~= nil
+        or text:find("kicked", 1, true) ~= nil
+        or text:find("banned", 1, true) ~= nil
+        or text:find("disconnected", 1, true) ~= nil
+        or text:find("connection error", 1, true) ~= nil
+end
+
+reg(GuiService.ErrorMessageChanged:Connect(function()
+    local message = GuiService:GetErrorMessage()
+    if isKickLikeMessage(message) then
+        attemptRejoinAfterKick(message)
+    end
 end))
 
 local function performCleanup(fullSweep)
