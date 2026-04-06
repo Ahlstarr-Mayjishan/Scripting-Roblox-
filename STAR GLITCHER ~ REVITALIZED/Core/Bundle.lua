@@ -2421,16 +2421,14 @@ function RuntimeLifecycle:BindGlobals()
     _G.BossAimAssist_Update = function()
         local updateUrl = self.UpdateEntryUrl .. "?update=" .. tostring(os.time())
         task.spawn(function()
-            task.wait(0.15)
+            self:PerformCleanup(true)
+            task.wait(0.2)
             local ok, result = pcall(function()
                 return self.ExecuteUpdatedEntry(updateUrl, "=updated-entry")
             end)
             if not ok then
                 warn("[Update] Reload failed after cleanup | Error: " .. tostring(result))
             end
-        end)
-        task.defer(function()
-            self:PerformCleanup(true)
         end)
     end
 
@@ -4954,6 +4952,8 @@ local MIN_SPEED = 10
 local MAX_SPEED = 1000
 local EMPTY_OPTION = "(No waypoints yet)"
 local SERIALIZED_OPTION_KEY = "TeleportWaypointsData"
+local WAYPOINT_FOLDER = "Boss_AimAssist"
+local WAYPOINT_FILE = WAYPOINT_FOLDER .. "/Waypoints.json"
 
 function WaypointTeleport.new(options, localCharacter)
     local self = setmetatable({}, WaypointTeleport)
@@ -4965,6 +4965,38 @@ function WaypointTeleport.new(options, localCharacter)
     self.Dropdown = nil
     self._tweenConnection = nil
     return self
+end
+
+function WaypointTeleport:_writeWaypointFile(serialized)
+    if not writefile then
+        return false
+    end
+
+    pcall(function()
+        if makefolder and not isfolder(WAYPOINT_FOLDER) then
+            makefolder(WAYPOINT_FOLDER)
+        end
+    end)
+
+    return pcall(function()
+        writefile(WAYPOINT_FILE, serialized)
+    end)
+end
+
+function WaypointTeleport:_readWaypointFile()
+    if not readfile or not isfile or not isfile(WAYPOINT_FILE) then
+        return nil
+    end
+
+    local ok, content = pcall(function()
+        return readfile(WAYPOINT_FILE)
+    end)
+
+    if ok and type(content) == "string" and content ~= "" then
+        return content
+    end
+
+    return nil
 end
 
 function WaypointTeleport:_serializeWaypoints()
@@ -4989,13 +5021,21 @@ function WaypointTeleport:_serializeWaypoints()
     end)
 
     self.Options[SERIALIZED_OPTION_KEY] = ok and result or ""
+    if ok and result then
+        self:_writeWaypointFile(result)
+    end
 end
 
 function WaypointTeleport:LoadFromOptions()
     local encoded = self.Options[SERIALIZED_OPTION_KEY]
     if type(encoded) ~= "string" or encoded == "" then
-        self:_refreshDropdown()
-        return
+        encoded = self:_readWaypointFile()
+        if encoded then
+            self.Options[SERIALIZED_OPTION_KEY] = encoded
+        else
+            self:_refreshDropdown()
+            return
+        end
     end
 
     local ok, decoded = pcall(function()

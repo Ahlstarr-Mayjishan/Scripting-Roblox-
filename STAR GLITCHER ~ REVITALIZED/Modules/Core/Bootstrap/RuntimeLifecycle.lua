@@ -122,16 +122,14 @@ function RuntimeLifecycle:BindGlobals()
     _G.BossAimAssist_Update = function()
         local updateUrl = self.UpdateEntryUrl .. "?update=" .. tostring(os.time())
         task.spawn(function()
-            task.wait(0.15)
+            self:PerformCleanup(true)
+            task.wait(0.2)
             local ok, result = pcall(function()
                 return self.ExecuteUpdatedEntry(updateUrl, "=updated-entry")
             end)
             if not ok then
                 warn("[Update] Reload failed after cleanup | Error: " .. tostring(result))
             end
-        end)
-        task.defer(function()
-            self:PerformCleanup(true)
         end)
     end
 
