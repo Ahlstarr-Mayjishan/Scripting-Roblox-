@@ -25,11 +25,12 @@ local function setLabelText(label, text)
     end
 end
 
-return function(Window, Options, killPartBypass, proactiveEvade)
+return function(Window, Options, killPartBypass, proactiveEvade, ultraHell)
     local Tab = Window:CreateTab("Blatant & Bypass", 4483362458)
     local statusLabel = Tab:CreateLabel("Zenith Status: Idle")
     local killPartLabel = Tab:CreateLabel("Kill Part Bypass: Idle")
     local proactiveEvadeLabel = Tab:CreateLabel("Proactive Evade: Idle")
+    local ultraHellLabel = Tab:CreateLabel("UltraHell: Hit an enemy once to arm capture")
 
     Tab:CreateSection("Zenith Desync Architecture")
 
@@ -138,9 +139,43 @@ return function(Window, Options, killPartBypass, proactiveEvade)
         end,
     })
 
+    Tab:CreateSection("UltraHell Gamemode")
+
+    Tab:CreateLabel("Deal damage once so the combat packet can be captured, then toggle UltraHell.")
+
+    Tab:CreateToggle({
+        Name = "UltraHell Multi-Hit",
+        CurrentValue = Options.UltraHellEnabled,
+        Flag = "UltraHellEnabledFlag",
+        Callback = function(Value)
+            Options.UltraHellEnabled = Value
+            if Value then
+                Rayfield:Notify({
+                    Title = "UltraHell Armed",
+                    Content = "If no packet is captured yet, hit an enemy once first.",
+                    Duration = 4,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Multi Hit (Counts)",
+        Range = {1, 100},
+        Increment = 1,
+        Suffix = " hits/s",
+        CurrentValue = tonumber(Options.UltraHellHitsPerSecond) or 10,
+        Flag = "UltraHellHitsPerSecondFlag",
+        Callback = function(Value)
+            Options.UltraHellHitsPerSecond = math.clamp(math.floor(tonumber(Value) or 10), 1, 100)
+        end,
+    })
+
     task.spawn(function()
         local lastKillPartText = nil
         local lastProactiveText = nil
+        local lastUltraHellText = nil
         while task.wait(0.2) do
             if killPartBypass then
                 local nextText = "Kill Part Bypass: " .. tostring(killPartBypass.Status or "Idle")
@@ -155,6 +190,14 @@ return function(Window, Options, killPartBypass, proactiveEvade)
                 if nextText ~= lastProactiveText then
                     lastProactiveText = nextText
                     setLabelText(proactiveEvadeLabel, nextText)
+                end
+            end
+
+            if ultraHell then
+                local nextText = "UltraHell: " .. tostring(ultraHell.Status or "Idle")
+                if nextText ~= lastUltraHellText then
+                    lastUltraHellText = nextText
+                    setLabelText(ultraHellLabel, nextText)
                 end
             end
         end

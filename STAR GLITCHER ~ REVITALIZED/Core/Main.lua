@@ -222,6 +222,7 @@ local GarbageCollector = requireModule("Modules/Utils/GarbageCollector.lua")
 local Selector        = requireModule("Modules/Combat/TargetSelector.lua")
 local Aimbot          = requireModule("Modules/Combat/Aimbot.lua")
 local SilentAim       = requireModule("Modules/Combat/SilentAim.lua")
+local UltraHell       = requireModule("Modules/Combat/UltraHell.lua")
 
 local SpeedSpoof      = requireModule("Modules/Movement/SpeedSpoof.lua")
 local MovementArbiter = requireModule("Modules/Movement/MovementArbiter.lua")
@@ -261,6 +262,7 @@ local tracker    = Tracker.new(Config, detector, taskScheduler)
 local aimbot     = Aimbot.new(Config)
 local silentResolver = SilentResolver.new(Config)
 local silentAim  = SilentAim.new(Config, synapse, silentResolver) 
+local ultraHell = UltraHell.new(Options)
 local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
 local waypointTeleport = WaypointTeleport.new(Options, localCharacter)
 local resourceManager = ResourceManager.new(Options)
@@ -312,6 +314,7 @@ tracker:Init()
 aimbot:Init()
 selector:Init()
 silentAim:Init()
+ultraHell:Init()
 dataPruner:Init()
 resourceManager:Init()
 cleaner:Init()
@@ -321,7 +324,7 @@ requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, playerTabController)
 requireModule("UI/Tabs/TeleportTab.lua")(Window, Options, waypointTeleport)
-requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, movementSuite.killPart, movementSuite.proactiveEvade)
+requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, movementSuite.killPart, movementSuite.proactiveEvade, ultraHell)
 local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
 
 local loadConfigOk, loadConfigErr = RayfieldUI.SafeLoadConfiguration(Rayfield)
@@ -329,6 +332,7 @@ if not loadConfigOk then
     warn("[Config] LoadConfiguration failed, continuing with runtime defaults | Error: " .. tostring(loadConfigErr))
 end
 Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
+waypointTeleport:LoadFromOptions()
 
 -- ===================================================
 -- MAIN ORCHESTRATION LOOP (Brain Powered)
@@ -342,7 +346,7 @@ end
 local function getCleanupObjects()
     local objs = {
         input, localCharacter, detector, tracker, pred, selector, aimbot, silentAim,
-        cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
+        ultraHell, cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
         taskScheduler, dataPruner, waypointTeleport, rejoinOnKick,
         playerTabController, settingsTabController
     }

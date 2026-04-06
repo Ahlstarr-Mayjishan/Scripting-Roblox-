@@ -53,8 +53,11 @@ Config.Options = {
     ProactiveEvadeInterval = 0.42,
     ZenithDesyncEnabled = false,
     SilentDamageEnabled = false,
+    UltraHellEnabled = false,
+    UltraHellHitsPerSecond = 10,
     TeleportMethod = "Tween",
     TeleportTweenSpeed = 150,
+    TeleportWaypointsData = "",
 }
 
 Config.Prediction = {

@@ -61,8 +61,11 @@ Config.Options = {
     ProactiveEvadeInterval = 0.42,
     ZenithDesyncEnabled = false,
     SilentDamageEnabled = false,
+    UltraHellEnabled = false,
+    UltraHellHitsPerSecond = 10,
     TeleportMethod = "Tween",
     TeleportTweenSpeed = 150,
+    TeleportWaypointsData = "",
 }
 
 Config.Prediction = {
@@ -1817,6 +1820,189 @@ function TargetSelector:Destroy()
 end
 
 return TargetSelector
+]====],
+    ["Modules/Combat/UltraHell.lua"] = [====[local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+local UltraHell = {}
+UltraHell.__index = UltraHell
+
+local MIN_HITS_PER_SECOND = 1
+local MAX_HITS_PER_SECOND = 100
+local EXCLUDE_KEYWORDS = { "chat", "move", "walk", "jump", "anim", "inventory", "sprint" }
+local COMBAT_KEYWORDS = {
+    "hit", "damage", "attack", "punch", "slash", "shoot", "fire",
+    "impact", "ability", "skill", "weapon", "tool",
+}
+
+local function isCombatRemote(remote, args)
+    local name = tostring(remote):lower()
+    for _, word in ipairs(EXCLUDE_KEYWORDS) do
+        if string.find(name, word, 1, true) then
+            return false
+        end
+    end
+
+    for _, word in ipairs(COMBAT_KEYWORDS) do
+        if string.find(name, word, 1, true) then
+            return true
+        end
+    end
+
+    for index = 1, args.n do
+        local arg = args[index]
+        if typeof(arg) == "Instance" and arg:IsA("Model") and arg ~= LocalPlayer.Character then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function getSharedState()
+    local env = getgenv and getgenv()
+    if not env then
+        return nil
+    end
+
+    env.__STAR_GLITCHER_ULTRAHELL = env.__STAR_GLITCHER_ULTRAHELL or {
+        Hooked = false,
+        CapturedRemote = nil,
+        CapturedArgs = nil,
+        CapturedName = nil,
+        LastCaptureClock = 0,
+        ActiveInstance = nil,
+    }
+
+    return env.__STAR_GLITCHER_ULTRAHELL
+end
+
+function UltraHell.new(options)
+    local self = setmetatable({}, UltraHell)
+    self.Options = options
+    self.SharedState = getSharedState()
+    self.Status = "Waiting For Damage"
+    self._heartbeatConnection = nil
+    self._tokenBucket = 0
+    return self
+end
+
+function UltraHell:_updateStatus()
+    local shared = self.SharedState
+    local capturedName = shared and shared.CapturedName
+    if not capturedName then
+        self.Status = "Hit an enemy once to arm capture"
+        return
+    end
+
+    if self.Options.UltraHellEnabled then
+        local rate = math.clamp(tonumber(self.Options.UltraHellHitsPerSecond) or 10, MIN_HITS_PER_SECOND, MAX_HITS_PER_SECOND)
+        self.Status = string.format("Captured: %s | %d hits/s", tostring(capturedName), rate)
+        return
+    end
+
+    self.Status = "Captured: " .. tostring(capturedName) .. " | Ready"
+end
+
+function UltraHell:_installHook()
+    local shared = self.SharedState
+    if not shared or shared.Hooked then
+        return
+    end
+
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(target, ...)
+        local method = getnamecallmethod()
+        local args = table.pack(...)
+
+        if not checkcaller() and (method == "FireServer" or method == "InvokeServer") and isCombatRemote(target, args) then
+            shared.CapturedRemote = target
+            shared.CapturedArgs = args
+            shared.CapturedName = target.Name
+            shared.LastCaptureClock = os.clock()
+
+            local active = shared.ActiveInstance
+            if active then
+                active:_updateStatus()
+            end
+        end
+
+        return oldNamecall(target, ...)
+    end))
+
+    shared.Hooked = true
+end
+
+function UltraHell:_fireCapturedRemote()
+    local shared = self.SharedState
+    if not shared then
+        return
+    end
+
+    local remote = shared.CapturedRemote
+    local args = shared.CapturedArgs
+    if not remote or not args then
+        self.Options.UltraHellEnabled = false
+        self:_updateStatus()
+        return
+    end
+
+    if remote.ClassName == "RemoteEvent" then
+        remote:FireServer(table.unpack(args, 1, args.n))
+    elseif remote.ClassName == "RemoteFunction" then
+        task.spawn(function()
+            remote:InvokeServer(table.unpack(args, 1, args.n))
+        end)
+    end
+end
+
+function UltraHell:Init()
+    if self.SharedState then
+        self.SharedState.ActiveInstance = self
+    end
+
+    self:_installHook()
+    self:_updateStatus()
+
+    if self._heartbeatConnection then
+        self._heartbeatConnection:Disconnect()
+    end
+
+    self._heartbeatConnection = RunService.Heartbeat:Connect(function(dt)
+        self:_updateStatus()
+        if not self.Options.UltraHellEnabled then
+            self._tokenBucket = 0
+            return
+        end
+
+        if not (self.SharedState and self.SharedState.CapturedRemote and self.SharedState.CapturedArgs) then
+            return
+        end
+
+        local rate = math.clamp(tonumber(self.Options.UltraHellHitsPerSecond) or 10, MIN_HITS_PER_SECOND, MAX_HITS_PER_SECOND)
+        self._tokenBucket = math.min(self._tokenBucket + (rate * dt), rate)
+
+        while self._tokenBucket >= 1 do
+            self._tokenBucket = self._tokenBucket - 1
+            self:_fireCapturedRemote()
+        end
+    end)
+end
+
+function UltraHell:Destroy()
+    if self.SharedState and self.SharedState.ActiveInstance == self then
+        self.SharedState.ActiveInstance = nil
+    end
+
+    if self._heartbeatConnection then
+        self._heartbeatConnection:Disconnect()
+        self._heartbeatConnection = nil
+    end
+end
+
+return UltraHell
 ]====],
     ["Modules/Core/Bootstrap/Normalize.lua"] = [====[--[[
     Normalize.lua - Bootstrap option normalization helpers
@@ -4758,6 +4944,7 @@ return SpeedSpoof
 ]====],
     ["Modules/Movement/WaypointTeleport.lua"] = [====[local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 
 local WaypointTeleport = {}
 WaypointTeleport.__index = WaypointTeleport
@@ -4766,6 +4953,7 @@ local DEFAULT_SPEED = 150
 local MIN_SPEED = 10
 local MAX_SPEED = 1000
 local EMPTY_OPTION = "(No waypoints yet)"
+local SERIALIZED_OPTION_KEY = "TeleportWaypointsData"
 
 function WaypointTeleport.new(options, localCharacter)
     local self = setmetatable({}, WaypointTeleport)
@@ -4777,6 +4965,70 @@ function WaypointTeleport.new(options, localCharacter)
     self.Dropdown = nil
     self._tweenConnection = nil
     return self
+end
+
+function WaypointTeleport:_serializeWaypoints()
+    local payload = table.create(#self.Waypoints)
+    for index = 1, #self.Waypoints do
+        local waypoint = self.Waypoints[index]
+        local cf = waypoint.CFrame
+        local components = table.pack(cf:GetComponents())
+        payload[index] = {
+            Name = waypoint.Name,
+            Components = {
+                components[1], components[2], components[3], components[4],
+                components[5], components[6], components[7], components[8],
+                components[9], components[10], components[11], components[12],
+            },
+            CreatedAt = waypoint.CreatedAt,
+        }
+    end
+
+    local ok, result = pcall(function()
+        return HttpService:JSONEncode(payload)
+    end)
+
+    self.Options[SERIALIZED_OPTION_KEY] = ok and result or ""
+end
+
+function WaypointTeleport:LoadFromOptions()
+    local encoded = self.Options[SERIALIZED_OPTION_KEY]
+    if type(encoded) ~= "string" or encoded == "" then
+        self:_refreshDropdown()
+        return
+    end
+
+    local ok, decoded = pcall(function()
+        return HttpService:JSONDecode(encoded)
+    end)
+    if not ok or type(decoded) ~= "table" then
+        self.Options[SERIALIZED_OPTION_KEY] = ""
+        self.Waypoints = {}
+        self.SelectedWaypointName = nil
+        self:_refreshDropdown()
+        return
+    end
+
+    local loadedWaypoints = {}
+    for index = 1, #decoded do
+        local item = decoded[index]
+        local components = item and item.Components
+        if type(item) == "table" and type(item.Name) == "string" and type(components) == "table" and #components == 12 then
+            local okCFrame, waypointCFrame = pcall(CFrame.new, table.unpack(components, 1, 12))
+            if okCFrame and waypointCFrame then
+                loadedWaypoints[#loadedWaypoints + 1] = {
+                    Name = item.Name,
+                    CFrame = waypointCFrame,
+                    CreatedAt = tonumber(item.CreatedAt) or os.clock(),
+                }
+            end
+        end
+    end
+
+    self.Waypoints = loadedWaypoints
+    self.SelectedWaypointName = self.Waypoints[1] and self.Waypoints[1].Name or nil
+    self:_serializeWaypoints()
+    self:_refreshDropdown()
 end
 
 function WaypointTeleport:_getCharacterState()
@@ -4889,6 +5141,7 @@ function WaypointTeleport:SetWaypoint()
 
     self.SelectedWaypointName = name
     self.Status = "Saved Waypoint"
+    self:_serializeWaypoints()
     self:_refreshDropdown()
     return true, name
 end
@@ -7846,11 +8099,12 @@ local function setLabelText(label, text)
     end
 end
 
-return function(Window, Options, killPartBypass, proactiveEvade)
+return function(Window, Options, killPartBypass, proactiveEvade, ultraHell)
     local Tab = Window:CreateTab("Blatant & Bypass", 4483362458)
     local statusLabel = Tab:CreateLabel("Zenith Status: Idle")
     local killPartLabel = Tab:CreateLabel("Kill Part Bypass: Idle")
     local proactiveEvadeLabel = Tab:CreateLabel("Proactive Evade: Idle")
+    local ultraHellLabel = Tab:CreateLabel("UltraHell: Hit an enemy once to arm capture")
 
     Tab:CreateSection("Zenith Desync Architecture")
 
@@ -7959,9 +8213,43 @@ return function(Window, Options, killPartBypass, proactiveEvade)
         end,
     })
 
+    Tab:CreateSection("UltraHell Gamemode")
+
+    Tab:CreateLabel("Deal damage once so the combat packet can be captured, then toggle UltraHell.")
+
+    Tab:CreateToggle({
+        Name = "UltraHell Multi-Hit",
+        CurrentValue = Options.UltraHellEnabled,
+        Flag = "UltraHellEnabledFlag",
+        Callback = function(Value)
+            Options.UltraHellEnabled = Value
+            if Value then
+                Rayfield:Notify({
+                    Title = "UltraHell Armed",
+                    Content = "If no packet is captured yet, hit an enemy once first.",
+                    Duration = 4,
+                    Image = 4483362458,
+                })
+            end
+        end,
+    })
+
+    Tab:CreateSlider({
+        Name = "Multi Hit (Counts)",
+        Range = {1, 100},
+        Increment = 1,
+        Suffix = " hits/s",
+        CurrentValue = tonumber(Options.UltraHellHitsPerSecond) or 10,
+        Flag = "UltraHellHitsPerSecondFlag",
+        Callback = function(Value)
+            Options.UltraHellHitsPerSecond = math.clamp(math.floor(tonumber(Value) or 10), 1, 100)
+        end,
+    })
+
     task.spawn(function()
         local lastKillPartText = nil
         local lastProactiveText = nil
+        local lastUltraHellText = nil
         while task.wait(0.2) do
             if killPartBypass then
                 local nextText = "Kill Part Bypass: " .. tostring(killPartBypass.Status or "Idle")
@@ -7976,6 +8264,14 @@ return function(Window, Options, killPartBypass, proactiveEvade)
                 if nextText ~= lastProactiveText then
                     lastProactiveText = nextText
                     setLabelText(proactiveEvadeLabel, nextText)
+                end
+            end
+
+            if ultraHell then
+                local nextText = "UltraHell: " .. tostring(ultraHell.Status or "Idle")
+                if nextText ~= lastUltraHellText then
+                    lastUltraHellText = nextText
+                    setLabelText(ultraHellLabel, nextText)
                 end
             end
         end
@@ -8979,6 +9275,7 @@ local GarbageCollector = requireModule("Modules/Utils/GarbageCollector.lua")
 local Selector        = requireModule("Modules/Combat/TargetSelector.lua")
 local Aimbot          = requireModule("Modules/Combat/Aimbot.lua")
 local SilentAim       = requireModule("Modules/Combat/SilentAim.lua")
+local UltraHell       = requireModule("Modules/Combat/UltraHell.lua")
 
 local SpeedSpoof      = requireModule("Modules/Movement/SpeedSpoof.lua")
 local MovementArbiter = requireModule("Modules/Movement/MovementArbiter.lua")
@@ -9018,6 +9315,7 @@ local tracker    = Tracker.new(Config, detector, taskScheduler)
 local aimbot     = Aimbot.new(Config)
 local silentResolver = SilentResolver.new(Config)
 local silentAim  = SilentAim.new(Config, synapse, silentResolver) 
+local ultraHell = UltraHell.new(Options)
 local playerTabController = PlayerController.new(PlayerLayout, PlayerStatusLoop, PlayerLabelUtils)
 local waypointTeleport = WaypointTeleport.new(Options, localCharacter)
 local resourceManager = ResourceManager.new(Options)
@@ -9069,6 +9367,7 @@ tracker:Init()
 aimbot:Init()
 selector:Init()
 silentAim:Init()
+ultraHell:Init()
 dataPruner:Init()
 resourceManager:Init()
 cleaner:Init()
@@ -9078,7 +9377,7 @@ requireModule("UI/Tabs/AimbotTab.lua")(Window, Options, {FOVCircle = visuals.fov
 requireModule("UI/Tabs/PredictionTab.lua")(Window, Options)
 requireModule("UI/Tabs/PlayerTab.lua")(Window, Options, movementSuite.slow, movementSuite.stun, movementSuite.multi, movementSuite.gravity, movementSuite.float, movementSuite.jump, movementSuite.noclip, movementSuite.zenith, playerTabController)
 requireModule("UI/Tabs/TeleportTab.lua")(Window, Options, waypointTeleport)
-requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, movementSuite.killPart, movementSuite.proactiveEvade)
+requireModule("UI/Tabs/BlatantTab.lua")(Window, Options, movementSuite.killPart, movementSuite.proactiveEvade, ultraHell)
 local settingsTabController = requireModule("UI/Tabs/SettingsTab.lua")(Window, Options, cleaner, resourceManager, tracker, taskScheduler)
 
 local loadConfigOk, loadConfigErr = RayfieldUI.SafeLoadConfiguration(Rayfield)
@@ -9086,6 +9385,7 @@ if not loadConfigOk then
     warn("[Config] LoadConfiguration failed, continuing with runtime defaults | Error: " .. tostring(loadConfigErr))
 end
 Options.TargetingMethod = Normalize.TargetingMethod(Options.TargetingMethod)
+waypointTeleport:LoadFromOptions()
 
 -- ===================================================
 -- MAIN ORCHESTRATION LOOP (Brain Powered)
@@ -9099,7 +9399,7 @@ end
 local function getCleanupObjects()
     local objs = {
         input, localCharacter, detector, tracker, pred, selector, aimbot, silentAim,
-        cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
+        ultraHell, cleaner, visuals.fov, visuals.highlight, visuals.technique, visuals.dot, brain,
         taskScheduler, dataPruner, waypointTeleport, rejoinOnKick,
         playerTabController, settingsTabController
     }

@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 
 local WaypointTeleport = {}
 WaypointTeleport.__index = WaypointTeleport
@@ -8,6 +9,7 @@ local DEFAULT_SPEED = 150
 local MIN_SPEED = 10
 local MAX_SPEED = 1000
 local EMPTY_OPTION = "(No waypoints yet)"
+local SERIALIZED_OPTION_KEY = "TeleportWaypointsData"
 
 function WaypointTeleport.new(options, localCharacter)
     local self = setmetatable({}, WaypointTeleport)
@@ -19,6 +21,70 @@ function WaypointTeleport.new(options, localCharacter)
     self.Dropdown = nil
     self._tweenConnection = nil
     return self
+end
+
+function WaypointTeleport:_serializeWaypoints()
+    local payload = table.create(#self.Waypoints)
+    for index = 1, #self.Waypoints do
+        local waypoint = self.Waypoints[index]
+        local cf = waypoint.CFrame
+        local components = table.pack(cf:GetComponents())
+        payload[index] = {
+            Name = waypoint.Name,
+            Components = {
+                components[1], components[2], components[3], components[4],
+                components[5], components[6], components[7], components[8],
+                components[9], components[10], components[11], components[12],
+            },
+            CreatedAt = waypoint.CreatedAt,
+        }
+    end
+
+    local ok, result = pcall(function()
+        return HttpService:JSONEncode(payload)
+    end)
+
+    self.Options[SERIALIZED_OPTION_KEY] = ok and result or ""
+end
+
+function WaypointTeleport:LoadFromOptions()
+    local encoded = self.Options[SERIALIZED_OPTION_KEY]
+    if type(encoded) ~= "string" or encoded == "" then
+        self:_refreshDropdown()
+        return
+    end
+
+    local ok, decoded = pcall(function()
+        return HttpService:JSONDecode(encoded)
+    end)
+    if not ok or type(decoded) ~= "table" then
+        self.Options[SERIALIZED_OPTION_KEY] = ""
+        self.Waypoints = {}
+        self.SelectedWaypointName = nil
+        self:_refreshDropdown()
+        return
+    end
+
+    local loadedWaypoints = {}
+    for index = 1, #decoded do
+        local item = decoded[index]
+        local components = item and item.Components
+        if type(item) == "table" and type(item.Name) == "string" and type(components) == "table" and #components == 12 then
+            local okCFrame, waypointCFrame = pcall(CFrame.new, table.unpack(components, 1, 12))
+            if okCFrame and waypointCFrame then
+                loadedWaypoints[#loadedWaypoints + 1] = {
+                    Name = item.Name,
+                    CFrame = waypointCFrame,
+                    CreatedAt = tonumber(item.CreatedAt) or os.clock(),
+                }
+            end
+        end
+    end
+
+    self.Waypoints = loadedWaypoints
+    self.SelectedWaypointName = self.Waypoints[1] and self.Waypoints[1].Name or nil
+    self:_serializeWaypoints()
+    self:_refreshDropdown()
 end
 
 function WaypointTeleport:_getCharacterState()
@@ -131,6 +197,7 @@ function WaypointTeleport:SetWaypoint()
 
     self.SelectedWaypointName = name
     self.Status = "Saved Waypoint"
+    self:_serializeWaypoints()
     self:_refreshDropdown()
     return true, name
 end
