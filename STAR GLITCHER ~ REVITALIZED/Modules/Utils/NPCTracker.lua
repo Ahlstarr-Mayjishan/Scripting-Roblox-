@@ -13,7 +13,7 @@ NPCTracker.__index = NPCTracker
 function NPCTracker.new(config, detector, taskScheduler)
     local self = setmetatable({}, NPCTracker)
     self.Options = config.Options
-    self.Blacklist = config.Blacklist or {"statue", "tuong", "monument", "altar", "dummy", "board", "spawn", "shop", "gui", "display", "map", "portal", "tele", "rsbroad", "landscape", "terrain", "sign"}
+    self.Blacklist = config.Blacklist or {"statue", "Minigames", "monument", "altar", "dummy", "board", "spawn", "shop", "gui", "display", "map", "portal", "tele", "rsbroad", "landscape", "terrain", "sign"}
     self._blacklistLower = {}
     self.Detector = detector
     self.TaskScheduler = taskScheduler
