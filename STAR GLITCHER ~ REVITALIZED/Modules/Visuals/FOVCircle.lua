@@ -28,7 +28,7 @@ end
 
 function FOVCircle:_shouldShow()
     local method = tostring(self.Options.TargetingMethod or "FOV")
-    return method ~= "Distance"
+    return method ~= "Distance" and method ~= "Deadlock"
 end
 
 function FOVCircle:Update(mousePos)

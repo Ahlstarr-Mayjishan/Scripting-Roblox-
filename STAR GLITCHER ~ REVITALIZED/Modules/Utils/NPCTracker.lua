@@ -190,17 +190,18 @@ function NPCTracker:_IsTargetCandidate(model, existingEntry)
     -- STATIC OBJECT FILTER: Boss boards, shops, etc.
     -- Mobs/Bosses (even custom ones) usually have unanchored root parts.
     if not humanoid and primary.Anchored and not model:FindFirstChild("Health", true) then
-        if not isBoss then
-            return false
-        end
+        -- Only block if it's explicitly identified as a board/kiosk
+        local lowerName = string.lower(model.Name)
+        local isExplicitBoard = lowerName:find("board") or lowerName:find("summon") or lowerName:find("minigame") or lowerName:find("bảng")
         
-        -- Even if it looks like a boss, check for board-like characteristics
-        local isActuallyBoard = model:FindFirstChildWhichIsA("SurfaceGui", true) 
-            or model:FindFirstChildWhichIsA("BillboardGui", true)
-            or model:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if isExplicitBoard then
+            local hasUI = model:FindFirstChildWhichIsA("SurfaceGui", true) 
+                or model:FindFirstChildWhichIsA("BillboardGui", true)
+                or model:FindFirstChildWhichIsA("ProximityPrompt", true)
             
-        if isActuallyBoard then
-            return false
+            if hasUI then
+                return false
+            end
         end
     end
 
@@ -250,14 +251,13 @@ function NPCTracker:GetTargets()
         return false
     end
     
-    -- 1. Scan Folders (Entities)
-    local foundFolderTarget = false
+    -- 1. Scan Folders (Entities/NPCs/Bosses)
     for i = 1, #self._folderRefs do
         local f = self._folderRefs[i]
         if f then
             for _, model in ipairs(f:GetChildren()) do
-                if model:IsA("Model") and trackModel(model) then
-                    foundFolderTarget = true
+                if model:IsA("Model") then
+                    trackModel(model)
                 end
             end
         end
@@ -265,7 +265,7 @@ function NPCTracker:GetTargets()
 
     -- 2. Fallback Scan (Entities directly in Workspace)
     -- Skip this broad scan if dedicated entity folders already yielded targets.
-    if not foundFolderTarget then
+    if #result == 0 then
         -- Avoid GetDescendants() which is catastrophic for performance.
         for _, obj in ipairs(Workspace:GetChildren()) do
             if obj:IsA("Model") then

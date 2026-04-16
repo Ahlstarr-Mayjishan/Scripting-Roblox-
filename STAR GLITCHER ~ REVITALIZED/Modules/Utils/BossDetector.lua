@@ -160,15 +160,16 @@ function BossDetector:IsBoss(model, humanoid)
     local primaryIsBall = primary and primary:IsA("Part") and primary.Shape == Enum.PartType.Ball
     local isBoss = false
     local isStaticBoard = false
+    local lowerName = string.lower(model.Name)
+    local isOrbType = lowerName:find("orb") or lowerName:find("sphere") or lowerName:find("core")
 
     -- Verify if it's a static board/info sign
-    if not humanoid and (primary and primary.Anchored) then
+    if not humanoid and (primary and primary.Anchored) and not isOrbType then
         local hasUI = model:FindFirstChildWhichIsA("SurfaceGui", true) 
             or model:FindFirstChildWhichIsA("BillboardGui", true)
             or model:FindFirstChildWhichIsA("ProximityPrompt", true)
 
         if hasUI then
-            local lowerName = string.lower(model.Name)
             if lowerName:find("board") or lowerName:find("summon") or lowerName:find("minigame") or lowerName:find("kiosk") or lowerName:find("sign") or lowerName:find("bảng") then
                 isStaticBoard = true
             end
@@ -177,8 +178,8 @@ function BossDetector:IsBoss(model, humanoid)
 
     if isStaticBoard then
         isBoss = false
-    elseif displayHint or nameHint then
-        -- Name hints are strong but we still prefer unanchored or humanoid for 100% certainty
+    elseif displayHint or nameHint or isOrbType then
+        -- Name hints or specific shapes (Orbs) are strong boss indicators
         isBoss = true
     elseif maxHealth and maxHealth > 500 then
         isBoss = true
