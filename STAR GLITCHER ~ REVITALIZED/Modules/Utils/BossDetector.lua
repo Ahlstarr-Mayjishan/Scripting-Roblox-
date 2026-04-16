@@ -159,8 +159,26 @@ function BossDetector:IsBoss(model, humanoid)
     local displayHint = humanoid and containsBossHint(humanoid.DisplayName)
     local primaryIsBall = primary and primary:IsA("Part") and primary.Shape == Enum.PartType.Ball
     local isBoss = false
+    local isStaticBoard = false
 
-    if displayHint or nameHint then
+    -- Verify if it's a static board/info sign
+    if not humanoid and (primary and primary.Anchored) then
+        local hasUI = model:FindFirstChildWhichIsA("SurfaceGui", true) 
+            or model:FindFirstChildWhichIsA("BillboardGui", true)
+            or model:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+        if hasUI then
+            local lowerName = string.lower(model.Name)
+            if lowerName:find("board") or lowerName:find("summon") or lowerName:find("minigame") or lowerName:find("kiosk") or lowerName:find("sign") or lowerName:find("bảng") then
+                isStaticBoard = true
+            end
+        end
+    end
+
+    if isStaticBoard then
+        isBoss = false
+    elseif displayHint or nameHint then
+        -- Name hints are strong but we still prefer unanchored or humanoid for 100% certainty
         isBoss = true
     elseif maxHealth and maxHealth > 500 then
         isBoss = true

@@ -13,7 +13,7 @@ NPCTracker.__index = NPCTracker
 function NPCTracker.new(config, detector, taskScheduler)
     local self = setmetatable({}, NPCTracker)
     self.Options = config.Options
-    self.Blacklist = config.Blacklist or {"statue", "Minigames", "monument", "altar", "dummy", "board", "spawn", "shop", "gui", "display", "map", "portal", "tele", "rsbroad", "landscape", "terrain", "sign"}
+    self.Blacklist = config.Blacklist or {"statue", "tuong", "Minigames", "monument", "altar", "dummy", "board", "spawn", "shop", "gui", "display", "map", "portal", "tele", "rsbroad", "landscape", "terrain", "sign", "summon", "bảng", "prompt", "interact"}
     self._blacklistLower = {}
     self.Detector = detector
     self.TaskScheduler = taskScheduler
@@ -189,9 +189,19 @@ function NPCTracker:_IsTargetCandidate(model, existingEntry)
 
     -- STATIC OBJECT FILTER: Boss boards, shops, etc.
     -- Mobs/Bosses (even custom ones) usually have unanchored root parts.
-    if not humanoid and primary.Anchored and not isBoss and not model:FindFirstChild("Health", true) then
-        -- Only ignore if it has no health indicators va is anchored
-        return false
+    if not humanoid and primary.Anchored and not model:FindFirstChild("Health", true) then
+        if not isBoss then
+            return false
+        end
+        
+        -- Even if it looks like a boss, check for board-like characteristics
+        local isActuallyBoard = model:FindFirstChildWhichIsA("SurfaceGui", true) 
+            or model:FindFirstChildWhichIsA("BillboardGui", true)
+            or model:FindFirstChildWhichIsA("ProximityPrompt", true)
+            
+        if isActuallyBoard then
+            return false
+        end
     end
 
     return true
