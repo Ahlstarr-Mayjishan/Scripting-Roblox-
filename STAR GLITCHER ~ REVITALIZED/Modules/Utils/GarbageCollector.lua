@@ -167,15 +167,10 @@ function GarbageCollector:_drainQueue(destroyBudget, gcStepSize, ignoreFrameBudg
 
         self._queuedMap[instance] = nil
         if instance and instance.Parent then
-            if self.ResourceManager then
-                self.ResourceManager:DeferDestroy(instance)
-                deferred = deferred + 1
-            else
-                pcall(function()
-                    instance:Destroy()
-                end)
-                destroyed = destroyed + 1
-            end
+            pcall(function()
+                instance:Destroy()
+            end)
+            destroyed = destroyed + 1
         end
     end
 
