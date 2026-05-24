@@ -25,6 +25,12 @@ return {
         ["Modules/Combat/TargetSelector.lua"] = { Version = 115 },
         ["Modules/Combat/UltraHell.lua"] = { Version = 100 },
         ["Modules/Combat/Prediction/SilentResolver.lua"] = { Version = 110 },
+        ["Modules/Combat/Prediction/Base.lua"] = { Version = 100 },
+        ["Modules/Combat/Prediction/Engine.lua"] = { Version = 100 },
+        ["Modules/Combat/Prediction/Estimator.lua"] = { Version = 100 },
+        ["Modules/Combat/Prediction/Sampler.lua"] = { Version = 100 },
+        ["Modules/Combat/Prediction/Stabilizer.lua"] = { Version = 100 },
+        ["Modules/Combat/Prediction/TechniqueSelector.lua"] = { Version = 100 },
         
         -- Modules/Movement
         ["Modules/Movement/AntiSlowdown.lua"] = { Version = 100 },
@@ -45,7 +51,7 @@ return {
         ["Modules/Utils/BossDetector.lua"] = { Version = 100 },
         ["Modules/Utils/DataPruner.lua"] = { Version = 100 },
         ["Modules/Utils/GarbageCollector.lua"] = { Version = 120 },
-        ["Modules/Utils/Input.lua"] = { Version = 105 },
+        ["Modules/Utils/InputHandler.lua"] = { Version = 105 },
         ["Modules/Utils/LocalCharacter.lua"] = { Version = 110 },
         ["Modules/Utils/NPCTracker.lua"] = { Version = 120 },
         ["Modules/Utils/ResourceManager.lua"] = { Version = 150 },

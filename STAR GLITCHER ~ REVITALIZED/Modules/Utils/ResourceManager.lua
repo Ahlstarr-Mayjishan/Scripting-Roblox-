@@ -7,7 +7,7 @@ local ResourceManager = {}
 ResourceManager.__index = ResourceManager
 
 local HttpService = game:GetService("HttpService")
-local CACHE_PATH = ".star_glitcher_cache/"
+local CACHE_PATH = ".star_glitcher_cache"
 local LOCAL_PATH_KEY = "BossAimAssist_LocalPath"
 
 function ResourceManager.new(options, githubBase, manifest)
@@ -104,7 +104,7 @@ function ResourceManager:GetSource(path)
     end
 
     -- 2. Check Cache with Version Verification
-    local cachedFile = CACHE_PATH .. path:gsub("/", "_")
+    local cachedFile = CACHE_PATH .. "/" .. path:gsub("/", "_")
     local fileManifest = self.Manifest.Files[path]
     local targetVersion = fileManifest and fileManifest.Version or 0
     
@@ -132,9 +132,8 @@ function ResourceManager:GetSource(path)
             local processedContent = versionHeader .. content
             
             -- Save to cache
-            if writefolder and writefile then
+            if writefile then
                 pcall(function()
-                    local dir = CACHE_PATH
                     writefile(cachedFile, processedContent)
                 end)
             end

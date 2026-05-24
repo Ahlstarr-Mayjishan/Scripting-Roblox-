@@ -58,11 +58,7 @@ $moduleFiles = Get-ChildItem -Path $root -Recurse -File -Filter "*.lua" |
     Where-Object {
         $_.FullName -ne (Join-Path $root "Main.lua") -and
         $_.FullName -ne $mainPath -and
-        $_.FullName -ne $bundlePath -and
-        $_.FullName -ne (Join-Path $root "Modules\PredictionCore.lua") -and
-        $_.FullName -ne (Join-Path $root "Modules\NPCPrediction.lua") -and
-        $_.FullName -ne (Join-Path $root "Modules\PvPPrediction.lua") -and
-        $_.FullName -ne (Join-Path $root "Modules\Visuals.lua")
+        $_.FullName -ne $bundlePath
     } |
     Sort-Object FullName
 

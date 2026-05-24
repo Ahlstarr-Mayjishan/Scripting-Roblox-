@@ -1,6 +1,6 @@
 --[[
-    InputHandler.lua - Input Management Class
-    Quan ly trang thai chuot/ban phim va logic shouldAssist().
+    InputHandler.lua - OOP User Interaction Class
+    Handles mouseholding and assist availability checks.
 ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -10,64 +10,51 @@ InputHandler.__index = InputHandler
 
 function InputHandler.new(config)
     local self = setmetatable({}, InputHandler)
-    self.Config = config
     self.Options = config.Options
-    self.RightMouseHeld = false
-    self.LastShotTick = 0
+    self.Holding = false
+    self._lastShot = 0
     self._connections = {}
     return self
 end
 
 function InputHandler:Init()
-    local conn1 = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if not gameProcessed then
-            local inputType = input.UserInputType
-            if inputType == Enum.UserInputType.MouseButton1
-                or inputType == Enum.UserInputType.MouseButton2
-                or inputType == Enum.UserInputType.Keyboard then
-                self.LastShotTick = os.clock()
-            end
-        end
-
-        if gameProcessed then
-            return
-        end
-
+    table.insert(self._connections, UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe then return end
         if input.UserInputType == Enum.UserInputType.MouseButton2 then
-            self.RightMouseHeld = true
+            self.Holding = true
         end
-    end)
-
-    local conn2 = UserInputService.InputEnded:Connect(function(input)
+    end))
+    
+    table.insert(self._connections, UserInputService.InputEnded:Connect(function(input, gpe)
         if input.UserInputType == Enum.UserInputType.MouseButton2 then
-            self.RightMouseHeld = false
+            self.Holding = false
         end
-    end)
-
-    table.insert(self._connections, conn1)
-    table.insert(self._connections, conn2)
+    end))
+    
+    -- Hitmarker tracking (Register a shot)
+    table.insert(self._connections, UserInputService.InputBegan:Connect(function(input, gpe)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            self._lastShot = os.clock()
+        end
+    end))
 end
 
 function InputHandler:ShouldAssist()
-    if self.Options.AssistMode == "Off" then
-        return false
+    if self.Options.HoldMouse2ToAssist then
+        return self.Holding
     end
-    if self.Options.HoldMouse2ToAssist and not self.RightMouseHeld then
-        return false
-    end
-    return true
+    return true -- Mode is always active otherwise
 end
 
-function InputHandler:WasShotRecently(windowSeconds)
-    return (os.clock() - self.LastShotTick) <= (windowSeconds or 1.5)
+function InputHandler:WasShotRecently(seconds)
+    return (os.clock() - self._lastShot) < (seconds or 1.5)
 end
 
 function InputHandler:Destroy()
-    for _, conn in ipairs(self._connections) do
-        conn:Disconnect()
+    for _, connection in ipairs(self._connections) do
+        connection:Disconnect()
     end
     table.clear(self._connections)
 end
 
 return InputHandler
-
