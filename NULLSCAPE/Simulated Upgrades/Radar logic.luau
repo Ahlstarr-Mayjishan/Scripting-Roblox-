@@ -537,13 +537,13 @@ function Logic.updateRender(controller, gc, hrp)
     
     -- 1. Tìm vị trí các vật thể gần nhất thời gian thực (real-time) từ danh sách cache bộ nhớ
     local nearestGiftPos = nil
-    if controller.GiftESPEnabled and controller.CachedGiftParts then
+    if controller.GiftESPEnabled and controller.ActiveGifts then
         local shortestDist = math.huge
         local giftsWithin10 = 0
         local tempNearestPos = nil
         
         -- Đếm số lượng quà trong phạm vi 10 studs và tìm vị trí quà gần nhất
-        for _, t in ipairs(controller.CachedGiftParts) do
+        for _, t in ipairs(controller.ActiveGifts) do
             local part = t.part
             if part and part.Parent and part:IsDescendantOf(workspace) then
                 local dist = (hrp.Position - part.Position).Magnitude
@@ -564,9 +564,9 @@ function Logic.updateRender(controller, gc, hrp)
     end
 
     local nearestCadencePos = nil
-    if controller.CadenceESPEnabled and controller.CachedCadenceParts then
+    if controller.CadenceESPEnabled and controller.ActiveInstruments then
         local shortestDist = math.huge
-        for _, t in ipairs(controller.CachedCadenceParts) do
+        for _, t in ipairs(controller.ActiveInstruments) do
             local part = t.part
             if part and part.Parent and part:IsDescendantOf(workspace) then
                 local dist = (hrp.Position - part.Position).Magnitude
@@ -580,9 +580,9 @@ function Logic.updateRender(controller, gc, hrp)
 
     local nearestAltarPos = nil
     local nearestAltarColor = Color3.fromRGB(255, 128, 0)
-    if controller.AltarESPEnabled and controller.CachedAltarParts then
+    if controller.AltarESPEnabled and controller.ActiveAltars then
         local shortestDist = math.huge
-        for _, t in ipairs(controller.CachedAltarParts) do
+        for _, t in ipairs(controller.ActiveAltars) do
             local part = t.part
             if part and part.Parent and part:IsDescendantOf(workspace) then
                 local dist = (hrp.Position - part.Position).Magnitude

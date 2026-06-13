@@ -62,6 +62,7 @@ return function(Client, Controller)
     Tab:CreateSection("Altar Settings")
     
     local isSettingAltar = false
+    local lastAltarSelection = {"All"}
     local AltarDropdown
     AltarDropdown = Tab:CreateDropdown({
         Name = "Select Altar Highlight",
@@ -75,29 +76,61 @@ return function(Client, Controller)
             if not unlockController then return end
             
             local hasNone = table.find(SelectedOptions, "None") ~= nil
+            local finalSelection = SelectedOptions
             
             if hasNone then
+                local wasNoneSelected = table.find(lastAltarSelection, "None") ~= nil
+                if wasNoneSelected then
+                    -- "None" đã được chọn từ trước, và người dùng vừa tích chọn thêm một mục khác.
+                    -- Chúng ta sẽ bỏ chọn "None" khỏi danh sách lựa chọn cuối cùng.
+                    finalSelection = {}
+                    for _, opt in ipairs(SelectedOptions) do
+                        if opt ~= "None" then
+                            table.insert(finalSelection, opt)
+                        end
+                    end
+                    if #finalSelection == 0 then
+                        finalSelection = {"None"}
+                    end
+                else
+                    -- Người dùng vừa chủ động tích chọn mục "None". Thiết lập "None" làm lựa chọn duy nhất.
+                    finalSelection = {"None"}
+                end
+            else
+                if #SelectedOptions == 0 then
+                    finalSelection = {"None"}
+                end
+            end
+            
+            -- Cập nhật lựa chọn hiển thị của Dropdown nếu có sự thay đổi
+            local changed = false
+            if #finalSelection ~= #SelectedOptions then
+                changed = true
+            else
+                for _, opt in ipairs(finalSelection) do
+                    if not table.find(SelectedOptions, opt) then
+                        changed = true
+                        break
+                    end
+                end
+            end
+            
+            if changed then
                 isSettingAltar = true
-                AltarDropdown:Set({"None"})
+                AltarDropdown:Set(finalSelection)
                 isSettingAltar = false
-                
-                unlockController:SetAltarFilter({"None"})
-                
-                -- Tự động đóng dropdown
+            end
+            
+            lastAltarSelection = finalSelection
+            
+            unlockController:SetAltarFilter(finalSelection)
+            
+            -- Tự động đóng dropdown nếu lựa chọn duy nhất hiện tại là "None"
+            if #finalSelection == 1 and finalSelection[1] == "None" then
                 task.spawn(function()
                     task.wait(0.1)
                     closeDropdown(getDropdownGui("Select Altar Highlight"))
                 end)
-            else
-                if #SelectedOptions == 0 then
-                    isSettingAltar = true
-                    AltarDropdown:Set({"None"})
-                    isSettingAltar = false
-                    
-                    unlockController:SetAltarFilter({"None"})
-                else
-                    unlockController:SetAltarFilter(SelectedOptions)
-                end
             end
         end
     })
