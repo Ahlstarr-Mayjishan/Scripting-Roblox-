@@ -68,6 +68,12 @@ function Controller:SetAltarFilter(option)
     triggerInstantUpdate()
 end
 
+-- Thay đổi chế độ hiển thị ESP
+function Controller:SetESPStyle(style)
+    self.ESPStyle = style or "Highlight"
+    triggerInstantUpdate()
+end
+
 -- Hàm phát hiện nâng cấp Radar chính thức của game đã mở khóa (Tối ưu hóa tránh đệ quy sâu)
 local function checkRadarUnlocked()
     local unlocked = false
@@ -126,8 +132,8 @@ task.spawn(function()
         if checkRadarUnlocked() then
             if getgenv().Rayfield then
                 getgenv().Rayfield:Notify({
-                    Title = "Radar tự động tắt",
-                    Content = "Phát hiện bạn đã sở hữu Radar chính thức của game. Radar custom tự động tắt để tối ưu hiệu năng!",
+                    Title = "Radar Auto Disabled",
+                    Content = "Official game radar detected. Custom radar disabled to optimize performance!",
                     Duration = 5
                 })
             end
@@ -205,6 +211,22 @@ task.spawn(function()
                 arrowAltar.CFrame = CFrame.lookAt(arrowPos, Controller.NearestAltarPosition)
             else
                 arrowAltar.Transparency = 1
+            end
+        end
+        
+        -- 4. Cập nhật độ trong suốt cho chế độ Ping (lại gần thì biến mất, ở xa hiện tối đa)
+        if Controller.SavedVisuals.ActiveTargets then
+            for targetPart, cached in pairs(Controller.SavedVisuals.ActiveTargets) do
+                if cached.Style == "Ping" and cached.Dot then
+                    local dist = (hrp.Position - targetPart.Position).Magnitude
+                    -- Dưới 15 studs biến mất hoàn toàn (Transparency = 1)
+                    -- Trên 35 studs hiện hoàn toàn (Transparency = 0)
+                    local transparency = 1 - math.clamp((dist - 15) / 20, 0, 1)
+                    local frame = cached.Dot:FindFirstChild("PingFrame")
+                    if frame then
+                        frame.BackgroundTransparency = transparency
+                    end
+                end
             end
         end
     end)

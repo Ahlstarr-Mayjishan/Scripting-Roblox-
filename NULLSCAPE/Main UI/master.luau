@@ -14,6 +14,46 @@ local Client = {
 }
 getgenv().Client = Client
 
+-- Tạo hoặc tự động cập nhật file cấu hình mặc định để ngăn Rayfield in cảnh báo console
+pcall(function()
+    local HttpService = game:GetService("HttpService")
+    if makefolder and writefile and readfile and isfile then
+        local folder = "NULLSCAPE"
+        local file = folder .. "/master_settings.json"
+        
+        makefolder(folder)
+        
+        local defaultSettings = {
+            ESPSelectionDropdown = {},
+            ESPStyleDropdown = "Highlight",
+            AltarFilterDropdown = "All",
+            ImmunityBabyToggle = false,
+            ImmunityBellToggle = false,
+            ImmunityMartToggle = false
+        }
+        
+        local currentSettings = {}
+        if isfile(file) then
+            local content = readfile(file)
+            pcall(function()
+                currentSettings = HttpService:JSONDecode(content)
+            end)
+        end
+        
+        local updated = false
+        for k, v in pairs(defaultSettings) do
+            if currentSettings[k] == nil then
+                currentSettings[k] = v
+                updated = true
+            end
+        end
+        
+        if updated or not isfile(file) then
+            writefile(file, HttpService:JSONEncode(currentSettings))
+        end
+    end
+end)
+
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 getgenv().Rayfield = Rayfield
 
@@ -85,33 +125,33 @@ function Client:LoadModule(moduleName, tabIcon, callback)
 end
 
 -- ==========================================
--- TAB: TRANG CHỦ (DASHBOARD)
+-- TAB: DASHBOARD (HOME)
 -- ==========================================
-local HomeTab = Window:CreateTab("Trang chủ", 4483362458)
+local HomeTab = Window:CreateTab("Home", 4483362458)
 Client.Tabs["Home"] = HomeTab
-
-HomeTab:CreateSection("Thông tin người chơi")
-HomeTab:CreateLabel("Tên tài khoản: " .. LocalPlayer.Name)
-HomeTab:CreateLabel("Tuổi tài khoản: " .. LocalPlayer.AccountAge .. " ngày")
-
-HomeTab:CreateSection("Thông số máy chủ")
-local statsLabel = HomeTab:CreateLabel("FPS: Đang tính... | Ping: Đang tính... | Người chơi: 0/0")
-
+ 
+HomeTab:CreateSection("Player Info")
+HomeTab:CreateLabel("Account Name: " .. LocalPlayer.Name)
+HomeTab:CreateLabel("Account Age: " .. LocalPlayer.AccountAge .. " days")
+ 
+HomeTab:CreateSection("Server Info")
+local statsLabel = HomeTab:CreateLabel("FPS: Calculating... | Ping: Calculating... | Players: 0/0")
+ 
 task.spawn(function()
     while task.wait(1) do
         if Client.Destroyed then break end
         pcall(function()
             local playerCount = #Players:GetPlayers()
             local maxPlayers = Players.MaxPlayers
-            statsLabel:Set(string.format("FPS: %d | Ping: %d ms | Người chơi: %d/%d", fps, ping, playerCount, maxPlayers))
+            statsLabel:Set(string.format("FPS: %d | Ping: %d ms | Players: %d/%d", fps, ping, playerCount, maxPlayers))
         end)
     end
 end)
-
+ 
 -- ==========================================
--- TAB: CÀI ĐẶT (SETTINGS)
+-- TAB: SETTINGS
 -- ==========================================
-local SettingsTab = Window:CreateTab("Cài đặt", 4483362458)
+local SettingsTab = Window:CreateTab("Settings", 4483362458)
 Client.Tabs["Settings"] = SettingsTab
 
 SettingsTab:CreateButton({

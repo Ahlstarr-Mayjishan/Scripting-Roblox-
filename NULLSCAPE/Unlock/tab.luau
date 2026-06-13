@@ -4,20 +4,20 @@
 -- ]]
 
 return function(Client, Controller)
-    local Tab = Client.Window:CreateTab("Mở khóa & Radar", 4483362458)
+    local Tab = Client.Window:CreateTab("Unlock & Radar", 4483362458)
     
-    Tab:CreateSection("Định vị Custom ESP")
+    Tab:CreateSection("Custom ESP Locator")
     
     Tab:CreateDropdown({
-        Name = "Chọn Loại ESP (Định vị)",
-        Options = {"Hộp quà (Gift)", "Nhạc cụ (Cadence)", "Đàn tế (Altar)"},
+        Name = "Select ESP Type",
+        Options = {"Gift", "Cadence", "Altar"},
         CurrentOption = {},
         MultipleOptions = true,
         Flag = "ESPSelectionDropdown",
         Callback = function(SelectedOptions)
-            local giftSelected = table.find(SelectedOptions, "Hộp quà (Gift)") ~= nil
-            local cadenceSelected = table.find(SelectedOptions, "Nhạc cụ (Cadence)") ~= nil
-            local altarSelected = table.find(SelectedOptions, "Đàn tế (Altar)") ~= nil
+            local giftSelected = table.find(SelectedOptions, "Gift") ~= nil
+            local cadenceSelected = table.find(SelectedOptions, "Cadence") ~= nil
+            local altarSelected = table.find(SelectedOptions, "Altar") ~= nil
             
             Controller:SetGiftESP(giftSelected)
             Controller:SetCadenceESP(cadenceSelected)
@@ -26,16 +26,34 @@ return function(Client, Controller)
     })
     
     Tab:CreateDropdown({
-        Name = "Chế độ hiển thị ESP",
-        Options = {"Highlight (Bo viền)", "Dot (Dấu chấm)"},
-        CurrentOption = "Highlight (Bo viền)",
+        Name = "ESP Render Style",
+        Options = {"Highlight", "Dot", "Ping"},
+        CurrentOption = Controller.ESPStyle == "Highlight" and "Highlight" or (Controller.ESPStyle == "Ping" and "Ping" or "Dot"),
         MultipleOptions = false,
         Flag = "ESPStyleDropdown",
         Callback = function(Option)
-            if Option == "Highlight (Bo viền)" then
-                Controller.ESPStyle = "Highlight"
+            if Option == "Highlight" then
+                Controller:SetESPStyle("Highlight")
+            elseif Option == "Dot" then
+                Controller:SetESPStyle("Dot")
             else
-                Controller.ESPStyle = "Dot"
+                Controller:SetESPStyle("Ping")
+            end
+        end
+    })
+
+    Tab:CreateSection("Altar Settings")
+    
+    Tab:CreateDropdown({
+        Name = "Select Altar Highlight",
+        Options = {"All", "Purgatory", "Chance", "Chaos", "Echo", "Passage", "Protection", "Purification"},
+        CurrentOption = "All",
+        MultipleOptions = false,
+        Flag = "AltarFilterDropdown",
+        Callback = function(Option)
+            local unlockController = Client.Modules.UnlockController
+            if unlockController then
+                unlockController:SetAltarFilter(Option)
             end
         end
     })

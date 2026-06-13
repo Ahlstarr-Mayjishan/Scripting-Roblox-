@@ -1,12 +1,12 @@
 -- [[
 --  NULLSCAPE - Entities UI Tab
---  Đóng vai trò tạo tab "Miễn nhiễm thực thể" trên giao diện Rayfield
+--  Handles creating the "Entities Immunity" tab on the Rayfield interface
 -- ]]
 
 return function(Client, Controller)
-    local Tab = Client.Window:CreateTab("Entitines", 4483362458)
+    local Tab = Client.Window:CreateTab("Entities", 4483362458)
     
-    Tab:CreateSection("Entities Lists - Touch Type")
+    Tab:CreateSection("Entities List - Touch Immunity")
     
     Tab:CreateToggle({
         Name = "Baby",
@@ -34,13 +34,13 @@ return function(Client, Controller)
             Controller:SetImmunity("Mart", Value)
         end
     })
-    
+
     Tab:CreateSection("Altar Settings")
     
     Tab:CreateDropdown({
-        Name = "Chọn Loại Altar Highlight",
-        Options = {"Tất cả", "Purgatory", "Chance", "Chaos", "Echo", "Passage", "Protection", "Purification"},
-        CurrentOption = "Tất cả",
+        Name = "Select Altar Highlight",
+        Options = {"All", "Purgatory", "Chance", "Chaos", "Echo", "Passage", "Protection", "Purification"},
+        CurrentOption = "All",
         MultipleOptions = false,
         Flag = "AltarFilterDropdown",
         Callback = function(Option)

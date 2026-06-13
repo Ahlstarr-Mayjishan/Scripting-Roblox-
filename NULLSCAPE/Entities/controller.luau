@@ -145,8 +145,8 @@ function Controller:SetImmunity(entityName, value)
     
     if getgenv().Rayfield then
         getgenv().Rayfield:Notify({
-            Title = "Cấu hình bảo vệ",
-            Content = (value and "Kích hoạt" or "Vô hiệu hóa") .. " miễn nhiễm với " .. entityName,
+            Title = "Protection Config",
+            Content = (value and "Activated" or "Disabled") .. " immunity for " .. entityName,
             Duration = 2
         })
     end
@@ -359,8 +359,8 @@ task.spawn(function()
                 
                 if getgenv().Rayfield then
                     getgenv().Rayfield:Notify({
-                        Title = "Hệ thống bảo vệ",
-                        Content = "TouchInterest của thực thể kích hoạt đã được dọn sạch. Trạng thái: Ngủ đông.",
+                        Title = "Protection System",
+                        Content = "TouchInterest of active entities has been cleaned. Status: Hibernating.",
                         Duration = 3
                     })
                 end

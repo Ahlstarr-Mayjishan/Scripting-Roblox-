@@ -227,6 +227,9 @@ function Executor.updateESP(controller, hrp)
         if controller.ESPStyle == "Highlight" and idx <= 31 then
             desiredStyle = "Highlight"
             parentObject = targetModel
+        elseif controller.ESPStyle == "Ping" and idx <= 31 then
+            desiredStyle = "Ping"
+            parentObject = targetPart
         else
             desiredStyle = "Dot"
             parentObject = targetPart
@@ -273,6 +276,24 @@ function Executor.updateESP(controller, hrp)
                 highlight.OutlineTransparency = 0.0
                 highlight.Parent = current.ParentObject
                 newCache.Highlight = highlight
+            elseif current.Style == "Ping" then
+                local billboard = Instance.new("BillboardGui")
+                billboard.Name = "NULLSCAPE_ESP_Ping"
+                billboard.Size = UDim2.new(0, 22, 0, 22)
+                billboard.AlwaysOnTop = true
+                
+                local frame = Instance.new("Frame")
+                frame.Name = "PingFrame"
+                frame.Size = UDim2.new(0, 15, 0, 15)
+                frame.AnchorPoint = Vector2.new(0.5, 0.5)
+                frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+                frame.Rotation = 45
+                frame.BackgroundColor3 = current.Color
+                frame.BorderSizePixel = 0
+                
+                frame.Parent = billboard
+                billboard.Parent = current.ParentObject
+                newCache.Dot = billboard
             else
                 local billboard = Instance.new("BillboardGui")
                 billboard.Name = "NULLSCAPE_ESP_Dot"
@@ -303,6 +324,11 @@ function Executor.updateESP(controller, hrp)
                     if inst.OutlineColor ~= current.Color then
                         inst.OutlineColor = current.Color
                         inst.FillColor = current.Color
+                    end
+                elseif cached.Style == "Ping" then
+                    local frame = inst:FindFirstChild("PingFrame")
+                    if frame and frame.BackgroundColor3 ~= current.Color then
+                        frame.BackgroundColor3 = current.Color
                     end
                 else
                     local frame = inst:FindFirstChildOfClass("Frame")

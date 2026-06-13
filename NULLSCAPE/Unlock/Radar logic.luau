@@ -249,6 +249,9 @@ local function updateESP(hrp)
         if RadarLogic.ESPStyle == "Highlight" and idx <= 31 then
             desiredStyle = "Highlight"
             parentObject = targetModel
+        elseif RadarLogic.ESPStyle == "Ping" and idx <= 31 then
+            desiredStyle = "Ping"
+            parentObject = targetPart
         else
             desiredStyle = "Dot"
             parentObject = targetPart
@@ -295,6 +298,24 @@ local function updateESP(hrp)
                 highlight.OutlineTransparency = 0.0
                 highlight.Parent = current.ParentObject
                 newCache.Highlight = highlight
+            elseif current.Style == "Ping" then
+                local billboard = Instance.new("BillboardGui")
+                billboard.Name = "NULLSCAPE_ESP_Ping"
+                billboard.Size = UDim2.new(0, 22, 0, 22)
+                billboard.AlwaysOnTop = true
+                
+                local frame = Instance.new("Frame")
+                frame.Name = "PingFrame"
+                frame.Size = UDim2.new(0, 15, 0, 15)
+                frame.AnchorPoint = Vector2.new(0.5, 0.5)
+                frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+                frame.Rotation = 45
+                frame.BackgroundColor3 = current.Color
+                frame.BorderSizePixel = 0
+                
+                frame.Parent = billboard
+                billboard.Parent = current.ParentObject
+                newCache.Dot = billboard
             else
                 local billboard = Instance.new("BillboardGui")
                 billboard.Name = "NULLSCAPE_ESP_Dot"
@@ -325,6 +346,11 @@ local function updateESP(hrp)
                     if inst.OutlineColor ~= current.Color then
                         inst.OutlineColor = current.Color
                         inst.FillColor = current.Color
+                    end
+                elseif cached.Style == "Ping" then
+                    local frame = inst:FindFirstChild("PingFrame")
+                    if frame and frame.BackgroundColor3 ~= current.Color then
+                        frame.BackgroundColor3 = current.Color
                     end
                 else
                     local frame = inst:FindFirstChildOfClass("Frame")
@@ -449,8 +475,8 @@ task.spawn(function()
         if checkRadarUnlocked() then
             if getgenv().Rayfield then
                 getgenv().Rayfield:Notify({
-                    Title = "Radar tự động tắt",
-                    Content = "Phát hiện bạn đã sở hữu Radar chính thức của game. Radar custom tự động tắt!",
+                    Title = "Radar Auto Disabled",
+                    Content = "Official game radar detected. Custom radar disabled!",
                     Duration = 5
                 })
             end
@@ -524,6 +550,20 @@ runConn = RunService.RenderStepped:Connect(function()
             arrowAltar.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestAltarPosition)
         else
             arrowAltar.Transparency = 1
+        end
+    end
+    
+    -- 4. Cập nhật độ trong suốt cho chế độ Ping (lại gần thì biến mất, ở xa hiện tối đa)
+    if RadarLogic.SavedVisuals.ActiveTargets then
+        for targetPart, cached in pairs(RadarLogic.SavedVisuals.ActiveTargets) do
+            if cached.Style == "Ping" and cached.Dot then
+                local dist = (hrp.Position - targetPart.Position).Magnitude
+                local transparency = 1 - math.clamp((dist - 15) / 20, 0, 1)
+                local frame = cached.Dot:FindFirstChild("PingFrame")
+                if frame then
+                    frame.BackgroundTransparency = transparency
+                end
+            end
         end
     end
 end)
