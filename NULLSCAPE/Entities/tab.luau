@@ -4,12 +4,12 @@
 -- ]]
 
 return function(Client, Controller)
-    local Tab = Client.Window:CreateTab("Miễn nhiễm thực thể", 4483362458)
+    local Tab = Client.Window:CreateTab("Entitines", 4483362458)
     
-    Tab:CreateSection("Danh sách thực thể")
+    Tab:CreateSection("Entities Lists - Touch Type")
     
     Tab:CreateToggle({
-        Name = "Miễn nhiễm Baby",
+        Name = "Baby",
         CurrentValue = Controller.BabyImmune,
         Flag = "ImmunityBabyToggle",
         Callback = function(Value)
@@ -18,7 +18,7 @@ return function(Client, Controller)
     })
     
     Tab:CreateToggle({
-        Name = "Miễn nhiễm Bell",
+        Name = "Bell",
         CurrentValue = Controller.BellImmune,
         Flag = "ImmunityBellToggle",
         Callback = function(Value)
@@ -27,7 +27,7 @@ return function(Client, Controller)
     })
     
     Tab:CreateToggle({
-        Name = "Miễn nhiễm Mart",
+        Name = "Mart",
         CurrentValue = Controller.MartImmune,
         Flag = "ImmunityMartToggle",
         Callback = function(Value)

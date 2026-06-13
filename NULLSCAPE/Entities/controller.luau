@@ -8,20 +8,19 @@ local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
--- Nạp module dọn dẹp riêng biệt (Cleaner)
-local Cleaner = getgenv().loadModule("NULLSCAPE/Entities/cleaner.luau")
-
 local Controller = {
     -- Trạng thái bật/tắt miễn nhiễm cho từng thực thể
     BabyImmune = false,
     BellImmune = false,
     MartImmune = false,
+    Destroyed = false,
     
     -- Bộ nhớ đệm quản lý tài nguyên (GC)
     ActiveConnections = {}, -- Lưu các sự kiện để disconnect khi thư mục Enemies bị hủy
     EntityConnections = {}, -- Kết nối riêng lẻ của từng thực thể
     EnemiesFolder = nil,
-    FolderObserver = nil    -- Theo dõi sự thay đổi của thư mục Enemies trong Workspace
+    FolderObserver = nil,   -- Theo dõi sự thay đổi của thư mục Enemies trong Workspace
+    SavedPartsData = setmetatable({}, { __mode = "k" }) -- Cache lưu TouchInterest & CanTouch
 }
 
 local targetNames = {
@@ -60,7 +59,8 @@ end
 task.spawn(function()
     local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
     if inRoundVal and inRoundVal:IsA("BoolValue") then
-        inRoundVal.Changed:Connect(function(val)
+        local conn = inRoundVal.Changed:Connect(function(val)
+            if Controller.Destroyed then return end
             if val then
                 -- Bắt đầu trận mới, kích hoạt quét ngay lập tức
                 inLobby = false
@@ -71,8 +71,46 @@ task.spawn(function()
                 isHibernating = false
             end
         end)
+        table.insert(Controller.ActiveConnections, conn)
     end
 end)
+
+-- Bật miễn nhiễm (ẩn TouchInterest và tắt CanTouch) cho một thực thể cụ thể
+function Controller:EnableImmunity(enemy)
+    if not enemy then return end
+    for _, descendant in ipairs(enemy:GetDescendants()) do
+        if descendant:IsA("TouchTransmitter") or descendant.Name == "TouchInterest" then
+            local part = descendant.Parent
+            if part and part:IsA("BasePart") then
+                if not self.SavedPartsData[part] then
+                    self.SavedPartsData[part] = {
+                        touch = descendant,
+                        originalCanTouch = part.CanTouch
+                    }
+                end
+                pcall(function() descendant.Parent = nil end)
+                pcall(function() part.CanTouch = false end)
+            end
+        end
+    end
+end
+
+-- Tắt miễn nhiễm (khôi phục lại TouchInterest và CanTouch) cho một thực thể cụ thể
+function Controller:DisableImmunity(enemy)
+    if not enemy then return end
+    for _, descendant in ipairs(enemy:GetDescendants()) do
+        if descendant:IsA("BasePart") then
+            local data = self.SavedPartsData[descendant]
+            if data then
+                if data.touch then
+                    pcall(function() data.touch.Parent = descendant end)
+                end
+                pcall(function() descendant.CanTouch = data.originalCanTouch end)
+                self.SavedPartsData[descendant] = nil
+            end
+        end
+    end
+end
 
 -- Thiết lập cấu hình miễn nhiễm và kích hoạt dọn dẹp tức thời
 function Controller:SetImmunity(entityName, value)
@@ -84,14 +122,16 @@ function Controller:SetImmunity(entityName, value)
         self.MartImmune = value
     end
     
-    if value then
-        isHibernating = false -- Đánh thức checker
-        
-        -- Dọn dẹp tức thời nếu thực thể đã tồn tại trong workspace
-        if self.EnemiesFolder then
-            for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
-                if child.Name == entityName then
-                    Cleaner.removeTouchInterests(child)
+    isHibernating = false -- Đánh thức checker
+    
+    -- Áp dụng thay đổi tức thời cho thực thể đã tồn tại trong workspace
+    if self.EnemiesFolder then
+        for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
+            if child.Name == entityName then
+                if value then
+                    self:EnableImmunity(child)
+                else
+                    self:DisableImmunity(child)
                 end
             end
         end
@@ -108,6 +148,19 @@ end
 
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
 function Controller:CleanUp()
+    -- Khôi phục lại toàn bộ TouchInterest trước khi dọn dẹp (nếu có)
+    if self.SavedPartsData then
+        for part, data in pairs(self.SavedPartsData) do
+            if part and part.Parent and data then
+                if data.touch then
+                    pcall(function() data.touch.Parent = part end)
+                end
+                pcall(function() part.CanTouch = data.originalCanTouch end)
+            end
+        end
+        table.clear(self.SavedPartsData)
+    end
+
     -- Disconnect các kết nối của từng thực thể
     for enemy, connections in pairs(self.EntityConnections) do
         for _, conn in ipairs(connections) do
@@ -132,25 +185,30 @@ local function processEntity(enemy)
     Controller.EntityConnections[enemy] = Controller.EntityConnections[enemy] or {}
     local connections = Controller.EntityConnections[enemy]
 
-    local function applyImmunity(part)
-        local checkFunc = targetNames[enemy.Name]
-        if checkFunc and checkFunc() then
-            if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-                pcall(function() part:Destroy() end)
-            elseif part:IsA("BasePart") then
-                pcall(function() part.CanTouch = false end)
-            end
-        end
-    end
-
-    -- Xử lý các bộ phận hiện có của thực thể
-    for _, part in ipairs(enemy:GetDescendants()) do
-        applyImmunity(part)
+    -- Nếu đang bật miễn nhiễm cho thực thể này thì ẩn ngay lập tức
+    local checkFunc = targetNames[enemy.Name]
+    if checkFunc and checkFunc() then
+        Controller:EnableImmunity(enemy)
     end
 
     -- Lắng nghe các bộ phận mới được thêm vào thực thể sau này (tránh sót hitbox khi đang replicate)
     local descConn = enemy.DescendantAdded:Connect(function(part)
-        applyImmunity(part)
+        local checkFunc = targetNames[enemy.Name]
+        if checkFunc and checkFunc() then
+            if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
+                local parentPart = part.Parent
+                if parentPart and parentPart:IsA("BasePart") then
+                    if not Controller.SavedPartsData[parentPart] then
+                        Controller.SavedPartsData[parentPart] = {
+                            touch = part,
+                            originalCanTouch = parentPart.CanTouch
+                        }
+                    end
+                    pcall(function() part.Parent = nil end)
+                    pcall(function() parentPart.CanTouch = false end)
+                end
+            end
+        end
     end)
     table.insert(connections, descConn)
 end
@@ -201,12 +259,14 @@ end
 local function startObserving()
     -- Theo dõi khi thư mục Enemies xuất hiện trong Workspace
     local function checkAndObserve(child)
+        if Controller.Destroyed then return end
         if child.Name == "Enemies" and child:IsA("Folder") then
             Controller:ObserveFolder(child)
         end
     end
 
     local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
+    table.insert(Controller.ActiveConnections, wsConn)
     
     -- Quét thư mục hiện có
     local initialFolder = workspace:FindFirstChild("Enemies")
@@ -250,8 +310,9 @@ end
 
 -- Vòng lặp quan sát TouchInterest của các mục tiêu đặc biệt với cơ chế ngủ đông
 task.spawn(function()
-    while true do
+    while not Controller.Destroyed do
         task.wait(1) -- Kiểm tra 1 giây 1 lần
+        if Controller.Destroyed then break end
         
         -- Xác minh trạng thái phòng chờ / trong trận
         local currentInMatch = isInMatch()
@@ -297,11 +358,11 @@ task.spawn(function()
                     })
                 end
             else
-                -- Nếu vẫn còn, kích hoạt Cleaner để dọn dẹp
+                -- Nếu vẫn còn, kích hoạt ẩn đi và lưu trữ
                 for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
                     local checkFunc = targetNames[enemy.Name]
                     if checkFunc and checkFunc() then
-                        Cleaner.removeTouchInterests(enemy)
+                        Controller:EnableImmunity(enemy)
                     end
                 end
             end

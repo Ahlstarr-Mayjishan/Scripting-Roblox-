@@ -4,6 +4,16 @@
 --  Đây là file điều khiển chính (Master loader). Các tính năng sẽ được thêm dưới dạng module.
 -- ]]
 
+-- Đối tượng quản lý chung của Client
+local Client = {
+    Window = nil,
+    Tabs = {},
+    Modules = {},
+    ActiveConnections = {},
+    Destroyed = false
+}
+getgenv().Client = Client
+
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 getgenv().Rayfield = Rayfield
 
@@ -30,6 +40,7 @@ end)
 
 task.spawn(function()
     while task.wait(2) do
+        if Client.Destroyed then break end
         pcall(function()
             ping = math.floor(LocalPlayer:GetNetworkPing() * 1000)
         end)
@@ -53,15 +64,7 @@ local Window = Rayfield:CreateWindow({
     },
     KeySystem = false
 })
-
--- Đối tượng quản lý chung của Client
-local Client = {
-    Window = Window,
-    Tabs = {},
-    Modules = {},
-    ActiveConnections = {}
-}
-getgenv().Client = Client
+Client.Window = Window
 
 
 -- Hàm đăng ký các module tính năng
@@ -96,6 +99,7 @@ local statsLabel = HomeTab:CreateLabel("FPS: Đang tính... | Ping: Đang tính.
 
 task.spawn(function()
     while task.wait(1) do
+        if Client.Destroyed then break end
         pcall(function()
             local playerCount = #Players:GetPlayers()
             local maxPlayers = Players.MaxPlayers
@@ -110,84 +114,68 @@ end)
 local SettingsTab = Window:CreateTab("Cài đặt", 4483362458)
 Client.Tabs["Settings"] = SettingsTab
 
-SettingsTab:CreateSection("Quản lý UI")
 SettingsTab:CreateButton({
-    Name = "Sao chép Discord Link",
-    Callback = function()
-        setclipboard("https://discord.gg/nullscape")
-        Rayfield:Notify({
-            Title = "NULLSCAPE",
-            Content = "Đã sao chép link Discord vào bộ nhớ tạm!",
-            Duration = 3
-        })
-    end
-})
-
-SettingsTab:CreateButton({
-    Name = "Tắt hoàn toàn Client (Destroy UI)",
+    Name = "Destroy UI",
     Callback = function()
         pcall(function()
-            -- Hủy các kết nối hệ thống
-            if fpsConnection then fpsConnection:Disconnect() end
+            -- Đánh dấu Client đã bị hủy để dừng các luồng/vòng lặp
+            Client.Destroyed = true
+            
+            -- 1. Hủy các kết nối hệ thống chính trong master
+            if fpsConnection then
+                pcall(function() fpsConnection:Disconnect() end)
+            end
             for _, conn in pairs(Client.ActiveConnections) do
-                if conn then conn:Disconnect() end
+                if conn then
+                    pcall(function() conn:Disconnect() end)
+                end
             end
             
-            -- Hủy UI Rayfield
+            -- 2. Hủy các module con và giải phóng tài nguyên của chúng
+            for name, module in pairs(Client.Modules) do
+                if typeof(module) == "table" then
+                    module.Destroyed = true
+                    if typeof(module.CleanUp) == "function" then
+                        pcall(function() module:CleanUp() end)
+                    end
+                    pcall(function() table.clear(module) end)
+                end
+            end
+            
+            -- 3. Hủy UI Rayfield
             Rayfield:Destroy()
+            
+            -- 4. Giải phóng các biến môi trường toàn cục
+            getgenv().Rayfield = nil
+            getgenv().Client = nil
+            getgenv().loadModule = nil
+            
+            -- 5. Xóa sạch dữ liệu trong bảng Client chính
+            table.clear(Client)
+            
+            -- 6. Thu gom rác (Garbage Collector) để giải phóng RAM & Memory hoàn toàn
+            local cg = collectgarbage
+            if cg then
+                pcall(cg, "collect")
+            end
         end)
     end
 })
 
--- ==========================================
--- VÍ DỤ/HƯỚNG DẪN KHI THÊM MODULE MỚI:
--- ==========================================
--- [[
---  Để thêm một tính năng/module mới, bạn có thể gọi:
---
---  Client:LoadModule("Tên Tab Mới", 4483362458, function(Tab, Controller)
---      Tab:CreateSection("Danh mục 1")
---      Tab:CreateToggle({
---          Name = "Tính năng mẫu",
---          CurrentValue = false,
---          Callback = function(Value)
---              print("Trạng thái:", Value)
---          end
---      })
---  end)
--- ]]
-
--- ==========================================
--- BỘ NẠP MODULE HYBRID (LOCAL / GITHUB CLOUD)
--- ==========================================
 local function loadModule(path)
     local githubRawUrl = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
-    
-    -- Kiểm tra xem có thể đọc file cục bộ không (dành cho DEV thử nghiệm trên PC)
-    local localSuccess, content = pcall(function()
-        if readfile then
-            return readfile(path)
-        end
-        return nil
-    end)
-    
-    if localSuccess and content then
-        return loadstring(content)()
-    else
-        -- Nếu không có file cục bộ, tự động tải trực tiếp từ GitHub
-        return loadstring(game:HttpGet(githubRawUrl .. path))()
-    end
+    return loadstring(game:HttpGet(githubRawUrl .. path))()
 end
 getgenv().loadModule = loadModule
 
 -- Tải các module con
 local success, err = pcall(function()
     local EntitiesController = loadModule("NULLSCAPE/Entities/controller.luau")
+    Client.Modules["EntitiesController"] = EntitiesController
     local EntitiesTab = loadModule("NULLSCAPE/Entities/tab.luau")
     
     EntitiesTab(Client, EntitiesController)
 end)
-
 
 if not success then
     warn("[NULLSCAPE] Lỗi khi nạp module Entities: " .. tostring(err))
