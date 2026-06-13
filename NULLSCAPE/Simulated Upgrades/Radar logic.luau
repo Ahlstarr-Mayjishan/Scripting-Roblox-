@@ -293,7 +293,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
         if controller.ESPStyle == "Highlight" and idx <= 8 and not isGolden then
             desiredStyle = "Highlight"
             parentObject = targetModel
-        elseif controller.ESPStyle == "Ping" and idx <= 8 then
+        elseif controller.ESPStyle == "Ping" then
             desiredStyle = "Ping"
             parentObject = targetPart
         else
@@ -676,16 +676,10 @@ function Logic.updateRender(controller, gc, hrp)
                 local dist = (hrp.Position - targetPart.Position).Magnitude
                 local frame = cached.Dot:FindFirstChild("PingFrame")
                 if frame then
-                    if dist < 50 then
-                        cached.Dot.Enabled = false
-                        frame.Size = UDim2.new(0, 0, 0, 0)
-                    else
-                        cached.Dot.Enabled = true
-                        local scale = math.clamp((dist - 50) / 150, 0, 1)
-                        local newSize = scale * 10
-                        frame.Size = UDim2.new(0, newSize, 0, newSize)
-                        frame.BackgroundTransparency = 0
-                    end
+                    cached.Dot.Enabled = true
+                    local size = math.clamp(dist / 20, 6, 10)
+                    frame.Size = UDim2.new(0, size, 0, size)
+                    frame.BackgroundTransparency = 0
                 end
             end
         end
