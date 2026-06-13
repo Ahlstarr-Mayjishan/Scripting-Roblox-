@@ -88,10 +88,39 @@ end
 local function processEntity(enemy)
     if not enemy then return end
     
-    -- Kiểm tra xem thực thể có trong danh sách mục tiêu và đang được bật Toggle không
-    local checkFunc = targetNames[enemy.Name]
-    if checkFunc and checkFunc() then
-        Cleaner.removeTouchInterests(enemy)
+    Controller.EntityConnections[enemy] = Controller.EntityConnections[enemy] or {}
+    local connections = Controller.EntityConnections[enemy]
+
+    local function applyImmunity(part)
+        local checkFunc = targetNames[enemy.Name]
+        if checkFunc and checkFunc() then
+            if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
+                pcall(function() part:Destroy() end)
+            elseif part:IsA("BasePart") then
+                pcall(function() part.CanTouch = false end)
+            end
+        end
+    end
+
+    -- Xử lý các bộ phận hiện có của thực thể
+    for _, part in ipairs(enemy:GetDescendants()) do
+        applyImmunity(part)
+    end
+
+    -- Lắng nghe các bộ phận mới được thêm vào thực thể sau này (tránh sót hitbox khi đang replicate)
+    local descConn = enemy.DescendantAdded:Connect(function(part)
+        applyImmunity(part)
+    end)
+    table.insert(connections, descConn)
+end
+
+-- Gỡ bỏ lắng nghe của thực thể khi nó bị xóa
+local function removeEntity(enemy)
+    if Controller.EntityConnections[enemy] then
+        for _, conn in ipairs(Controller.EntityConnections[enemy]) do
+            if conn then conn:Disconnect() end
+        end
+        Controller.EntityConnections[enemy] = nil
     end
 end
 
@@ -106,12 +135,18 @@ function Controller:ObserveFolder(folder)
     end)
     table.insert(self.ActiveConnections, childAddedConn)
 
-    -- 2. Xử lý các thực thể đã có sẵn trong thư mục
+    -- 2. Lắng nghe khi thực thể bị xóa khỏi game
+    local childRemovedConn = folder.ChildRemoved:Connect(function(child)
+        removeEntity(child)
+    end)
+    table.insert(self.ActiveConnections, childRemovedConn)
+
+    -- 3. Xử lý các thực thể đã có sẵn trong thư mục
     for _, child in ipairs(folder:GetChildren()) do
         processEntity(child)
     end
 
-    -- 3. Cơ chế tự động GC khi thư mục bị xóa/hủy khỏi Workspace
+    -- 4. Cơ chế tự động GC khi thư mục bị xóa/hủy khỏi Workspace
     local destroyingConn = folder.AncestryChanged:Connect(function(_, parent)
         if not parent then
             -- Thư mục Enemies đã bị xóa hoàn toàn khỏi trò chơi (chuyển màn, game reset,...)
@@ -144,15 +179,23 @@ task.spawn(startObserving)
 
 -- Kiểm tra xem trong các thực thể mục tiêu còn TouchInterest nào không
 local function checkTargetsForTouchInterest()
-    if not Controller.EnemiesFolder then return false, false end
+    if not Controller.EnemiesFolder then return false, false, false end
     
     local foundAny = false
     local touchInterestsExist = false
+    local allLoaded = true
     
     for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
         local checkFunc = targetNames[enemy.Name]
         if checkFunc and checkFunc() then
             foundAny = true
+            
+            -- Đảm bảo thực thể đã tải xong nhân vật trước khi kiểm tra trạng thái TouchInterest
+            local loaded = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildOfClass("Humanoid") or enemy:FindFirstChildWhichIsA("BasePart")
+            if not loaded then
+                allLoaded = false
+            end
+            
             for _, part in ipairs(enemy:GetDescendants()) do
                 if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
                     touchInterestsExist = true
@@ -163,7 +206,7 @@ local function checkTargetsForTouchInterest()
         if touchInterestsExist then break end
     end
     
-    return foundAny, touchInterestsExist
+    return foundAny, touchInterestsExist, allLoaded
 end
 
 -- Vòng lặp quan sát TouchInterest của các mục tiêu đặc biệt với cơ chế ngủ đông
@@ -171,11 +214,20 @@ task.spawn(function()
     while true do
         task.wait(1) -- Kiểm tra 1 giây 1 lần
         
-        -- Nếu EnemiesFolder bị nil -> Đánh thức cơ chế kiểm tra (tái kích hoạt)
+        -- Điều kiện tái kích hoạt 1: Thư mục Enemies bị xóa (nil)
         if not Controller.EnemiesFolder then
             if isHibernating then
                 isHibernating = false
                 warn("[NULLSCAPE] Thư mục Enemies đã bằng nil. Tái kích hoạt cơ chế quan sát TouchInterest (Check 1s/lần).")
+            end
+            continue
+        end
+        
+        -- Điều kiện tái kích hoạt 2: Thư mục Enemies trống (0 thực thể - ví dụ trong intermission)
+        if #Controller.EnemiesFolder:GetChildren() == 0 then
+            if isHibernating then
+                isHibernating = false
+                warn("[NULLSCAPE] Thư mục Enemies trống. Tái kích hoạt cơ chế quan sát TouchInterest (Check 1s/lần).")
             end
             continue
         end
@@ -186,11 +238,11 @@ task.spawn(function()
         end
         
         -- Thực hiện kiểm tra
-        local foundAny, touchInterestsExist = checkTargetsForTouchInterest()
+        local foundAny, touchInterestsExist, allLoaded = checkTargetsForTouchInterest()
         
         if foundAny then
-            if not touchInterestsExist then
-                -- Tất cả TouchInterest của các thực thể mục tiêu hiện tại đã được xóa hoàn toàn
+            if not touchInterestsExist and allLoaded then
+                -- Tất cả TouchInterest của các thực thể mục tiêu hiện tại đã được xóa hoàn toàn và đã load xong
                 isHibernating = true
                 warn("[NULLSCAPE] Đã xác nhận: Toàn bộ TouchInterest của các mục tiêu bật bảo vệ đã biến mất. Hệ thống vào trạng thái ngủ đông.")
                 
