@@ -29,7 +29,20 @@ local targetNames = {
     ["Mart"] = function() return Controller.MartImmune end
 }
 
-local isHibernating = false -- Trạng thái ngủ đông của checker TouchInterest
+local inLobby = false       -- Đang ở sảnh chờ/lựa chọn
+local isHibernating = false -- Đã dọn sạch thực thể trong trận và đang ngủ đông
+
+-- Xác minh 2 bước kiểm tra trạng thái game (trong trận hay ở sảnh chờ)
+local function isInMatch()
+    local lobby = workspace:FindFirstChild("Lobby")
+    local selectFolder = workspace:FindFirstChild("Select")
+    
+    local lobbyCount = lobby and #lobby:GetChildren() or 0
+    local selectCount = selectFolder and #selectFolder:GetChildren() or 0
+    
+    -- Nếu cả hai thư mục đều trống (0 children) hoặc không tồn tại, tức là đang trong trận
+    return lobbyCount == 0 and selectCount == 0
+end
 
 -- Thiết lập cấu hình miễn nhiễm và kích hoạt dọn dẹp tức thời
 function Controller:SetImmunity(entityName, value)
@@ -214,30 +227,37 @@ task.spawn(function()
     while true do
         task.wait(1) -- Kiểm tra 1 giây 1 lần
         
-        -- Điều kiện tái kích hoạt 1: Thư mục Enemies bị xóa (nil)
-        if not Controller.EnemiesFolder then
-            if isHibernating then
-                isHibernating = false
-                warn("[NULLSCAPE] Thư mục Enemies đã bằng nil. Tái kích hoạt cơ chế quan sát TouchInterest (Check 1s/lần).")
+        -- Xác minh 2 bước kiểm tra trạng thái phòng chờ / trong trận
+        local currentInMatch = isInMatch()
+        
+        if not currentInMatch then
+            -- Nếu đang ở Lobby/Select (có phần tử con) -> Ngừng quét
+            if not inLobby then
+                inLobby = true
+                isHibernating = false -- Reset trạng thái quét của trận cũ
+                warn("[NULLSCAPE] Đang ở Lobby/Select. Tạm dừng quét.")
             end
             continue
-        end
-        
-        -- Điều kiện tái kích hoạt 2: Thư mục Enemies trống (0 thực thể - ví dụ trong intermission)
-        if #Controller.EnemiesFolder:GetChildren() == 0 then
-            if isHibernating then
-                isHibernating = false
-                warn("[NULLSCAPE] Thư mục Enemies trống. Tái kích hoạt cơ chế quan sát TouchInterest (Check 1s/lần).")
+        else
+            -- Nếu đã vào trận (Lobby & Select trống) -> Đánh thức hệ thống
+            if inLobby then
+                inLobby = false
+                isHibernating = false -- Bắt đầu trận mới, kích hoạt quét
+                warn("[NULLSCAPE] Đã vào trận. Bắt đầu quét...")
             end
-            continue
         end
         
-        -- Nếu đang ở trạng thái ngủ đông, không làm gì cả
+        -- Nếu đang ở trạng thái ngủ đông (đã dọn sạch trận này), không làm gì cả
         if isHibernating then
             continue
         end
         
-        -- Thực hiện kiểm tra
+        -- Nếu EnemiesFolder bị nil -> Chúng ta tiếp tục đợi cho đến khi nó xuất hiện
+        if not Controller.EnemiesFolder then
+            continue
+        end
+        
+        -- Thực hiện kiểm tra TouchInterest
         local foundAny, touchInterestsExist, allLoaded = checkTargetsForTouchInterest()
         
         if foundAny then
