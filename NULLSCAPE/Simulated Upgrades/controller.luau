@@ -18,7 +18,7 @@ local Controller = {
     GiftESPEnabled = false,
     CadenceESPEnabled = false,
     AltarESPEnabled = false,
-    AltarFilter = "Tất cả",
+    AltarFilter = {"All"},
     ESPStyle = "Highlight", -- Mặc định: "Highlight" hoặc "Dot"
     Destroyed = false,
     
@@ -59,9 +59,13 @@ function Controller:SetAltarESP(value)
     triggerInstantUpdate()
 end
 
--- Bộ lọc loại Altar
+-- Bộ lọc loại Altar (Hỗ trợ multi-select table)
 function Controller:SetAltarFilter(option)
-    self.AltarFilter = option or "Tất cả"
+    if typeof(option) == "string" then
+        self.AltarFilter = {option}
+    else
+        self.AltarFilter = option or {"All"}
+    end
     triggerInstantUpdate()
 end
 

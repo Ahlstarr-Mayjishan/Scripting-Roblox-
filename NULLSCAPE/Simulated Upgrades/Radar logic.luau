@@ -175,9 +175,21 @@ function Logic.updateESP(controller, gc, hrp)
                     local targetPart = altarObj:IsA("Model") and (altarObj:FindFirstChild("HumanoidRootPart") or altarObj:FindFirstChildWhichIsA("BasePart")) or altarObj
                     if targetPart and targetPart:IsA("BasePart") then
                         local altarName, altarColor = getAltarTypeAndColor(altarObj)
-                        local filter = controller.AltarFilter or "Tất cả"
+                        local filter = controller.AltarFilter
+                        local matchesFilter = false
                         
-                        if filter == "Tất cả" or filter == altarName then
+                        if typeof(filter) == "table" then
+                            if table.find(filter, "All") or table.find(filter, "Tất cả") or #filter == 0 then
+                                matchesFilter = true
+                            else
+                                matchesFilter = table.find(filter, altarName) ~= nil
+                            end
+                        else
+                            local filterStr = tostring(filter or "All")
+                            matchesFilter = (filterStr == "All" or filterStr == "Tất cả" or filterStr == altarName)
+                        end
+                        
+                        if matchesFilter then
                             local distance = (hrp.Position - targetPart.Position).Magnitude
                             if distance < shortestAltarDist then
                                 shortestAltarDist = distance

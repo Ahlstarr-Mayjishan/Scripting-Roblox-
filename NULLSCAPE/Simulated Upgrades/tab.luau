@@ -51,13 +51,13 @@ return function(Client, Controller)
     Tab:CreateDropdown({
         Name = "Select Altar Highlight",
         Options = {"All", "Purgatory", "Chance", "Chaos", "Echo", "Passage", "Protection", "Purification"},
-        CurrentOption = "All",
-        MultipleOptions = false,
+        CurrentOption = {"All"},
+        MultipleOptions = true,
         Flag = "AltarFilterDropdown",
-        Callback = function(Option)
+        Callback = function(Options)
             local unlockController = Client.Modules.UnlockController
             if unlockController then
-                unlockController:SetAltarFilter(Option)
+                unlockController:SetAltarFilter(Options)
             end
         end
     })
