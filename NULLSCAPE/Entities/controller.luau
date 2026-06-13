@@ -3,10 +3,7 @@
 --  Chỉ tập trung vào quản lý, quan sát, tối ưu hiệu năng và tự động thu gom rác (GC).
 -- ]]
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local LocalPlayer = Players.LocalPlayer
 
 local Controller = {
     -- Trạng thái bật/tắt miễn nhiễm cho từng thực thể
@@ -85,7 +82,8 @@ function Controller:EnableImmunity(enemy)
                 if not self.SavedPartsData[part] then
                     self.SavedPartsData[part] = {
                         touch = descendant,
-                        originalCanTouch = part.CanTouch
+                        originalCanTouch = part.CanTouch,
+                        enemyName = enemy.Name
                     }
                 end
                 pcall(function() descendant.Parent = nil end)
@@ -95,15 +93,16 @@ function Controller:EnableImmunity(enemy)
     end
 end
 
--- Tắt miễn nhiễm (khôi phục lại TouchInterest và CanTouch) cho một thực thể cụ thể
-function Controller:DisableImmunity(enemy)
-    if not enemy then return end
+-- Tắt miễn nhiễm (khôi phục lại TouchInterest và CanTouch) cho một loại thực thể cụ thể
+function Controller:DisableImmunityForType(entityName)
     for part, data in pairs(self.SavedPartsData) do
-        if part and part.Parent and part:IsDescendantOf(enemy) then
-            if data.touch then
-                pcall(function() data.touch.Parent = part end)
+        if data and data.enemyName == entityName then
+            if part and part.Parent then
+                if data.touch then
+                    pcall(function() data.touch.Parent = part end)
+                end
+                pcall(function() part.CanTouch = data.originalCanTouch end)
             end
-            pcall(function() part.CanTouch = data.originalCanTouch end)
             self.SavedPartsData[part] = nil
         end
     end
@@ -122,16 +121,16 @@ function Controller:SetImmunity(entityName, value)
     isHibernating = false -- Đánh thức checker
     
     -- Áp dụng thay đổi tức thời cho thực thể đã tồn tại trong workspace
-    if self.EnemiesFolder then
-        for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
-            if child.Name == entityName then
-                if value then
+    if value then
+        if self.EnemiesFolder then
+            for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
+                if child.Name == entityName then
                     self:EnableImmunity(child)
-                else
-                    self:DisableImmunity(child)
                 end
             end
         end
+    else
+        self:DisableImmunityForType(entityName)
     end
     
     if getgenv().Rayfield then
