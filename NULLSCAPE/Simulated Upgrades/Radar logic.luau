@@ -4,111 +4,9 @@
 --  nhận diện khoảng cách và phân loại. Cung cấp API logic để Executor và Controller sử dụng.
 -- ]]
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local LocalPlayer = Players.LocalPlayer
+local Logic = {}
 
-local RadarLogic = {
-    GiftESPEnabled = true,
-    CadenceESPEnabled = true,
-    AltarESPEnabled = true,
-    AltarFilter = "Tất cả",
-    ESPStyle = "Highlight", -- Mặc định: "Highlight" hoặc "Dot"
-    Destroyed = false,
-    
-    NearestGiftPosition = nil,
-    NearestCadencePosition = nil,
-    NearestAltarPosition = nil,
-    CachedGiftParts = {},
-    CachedCadenceParts = {},
-    CachedAltarParts = {},
-    
-    ActiveConnections = {},
-    SavedVisuals = {
-        Highlights = {},
-        Beams = {},
-        Attachments = {},
-        Dots = {},
-        ActiveTargets = {}, -- Cache lưu các vật thể để tái sử dụng
-        ArrowGift = nil,
-        ArrowCadence = nil,
-        ArrowAltar = nil
-    }
-}
-
--- Mũi tên chỉ hướng dùng MeshId gốc của game (đặc, không trong suốt)
-local function getOrCreateArrow(saved, key, color)
-    local arrow = saved[key]
-    if not arrow or not arrow.Parent then
-        local success = pcall(function()
-            arrow = Instance.new("MeshPart")
-            arrow.Name = key
-            arrow.MeshId = "rbxassetid://118015691029311"
-        end)
-        
-        if not success or not arrow then
-            arrow = Instance.new("Part")
-            arrow.Name = key
-            local mesh = Instance.new("SpecialMesh")
-            mesh.MeshType = Enum.MeshType.FileMesh
-            mesh.MeshId = "rbxassetid://118015691029311"
-            mesh.Parent = arrow
-        end
-        
-        arrow.Material = Enum.Material.Neon
-        arrow.Size = Vector3.new(1.3, 1.3, 1.3)
-        arrow.CanCollide = false
-        arrow.Anchored = true
-        arrow.Transparency = 0 -- Hoàn toàn đặc
-        arrow.Parent = workspace
-        saved[key] = arrow
-    end
-    arrow.Color = color
-    return arrow
-end
-
-local function clearVisuals(saved, keepArrows)
-    if not saved then return end
-    
-    if saved.ActiveTargets then
-        for part, cached in pairs(saved.ActiveTargets) do
-            if cached.Highlight then pcall(function() cached.Highlight:Destroy() end) end
-            if cached.Dot then pcall(function() cached.Dot:Destroy() end) end
-        end
-        table.clear(saved.ActiveTargets)
-    else
-        saved.ActiveTargets = {}
-    end
-    
-    if saved.Highlights then table.clear(saved.Highlights) end
-    if saved.Beams then table.clear(saved.Beams) end
-    if saved.Attachments then table.clear(saved.Attachments) end
-    if saved.Dots then table.clear(saved.Dots) end
-
-    if not keepArrows then
-        for _, key in ipairs({"ArrowGift", "ArrowCadence", "ArrowAltar"}) do
-            if saved[key] then
-                pcall(function() saved[key]:Destroy() end)
-                saved[key] = nil
-            end
-        end
-    end
-end
-
--- Bộ lọc nhận dạng nhạc cụ Cadence
-local instrumentKeywords = {"harp", "violin", "guitar", "flute", "drum", "piano", "trumpet", "instrument"}
-local function isInstrument(name)
-    if not name then return false end
-    local nameLower = name:lower()
-    for _, keyword in ipairs(instrumentKeywords) do
-        if string.find(nameLower, keyword) then
-            return true
-        end
-    end
-    return false
-end
-
--- Danh sách màu sắc tương ứng cho các loại Altar
+-- Nhận diện loại Altar dựa vào tên đối tượng hoặc cha/con của nó
 local altarColors = {
     Purgatory = Color3.new(1, 0.5, 0),
     Chance = Color3.new(1, 1, 0.7),
@@ -119,7 +17,6 @@ local altarColors = {
     Purification = Color3.fromRGB(255, 0, 255)
 }
 
--- Nhận diện loại Altar
 local function getAltarTypeAndColor(altarObj)
     local objName = altarObj.Name:lower()
     for name, color in pairs(altarColors) do
@@ -147,12 +44,86 @@ local function getAltarTypeAndColor(altarObj)
         end
     end
     
-    return "Unknown", Color3.fromRGB(255, 128, 0) -- Mặc định là màu cam
+    return "Unknown", Color3.fromRGB(255, 128, 0)
 end
 
--- Vòng lặp quét định vị chính bằng cơ chế lưu đệm (Caching & Reusing) tránh giật lag
-local function updateESP(hrp)
-    local saved = RadarLogic.SavedVisuals
+-- Bộ lọc nhận dạng nhạc cụ Cadence
+local instrumentKeywords = {"harp", "violin", "guitar", "flute", "drum", "piano", "trumpet", "instrument"}
+local function isInstrument(name)
+    if not name then return false end
+    local nameLower = name:lower()
+    for _, keyword in ipairs(instrumentKeywords) do
+        if string.find(nameLower, keyword) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Helper để lấy hoặc tạo mũi tên chỉ hướng (đặc, không trong suốt)
+local function getOrCreateArrow(saved, key, color)
+    local arrow = saved[key]
+    if not arrow or not arrow.Parent then
+        local success = pcall(function()
+            arrow = Instance.new("MeshPart")
+            arrow.Name = key
+            arrow.MeshId = "rbxassetid://118015691029311"
+        end)
+        
+        if not success or not arrow then
+            arrow = Instance.new("Part")
+            arrow.Name = key
+            local mesh = Instance.new("SpecialMesh")
+            mesh.MeshType = Enum.MeshType.FileMesh
+            mesh.MeshId = "rbxassetid://118015691029311"
+            mesh.Parent = arrow
+        end
+        
+        arrow.Material = Enum.Material.Neon
+        arrow.Size = Vector3.new(1.3, 1.3, 1.3)
+        arrow.CanCollide = false
+        arrow.Anchored = true
+        arrow.Transparency = 0
+        arrow.Parent = workspace
+        saved[key] = arrow
+    end
+    arrow.Color = color
+    return arrow
+end
+
+-- Dọn dẹp toàn bộ Highlight, Beam, Dot và các đối tượng lưu đệm
+function Logic.clearVisuals(gc, keepArrows)
+    local saved = gc.SavedVisuals
+    if not saved then return end
+    
+    if saved.ActiveTargets then
+        for part, cached in pairs(saved.ActiveTargets) do
+            if cached.Highlight then pcall(function() cached.Highlight:Destroy() end) end
+            if cached.Dot then pcall(function() cached.Dot:Destroy() end) end
+        end
+        table.clear(saved.ActiveTargets)
+    else
+        saved.ActiveTargets = {}
+    end
+    
+    if saved.Highlights then table.clear(saved.Highlights) end
+    if saved.Beams then table.clear(saved.Beams) end
+    if saved.Attachments then table.clear(saved.Attachments) end
+    if saved.Dots then table.clear(saved.Dots) end
+
+    if not keepArrows then
+        for _, key in ipairs({"ArrowGift", "ArrowCadence", "ArrowAltar"}) do
+            if saved[key] then
+                pcall(function() saved[key]:Destroy() end)
+                saved[key] = nil
+            end
+        end
+    end
+end
+
+-- Vòng lặp quét định vị và vẽ các chỉ dẫn/Highlight bằng cơ chế lưu đệm
+function Logic.updateESP(controller, gc, hrp)
+    local saved = gc.SavedVisuals
     if not saved.ActiveTargets then saved.ActiveTargets = {} end
     
     local nearestAltar = nil
@@ -162,8 +133,8 @@ local function updateESP(hrp)
     local instruments = {}
     local altars = {}
     
-    -- 1. Thu thập Hộp quà trong Workspace.Item_Pools
-    if RadarLogic.GiftESPEnabled then
+    -- 1. Thu thập Hộp quà
+    if controller.GiftESPEnabled then
         local itemPools = workspace:FindFirstChild("Item_Pools")
         if itemPools then
             for _, obj in ipairs(itemPools:GetDescendants()) do
@@ -175,8 +146,8 @@ local function updateESP(hrp)
         end
     end
     
-    -- 2. Thu thập Nhạc cụ trong Workspace.Item_Pools và Enemies
-    if RadarLogic.CadenceESPEnabled then
+    -- 2. Thu thập Nhạc cụ
+    if controller.CadenceESPEnabled then
         local function scanFolder(folder)
             for _, obj in ipairs(folder:GetDescendants()) do
                 if (obj:IsA("BasePart") or obj:IsA("Model")) and isInstrument(obj.Name) then
@@ -194,8 +165,8 @@ local function updateESP(hrp)
         if enemies then scanFolder(enemies) end
     end
     
-    -- 3. Thu thập Đàn tế trong Workspace.CurrentRooms
-    if RadarLogic.AltarESPEnabled then
+    -- 3. Thu thập Đàn tế (Altar)
+    if controller.AltarESPEnabled then
         local currentRooms = workspace:FindFirstChild("CurrentRooms")
         if currentRooms then
             for _, room in ipairs(currentRooms:GetChildren()) do
@@ -204,7 +175,7 @@ local function updateESP(hrp)
                     local targetPart = altarObj:IsA("Model") and (altarObj:FindFirstChild("HumanoidRootPart") or altarObj:FindFirstChildWhichIsA("BasePart")) or altarObj
                     if targetPart and targetPart:IsA("BasePart") then
                         local altarName, altarColor = getAltarTypeAndColor(altarObj)
-                        local filter = RadarLogic.AltarFilter or "Tất cả"
+                        local filter = controller.AltarFilter or "Tất cả"
                         
                         if filter == "Tất cả" or filter == altarName then
                             local distance = (hrp.Position - targetPart.Position).Magnitude
@@ -230,7 +201,6 @@ local function updateESP(hrp)
         return a.distance < b.distance
     end)
     
-    -- Xây dựng các đối tượng cần vẽ ESP
     local currentTargets = {}
     for idx, target in ipairs(allTargets) do
         local targetPart = target.part
@@ -238,10 +208,10 @@ local function updateESP(hrp)
         local color = target.color
         
         local desiredStyle, parentObject
-        if RadarLogic.ESPStyle == "Highlight" and idx <= 31 then
+        if controller.ESPStyle == "Highlight" and idx <= 31 then
             desiredStyle = "Highlight"
             parentObject = targetModel
-        elseif RadarLogic.ESPStyle == "Ping" and idx <= 31 then
+        elseif controller.ESPStyle == "Ping" and idx <= 31 then
             desiredStyle = "Ping"
             parentObject = targetPart
         else
@@ -330,7 +300,6 @@ local function updateESP(hrp)
             
             saved.ActiveTargets[targetPart] = newCache
         else
-            -- Đã có sẵn visual đúng loại, chỉ cập nhật LastSeen và kiểm tra màu
             cached.LastSeen = scanTime
             local inst = cached.Highlight or cached.Dot
             if inst and inst.Parent then
@@ -351,7 +320,6 @@ local function updateESP(hrp)
                     end
                 end
             else
-                -- Instance đã bị hủy mất, đánh dấu xóa để lần sau tạo lại
                 saved.ActiveTargets[targetPart] = nil
             end
         end
@@ -366,25 +334,25 @@ local function updateESP(hrp)
         end
     end
     
-    -- --- PHẦN 5: CẬP NHẬT DANH SÁCH CHI TIẾT ĐỂ TÍNH REAL-TIME TRONG RENDERSTEPPED ---
-    RadarLogic.CachedGiftParts = gifts
-    RadarLogic.CachedCadenceParts = instruments
-    RadarLogic.CachedAltarParts = altars
+    -- Cập nhật danh sách chi tiết để tính real-time trong RenderStepped
+    controller.CachedGiftParts = gifts
+    controller.CachedCadenceParts = instruments
+    controller.CachedAltarParts = altars
     
-    -- Đảm bảo các mũi tên tồn tại/hủy phù hợp với cấu hình bật/tắt
-    if RadarLogic.GiftESPEnabled and #gifts > 0 then
+    -- Đảm bảo các mũi tên tồn tại/hủy phù hợp
+    if controller.GiftESPEnabled and #gifts > 0 then
         getOrCreateArrow(saved, "ArrowGift", Color3.fromRGB(255, 255, 255))
     else
         if saved.ArrowGift then pcall(function() saved.ArrowGift:Destroy() end) saved.ArrowGift = nil end
     end
     
-    if RadarLogic.CadenceESPEnabled and #instruments > 0 then
+    if controller.CadenceESPEnabled and #instruments > 0 then
         getOrCreateArrow(saved, "ArrowCadence", Color3.fromRGB(255, 0, 0))
     else
         if saved.ArrowCadence then pcall(function() saved.ArrowCadence:Destroy() end) saved.ArrowCadence = nil end
     end
     
-    if RadarLogic.AltarESPEnabled and #altars > 0 then
+    if controller.AltarESPEnabled and #altars > 0 then
         local _, altarColor = getAltarTypeAndColor(nearestAltar or altars[1].part)
         getOrCreateArrow(saved, "ArrowAltar", altarColor)
     else
@@ -392,116 +360,12 @@ local function updateESP(hrp)
     end
 end
 
--- Hàm trigger cập nhật ESP tức thì khi thay đổi cấu hình
-local function triggerInstantUpdate()
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if hrp then
-        pcall(updateESP, hrp)
-    end
-end
-
-function RadarLogic:SetGiftESP(value)
-    self.GiftESPEnabled = value
-    triggerInstantUpdate()
-end
-
-function RadarLogic:SetCadenceESP(value)
-    self.CadenceESPEnabled = value
-    triggerInstantUpdate()
-end
-
-function RadarLogic:SetAltarESP(value)
-    self.AltarESPEnabled = value
-    triggerInstantUpdate()
-end
-
-function RadarLogic:SetAltarFilter(option)
-    self.AltarFilter = option or "Tất cả"
-    triggerInstantUpdate()
-end
-
-function RadarLogic:SetESPStyle(style)
-    self.ESPStyle = style or "Highlight"
-    pcall(function()
-        clearVisuals(self.SavedVisuals, true)
-    end)
-    triggerInstantUpdate()
-end
-
--- Hàm phát hiện nâng cấp Radar chính thức của game đã mở khóa (Tối ưu hóa tránh đệ quy sâu)
-local function checkRadarUnlocked()
-    local unlocked = false
-    local function check(parent)
-        if not parent then return end
-        
-        -- Bỏ qua các thư mục GUI, Scripts, Backpack,... của Player để tránh lag
-        local pName = parent.Name
-        if pName == "PlayerGui" or pName == "PlayerScripts" or pName == "Backpack" or pName == "StarterGear" then
-            return
-        end
-        
-        for _, child in ipairs(parent:GetChildren()) do
-            local name = child.Name:lower()
-            if string.find(name, "radar") then
-                if child:IsA("BoolValue") and child.Value == true then
-                    unlocked = true
-                    break
-                elseif (child:IsA("NumberValue") or child:IsA("IntValue")) and child.Value >= 1 then
-                    unlocked = true
-                    break
-                end
-            end
-            if not unlocked then
-                check(child)
-            end
-        end
-    end
-    pcall(function() check(LocalPlayer) end)
-    return unlocked
-end
-
--- Vòng lặp quét định kỳ (Chu kỳ 3 giây cực kỳ tối ưu và nhẹ)
-task.spawn(function()
-    while not RadarLogic.Destroyed do
-        task.wait(3.0)
-        if RadarLogic.Destroyed then break end
-        
-        -- Tự động tắt nếu đã mở khóa Radar chính thức của game
-        if checkRadarUnlocked() then
-            if getgenv().Rayfield then
-                getgenv().Rayfield:Notify({
-                    Title = "Radar Auto Disabled",
-                    Content = "Official game radar detected. Custom radar disabled!",
-                    Duration = 5
-                })
-            end
-            RadarLogic.Destroyed = true
-            clearVisuals(RadarLogic.SavedVisuals, false)
-            break
-        end
-        
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            pcall(updateESP, hrp)
-        end
-    end
-end)
-
--- Vòng lặp RenderStepped (Mũi tên orbit cách 5 studs, đặc hoàn toàn, không nhấp nhô)
-local runConn
-runConn = RunService.RenderStepped:Connect(function()
-    if RadarLogic.Destroyed then
-        if runConn then runConn:Disconnect() end
-        return
-    end
-    
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+-- Cập nhật chuyển động thời gian thực của các mũi tên và Ping
+function Logic.updateRender(controller, gc, hrp)
+    local saved = gc.SavedVisuals
     if not hrp then
         for _, name in ipairs({"ArrowGift", "ArrowCadence", "ArrowAltar"}) do
-            local arrow = RadarLogic.SavedVisuals[name]
+            local arrow = saved[name]
             if arrow then arrow.Transparency = 1 end
         end
         return
@@ -509,9 +373,9 @@ runConn = RunService.RenderStepped:Connect(function()
     
     -- 1. Tìm vị trí các vật thể gần nhất thời gian thực (real-time) từ danh sách cache bộ nhớ
     local nearestGiftPos = nil
-    if RadarLogic.GiftESPEnabled and RadarLogic.CachedGiftParts then
+    if controller.GiftESPEnabled and controller.CachedGiftParts then
         local shortestDist = math.huge
-        for _, t in ipairs(RadarLogic.CachedGiftParts) do
+        for _, t in ipairs(controller.CachedGiftParts) do
             local part = t.part
             if part and part.Parent and part:IsDescendantOf(workspace) then
                 local dist = (hrp.Position - part.Position).Magnitude
@@ -524,9 +388,9 @@ runConn = RunService.RenderStepped:Connect(function()
     end
 
     local nearestCadencePos = nil
-    if RadarLogic.CadenceESPEnabled and RadarLogic.CachedCadenceParts then
+    if controller.CadenceESPEnabled and controller.CachedCadenceParts then
         local shortestDist = math.huge
-        for _, t in ipairs(RadarLogic.CachedCadenceParts) do
+        for _, t in ipairs(controller.CachedCadenceParts) do
             local part = t.part
             if part and part.Parent and part:IsDescendantOf(workspace) then
                 local dist = (hrp.Position - part.Position).Magnitude
@@ -540,9 +404,9 @@ runConn = RunService.RenderStepped:Connect(function()
 
     local nearestAltarPos = nil
     local nearestAltarColor = Color3.fromRGB(255, 128, 0)
-    if RadarLogic.AltarESPEnabled and RadarLogic.CachedAltarParts then
+    if controller.AltarESPEnabled and controller.CachedAltarParts then
         local shortestDist = math.huge
-        for _, t in ipairs(RadarLogic.CachedAltarParts) do
+        for _, t in ipairs(controller.CachedAltarParts) do
             local part = t.part
             if part and part.Parent and part:IsDescendantOf(workspace) then
                 local dist = (hrp.Position - part.Position).Magnitude
@@ -555,8 +419,8 @@ runConn = RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- 2. Cập nhật hiển thị và hướng xoay cho Mũi tên Hộp quà (Trắng, tầng thấp)
-    local arrowGift = RadarLogic.SavedVisuals.ArrowGift
+    -- 2. Cập nhật hiển thị và hướng xoay cho Mũi tên Hộp quà (Trắng)
+    local arrowGift = saved.ArrowGift
     if arrowGift and arrowGift.Parent then
         if nearestGiftPos then
             arrowGift.Transparency = 0
@@ -567,8 +431,8 @@ runConn = RunService.RenderStepped:Connect(function()
         end
     end
     
-    -- 3. Cập nhật hiển thị và hướng xoay cho Mũi tên Nhạc cụ (Đỏ, tầng trung)
-    local arrowCadence = RadarLogic.SavedVisuals.ArrowCadence
+    -- 3. Cập nhật hiển thị và hướng xoay cho Mũi tên Nhạc cụ (Đỏ)
+    local arrowCadence = saved.ArrowCadence
     if arrowCadence and arrowCadence.Parent then
         if nearestCadencePos then
             arrowCadence.Transparency = 0
@@ -579,8 +443,8 @@ runConn = RunService.RenderStepped:Connect(function()
         end
     end
     
-    -- 4. Cập nhật hiển thị và hướng xoay cho Mũi tên Đàn tế / Altar (Màu tương ứng, tầng cao)
-    local arrowAltar = RadarLogic.SavedVisuals.ArrowAltar
+    -- 4. Cập nhật hiển thị và hướng xoay cho Mũi tên Đàn tế (Màu tương ứng)
+    local arrowAltar = saved.ArrowAltar
     if arrowAltar and arrowAltar.Parent then
         if nearestAltarPos then
             arrowAltar.Transparency = 0
@@ -592,9 +456,9 @@ runConn = RunService.RenderStepped:Connect(function()
         end
     end
     
-    -- 4. Cập nhật kích thước và ẩn/hiện chế độ Ping (lại gần thì thu nhỏ về 0 và tắt để giải phóng)
-    if RadarLogic.SavedVisuals.ActiveTargets then
-        for targetPart, cached in pairs(RadarLogic.SavedVisuals.ActiveTargets) do
+    -- 5. Cập nhật kích thước và ẩn/hiện chế độ Ping
+    if saved.ActiveTargets then
+        for targetPart, cached in pairs(saved.ActiveTargets) do
             if cached.Style == "Ping" and cached.Dot then
                 if not targetPart or not targetPart.Parent or not targetPart:IsDescendantOf(workspace) then
                     continue
@@ -607,7 +471,6 @@ runConn = RunService.RenderStepped:Connect(function()
                         frame.Size = UDim2.new(0, 0, 0, 0)
                     else
                         cached.Dot.Enabled = true
-                        -- Thu nhỏ từ 10px (ở >= 200 studs) về 0px (ở <= 50 studs)
                         local scale = math.clamp((dist - 50) / 150, 0, 1)
                         local newSize = scale * 10
                         frame.Size = UDim2.new(0, newSize, 0, newSize)
@@ -617,7 +480,6 @@ runConn = RunService.RenderStepped:Connect(function()
             end
         end
     end
-end)
-table.insert(RadarLogic.ActiveConnections, runConn)
+end
 
-return RadarLogic
+return Logic
