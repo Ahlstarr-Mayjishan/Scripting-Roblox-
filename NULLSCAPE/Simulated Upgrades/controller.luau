@@ -34,6 +34,17 @@ local Controller = {
 
 local inLobby = false       -- Đang ở sảnh chờ/lựa chọn
 
+-- Hàm cập nhật trạng thái sảnh chờ và tự động dọn dẹp visual khi vào sảnh
+local function setInLobby(val)
+    if inLobby == val then return end
+    inLobby = val
+    if val then
+        pcall(function()
+            Executor.clearVisuals(GC, false)
+        end)
+    end
+end
+
 -- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
 local function isInMatch()
     local inRoundVal = ReplicatedStorage:FindFirstChild("InRound")
@@ -49,11 +60,7 @@ task.spawn(function()
     if inRoundVal and inRoundVal:IsA("BoolValue") then
         local conn = inRoundVal.Changed:Connect(function(val)
             if Controller.Destroyed then return end
-            if val then
-                inLobby = false
-            else
-                inLobby = true
-            end
+            setInLobby(not val)
         end)
         GC.registerConnection(conn)
     end
@@ -61,6 +68,7 @@ end)
 
 -- Hàm trigger cập nhật ESP tức thì khi thay đổi cấu hình
 local function triggerInstantUpdate()
+    if inLobby then return end
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if hrp then
@@ -166,19 +174,9 @@ task.spawn(function()
         end
         
         local currentInMatch = isInMatch()
+        setInLobby(not currentInMatch)
         if not currentInMatch then
-            if not inLobby then
-                inLobby = true
-                -- Dọn dẹp Visuals khi quay về Lobby
-                pcall(function()
-                    Executor.clearVisuals(GC, false)
-                end)
-            end
             continue
-        else
-            if inLobby then
-                inLobby = false
-            end
         end
         
         local char = LocalPlayer.Character
