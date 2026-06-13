@@ -37,6 +37,7 @@ return function(Client, Controller)
     
     Tab:CreateSection("Custom ESP Locator")
     
+    local isSettingESP = false
     local ESPDropdown
     ESPDropdown = Tab:CreateDropdown({
         Name = "Select ESP Type",
@@ -45,10 +46,14 @@ return function(Client, Controller)
         MultipleOptions = true,
         Flag = "ESPSelectionDropdown",
         Callback = function(SelectedOptions)
+            if isSettingESP then return end
             local hasNone = table.find(SelectedOptions, "None") ~= nil
             
             if hasNone then
+                isSettingESP = true
                 ESPDropdown:Set({"None"})
+                isSettingESP = false
+                
                 Controller:SetGiftESP(false)
                 Controller:SetCadenceESP(false)
                 Controller:SetAltarESP(false)
@@ -61,7 +66,10 @@ return function(Client, Controller)
                 end)
             else
                 if #SelectedOptions == 0 then
+                    isSettingESP = true
                     ESPDropdown:Set({"None"})
+                    isSettingESP = false
+                    
                     Controller:SetGiftESP(false)
                     Controller:SetCadenceESP(false)
                     Controller:SetAltarESP(false)
@@ -101,6 +109,7 @@ return function(Client, Controller)
 
     Tab:CreateSection("Altar Settings")
     
+    local isSettingAltar = false
     local AltarDropdown
     AltarDropdown = Tab:CreateDropdown({
         Name = "Select Altar Highlight",
@@ -109,13 +118,17 @@ return function(Client, Controller)
         MultipleOptions = true,
         Flag = "AltarFilterDropdown",
         Callback = function(SelectedOptions)
+            if isSettingAltar then return end
             local unlockController = Client.Modules.UnlockController
             if not unlockController then return end
             
             local hasNone = table.find(SelectedOptions, "None") ~= nil
             
             if hasNone then
+                isSettingAltar = true
                 AltarDropdown:Set({"None"})
+                isSettingAltar = false
+                
                 unlockController:SetAltarFilter({"None"})
                 
                 -- Tự động đóng cả hai dropdown
@@ -126,7 +139,10 @@ return function(Client, Controller)
                 end)
             else
                 if #SelectedOptions == 0 then
+                    isSettingAltar = true
                     AltarDropdown:Set({"None"})
+                    isSettingAltar = false
+                    
                     unlockController:SetAltarFilter({"None"})
                 else
                     unlockController:SetAltarFilter(SelectedOptions)

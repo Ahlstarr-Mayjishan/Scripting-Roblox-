@@ -61,6 +61,7 @@ return function(Client, Controller)
 
     Tab:CreateSection("Altar Settings")
     
+    local isSettingAltar = false
     local AltarDropdown
     AltarDropdown = Tab:CreateDropdown({
         Name = "Select Altar Highlight",
@@ -69,13 +70,17 @@ return function(Client, Controller)
         MultipleOptions = true,
         Flag = "AltarFilterDropdown",
         Callback = function(SelectedOptions)
+            if isSettingAltar then return end
             local unlockController = Client.Modules.UnlockController
             if not unlockController then return end
             
             local hasNone = table.find(SelectedOptions, "None") ~= nil
             
             if hasNone then
+                isSettingAltar = true
                 AltarDropdown:Set({"None"})
+                isSettingAltar = false
+                
                 unlockController:SetAltarFilter({"None"})
                 
                 -- Tự động đóng dropdown
@@ -85,7 +90,10 @@ return function(Client, Controller)
                 end)
             else
                 if #SelectedOptions == 0 then
+                    isSettingAltar = true
                     AltarDropdown:Set({"None"})
+                    isSettingAltar = false
+                    
                     unlockController:SetAltarFilter({"None"})
                 else
                     unlockController:SetAltarFilter(SelectedOptions)

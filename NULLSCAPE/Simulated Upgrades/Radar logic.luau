@@ -261,9 +261,18 @@ function Logic.updateESPStyles(controller, gc, hrp)
         local targetModel = target.model or targetPart
         local color = target.color
         
+        local isGolden = false
+        local targetName = targetPart.Name:lower()
+        local modelName = targetModel.Name:lower()
+        local parentName = targetPart.Parent and targetPart.Parent.Name:lower() or ""
+        if string.find(targetName, "golden") or string.find(modelName, "golden") or string.find(parentName, "golden") then
+            isGolden = true
+        end
+
         local desiredStyle, parentObject
         -- Hạ giới hạn vẽ Highlight đồng thời từ 12 xuống 8 để cải thiện FPS
-        if controller.ESPStyle == "Highlight" and idx <= 8 then
+        -- Không sử dụng Highlight cho Golden Gift (ép buộc dùng Dot)
+        if controller.ESPStyle == "Highlight" and idx <= 8 and not isGolden then
             desiredStyle = "Highlight"
             parentObject = targetModel
         elseif controller.ESPStyle == "Ping" and idx <= 8 then
