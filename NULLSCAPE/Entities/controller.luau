@@ -26,6 +26,16 @@ local targetNames = {
     ["Mart"] = function() return Controller.MartImmune end
 }
 
+local function getImmunityCheck(name)
+    if not name then return nil end
+    for entityName, checkFunc in pairs(targetNames) do
+        if string.find(name, entityName) then
+            return checkFunc
+        end
+    end
+    return nil
+end
+
 local inLobby = false       -- Đang ở sảnh chờ/lựa chọn
 local isHibernating = false -- Đã dọn sạch thực thể trong trận và đang ngủ đông
 
@@ -182,14 +192,14 @@ local function processEntity(enemy)
     local connections = Controller.EntityConnections[enemy]
 
     -- Nếu đang bật miễn nhiễm cho thực thể này thì ẩn ngay lập tức
-    local checkFunc = targetNames[enemy.Name]
+    local checkFunc = getImmunityCheck(enemy.Name)
     if checkFunc and checkFunc() then
         Controller:EnableImmunity(enemy)
     end
 
     -- Lắng nghe các bộ phận mới được thêm vào thực thể sau này (tránh sót hitbox khi đang replicate)
     local descConn = enemy.DescendantAdded:Connect(function(part)
-        local checkFunc = targetNames[enemy.Name]
+        local checkFunc = getImmunityCheck(enemy.Name)
         if checkFunc and checkFunc() then
             if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
                 local parentPart = part.Parent
@@ -197,7 +207,8 @@ local function processEntity(enemy)
                     if not Controller.SavedPartsData[parentPart] then
                         Controller.SavedPartsData[parentPart] = {
                             touch = part,
-                            originalCanTouch = parentPart.CanTouch
+                            originalCanTouch = parentPart.CanTouch,
+                            enemyName = enemy.Name
                         }
                     end
                     pcall(function() part.Parent = nil end)
@@ -281,7 +292,7 @@ local function checkTargetsForTouchInterest()
     local allLoaded = true
     
     for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
-        local checkFunc = targetNames[enemy.Name]
+        local checkFunc = getImmunityCheck(enemy.Name)
         if checkFunc and checkFunc() then
             foundAny = true
             
@@ -356,7 +367,7 @@ task.spawn(function()
             else
                 -- Nếu vẫn còn, kích hoạt ẩn đi và lưu trữ
                 for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
-                    local checkFunc = targetNames[enemy.Name]
+                    local checkFunc = getImmunityCheck(enemy.Name)
                     if checkFunc and checkFunc() then
                         Controller:EnableImmunity(enemy)
                     end
