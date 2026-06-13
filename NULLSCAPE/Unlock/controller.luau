@@ -180,10 +180,8 @@ task.spawn(function()
         if arrowGift and arrowGift.Parent then
             if Controller.NearestGiftPosition then
                 arrowGift.Transparency = 0
-                local dir = (Controller.NearestGiftPosition - hrp.Position)
-                local dir2D = Vector3.new(dir.X, 0, dir.Z).Unit
-                local arrowPos = hrp.Position + dir2D * 5 + Vector3.new(0, -1.0, 0)
-                arrowGift.CFrame = CFrame.lookAt(arrowPos, Controller.NearestGiftPosition)
+                local arrowPos = hrp.Position + Vector3.new(0, 3.5, 0)
+                arrowGift.CFrame = CFrame.lookAt(arrowPos, Controller.NearestGiftPosition) * CFrame.Angles(0, math.pi, 0)
             else
                 arrowGift.Transparency = 1
             end
@@ -194,10 +192,8 @@ task.spawn(function()
         if arrowCadence and arrowCadence.Parent then
             if Controller.NearestCadencePosition then
                 arrowCadence.Transparency = 0
-                local dir = (Controller.NearestCadencePosition - hrp.Position)
-                local dir2D = Vector3.new(dir.X, 0, dir.Z).Unit
-                local arrowPos = hrp.Position + dir2D * 5 + Vector3.new(0, 0.5, 0)
-                arrowCadence.CFrame = CFrame.lookAt(arrowPos, Controller.NearestCadencePosition)
+                local arrowPos = hrp.Position + Vector3.new(0, 4.7, 0)
+                arrowCadence.CFrame = CFrame.lookAt(arrowPos, Controller.NearestCadencePosition) * CFrame.Angles(0, math.pi, 0)
             else
                 arrowCadence.Transparency = 1
             end
@@ -208,10 +204,8 @@ task.spawn(function()
         if arrowAltar and arrowAltar.Parent then
             if Controller.NearestAltarPosition then
                 arrowAltar.Transparency = 0
-                local dir = (Controller.NearestAltarPosition - hrp.Position)
-                local dir2D = Vector3.new(dir.X, 0, dir.Z).Unit
-                local arrowPos = hrp.Position + dir2D * 5 + Vector3.new(0, 2.0, 0)
-                arrowAltar.CFrame = CFrame.lookAt(arrowPos, Controller.NearestAltarPosition)
+                local arrowPos = hrp.Position + Vector3.new(0, 5.9, 0)
+                arrowAltar.CFrame = CFrame.lookAt(arrowPos, Controller.NearestAltarPosition) * CFrame.Angles(0, math.pi, 0)
             else
                 arrowAltar.Transparency = 1
             end

@@ -524,10 +524,8 @@ runConn = RunService.RenderStepped:Connect(function()
     if arrowGift and arrowGift.Parent then
         if RadarLogic.NearestGiftPosition then
             arrowGift.Transparency = 0
-            local dir = (RadarLogic.NearestGiftPosition - hrp.Position)
-            local dir2D = Vector3.new(dir.X, 0, dir.Z).Unit
-            local arrowPos = hrp.Position + dir2D * 5 + Vector3.new(0, -1.0, 0)
-            arrowGift.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestGiftPosition)
+            local arrowPos = hrp.Position + Vector3.new(0, 3.5, 0)
+            arrowGift.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestGiftPosition) * CFrame.Angles(0, math.pi, 0)
         else
             arrowGift.Transparency = 1
         end
@@ -538,10 +536,8 @@ runConn = RunService.RenderStepped:Connect(function()
     if arrowCadence and arrowCadence.Parent then
         if RadarLogic.NearestCadencePosition then
             arrowCadence.Transparency = 0
-            local dir = (RadarLogic.NearestCadencePosition - hrp.Position)
-            local dir2D = Vector3.new(dir.X, 0, dir.Z).Unit
-            local arrowPos = hrp.Position + dir2D * 5 + Vector3.new(0, 0.5, 0)
-            arrowCadence.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestCadencePosition)
+            local arrowPos = hrp.Position + Vector3.new(0, 4.7, 0)
+            arrowCadence.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestCadencePosition) * CFrame.Angles(0, math.pi, 0)
         else
             arrowCadence.Transparency = 1
         end
@@ -552,10 +548,8 @@ runConn = RunService.RenderStepped:Connect(function()
     if arrowAltar and arrowAltar.Parent then
         if RadarLogic.NearestAltarPosition then
             arrowAltar.Transparency = 0
-            local dir = (RadarLogic.NearestAltarPosition - hrp.Position)
-            local dir2D = Vector3.new(dir.X, 0, dir.Z).Unit
-            local arrowPos = hrp.Position + dir2D * 5 + Vector3.new(0, 2.0, 0)
-            arrowAltar.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestAltarPosition)
+            local arrowPos = hrp.Position + Vector3.new(0, 5.9, 0)
+            arrowAltar.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestAltarPosition) * CFrame.Angles(0, math.pi, 0)
         else
             arrowAltar.Transparency = 1
         end
