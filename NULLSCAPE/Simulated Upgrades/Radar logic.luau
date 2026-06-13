@@ -79,7 +79,7 @@ local function getOrCreateArrow(saved, key, color)
             mesh.Parent = arrow
         end
         
-        arrow.Material = Enum.Material.SmoothPlastic
+        arrow.Material = Enum.Material.Neon
         arrow.Size = Vector3.new(1.3, 1.3, 1.3)
         arrow.CanCollide = false
         arrow.Anchored = true
@@ -375,15 +375,27 @@ function Logic.updateRender(controller, gc, hrp)
     local nearestGiftPos = nil
     if controller.GiftESPEnabled and controller.CachedGiftParts then
         local shortestDist = math.huge
+        local giftsWithin10 = 0
+        local tempNearestPos = nil
+        
+        -- Đếm số lượng quà trong phạm vi 10 studs và tìm vị trí quà gần nhất
         for _, t in ipairs(controller.CachedGiftParts) do
             local part = t.part
             if part and part.Parent and part:IsDescendantOf(workspace) then
                 local dist = (hrp.Position - part.Position).Magnitude
+                if dist <= 10 then
+                    giftsWithin10 = giftsWithin10 + 1
+                end
                 if dist < shortestDist then
                     shortestDist = dist
-                    nearestGiftPos = part.Position
+                    tempNearestPos = part.Position
                 end
             end
+        end
+        
+        -- Ngừng track nếu số quà trong phạm vi 10 studs > 1, bật lại khi <= 1 quà
+        if giftsWithin10 <= 1 then
+            nearestGiftPos = tempNearestPos
         end
     end
 
@@ -424,7 +436,7 @@ function Logic.updateRender(controller, gc, hrp)
     if arrowGift and arrowGift.Parent then
         if nearestGiftPos then
             arrowGift.Transparency = 0
-            arrowGift.Material = Enum.Material.SmoothPlastic
+            arrowGift.Material = Enum.Material.Neon
             local dir = (nearestGiftPos - hrp.Position).Unit
             local arrowPos = hrp.Position + dir * 3
             arrowGift.CFrame = CFrame.lookAt(arrowPos, nearestGiftPos)
@@ -438,7 +450,7 @@ function Logic.updateRender(controller, gc, hrp)
     if arrowCadence and arrowCadence.Parent then
         if nearestCadencePos then
             arrowCadence.Transparency = 0
-            arrowCadence.Material = Enum.Material.SmoothPlastic
+            arrowCadence.Material = Enum.Material.Neon
             local dir = (nearestCadencePos - hrp.Position).Unit
             local arrowPos = hrp.Position + dir * 3
             arrowCadence.CFrame = CFrame.lookAt(arrowPos, nearestCadencePos)
@@ -453,7 +465,7 @@ function Logic.updateRender(controller, gc, hrp)
         if nearestAltarPos then
             arrowAltar.Transparency = 0
             arrowAltar.Color = nearestAltarColor
-            arrowAltar.Material = Enum.Material.SmoothPlastic
+            arrowAltar.Material = Enum.Material.Neon
             local dir = (nearestAltarPos - hrp.Position).Unit
             local arrowPos = hrp.Position + dir * 3
             arrowAltar.CFrame = CFrame.lookAt(arrowPos, nearestAltarPos)
