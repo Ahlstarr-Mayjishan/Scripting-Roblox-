@@ -32,11 +32,15 @@ return function(Client, Controller)
         MultipleOptions = false,
         Flag = "ESPStyleDropdown",
         Callback = function(Option)
-            if Option == "Highlight" then
+            local selectedStyle = Option
+            if typeof(Option) == "table" then
+                selectedStyle = Option[1]
+            end
+            if selectedStyle == "Highlight" then
                 Controller:SetESPStyle("Highlight")
-            elseif Option == "Dot" then
+            elseif selectedStyle == "Dot" then
                 Controller:SetESPStyle("Dot")
-            else
+            elseif selectedStyle == "Ping" then
                 Controller:SetESPStyle("Ping")
             end
         end

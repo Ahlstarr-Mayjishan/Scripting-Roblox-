@@ -245,9 +245,16 @@ function Executor.updateESP(controller, hrp)
     local scanTime = os.clock()
     
     -- 1. Xóa các ESP lỗi thời hoặc bị đổi style hoặc không còn tồn tại
+    local toRemove = {}
     for targetPart, cached in pairs(saved.ActiveTargets) do
         local current = currentTargets[targetPart]
         if not current or current.Style ~= cached.Style or not targetPart:IsDescendantOf(workspace) then
+            table.insert(toRemove, targetPart)
+        end
+    end
+    for _, targetPart in ipairs(toRemove) do
+        local cached = saved.ActiveTargets[targetPart]
+        if cached then
             if cached.Highlight then pcall(function() cached.Highlight:Destroy() end) end
             if cached.Dot then pcall(function() cached.Dot:Destroy() end) end
             saved.ActiveTargets[targetPart] = nil

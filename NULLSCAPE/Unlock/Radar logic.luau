@@ -433,6 +433,14 @@ function RadarLogic:SetAltarFilter(option)
     triggerInstantUpdate()
 end
 
+function RadarLogic:SetESPStyle(style)
+    self.ESPStyle = style or "Highlight"
+    pcall(function()
+        clearVisuals(self.SavedVisuals, true)
+    end)
+    triggerInstantUpdate()
+end
+
 -- Hàm phát hiện nâng cấp Radar chính thức của game đã mở khóa (Tối ưu hóa tránh đệ quy sâu)
 local function checkRadarUnlocked()
     local unlocked = false
@@ -557,6 +565,9 @@ runConn = RunService.RenderStepped:Connect(function()
     if RadarLogic.SavedVisuals.ActiveTargets then
         for targetPart, cached in pairs(RadarLogic.SavedVisuals.ActiveTargets) do
             if cached.Style == "Ping" and cached.Dot then
+                if not targetPart or not targetPart.Parent or not targetPart:IsDescendantOf(workspace) then
+                    continue
+                end
                 local dist = (hrp.Position - targetPart.Position).Magnitude
                 local transparency = 1 - math.clamp((dist - 15) / 20, 0, 1)
                 local frame = cached.Dot:FindFirstChild("PingFrame")

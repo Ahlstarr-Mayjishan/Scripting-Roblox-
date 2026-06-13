@@ -71,6 +71,9 @@ end
 -- Thay đổi chế độ hiển thị ESP
 function Controller:SetESPStyle(style)
     self.ESPStyle = style or "Highlight"
+    pcall(function()
+        Executor.clearVisuals(self.SavedVisuals, true)
+    end)
     triggerInstantUpdate()
 end
 
@@ -218,6 +221,9 @@ task.spawn(function()
         if Controller.SavedVisuals.ActiveTargets then
             for targetPart, cached in pairs(Controller.SavedVisuals.ActiveTargets) do
                 if cached.Style == "Ping" and cached.Dot then
+                    if not targetPart or not targetPart.Parent or not targetPart:IsDescendantOf(workspace) then
+                        continue
+                    end
                     local dist = (hrp.Position - targetPart.Position).Magnitude
                     -- Dưới 15 studs biến mất hoàn toàn (Transparency = 1)
                     -- Trên 35 studs hiện hoàn toàn (Transparency = 0)
