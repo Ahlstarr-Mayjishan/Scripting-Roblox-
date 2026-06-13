@@ -99,8 +99,6 @@ function Controller:CleanUp()
     self.ActiveConnections = {}
 
     self.EnemiesFolder = nil
-    
-    warn("[NULLSCAPE] Đã kích hoạt cơ chế GC: Dọn dẹp toàn bộ bộ nhớ đệm và kết nối thực thể cũ.")
 end
 
 -- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
@@ -173,8 +171,6 @@ function Controller:ObserveFolder(folder)
         end
     end)
     table.insert(self.ActiveConnections, destroyingConn)
-    
-    warn("[NULLSCAPE] Đang quan sát thư mục Enemies mới.")
 end
 
 -- Quét tìm thư mục Enemies trong Workspace
@@ -230,30 +226,17 @@ end
 
 -- Vòng lặp quan sát TouchInterest của các mục tiêu đặc biệt với cơ chế ngủ đông
 task.spawn(function()
-    local lastDebugTime = 0
     while true do
         task.wait(1) -- Kiểm tra 1 giây 1 lần
         
         -- Xác minh 2 bước kiểm tra trạng thái phòng chờ / trong trận
         local currentInMatch = isInMatch()
         
-        -- Debug logs in F9 developer console (Spam giảm thiểu)
-        if os.clock() - lastDebugTime >= 5 then
-            lastDebugTime = os.clock()
-            local lobby = workspace:FindFirstChild("Lobby")
-            local selectFolder = workspace:FindFirstChild("Select")
-            local lCount = lobby and #lobby:GetChildren() or 0
-            local sCount = selectFolder and #selectFolder:GetChildren() or 0
-            print(string.format("[NULLSCAPE Debug] Lobby count: %d | Select count: %d | In Match: %s | Enemies observed: %s",
-                lCount, sCount, tostring(currentInMatch), tostring(Controller.EnemiesFolder ~= nil)))
-        end
-        
         if not currentInMatch then
             -- Nếu đang ở Lobby/Select (có phần tử con) -> Ngừng quét
             if not inLobby then
                 inLobby = true
                 isHibernating = false -- Reset trạng thái quét của trận cũ
-                warn("[NULLSCAPE] Phát hiện ở sảnh chờ (Lobby/Select). Tạm ngưng hoạt động.")
             end
             continue
         else
@@ -261,7 +244,6 @@ task.spawn(function()
             if inLobby then
                 inLobby = false
                 isHibernating = false -- Bắt đầu trận mới, kích hoạt quét
-                warn("[NULLSCAPE] Đã vào trận. Đánh thức hệ thống!")
             end
         end
         
@@ -282,7 +264,6 @@ task.spawn(function()
             if not touchInterestsExist and allLoaded then
                 -- Tất cả TouchInterest của các thực thể mục tiêu hiện tại đã được xóa hoàn toàn và đã load xong
                 isHibernating = true
-                warn("[NULLSCAPE] Đã xác nhận: Toàn bộ TouchInterest của các mục tiêu bật bảo vệ đã biến mất. Hệ thống vào trạng thái ngủ đông.")
                 
                 if getgenv().Rayfield then
                     getgenv().Rayfield:Notify({
