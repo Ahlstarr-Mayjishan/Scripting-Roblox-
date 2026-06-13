@@ -1,49 +1,35 @@
 -- [[
---  NULLSCAPE - Unlock & Radar Executor
---  Thực thi dọn dẹp vẽ cũ và định vị vẽ ESP/Highlight mới.
+--  NULLSCAPE - Custom Radar & ESP Logic
+--  Module định vị quà, nhạc cụ Cadence và đàn tế (Altar) dưới dạng mũi tên và Highlight/Dot.
 -- ]]
 
-local Executor = {}
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
 
--- 2. Dọn dẹp toàn bộ Highlight, Beam & Dot cũ
-function Executor.clearVisuals(savedVisuals, keepArrows)
-    if not savedVisuals then return end
+local RadarLogic = {
+    GiftESPEnabled = true,
+    CadenceESPEnabled = true,
+    AltarESPEnabled = true,
+    Destroyed = false,
     
-    for _, hl in ipairs(savedVisuals.Highlights) do
-        if hl then pcall(function() hl:Destroy() end) end
-    end
-    table.clear(savedVisuals.Highlights)
+    NearestGiftPosition = nil,
+    NearestCadencePosition = nil,
+    NearestAltarPosition = nil,
     
-    for _, beam in ipairs(savedVisuals.Beams) do
-        if beam then pcall(function() beam:Destroy() end) end
-    end
-    table.clear(savedVisuals.Beams)
-    
-    for _, att in ipairs(savedVisuals.Attachments) do
-        if att then pcall(function() att:Destroy() end) end
-    end
-    table.clear(savedVisuals.Attachments)
+    ActiveConnections = {},
+    SavedVisuals = {
+        Highlights = {},
+        Beams = {},
+        Attachments = {},
+        Dots = {},
+        ArrowGift = nil,
+        ArrowCadence = nil,
+        ArrowAltar = nil
+    }
+}
 
-    if savedVisuals.Dots then
-        for _, dot in ipairs(savedVisuals.Dots) do
-            if dot then pcall(function() dot:Destroy() end) end
-        end
-        table.clear(savedVisuals.Dots)
-    else
-        savedVisuals.Dots = {}
-    end
-
-    if not keepArrows then
-        for _, key in ipairs({"ArrowGift", "ArrowCadence", "ArrowAltar"}) do
-            if savedVisuals[key] then
-                pcall(function() savedVisuals[key]:Destroy() end)
-                savedVisuals[key] = nil
-            end
-        end
-    end
-end
-
--- Helper để lấy hoặc tạo mũi tên chỉ hướng (đặc, không trong suốt)
+-- Mũi tên chỉ hướng dùng MeshId gốc của game (đặc, không trong suốt)
 local function getOrCreateArrow(saved, key, color)
     local arrow = saved[key]
     if not arrow or not arrow.Parent then
@@ -74,9 +60,39 @@ local function getOrCreateArrow(saved, key, color)
     return arrow
 end
 
--- Danh sách từ khóa của các nhạc cụ Cadence thường gặp
-local instrumentKeywords = {"harp", "violin", "guitar", "flute", "drum", "piano", "trumpet", "instrument"}
+local function clearVisuals(saved, keepArrows)
+    for _, hl in ipairs(saved.Highlights) do
+        if hl then pcall(function() hl:Destroy() end) end
+    end
+    table.clear(saved.Highlights)
+    
+    for _, beam in ipairs(saved.Beams) do
+        if beam then pcall(function() beam:Destroy() end) end
+    end
+    table.clear(saved.Beams)
+    
+    for _, att in ipairs(saved.Attachments) do
+        if att then pcall(function() att:Destroy() end) end
+    end
+    table.clear(saved.Attachments)
+    
+    for _, dot in ipairs(saved.Dots) do
+        if dot then pcall(function() dot:Destroy() end) end
+    end
+    table.clear(saved.Dots)
 
+    if not keepArrows then
+        for _, key in ipairs({"ArrowGift", "ArrowCadence", "ArrowAltar"}) do
+            if saved[key] then
+                pcall(function() saved[key]:Destroy() end)
+                saved[key] = nil
+            end
+        end
+    end
+end
+
+-- Bộ lọc nhận dạng nhạc cụ Cadence
+local instrumentKeywords = {"harp", "violin", "guitar", "flute", "drum", "piano", "trumpet", "instrument"}
 local function isInstrument(name)
     if not name then return false end
     local nameLower = name:lower()
@@ -88,13 +104,10 @@ local function isInstrument(name)
     return false
 end
 
--- 3. Quét định vị và vẽ các chỉ dẫn/Highlight
-function Executor.updateESP(controller, hrp)
-    -- Xóa các chỉ dẫn cũ (giữ lại các mũi tên để cập nhật CFrame tránh nhấp nháy)
-    Executor.clearVisuals(controller.SavedVisuals, true)
-    
-    local saved = controller.SavedVisuals
-    if not saved.Dots then saved.Dots = {} end
+-- Vòng lặp quét định vị chính
+local function updateESP(hrp)
+    clearVisuals(RadarLogic.SavedVisuals, true)
+    local saved = RadarLogic.SavedVisuals
     
     local nearestGift = nil
     local shortestGiftDist = math.huge
@@ -107,8 +120,8 @@ function Executor.updateESP(controller, hrp)
     local instruments = {}
     local altars = {}
     
-    -- --- PHẦN 1: THU THẬP HỘP QUÀ ---
-    if controller.GiftESPEnabled then
+    -- 1. Thu thập Hộp quà trong Workspace.Item_Pools
+    if RadarLogic.GiftESPEnabled then
         local itemPools = workspace:FindFirstChild("Item_Pools")
         if itemPools then
             for _, obj in ipairs(itemPools:GetDescendants()) do
@@ -124,9 +137,9 @@ function Executor.updateESP(controller, hrp)
         end
     end
     
-    -- --- PHẦN 2: THU THẬP NHẠC CỤ CADENCE ---
-    if controller.CadenceESPEnabled then
-        local function scanFolderForInstruments(folder)
+    -- 2. Thu thập Nhạc cụ trong Workspace.Item_Pools và Enemies
+    if RadarLogic.CadenceESPEnabled then
+        local function scanFolder(folder)
             for _, obj in ipairs(folder:GetDescendants()) do
                 if (obj:IsA("BasePart") or obj:IsA("Model")) and isInstrument(obj.Name) then
                     local targetPart = obj:IsA("Model") and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")) or obj
@@ -141,15 +154,14 @@ function Executor.updateESP(controller, hrp)
                 end
             end
         end
-        
         local itemPools = workspace:FindFirstChild("Item_Pools")
-        if itemPools then scanFolderForInstruments(itemPools) end
+        if itemPools then scanFolder(itemPools) end
         local enemies = workspace:FindFirstChild("Enemies")
-        if enemies then scanFolderForInstruments(enemies) end
+        if enemies then scanFolder(enemies) end
     end
     
-    -- --- PHẦN 3: THU THẬP ĐÀN TẾ (ALTAR) ---
-    if controller.AltarESPEnabled then
+    -- 3. Thu thập Đàn tế trong Workspace.CurrentRooms
+    if RadarLogic.AltarESPEnabled then
         local currentRooms = workspace:FindFirstChild("CurrentRooms")
         if currentRooms then
             for _, room in ipairs(currentRooms:GetChildren()) do
@@ -169,7 +181,7 @@ function Executor.updateESP(controller, hrp)
         end
     end
     
-    -- --- PHẦN 4: GỘP VÀ SẮP XẾP ĐỂ RENDER HIGHLIGHTS / DOTS ---
+    -- Gộp toàn bộ để xử lý giới hạn 31 Highlight
     local allTargets = {}
     for _, t in ipairs(gifts) do table.insert(allTargets, t) end
     for _, t in ipairs(instruments) do table.insert(allTargets, t) end
@@ -179,13 +191,14 @@ function Executor.updateESP(controller, hrp)
         return a.distance < b.distance
     end)
     
+    -- Áp dụng Highlight hoặc Dot (qua tường)
     for idx, target in ipairs(allTargets) do
         local targetPart = target.part
         local targetModel = target.model or targetPart
         local color = target.color
         
         if idx <= 31 then
-            -- Vẽ Highlight phát sáng: Viền đặc (Outline = 0), Trong suốt bên trong (Fill = 1)
+            -- Highlight: viền đặc (Outline = 0), ruột trong suốt (Fill = 1)
             local highlight = Instance.new("Highlight")
             highlight.FillColor = color
             highlight.FillTransparency = 1.0
@@ -194,7 +207,7 @@ function Executor.updateESP(controller, hrp)
             highlight.Parent = targetModel
             table.insert(saved.Highlights, highlight)
         else
-            -- Vẽ dấu chấm (BillboardGui) cho các vật thể xa hơn khi vượt quá 31
+            -- Vượt quá 31: Vẽ dấu chấm tròn (BillboardGui) cho các vật thể ở xa
             local billboard = Instance.new("BillboardGui")
             billboard.Size = UDim2.new(0, 10, 0, 10)
             billboard.AlwaysOnTop = true
@@ -214,10 +227,10 @@ function Executor.updateESP(controller, hrp)
         end
     end
     
-    -- --- PHẦN 5: CẬP NHẬT CHỈ HƯỚNG / BEAMS GẦN NHẤT ---
+    -- Cập nhật Beams và vị trí Mũi tên gần nhất
     -- A. Hộp quà
     if nearestGift then
-        controller.NearestGiftPosition = nearestGift.Position
+        RadarLogic.NearestGiftPosition = nearestGift.Position
         getOrCreateArrow(saved, "ArrowGift", Color3.fromRGB(255, 255, 255))
         
         local att0 = Instance.new("Attachment", hrp)
@@ -228,23 +241,19 @@ function Executor.updateESP(controller, hrp)
         local beam = Instance.new("Beam")
         beam.Attachment0 = att0
         beam.Attachment1 = att1
-        beam.Width0 = 0.4
-        beam.Width1 = 0.4
+        beam.Width0 = 0.4; beam.Width1 = 0.4
         beam.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
         beam.FaceCamera = true
         beam.Parent = hrp
         table.insert(saved.Beams, beam)
     else
-        controller.NearestGiftPosition = nil
-        if saved.ArrowGift then
-            pcall(function() saved.ArrowGift:Destroy() end)
-            saved.ArrowGift = nil
-        end
+        RadarLogic.NearestGiftPosition = nil
+        if saved.ArrowGift then pcall(function() saved.ArrowGift:Destroy() end) saved.ArrowGift = nil end
     end
     
-    -- B. Nhạc cụ Cadence
+    -- B. Nhạc cụ
     if nearestCadence then
-        controller.NearestCadencePosition = nearestCadence.Position
+        RadarLogic.NearestCadencePosition = nearestCadence.Position
         getOrCreateArrow(saved, "ArrowCadence", Color3.fromRGB(255, 0, 0))
         
         local att0 = Instance.new("Attachment", hrp)
@@ -255,23 +264,19 @@ function Executor.updateESP(controller, hrp)
         local beam = Instance.new("Beam")
         beam.Attachment0 = att0
         beam.Attachment1 = att1
-        beam.Width0 = 0.3
-        beam.Width1 = 0.3
+        beam.Width0 = 0.3; beam.Width1 = 0.3
         beam.Color = ColorSequence.new(Color3.fromRGB(255, 0, 0))
         beam.FaceCamera = true
         beam.Parent = hrp
         table.insert(saved.Beams, beam)
     else
-        controller.NearestCadencePosition = nil
-        if saved.ArrowCadence then
-            pcall(function() saved.ArrowCadence:Destroy() end)
-            saved.ArrowCadence = nil
-        end
+        RadarLogic.NearestCadencePosition = nil
+        if saved.ArrowCadence then pcall(function() saved.ArrowCadence:Destroy() end) saved.ArrowCadence = nil end
     end
     
-    -- C. Đàn tế (Altar)
+    -- C. Đàn tế
     if nearestAltar then
-        controller.NearestAltarPosition = nearestAltar.Position
+        RadarLogic.NearestAltarPosition = nearestAltar.Position
         getOrCreateArrow(saved, "ArrowAltar", Color3.fromRGB(255, 128, 0))
         
         local att0 = Instance.new("Attachment", hrp)
@@ -282,19 +287,91 @@ function Executor.updateESP(controller, hrp)
         local beam = Instance.new("Beam")
         beam.Attachment0 = att0
         beam.Attachment1 = att1
-        beam.Width0 = 0.3
-        beam.Width1 = 0.3
+        beam.Width0 = 0.3; beam.Width1 = 0.3
         beam.Color = ColorSequence.new(Color3.fromRGB(255, 128, 0))
         beam.FaceCamera = true
         beam.Parent = hrp
         table.insert(saved.Beams, beam)
     else
-        controller.NearestAltarPosition = nil
-        if saved.ArrowAltar then
-            pcall(function() saved.ArrowAltar:Destroy() end)
-            saved.ArrowAltar = nil
-        end
+        RadarLogic.NearestAltarPosition = nil
+        if saved.ArrowAltar then pcall(function() saved.ArrowAltar:Destroy() end) saved.ArrowAltar = nil end
     end
 end
 
-return Executor
+-- Vòng lặp quét định kỳ
+task.spawn(function()
+    while not RadarLogic.Destroyed do
+        task.wait(1.5)
+        if RadarLogic.Destroyed then break end
+        
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            pcall(updateESP, hrp)
+        end
+    end
+end)
+
+-- Vòng lặp RenderStepped (Mũi tên orbit cách 5 studs, đặc hoàn toàn, không nhấp nhô)
+local runConn
+runConn = RunService.RenderStepped:Connect(function()
+    if RadarLogic.Destroyed then
+        if runConn then runConn:Disconnect() end
+        return
+    end
+    
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        for _, name in ipairs({"ArrowGift", "ArrowCadence", "ArrowAltar"}) do
+            local arrow = RadarLogic.SavedVisuals[name]
+            if arrow then arrow.Transparency = 1 end
+        end
+        return
+    end
+    
+    -- 1. Hộp quà (Trắng, tầng thấp)
+    local arrowGift = RadarLogic.SavedVisuals.ArrowGift
+    if arrowGift and arrowGift.Parent then
+        if RadarLogic.NearestGiftPosition then
+            arrowGift.Transparency = 0
+            local dir = (RadarLogic.NearestGiftPosition - hrp.Position)
+            local dir2D = Vector3.new(dir.X, 0, dir.Z).Unit
+            local arrowPos = hrp.Position + dir2D * 5 + Vector3.new(0, -1.0, 0)
+            arrowGift.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestGiftPosition)
+        else
+            arrowGift.Transparency = 1
+        end
+    end
+    
+    -- 2. Nhạc cụ (Đỏ, tầng trung)
+    local arrowCadence = RadarLogic.SavedVisuals.ArrowCadence
+    if arrowCadence and arrowCadence.Parent then
+        if RadarLogic.NearestCadencePosition then
+            arrowCadence.Transparency = 0
+            local dir = (RadarLogic.NearestCadencePosition - hrp.Position)
+            local dir2D = Vector3.new(dir.X, 0, dir.Z).Unit
+            local arrowPos = hrp.Position + dir2D * 5 + Vector3.new(0, 0.5, 0)
+            arrowCadence.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestCadencePosition)
+        else
+            arrowCadence.Transparency = 1
+        end
+    end
+    
+    -- 3. Đàn tế (Cam, tầng cao)
+    local arrowAltar = RadarLogic.SavedVisuals.ArrowAltar
+    if arrowAltar and arrowAltar.Parent then
+        if RadarLogic.NearestAltarPosition then
+            arrowAltar.Transparency = 0
+            local dir = (RadarLogic.NearestAltarPosition - hrp.Position)
+            local dir2D = Vector3.new(dir.X, 0, dir.Z).Unit
+            local arrowPos = hrp.Position + dir2D * 5 + Vector3.new(0, 2.0, 0)
+            arrowAltar.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestAltarPosition)
+        else
+            arrowAltar.Transparency = 1
+        end
+    end
+end)
+table.insert(RadarLogic.ActiveConnections, runConn)
+
+return RadarLogic

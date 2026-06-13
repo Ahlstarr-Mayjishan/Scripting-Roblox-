@@ -6,21 +6,10 @@
 return function(Client, Controller)
     local Tab = Client.Window:CreateTab("Mở khóa & Radar", 4483362458)
     
-    Tab:CreateSection("Bẻ khóa Game")
+    Tab:CreateSection("Radar - Fake")
     
     Tab:CreateToggle({
-        Name = "Bỏ qua tiến trình Radar",
-        CurrentValue = Controller.RadarSpoofEnabled,
-        Flag = "RadarSpoofToggle",
-        Callback = function(Value)
-            Controller:SetRadarSpoof(Value)
-        end
-    })
-    
-    Tab:CreateSection("Định vị Custom ESP")
-    
-    Tab:CreateToggle({
-        Name = "Định vị Hộp quà (Gift ESP)",
+        Name = "Radar Gift",
         CurrentValue = Controller.GiftESPEnabled,
         Flag = "GiftESPToggle",
         Callback = function(Value)
@@ -28,15 +17,8 @@ return function(Client, Controller)
         end
     })
     
-    Tab:CreateButton({
-        Name = "Tạo Hộp quà Thử nghiệm (Client-Side)",
-        Callback = function()
-            Controller:SpawnTestGift()
-        end
-    })
-    
     Tab:CreateToggle({
-        Name = "Định vị Nhạc cụ Cadence",
+        Name = "Cadence",
         CurrentValue = Controller.CadenceESPEnabled,
         Flag = "CadenceESPToggle",
         Callback = function(Value)
