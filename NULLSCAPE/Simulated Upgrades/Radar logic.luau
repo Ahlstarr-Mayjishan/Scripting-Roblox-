@@ -201,9 +201,9 @@ function Logic.updateESPStyles(controller, gc, hrp)
     if not saved.ActiveTargets then saved.ActiveTargets = {} end
     if not hrp then return end
     
-    local gifts = controller.CachedGiftParts or {}
-    local instruments = controller.CachedCadenceParts or {}
-    local altars = controller.CachedAltarParts or {}
+    local gifts = controller.GiftESPEnabled and (controller.ActiveGifts or {}) or {}
+    local instruments = controller.CadenceESPEnabled and (controller.ActiveInstruments or {}) or {}
+    local altars = controller.AltarESPEnabled and (controller.ActiveAltars or {}) or {}
     
     local allTargets = {}
     local validGifts = {}
@@ -238,14 +238,32 @@ function Logic.updateESPStyles(controller, gc, hrp)
         local part = t.part
         local model = t.model or part
         if part and part.Parent and part:IsDescendantOf(workspace) then
-            local distance = (hrp.Position - part.Position).Magnitude
-            t.distance = distance
-            table.insert(allTargets, t)
-            table.insert(validAltars, t)
+            -- Áp dụng bộ lọc AltarFilter
+            local altarName = t.altarName or "Unknown"
+            local filter = controller.AltarFilter
+            local matchesFilter = false
             
-            if distance < shortestAltarDist then
-                shortestAltarDist = distance
-                nearestAltar = model
+            if typeof(filter) == "table" then
+                if table.find(filter, "All") or table.find(filter, "Tất cả") or #filter == 0 then
+                    matchesFilter = true
+                else
+                    matchesFilter = table.find(filter, altarName) ~= nil
+                end
+            else
+                local filterStr = tostring(filter or "All")
+                matchesFilter = (filterStr == "All" or filterStr == "Tất cả" or filterStr == altarName)
+            end
+            
+            if matchesFilter then
+                local distance = (hrp.Position - part.Position).Magnitude
+                t.distance = distance
+                table.insert(allTargets, t)
+                table.insert(validAltars, t)
+                
+                if distance < shortestAltarDist then
+                    shortestAltarDist = distance
+                    nearestAltar = model
+                end
             end
         end
     end
@@ -673,5 +691,8 @@ function Logic.updateRender(controller, gc, hrp)
         end
     end
 end
+
+Logic.isInstrument = isInstrument
+Logic.getAltarTypeAndColor = getAltarTypeAndColor
 
 return Logic

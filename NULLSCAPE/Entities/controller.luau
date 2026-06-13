@@ -19,11 +19,9 @@ local Controller = {
     MartImmune = false,
     Destroyed = false,
     
-    EnemiesFolder = nil
+    EnemiesFolder = nil,
+    PermanentConnections = {}
 }
-
-local inLobby = false       -- Đang ở sảnh chờ/lựa chọn
-local isHibernating = false -- Đã dọn sạch thực thể trong trận và đang ngủ đông
 
 -- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
 local function isInMatch()
@@ -40,23 +38,71 @@ local function isInMatch()
     return false
 end
 
--- Lắng nghe sự kiện đổi trạng thái game thời gian thực
-task.spawn(function()
-    local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
-    if inRoundVal and inRoundVal:IsA("BoolValue") then
-        local conn = inRoundVal.Changed:Connect(function(val)
-            if Controller.Destroyed then return end
-            if val then
-                inLobby = false
-                isHibernating = false
-            else
-                inLobby = true
-                isHibernating = false
+local inLobby = not isInMatch()       -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
+local isHibernating = false -- Đã dọn sạch thực thể trong trận và đang ngủ đông
+local hasInRoundValue = false
+local touchInterestLoopActive = false
+
+-- Vòng lặp quan sát TouchInterest của các mục tiêu đặc biệt
+local function startTouchInterestLoop()
+    if touchInterestLoopActive then return end
+    touchInterestLoopActive = true
+    
+    task.spawn(function()
+        while not Controller.Destroyed and not inLobby do
+            if isHibernating then
+                task.wait(1)
+                continue
             end
-        end)
-        GC.registerConnection(conn)
+            
+            if not Controller.EnemiesFolder then
+                task.wait(1)
+                continue
+            end
+            
+            -- Gọi logic kiểm tra trạng thái TouchInterest từ logic file
+            local foundAny, touchInterestsExist, allLoaded = Logic.checkTargetsForTouchInterest(Controller.EnemiesFolder, Controller)
+            
+            if foundAny then
+                if not touchInterestsExist and allLoaded then
+                    isHibernating = true
+                    
+                    if getgenv().Rayfield then
+                        getgenv().Rayfield:Notify({
+                            Title = "Protection System",
+                            Content = "TouchInterest of active entities has been cleaned. Status: Hibernating.",
+                            Duration = 3
+                        })
+                    end
+                else
+                    for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
+                        local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
+                        if checkFunc and checkFunc() then
+                            Executor.enableImmunity(GC, enemy)
+                        end
+                    end
+                end
+            end
+            
+            task.wait(1)
+        end
+        touchInterestLoopActive = false
+    end)
+end
+
+-- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
+function Controller:CleanUp()
+    GC.cleanAll()
+    self.EnemiesFolder = nil
+    
+    -- Nếu bị hủy hoàn toàn (Destroyed = true), giải phóng các kết nối vĩnh viễn
+    if self.Destroyed and self.PermanentConnections then
+        for _, conn in ipairs(self.PermanentConnections) do
+            if conn then pcall(function() conn:Disconnect() end) end
+        end
+        table.clear(self.PermanentConnections)
     end
-end)
+end
 
 -- Thiết lập cấu hình miễn nhiễm và kích hoạt dọn dẹp tức thời
 function Controller:SetImmunity(entityName, value)
@@ -90,12 +136,6 @@ function Controller:SetImmunity(entityName, value)
             Duration = 2
         })
     end
-end
-
--- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
-function Controller:CleanUp()
-    GC.cleanAll()
-    self.EnemiesFolder = nil
 end
 
 -- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
@@ -178,7 +218,7 @@ local function startObserving()
     end
 
     local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
-    GC.registerConnection(wsConn)
+    table.insert(Controller.PermanentConnections, wsConn)
     
     local initialFolder = workspace:FindFirstChild("Enemies")
     if initialFolder and initialFolder:IsA("Folder") then
@@ -187,56 +227,56 @@ local function startObserving()
 end
 task.spawn(startObserving)
 
--- Vòng lặp quan sát TouchInterest của các mục tiêu đặc biệt với cơ chế ngủ đông
+-- Khởi tạo ban đầu khi nạp script
+if not inLobby then
+    startTouchInterestLoop()
+end
+
+-- Lắng nghe sự kiện đổi trạng thái game thời gian thực
 task.spawn(function()
-    while not Controller.Destroyed do
-        task.wait(1) -- Kiểm tra 1 giây 1 lần
-        if Controller.Destroyed then break end
+    local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
+    if inRoundVal and inRoundVal:IsA("BoolValue") then
+        hasInRoundValue = true
+        inLobby = not inRoundVal.Value
+        isHibernating = false
+        if not inLobby then
+            startTouchInterestLoop()
+        end
         
-        local currentInMatch = isInMatch()
-        
-        if not currentInMatch then
-            if not inLobby then
+        local conn = inRoundVal.Changed:Connect(function(val)
+            if Controller.Destroyed then return end
+            if val then
+                inLobby = false
+                isHibernating = false
+                startTouchInterestLoop()
+            else
                 inLobby = true
                 isHibernating = false
+                Controller:CleanUp()
             end
-            continue
-        else
+        end)
+        table.insert(Controller.PermanentConnections, conn)
+    end
+end)
+
+-- Vòng lặp quan sát dự phòng (chỉ chạy khi không có InRound)
+task.spawn(function()
+    while not Controller.Destroyed and not hasInRoundValue do
+        task.wait(3.0)
+        if Controller.Destroyed or hasInRoundValue then break end
+        
+        local currentInMatch = isInMatch()
+        if currentInMatch then
             if inLobby then
                 inLobby = false
                 isHibernating = false
+                startTouchInterestLoop()
             end
-        end
-        
-        if isHibernating then
-            continue
-        end
-        
-        if not Controller.EnemiesFolder then
-            continue
-        end
-        
-        -- Gọi logic kiểm tra trạng thái TouchInterest từ logic file
-        local foundAny, touchInterestsExist, allLoaded = Logic.checkTargetsForTouchInterest(Controller.EnemiesFolder, Controller)
-        
-        if foundAny then
-            if not touchInterestsExist and allLoaded then
-                isHibernating = true
-                
-                if getgenv().Rayfield then
-                    getgenv().Rayfield:Notify({
-                        Title = "Protection System",
-                        Content = "TouchInterest of active entities has been cleaned. Status: Hibernating.",
-                        Duration = 3
-                    })
-                end
-            else
-                for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
-                    local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
-                    if checkFunc and checkFunc() then
-                        Executor.enableImmunity(GC, enemy)
-                    end
-                end
+        else
+            if not inLobby then
+                inLobby = true
+                isHibernating = false
+                Controller:CleanUp()
             end
         end
     end

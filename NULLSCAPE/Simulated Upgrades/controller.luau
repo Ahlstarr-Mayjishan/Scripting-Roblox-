@@ -27,23 +27,11 @@ local Controller = {
     NearestGiftPosition = nil,
     NearestCadencePosition = nil,
     NearestAltarPosition = nil,
-    CachedGiftParts = {},
-    CachedCadenceParts = {},
-    CachedAltarParts = {},
+    ActiveGifts = {},
+    ActiveInstruments = {},
+    ActiveAltars = {},
+    PermanentConnections = {}
 }
-
-local inLobby = false       -- Đang ở sảnh chờ/lựa chọn
-
--- Hàm cập nhật trạng thái sảnh chờ và tự động dọn dẹp visual khi vào sảnh
-local function setInLobby(val)
-    if inLobby == val then return end
-    inLobby = val
-    if val then
-        pcall(function()
-            Executor.clearVisuals(GC, false)
-        end)
-    end
-end
 
 -- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
 local function isInMatch()
@@ -54,17 +42,249 @@ local function isInMatch()
     return false
 end
 
--- Lắng nghe sự kiện đổi trạng thái game thời gian thực
-task.spawn(function()
-    local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
-    if inRoundVal and inRoundVal:IsA("BoolValue") then
-        local conn = inRoundVal.Changed:Connect(function(val)
-            if Controller.Destroyed then return end
-            setInLobby(not val)
-        end)
-        GC.registerConnection(conn)
+local inLobby = not isInMatch()       -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
+local hasInRoundValue = false
+local matchLoopsActive = false
+local folderConnections = {}
+
+-- Ngắt các kết nối sự kiện thư mục
+local function disconnectFolderObservations()
+    for _, conn in ipairs(folderConnections) do
+        if conn then pcall(function() conn:Disconnect() end) end
     end
-end)
+    table.clear(folderConnections)
+end
+
+-- Đăng ký các hàm helper để quan sát vật thể thời gian thực
+local function registerGift(obj)
+    if not obj:IsA("BasePart") then return end
+    local nameLower = obj.Name:lower()
+    if string.find(nameLower, "gift") or string.find(nameLower, "present") then
+        for _, g in ipairs(Controller.ActiveGifts) do
+            if g.part == obj then return end
+        end
+        table.insert(Controller.ActiveGifts, {part = obj, color = Color3.fromRGB(255, 255, 255), type = "Gift"})
+    end
+end
+
+local function unregisterGift(obj)
+    for i, g in ipairs(Controller.ActiveGifts) do
+        if g.part == obj then
+            table.remove(Controller.ActiveGifts, i)
+            break
+        end
+    end
+end
+
+local function registerInstrument(obj)
+    if not (obj:IsA("BasePart") or obj:IsA("Model")) then return end
+    if not Logic.isInstrument(obj.Name) then return end
+    
+    local targetPart = obj:IsA("Model") and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")) or obj
+    if targetPart and targetPart:IsA("BasePart") then
+        for _, inst in ipairs(Controller.ActiveInstruments) do
+            if inst.model == obj or inst.part == targetPart then return end
+        end
+        table.insert(Controller.ActiveInstruments, {part = targetPart, model = obj, color = Color3.fromRGB(255, 0, 0), type = "Cadence"})
+    end
+end
+
+local function unregisterInstrument(obj)
+    for i, inst in ipairs(Controller.ActiveInstruments) do
+        if inst.model == obj or inst.part == obj then
+            table.remove(Controller.ActiveInstruments, i)
+            break
+        end
+    end
+end
+
+local function registerAltar(altarObj)
+    local targetPart = altarObj:IsA("Model") and (altarObj:FindFirstChild("HumanoidRootPart") or altarObj:FindFirstChildWhichIsA("BasePart")) or altarObj
+    if targetPart and targetPart:IsA("BasePart") then
+        for _, a in ipairs(Controller.ActiveAltars) do
+            if a.model == altarObj or a.part == targetPart then return end
+        end
+        local altarName, altarColor = Logic.getAltarTypeAndColor(altarObj)
+        table.insert(Controller.ActiveAltars, {part = targetPart, model = altarObj, color = altarColor, type = "Altar", altarName = altarName})
+    end
+end
+
+local function unregisterAltar(altarObj)
+    for i, a in ipairs(Controller.ActiveAltars) do
+        if a.model == altarObj or a.part == altarObj then
+            table.remove(Controller.ActiveAltars, i)
+            break
+        end
+    end
+end
+
+local function observeItemPools(folder)
+    for _, obj in ipairs(folder:GetDescendants()) do
+        registerGift(obj)
+        registerInstrument(obj)
+    end
+    
+    local addedConn = folder.DescendantAdded:Connect(function(obj)
+        registerGift(obj)
+        registerInstrument(obj)
+    end)
+    table.insert(folderConnections, addedConn)
+    
+    local removedConn = folder.DescendantRemoving:Connect(function(obj)
+        unregisterGift(obj)
+        unregisterInstrument(obj)
+    end)
+    table.insert(folderConnections, removedConn)
+end
+
+local function observeEnemies(folder)
+    for _, obj in ipairs(folder:GetDescendants()) do
+        registerInstrument(obj)
+    end
+    
+    local addedConn = folder.DescendantAdded:Connect(function(obj)
+        registerInstrument(obj)
+    end)
+    table.insert(folderConnections, addedConn)
+    
+    local removedConn = folder.DescendantRemoving:Connect(function(obj)
+        unregisterInstrument(obj)
+    end)
+    table.insert(folderConnections, removedConn)
+end
+
+local function checkRoomForAltar(room)
+    local altarObj = room:FindFirstChild("AltarLocation") or room:FindFirstChild("AltarModel") or room:FindFirstChild("Altar")
+    if altarObj then
+        registerAltar(altarObj)
+    end
+    
+    local childAddedConn = room.ChildAdded:Connect(function(child)
+        if child.Name == "AltarLocation" or child.Name == "AltarModel" or child.Name == "Altar" then
+            registerAltar(child)
+        end
+    end)
+    table.insert(folderConnections, childAddedConn)
+end
+
+local function observeCurrentRooms(folder)
+    for _, room in ipairs(folder:GetChildren()) do
+        checkRoomForAltar(room)
+    end
+    
+    local roomAddedConn = folder.ChildAdded:Connect(function(room)
+        checkRoomForAltar(room)
+    end)
+    table.insert(folderConnections, roomAddedConn)
+    
+    local roomRemovedConn = folder.ChildRemoved:Connect(function(room)
+        local altarObj = room:FindFirstChild("AltarLocation") or room:FindFirstChild("AltarModel") or room:FindFirstChild("Altar")
+        if altarObj then
+            unregisterAltar(altarObj)
+        end
+    end)
+    table.insert(folderConnections, roomRemovedConn)
+end
+
+local function startObservingFolders()
+    disconnectFolderObservations()
+    
+    table.clear(Controller.ActiveGifts)
+    table.clear(Controller.ActiveInstruments)
+    table.clear(Controller.ActiveAltars)
+    
+    local function checkAndObserve(child)
+        if child.Name == "Item_Pools" then
+            observeItemPools(child)
+        elseif child.Name == "Enemies" then
+            observeEnemies(child)
+        elseif child.Name == "CurrentRooms" then
+            observeCurrentRooms(child)
+        end
+    end
+    
+    local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
+    table.insert(folderConnections, wsConn)
+    
+    local itemPools = workspace:FindFirstChild("Item_Pools")
+    if itemPools then observeItemPools(itemPools) end
+    
+    local enemies = workspace:FindFirstChild("Enemies")
+    if enemies then observeEnemies(enemies) end
+    
+    local currentRooms = workspace:FindFirstChild("CurrentRooms")
+    if currentRooms then observeCurrentRooms(currentRooms) end
+end
+
+-- RenderStepped connection management
+local renderConn = nil
+
+local function stopRenderStepped()
+    if renderConn then
+        renderConn:Disconnect()
+        renderConn = nil
+    end
+end
+
+local function startRenderStepped()
+    if renderConn then return end
+    renderConn = RunService.RenderStepped:Connect(function()
+        if Controller.Destroyed then
+            stopRenderStepped()
+            return
+        end
+        if inLobby then
+            stopRenderStepped()
+            return
+        end
+        
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        pcall(function()
+            Logic.updateRender(Controller, GC, hrp)
+        end)
+    end)
+end
+
+-- Vòng lặp cập nhật styles hiển thị (Dot <-> Highlight) cực nhanh mỗi 0.3 giây
+local function startMatchLoops()
+    if matchLoopsActive then return end
+    matchLoopsActive = true
+    
+    task.spawn(function()
+        while not Controller.Destroyed and not inLobby do
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                pcall(function()
+                    Executor.updateESPStyles(Controller, GC, hrp)
+                end)
+            end
+            task.wait(0.3)
+        end
+        matchLoopsActive = false
+    end)
+end
+
+-- Hàm cập nhật trạng thái sảnh chờ và tự động dọn dẹp visual khi vào sảnh
+local function setInLobby(val)
+    if inLobby == val then return end
+    inLobby = val
+    if val then
+        pcall(function()
+            Executor.clearVisuals(GC, false)
+        end)
+        disconnectFolderObservations()
+        stopRenderStepped()
+        table.clear(Controller.ActiveGifts)
+        table.clear(Controller.ActiveInstruments)
+        table.clear(Controller.ActiveAltars)
+    else
+        startObservingFolders()
+        startMatchLoops()
+        startRenderStepped()
+    end
+end
 
 -- Hàm trigger cập nhật ESP tức thì khi thay đổi cấu hình
 local function triggerInstantUpdate()
@@ -73,7 +293,6 @@ local function triggerInstantUpdate()
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if hrp then
         pcall(function()
-            Executor.scanTargets(Controller, GC, hrp)
             Executor.updateESPStyles(Controller, GC, hrp)
         end)
     end
@@ -151,16 +370,32 @@ end
 -- Hàm dọn dẹp tài nguyên (GC) khi tắt hoặc hủy UI
 function Controller:CleanUp()
     self.Destroyed = true
+    disconnectFolderObservations()
+    stopRenderStepped()
+    
+    if self.PermanentConnections then
+        for _, conn in ipairs(self.PermanentConnections) do
+            if conn then pcall(function() conn:Disconnect() end) end
+        end
+        table.clear(self.PermanentConnections)
+    end
+    
     GC.cleanAll()
 end
 
--- Vòng lặp định kỳ tìm kiếm và cập nhật ESP (Không gây giật lag, hỗ trợ ngủ đông)
+-- Khởi tạo ban đầu khi nạp script
+if not inLobby then
+    startObservingFolders()
+    startMatchLoops()
+    startRenderStepped()
+end
+
+-- Vòng lặp phát hiện Radar chính thức của game
 task.spawn(function()
     while not Controller.Destroyed do
-        task.wait(3.0) -- Chu kỳ quét 3.0 giây một lần cực kỳ tối ưu
+        task.wait(5.0) -- Kiểm tra 5.0 giây một lần cực kỳ tối ưu
         if Controller.Destroyed then break end
         
-        -- Nếu người chơi đã mở khóa Radar chính thức của game, tắt script ngay
         if checkRadarUnlocked() then
             if getgenv().Rayfield then
                 getgenv().Rayfield:Notify({
@@ -172,62 +407,31 @@ task.spawn(function()
             Controller:CleanUp()
             break
         end
-        
-        local currentInMatch = isInMatch()
-        setInLobby(not currentInMatch)
-        if not currentInMatch then
-            continue
-        end
-        
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            pcall(function()
-                Executor.scanTargets(Controller, GC, hrp)
-                Executor.updateESPStyles(Controller, GC, hrp)
-            end)
-        end
     end
 end)
 
--- Vòng lặp cập nhật khoảng cách & styles hiển thị (Dot <-> Highlight) cực nhanh mỗi 0.3 giây
+-- Lắng nghe sự kiện đổi trạng thái game thời gian thực
 task.spawn(function()
-    while not Controller.Destroyed do
-        task.wait(0.3)
-        if Controller.Destroyed then break end
-        if inLobby then continue end
+    local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
+    if inRoundVal and inRoundVal:IsA("BoolValue") then
+        hasInRoundValue = true
+        setInLobby(not inRoundVal.Value)
         
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            pcall(function()
-                Executor.updateESPStyles(Controller, GC, hrp)
-            end)
-        end
-    end
-end)
-
--- Vòng lặp cập nhật chuyển động mượt mà của 3 mũi tên chỉ hướng
-task.spawn(function()
-    local runConn
-    runConn = RunService.RenderStepped:Connect(function()
-        if Controller.Destroyed then
-            if runConn then runConn:Disconnect() end
-            return
-        end
-        
-        -- Bỏ qua Render khi đang ở Lobby để tiết kiệm tài nguyên
-        if inLobby then
-            return
-        end
-        
-        local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        pcall(function()
-            Logic.updateRender(Controller, GC, hrp)
+        local conn = inRoundVal.Changed:Connect(function(val)
+            if Controller.Destroyed then return end
+            setInLobby(not val)
         end)
-    end)
-    GC.registerConnection(runConn)
+        table.insert(Controller.PermanentConnections, conn)
+    end
+end)
+
+-- Vòng lặp quan sát dự phòng (chỉ chạy khi không có InRound)
+task.spawn(function()
+    while not Controller.Destroyed and not hasInRoundValue do
+        task.wait(3.0)
+        if Controller.Destroyed or hasInRoundValue then break end
+        setInLobby(not isInMatch())
+    end
 end)
 
 return Controller
