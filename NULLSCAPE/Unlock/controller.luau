@@ -212,6 +212,7 @@ task.spawn(function()
         end
         
         -- 4. Cập nhật độ trong suốt cho chế độ Ping (lại gần thì biến mất, ở xa hiện tối đa)
+        -- 4. Cập nhật kích thước và ẩn/hiện chế độ Ping (lại gần thì thu nhỏ về 0 và tắt để giải phóng)
         if Controller.SavedVisuals.ActiveTargets then
             for targetPart, cached in pairs(Controller.SavedVisuals.ActiveTargets) do
                 if cached.Style == "Ping" and cached.Dot then
@@ -219,12 +220,19 @@ task.spawn(function()
                         continue
                     end
                     local dist = (hrp.Position - targetPart.Position).Magnitude
-                    -- Dưới 15 studs biến mất hoàn toàn (Transparency = 1)
-                    -- Trên 35 studs hiện hoàn toàn (Transparency = 0)
-                    local transparency = 1 - math.clamp((dist - 15) / 20, 0, 1)
                     local frame = cached.Dot:FindFirstChild("PingFrame")
                     if frame then
-                        frame.BackgroundTransparency = transparency
+                        if dist < 15 then
+                            cached.Dot.Enabled = false
+                            frame.Size = UDim2.new(0, 0, 0, 0)
+                        else
+                            cached.Dot.Enabled = true
+                            -- Thu nhỏ từ 10px (ở >= 35 studs) về 0px (ở <= 15 studs)
+                            local scale = math.clamp((dist - 15) / 20, 0, 1)
+                            local newSize = scale * 10
+                            frame.Size = UDim2.new(0, newSize, 0, newSize)
+                            frame.BackgroundTransparency = 0
+                        end
                     end
                 end
             end

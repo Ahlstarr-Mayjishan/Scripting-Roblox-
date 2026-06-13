@@ -286,12 +286,12 @@ function Executor.updateESP(controller, hrp)
             elseif current.Style == "Ping" then
                 local billboard = Instance.new("BillboardGui")
                 billboard.Name = "NULLSCAPE_ESP_Ping"
-                billboard.Size = UDim2.new(0, 22, 0, 22)
+                billboard.Size = UDim2.new(0, 16, 0, 16)
                 billboard.AlwaysOnTop = true
                 
                 local frame = Instance.new("Frame")
                 frame.Name = "PingFrame"
-                frame.Size = UDim2.new(0, 15, 0, 15)
+                frame.Size = UDim2.new(0, 10, 0, 10)
                 frame.AnchorPoint = Vector2.new(0.5, 0.5)
                 frame.Position = UDim2.new(0.5, 0, 0.5, 0)
                 frame.Rotation = 45

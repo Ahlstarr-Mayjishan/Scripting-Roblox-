@@ -301,12 +301,12 @@ local function updateESP(hrp)
             elseif current.Style == "Ping" then
                 local billboard = Instance.new("BillboardGui")
                 billboard.Name = "NULLSCAPE_ESP_Ping"
-                billboard.Size = UDim2.new(0, 22, 0, 22)
+                billboard.Size = UDim2.new(0, 16, 0, 16)
                 billboard.AlwaysOnTop = true
                 
                 local frame = Instance.new("Frame")
                 frame.Name = "PingFrame"
-                frame.Size = UDim2.new(0, 15, 0, 15)
+                frame.Size = UDim2.new(0, 10, 0, 10)
                 frame.AnchorPoint = Vector2.new(0.5, 0.5)
                 frame.Position = UDim2.new(0.5, 0, 0.5, 0)
                 frame.Rotation = 45
@@ -555,7 +555,7 @@ runConn = RunService.RenderStepped:Connect(function()
         end
     end
     
-    -- 4. Cập nhật độ trong suốt cho chế độ Ping (lại gần thì biến mất, ở xa hiện tối đa)
+    -- 4. Cập nhật kích thước và ẩn/hiện chế độ Ping (lại gần thì thu nhỏ về 0 và tắt để giải phóng)
     if RadarLogic.SavedVisuals.ActiveTargets then
         for targetPart, cached in pairs(RadarLogic.SavedVisuals.ActiveTargets) do
             if cached.Style == "Ping" and cached.Dot then
@@ -563,10 +563,19 @@ runConn = RunService.RenderStepped:Connect(function()
                     continue
                 end
                 local dist = (hrp.Position - targetPart.Position).Magnitude
-                local transparency = 1 - math.clamp((dist - 15) / 20, 0, 1)
                 local frame = cached.Dot:FindFirstChild("PingFrame")
                 if frame then
-                    frame.BackgroundTransparency = transparency
+                    if dist < 15 then
+                        cached.Dot.Enabled = false
+                        frame.Size = UDim2.new(0, 0, 0, 0)
+                    else
+                        cached.Dot.Enabled = true
+                        -- Thu nhỏ từ 10px (ở >= 35 studs) về 0px (ở <= 15 studs)
+                        local scale = math.clamp((dist - 15) / 20, 0, 1)
+                        local newSize = scale * 10
+                        frame.Size = UDim2.new(0, newSize, 0, newSize)
+                        frame.BackgroundTransparency = 0
+                    end
                 end
             end
         end
