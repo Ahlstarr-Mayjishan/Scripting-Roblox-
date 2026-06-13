@@ -220,10 +220,10 @@ function Logic.updateESP(controller, gc, hrp)
         local color = target.color
         
         local desiredStyle, parentObject
-        if controller.ESPStyle == "Highlight" and idx <= 31 then
+        if controller.ESPStyle == "Highlight" and idx <= 12 then
             desiredStyle = "Highlight"
             parentObject = targetModel
-        elseif controller.ESPStyle == "Ping" and idx <= 31 then
+        elseif controller.ESPStyle == "Ping" and idx <= 12 then
             desiredStyle = "Ping"
             parentObject = targetPart
         else
@@ -240,78 +240,171 @@ function Logic.updateESP(controller, gc, hrp)
     
     local scanTime = os.clock()
     
-    -- 1. Xóa các ESP lỗi thời hoặc bị đổi style hoặc không còn tồn tại
+    -- 1. Xóa các ESP không còn tồn tại hoặc đã rời khỏi workspace
     for targetPart, cached in pairs(saved.ActiveTargets) do
         local current = currentTargets[targetPart]
-        if not current or current.Style ~= cached.Style or not targetPart:IsDescendantOf(workspace) then
+        if not current or not targetPart:IsDescendantOf(workspace) then
             if cached.Highlight then pcall(function() cached.Highlight:Destroy() end) end
             if cached.Dot then pcall(function() cached.Dot:Destroy() end) end
             saved.ActiveTargets[targetPart] = nil
         end
     end
     
-    -- 2. Tạo hoặc Cập nhật ESP mới/hiện tại
+    -- 2. Tạo hoặc Cập nhật ESP mới/hiện tại với cơ chế Budget-rate limiting (Tránh giật màn hình)
+    local creationsThisFrame = 0
     for targetPart, current in pairs(currentTargets) do
         local cached = saved.ActiveTargets[targetPart]
         
-        if not cached then
+        if not cached or cached.Style ~= current.Style then
+            -- Đây là tạo mới hoặc chuyển đổi style (Transition)
+            -- Lưu lại tham chiếu visual cũ để dọn dẹp nguyên tử (Atomic) trong luồng sau
+            local oldHighlight = cached and cached.Highlight
+            local oldDot = cached and cached.Dot
+            
             local newCache = {
                 Style = current.Style,
                 Color = current.Color,
                 LastSeen = scanTime,
                 Highlight = nil,
-                Dot = nil
+                Dot = nil,
+                Pending = true
             }
-            
-            if current.Style == "Highlight" then
-                local highlight = Instance.new("Highlight")
-                highlight.Name = "NULLSCAPE_ESP_Highlight"
-                highlight.FillColor = current.Color
-                highlight.FillTransparency = 1.0
-                highlight.OutlineColor = current.Color
-                highlight.OutlineTransparency = 0.0
-                highlight.Parent = current.ParentObject
-                newCache.Highlight = highlight
-            elseif current.Style == "Ping" then
-                local billboard = Instance.new("BillboardGui")
-                billboard.Name = "NULLSCAPE_ESP_Ping"
-                billboard.Size = UDim2.new(0, 16, 0, 16)
-                billboard.AlwaysOnTop = true
-                
-                local frame = Instance.new("Frame")
-                frame.Name = "PingFrame"
-                frame.Size = UDim2.new(0, 10, 0, 10)
-                frame.AnchorPoint = Vector2.new(0.5, 0.5)
-                frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-                frame.Rotation = 45
-                frame.BackgroundColor3 = current.Color
-                frame.BorderSizePixel = 0
-                
-                frame.Parent = billboard
-                billboard.Parent = current.ParentObject
-                newCache.Dot = billboard
-            else
-                local billboard = Instance.new("BillboardGui")
-                billboard.Name = "NULLSCAPE_ESP_Dot"
-                billboard.Size = UDim2.new(0, 2, 0, 2)
-                billboard.AlwaysOnTop = true
-                
-                local frame = Instance.new("Frame")
-                frame.Size = UDim2.new(1, 0, 1, 0)
-                frame.BackgroundColor3 = current.Color
-                frame.BorderSizePixel = 0
-                
-                local uiCorner = Instance.new("UICorner")
-                uiCorner.CornerRadius = UDim.new(1, 0)
-                uiCorner.Parent = frame
-                
-                frame.Parent = billboard
-                billboard.Parent = current.ParentObject
-                newCache.Dot = billboard
-            end
-            
             saved.ActiveTargets[targetPart] = newCache
+            
+            if creationsThisFrame >= 3 then
+                -- Vượt budget 3 tạo mới/chuyển đổi trong frame: Trải đều qua các frame tiếp theo
+                local delayTime = (creationsThisFrame - 3) * 0.03
+                task.spawn(function()
+                    task.wait(delayTime)
+                    if not targetPart or not targetPart.Parent or not targetPart:IsDescendantOf(workspace) then
+                        if saved.ActiveTargets[targetPart] == newCache then
+                            saved.ActiveTargets[targetPart] = nil
+                        end
+                        if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
+                        if oldDot then pcall(function() oldDot:Destroy() end) end
+                        return
+                    end
+                    
+                    local currentCache = saved.ActiveTargets[targetPart]
+                    if currentCache ~= newCache or not currentCache.Pending then
+                        -- Cache đã bị thay đổi bởi lần quét sau hoặc đã xử lý xong
+                        if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
+                        if oldDot then pcall(function() oldDot:Destroy() end) end
+                        return
+                    end
+                    
+                    -- Dọn dẹp visual cũ ngay tại thời điểm tạo visual mới để tránh chớp nháy
+                    if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
+                    if oldDot then pcall(function() oldDot:Destroy() end) end
+                    
+                    pcall(function()
+                        if current.Style == "Highlight" then
+                            local highlight = Instance.new("Highlight")
+                            highlight.Name = "NULLSCAPE_ESP_Highlight"
+                            highlight.FillColor = current.Color
+                            highlight.FillTransparency = 1.0
+                            highlight.OutlineColor = current.Color
+                            highlight.OutlineTransparency = 0.0
+                            highlight.Parent = current.ParentObject
+                            newCache.Highlight = highlight
+                        elseif current.Style == "Ping" then
+                            local billboard = Instance.new("BillboardGui")
+                            billboard.Name = "NULLSCAPE_ESP_Ping"
+                            billboard.Size = UDim2.new(0, 16, 0, 16)
+                            billboard.AlwaysOnTop = true
+                            
+                            local frame = Instance.new("Frame")
+                            frame.Name = "PingFrame"
+                            frame.Size = UDim2.new(0, 10, 0, 10)
+                            frame.AnchorPoint = Vector2.new(0.5, 0.5)
+                            frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+                            frame.Rotation = 45
+                            frame.BackgroundColor3 = current.Color
+                            frame.BorderSizePixel = 0
+                            
+                            frame.Parent = billboard
+                            billboard.Parent = current.ParentObject
+                            newCache.Dot = billboard
+                        else
+                            local billboard = Instance.new("BillboardGui")
+                            billboard.Name = "NULLSCAPE_ESP_Dot"
+                            billboard.Size = UDim2.new(0, 2, 0, 2)
+                            billboard.AlwaysOnTop = true
+                            
+                            local frame = Instance.new("Frame")
+                            frame.Size = UDim2.new(1, 0, 1, 0)
+                            frame.BackgroundColor3 = current.Color
+                            frame.BorderSizePixel = 0
+                            
+                            local uiCorner = Instance.new("UICorner")
+                            uiCorner.CornerRadius = UDim.new(1, 0)
+                            uiCorner.Parent = frame
+                            
+                            frame.Parent = billboard
+                            billboard.Parent = current.ParentObject
+                            newCache.Dot = billboard
+                        end
+                        newCache.Pending = nil
+                    end)
+                end)
+            else
+                -- Đồng bộ ngay lập tức (trong budget 3 của frame hiện tại)
+                if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
+                if oldDot then pcall(function() oldDot:Destroy() end) end
+                
+                pcall(function()
+                    if current.Style == "Highlight" then
+                        local highlight = Instance.new("Highlight")
+                        highlight.Name = "NULLSCAPE_ESP_Highlight"
+                        highlight.FillColor = current.Color
+                        highlight.FillTransparency = 1.0
+                        highlight.OutlineColor = current.Color
+                        highlight.OutlineTransparency = 0.0
+                        highlight.Parent = current.ParentObject
+                        newCache.Highlight = highlight
+                    elseif current.Style == "Ping" then
+                        local billboard = Instance.new("BillboardGui")
+                        billboard.Name = "NULLSCAPE_ESP_Ping"
+                        billboard.Size = UDim2.new(0, 16, 0, 16)
+                        billboard.AlwaysOnTop = true
+                        
+                        local frame = Instance.new("Frame")
+                        frame.Name = "PingFrame"
+                        frame.Size = UDim2.new(0, 10, 0, 10)
+                        frame.AnchorPoint = Vector2.new(0.5, 0.5)
+                        frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+                        frame.Rotation = 45
+                        frame.BackgroundColor3 = current.Color
+                        frame.BorderSizePixel = 0
+                        
+                        frame.Parent = billboard
+                        billboard.Parent = current.ParentObject
+                        newCache.Dot = billboard
+                    else
+                        local billboard = Instance.new("BillboardGui")
+                        billboard.Name = "NULLSCAPE_ESP_Dot"
+                        billboard.Size = UDim2.new(0, 2, 0, 2)
+                        billboard.AlwaysOnTop = true
+                        
+                        local frame = Instance.new("Frame")
+                        frame.Size = UDim2.new(1, 0, 1, 0)
+                        frame.BackgroundColor3 = current.Color
+                        frame.BorderSizePixel = 0
+                        
+                        local uiCorner = Instance.new("UICorner")
+                        uiCorner.CornerRadius = UDim.new(1, 0)
+                        uiCorner.Parent = frame
+                        
+                        frame.Parent = billboard
+                        billboard.Parent = current.ParentObject
+                        newCache.Dot = billboard
+                    end
+                    newCache.Pending = nil
+                end)
+            end
+            creationsThisFrame = creationsThisFrame + 1
         else
+            -- Đã tồn tại và đúng style, chỉ cập nhật nếu đổi màu
             cached.LastSeen = scanTime
             local inst = cached.Highlight or cached.Dot
             if inst and inst.Parent then
@@ -331,7 +424,7 @@ function Logic.updateESP(controller, gc, hrp)
                         frame.BackgroundColor3 = current.Color
                     end
                 end
-            else
+            elseif not cached.Pending then
                 saved.ActiveTargets[targetPart] = nil
             end
         end

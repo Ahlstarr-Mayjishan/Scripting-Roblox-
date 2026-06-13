@@ -40,19 +40,7 @@ local function isInMatch()
     if inRoundVal and inRoundVal:IsA("BoolValue") then
         return inRoundVal.Value
     end
-    
-    local enemies = workspace:FindFirstChild("Enemies")
-    if enemies and #enemies:GetChildren() > 0 then
-        return true
-    end
-    
-    local lobby = workspace:FindFirstChild("Lobby")
-    local selectFolder = workspace:FindFirstChild("Select")
-    
-    local lobbyCount = lobby and #lobby:GetChildren() or 0
-    local selectCount = selectFolder and #selectFolder:GetChildren() or 0
-    
-    return lobbyCount == 0 and selectCount == 0
+    return false
 end
 
 -- Lắng nghe sự kiện đổi trạng thái game thời gian thực

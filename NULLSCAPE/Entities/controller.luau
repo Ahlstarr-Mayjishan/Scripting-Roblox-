@@ -37,13 +37,7 @@ local function isInMatch()
         return true
     end
     
-    local lobby = workspace:FindFirstChild("Lobby")
-    local selectFolder = workspace:FindFirstChild("Select")
-    
-    local lobbyCount = lobby and #lobby:GetChildren() or 0
-    local selectCount = selectFolder and #selectFolder:GetChildren() or 0
-    
-    return lobbyCount == 0 and selectCount == 0
+    return false
 end
 
 -- Lắng nghe sự kiện đổi trạng thái game thời gian thực
