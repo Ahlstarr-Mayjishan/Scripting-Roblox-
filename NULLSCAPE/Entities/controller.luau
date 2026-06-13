@@ -10,14 +10,11 @@ local LocalPlayer = Players.LocalPlayer
 -- Nạp module dọn dẹp riêng biệt (Cleaner)
 local Cleaner = getgenv().loadModule("NULLSCAPE/Entities/cleaner.luau")
 
-
-
--- Dòng code liệt kê các thực thể đặc biệt cần quét
-local targetNames = { ["Baby"] = true, ["Mart"] = true, ["Bell"] = true }
-
 local Controller = {
-    Enabled = false,
-    Method = "DisableTouch", -- "Noclip", "DisableTouch"
+    -- Trạng thái bật/tắt miễn nhiễm cho từng thực thể
+    BabyImmune = false,
+    BellImmune = false,
+    MartImmune = false,
     
     -- Bộ nhớ đệm quản lý tài nguyên (GC)
     ActiveConnections = {}, -- Lưu các sự kiện để disconnect khi thư mục Enemies bị hủy
@@ -26,7 +23,45 @@ local Controller = {
     FolderObserver = nil    -- Theo dõi sự thay đổi của thư mục Enemies trong Workspace
 }
 
+local targetNames = {
+    ["Baby"] = function() return Controller.BabyImmune end,
+    ["Bell"] = function() return Controller.BellImmune end,
+    ["Mart"] = function() return Controller.MartImmune end
+}
+
 local isHibernating = false -- Trạng thái ngủ đông của checker TouchInterest
+
+-- Thiết lập cấu hình miễn nhiễm và kích hoạt dọn dẹp tức thời
+function Controller:SetImmunity(entityName, value)
+    if entityName == "Baby" then
+        self.BabyImmune = value
+    elseif entityName == "Bell" then
+        self.BellImmune = value
+    elseif entityName == "Mart" then
+        self.MartImmune = value
+    end
+    
+    if value then
+        isHibernating = false -- Đánh thức checker
+        
+        -- Dọn dẹp tức thời nếu thực thể đã tồn tại trong workspace
+        if self.EnemiesFolder then
+            for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
+                if child.Name == entityName then
+                    Cleaner.removeTouchInterests(child)
+                end
+            end
+        end
+    end
+    
+    if getgenv().Rayfield then
+        getgenv().Rayfield:Notify({
+            Title = "Cấu hình bảo vệ",
+            Content = (value and "Kích hoạt" or "Vô hiệu hóa") .. " miễn nhiễm với " .. entityName,
+            Duration = 2
+        })
+    end
+end
 
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
 function Controller:CleanUp()
@@ -46,67 +81,17 @@ function Controller:CleanUp()
 
     self.EnemiesFolder = nil
     
-    -- Thu gom rác của Rayfield Highlights nếu có
-    if getgenv().espHighlights then
-        for player, hl in pairs(getgenv().espHighlights) do
-            pcall(function() hl:Destroy() end)
-        end
-        getgenv().espHighlights = {}
-    end
-    
     warn("[NULLSCAPE] Đã kích hoạt cơ chế GC: Dọn dẹp toàn bộ bộ nhớ đệm và kết nối thực thể cũ.")
 end
 
 -- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
 local function processEntity(enemy)
-    if not Controller.Enabled or not enemy then return end
+    if not enemy then return end
     
-    -- Nếu là các thực thể đặc biệt (Baby, Mart, Bell), chuyển giao hoàn toàn cho module Cleaner
-    if targetNames[enemy.Name] then
+    -- Kiểm tra xem thực thể có trong danh sách mục tiêu và đang được bật Toggle không
+    local checkFunc = targetNames[enemy.Name]
+    if checkFunc and checkFunc() then
         Cleaner.removeTouchInterests(enemy)
-        return
-    end
-
-    Controller.EntityConnections[enemy] = Controller.EntityConnections[enemy] or {}
-    local connections = Controller.EntityConnections[enemy]
-
-    local function applyImmunity(part)
-        if not part:IsA("BasePart") then return end
-        
-        -- 1. Phương thức Vô hiệu hóa va chạm (Noclip)
-        if Controller.Method == "Noclip" then
-            part.CanCollide = false
-            
-        -- 2. Phương thức Xóa sát thương chạm (Disable Touch)
-        elseif Controller.Method == "DisableTouch" then
-            part.CanTouch = false
-            -- Tìm và xóa TouchTransmitter (nếu có)
-            local transmitter = part:FindFirstChildOfClass("TouchTransmitter") or part:FindFirstChild("TouchInterest")
-            if transmitter then
-                pcall(function() transmitter:Destroy() end)
-            end
-        end
-    end
-
-    -- Xử lý các bộ phận hiện có của thực thể
-    for _, part in ipairs(enemy:GetDescendants()) do
-        applyImmunity(part)
-    end
-
-    -- Lắng nghe các bộ phận mới được thêm vào thực thể sau này (tránh sót hitbox)
-    local descConn = enemy.DescendantAdded:Connect(function(part)
-        applyImmunity(part)
-    end)
-    table.insert(connections, descConn)
-end
-
--- Gỡ bỏ lắng nghe của thực thể khi nó bị xóa
-local function removeEntity(enemy)
-    if Controller.EntityConnections[enemy] then
-        for _, conn in ipairs(Controller.EntityConnections[enemy]) do
-            if conn then conn:Disconnect() end
-        end
-        Controller.EntityConnections[enemy] = nil
     end
 end
 
@@ -121,18 +106,12 @@ function Controller:ObserveFolder(folder)
     end)
     table.insert(self.ActiveConnections, childAddedConn)
 
-    -- 2. Lắng nghe khi thực thể bị xóa khỏi game
-    local childRemovedConn = folder.ChildRemoved:Connect(function(child)
-        removeEntity(child)
-    end)
-    table.insert(self.ActiveConnections, childRemovedConn)
-
-    -- 3. Xử lý các thực thể đã có sẵn trong thư mục
+    -- 2. Xử lý các thực thể đã có sẵn trong thư mục
     for _, child in ipairs(folder:GetChildren()) do
         processEntity(child)
     end
 
-    -- 4. Cơ chế tự động GC khi thư mục bị xóa/hủy khỏi Workspace
+    -- 3. Cơ chế tự động GC khi thư mục bị xóa/hủy khỏi Workspace
     local destroyingConn = folder.AncestryChanged:Connect(function(_, parent)
         if not parent then
             -- Thư mục Enemies đã bị xóa hoàn toàn khỏi trò chơi (chuyển màn, game reset,...)
@@ -171,7 +150,8 @@ local function checkTargetsForTouchInterest()
     local touchInterestsExist = false
     
     for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
-        if targetNames[enemy.Name] then
+        local checkFunc = targetNames[enemy.Name]
+        if checkFunc and checkFunc() then
             foundAny = true
             for _, part in ipairs(enemy:GetDescendants()) do
                 if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
@@ -205,82 +185,33 @@ task.spawn(function()
             continue
         end
         
-        -- Thực hiện kiểm tra khi hệ thống miễn nhiễm được bật
-        if Controller.Enabled then
-            local foundAny, touchInterestsExist = checkTargetsForTouchInterest()
-            
-            if foundAny then
-                if not touchInterestsExist then
-                    -- Tất cả TouchInterest của các thực thể mục tiêu hiện tại đã được xóa hoàn toàn
-                    isHibernating = true
-                    warn("[NULLSCAPE] Đã xác nhận: Toàn bộ TouchInterest của Baby, Mart, Bell đã biến mất. Hệ thống vào trạng thái ngủ đông.")
-                    
-                    if getgenv().Rayfield then
-                        getgenv().Rayfield:Notify({
-                            Title = "Hệ thống bảo vệ",
-                            Content = "TouchInterest của các thực thể đặc biệt đã được dọn sạch. Trạng thái: Ngủ đông.",
-                            Duration = 3
-                        })
-                    end
-                else
-                    -- Nếu vẫn còn, kích hoạt Cleaner để dọn dẹp
-                    for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
-                        if targetNames[enemy.Name] then
-                            Cleaner.removeTouchInterests(enemy)
-                        end
+        -- Thực hiện kiểm tra
+        local foundAny, touchInterestsExist = checkTargetsForTouchInterest()
+        
+        if foundAny then
+            if not touchInterestsExist then
+                -- Tất cả TouchInterest của các thực thể mục tiêu hiện tại đã được xóa hoàn toàn
+                isHibernating = true
+                warn("[NULLSCAPE] Đã xác nhận: Toàn bộ TouchInterest của các mục tiêu bật bảo vệ đã biến mất. Hệ thống vào trạng thái ngủ đông.")
+                
+                if getgenv().Rayfield then
+                    getgenv().Rayfield:Notify({
+                        Title = "Hệ thống bảo vệ",
+                        Content = "TouchInterest của thực thể kích hoạt đã được dọn sạch. Trạng thái: Ngủ đông.",
+                        Duration = 3
+                    })
+                end
+            else
+                -- Nếu vẫn còn, kích hoạt Cleaner để dọn dẹp
+                for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
+                    local checkFunc = targetNames[enemy.Name]
+                    if checkFunc and checkFunc() then
+                        Cleaner.removeTouchInterests(enemy)
                     end
                 end
             end
         end
     end
 end)
-
--- Kích hoạt / Tắt miễn nhiễm
-function Controller:Toggle(state)
-    self.Enabled = state
-    if state and self.EnemiesFolder then
-        -- Kích hoạt lại trạng thái cho các thực thể hiện có
-        for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
-            processEntity(child)
-        end
-    elseif not state then
-        -- Giải phóng toàn bộ kết nối thực thể khi tắt
-        for enemy, connections in pairs(self.EntityConnections) do
-            for _, conn in ipairs(connections) do
-                if conn then conn:Disconnect() end
-            end
-        end
-        self.EntityConnections = {}
-    end
-
-    if getgenv().Rayfield then
-        getgenv().Rayfield:Notify({
-            Title = "Miễn nhiễm thực thể",
-            Content = state and "Đã bật hệ thống miễn nhiễm!" or "Đã tắt hệ thống miễn nhiễm!",
-            Duration = 2
-        })
-    end
-end
-
--- Đặt phương thức miễn nhiễm
-function Controller:SetMethod(methodName)
-    local oldMethod = self.Method
-    self.Method = methodName
-    
-    if self.Enabled and self.EnemiesFolder and oldMethod ~= methodName then
-        -- Reset và chạy lại để áp dụng phương thức mới
-        for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
-            processEntity(child)
-        end
-    end
-
-    if getgenv().Rayfield then
-        getgenv().Rayfield:Notify({
-            Title = "Miễn nhiễm thực thể",
-            Content = "Phương thức hiện tại: " .. methodName,
-            Duration = 2
-        })
-    end
-end
 
 return Controller

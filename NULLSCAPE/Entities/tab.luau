@@ -6,33 +6,32 @@
 return function(Client, Controller)
     local Tab = Client.Window:CreateTab("Miễn nhiễm thực thể", 4483362458)
     
-    Tab:CreateSection("Cấu hình miễn nhiễm")
+    Tab:CreateSection("Danh sách thực thể")
     
     Tab:CreateToggle({
-        Name = "Kích hoạt miễn nhiễm",
-        CurrentValue = Controller.Enabled,
-        Flag = "EntityImmunityToggle",
+        Name = "Miễn nhiễm Baby",
+        CurrentValue = Controller.BabyImmune,
+        Flag = "ImmunityBabyToggle",
         Callback = function(Value)
-            Controller:Toggle(Value)
+            Controller:SetImmunity("Baby", Value)
         end
     })
     
-    Tab:CreateDropdown({
-        Name = "Phương thức miễn nhiễm",
-        Options = {
-            "Vô hiệu hóa va chạm (Noclip)", 
-            "Xóa sát thương chạm (Disable Touch)"
-        },
-        CurrentOption = {"Xóa sát thương chạm (Disable Touch)"},
-        MultipleOptions = false,
-        Flag = "EntityImmunityMethod",
-        Callback = function(Option)
-            local selection = Option[1]
-            if selection == "Vô hiệu hóa va chạm (Noclip)" then
-                Controller:SetMethod("Noclip")
-            elseif selection == "Xóa sát thương chạm (Disable Touch)" then
-                Controller:SetMethod("DisableTouch")
-            end
+    Tab:CreateToggle({
+        Name = "Miễn nhiễm Bell",
+        CurrentValue = Controller.BellImmune,
+        Flag = "ImmunityBellToggle",
+        Callback = function(Value)
+            Controller:SetImmunity("Bell", Value)
+        end
+    })
+    
+    Tab:CreateToggle({
+        Name = "Miễn nhiễm Mart",
+        CurrentValue = Controller.MartImmune,
+        Flag = "ImmunityMartToggle",
+        Callback = function(Value)
+            Controller:SetImmunity("Mart", Value)
         end
     })
 end
