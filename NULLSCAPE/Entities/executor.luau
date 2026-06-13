@@ -1,61 +1,24 @@
 -- [[
 --  NULLSCAPE - Entities Executor & Cleaner
---  Vai trò: Chỉ đảm nhiệm việc thực thi sửa đổi trạng thái thực thể (ẩn/khôi phục TouchInterest,
---  vô hiệu hóa CanTouch) bằng cách gọi các tính năng/API từ file logic (TouchInterest Entities Types.luau).
+--  Vai trò: Chỉ đảm nhiệm việc thực thi sửa đổi trạng thái thực thể bằng cách gọi các tính năng/API từ file logic
 -- ]]
 
 local Logic = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest Entities Types.luau")
 local Executor = {}
 
--- Bật miễn nhiễm (ẩn TouchInterest và tắt CanTouch) cho một thực thể cụ thể
+-- Thực thi bật miễn nhiễm cho một thực thể
 function Executor.enableImmunity(controller, enemy)
-    if not enemy then return end
-    for _, descendant in ipairs(enemy:GetDescendants()) do
-        if descendant:IsA("TouchTransmitter") or descendant.Name == "TouchInterest" then
-            local part = descendant.Parent
-            if part and part:IsA("BasePart") then
-                if not controller.SavedPartsData[part] then
-                    controller.SavedPartsData[part] = {
-                        touch = descendant,
-                        originalCanTouch = part.CanTouch,
-                        enemyName = enemy.Name
-                    }
-                end
-                pcall(function() descendant.Parent = nil end)
-                pcall(function() part.CanTouch = false end)
-            end
-        end
-    end
+    Logic.enableImmunity(controller, enemy)
 end
 
--- Tắt miễn nhiễm (khôi phục lại TouchInterest và CanTouch) cho một loại thực thể cụ thể
+-- Thực thi tắt miễn nhiễm cho một loại thực thể
 function Executor.disableImmunityForType(controller, entityName)
-    for part, data in pairs(controller.SavedPartsData) do
-        if data and data.enemyName == entityName then
-            if part and part.Parent then
-                if data.touch then
-                    pcall(function() data.touch.Parent = part end)
-                end
-                pcall(function() part.CanTouch = data.originalCanTouch end)
-            end
-            controller.SavedPartsData[part] = nil
-        end
-    end
+    Logic.disableImmunityForType(controller, entityName)
 end
 
--- Khôi phục toàn bộ dữ liệu TouchInterest và dọn sạch cache
+-- Thực thi khôi phục toàn bộ TouchInterest và giải phóng bộ nhớ
 function Executor.restoreAll(controller)
-    if controller.SavedPartsData then
-        for part, data in pairs(controller.SavedPartsData) do
-            if part and part.Parent and data then
-                if data.touch then
-                    pcall(function() data.touch.Parent = part end)
-                end
-                pcall(function() part.CanTouch = data.originalCanTouch end)
-            end
-        end
-        table.clear(controller.SavedPartsData)
-    end
+    Logic.restoreAll(controller)
 end
 
 return Executor
