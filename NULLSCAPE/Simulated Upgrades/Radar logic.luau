@@ -79,7 +79,7 @@ local function getOrCreateArrow(saved, key, color)
             mesh.Parent = arrow
         end
         
-        arrow.Material = Enum.Material.Neon
+        arrow.Material = Enum.Material.SmoothPlastic
         arrow.Size = Vector3.new(1.3, 1.3, 1.3)
         arrow.CanCollide = false
         arrow.Anchored = true
@@ -424,8 +424,10 @@ function Logic.updateRender(controller, gc, hrp)
     if arrowGift and arrowGift.Parent then
         if nearestGiftPos then
             arrowGift.Transparency = 0
-            local arrowPos = hrp.Position + Vector3.new(0, 3.5, 0)
-            arrowGift.CFrame = CFrame.lookAt(arrowPos, nearestGiftPos) * CFrame.Angles(0, math.pi, 0)
+            arrowGift.Material = Enum.Material.SmoothPlastic
+            local dir = (nearestGiftPos - hrp.Position).Unit
+            local arrowPos = hrp.Position + dir * 3
+            arrowGift.CFrame = CFrame.lookAt(arrowPos, nearestGiftPos)
         else
             arrowGift.Transparency = 1
         end
@@ -436,8 +438,10 @@ function Logic.updateRender(controller, gc, hrp)
     if arrowCadence and arrowCadence.Parent then
         if nearestCadencePos then
             arrowCadence.Transparency = 0
-            local arrowPos = hrp.Position + Vector3.new(0, 4.7, 0)
-            arrowCadence.CFrame = CFrame.lookAt(arrowPos, nearestCadencePos) * CFrame.Angles(0, math.pi, 0)
+            arrowCadence.Material = Enum.Material.SmoothPlastic
+            local dir = (nearestCadencePos - hrp.Position).Unit
+            local arrowPos = hrp.Position + dir * 3
+            arrowCadence.CFrame = CFrame.lookAt(arrowPos, nearestCadencePos)
         else
             arrowCadence.Transparency = 1
         end
@@ -449,8 +453,10 @@ function Logic.updateRender(controller, gc, hrp)
         if nearestAltarPos then
             arrowAltar.Transparency = 0
             arrowAltar.Color = nearestAltarColor
-            local arrowPos = hrp.Position + Vector3.new(0, 5.9, 0)
-            arrowAltar.CFrame = CFrame.lookAt(arrowPos, nearestAltarPos) * CFrame.Angles(0, math.pi, 0)
+            arrowAltar.Material = Enum.Material.SmoothPlastic
+            local dir = (nearestAltarPos - hrp.Position).Unit
+            local arrowPos = hrp.Position + dir * 3
+            arrowAltar.CFrame = CFrame.lookAt(arrowPos, nearestAltarPos)
         else
             arrowAltar.Transparency = 1
         end
