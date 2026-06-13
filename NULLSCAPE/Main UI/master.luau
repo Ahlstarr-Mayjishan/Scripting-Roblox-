@@ -181,6 +181,18 @@ if not success then
     warn("[NULLSCAPE] Lỗi khi nạp module Entities: " .. tostring(err))
 end
 
+local success2, err2 = pcall(function()
+    local UnlockController = loadModule("NULLSCAPE/Unlock/controller.luau")
+    Client.Modules["UnlockController"] = UnlockController
+    local UnlockTab = loadModule("NULLSCAPE/Unlock/tab.luau")
+    
+    UnlockTab(Client, UnlockController)
+end)
+
+if not success2 then
+    warn("[NULLSCAPE] Lỗi khi nạp module Unlock/Radar: " .. tostring(err2))
+end
+
 -- Tải cấu hình lưu trữ của Rayfield
 Rayfield:LoadConfiguration()
 
