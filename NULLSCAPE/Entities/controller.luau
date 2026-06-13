@@ -8,7 +8,8 @@ local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
 -- Nạp module dọn dẹp riêng biệt (Cleaner)
-local Cleaner = loadstring(readfile("Entities/cleaner.luau"))()
+local Cleaner = loadstring(readfile("NULLSCAPE/Entities/cleaner.luau"))()
+
 
 -- Dòng code liệt kê các thực thể đặc biệt cần quét
 local targetNames = { ["Baby"] = true, ["Mart"] = true, ["Bell"] = true }

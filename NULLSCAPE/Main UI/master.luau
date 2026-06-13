@@ -162,8 +162,8 @@ SettingsTab:CreateButton({
 -- TẢI CÁC MODULE TÍNH NĂNG
 -- ==========================================
 local success, err = pcall(function()
-    local EntitiesController = loadstring(readfile("Entities/controller.luau"))()
-    local EntitiesTab = loadstring(readfile("Entities/tab.luau"))()
+    local EntitiesController = loadstring(readfile("NULLSCAPE/Entities/controller.luau"))()
+    local EntitiesTab = loadstring(readfile("NULLSCAPE/Entities/tab.luau"))()
     
     EntitiesTab(Client, EntitiesController)
 end)
