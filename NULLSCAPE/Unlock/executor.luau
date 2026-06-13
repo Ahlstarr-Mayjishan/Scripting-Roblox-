@@ -184,7 +184,7 @@ function Executor.updateESP(controller, hrp)
         local targetModel = target.model or targetPart
         local color = target.color
         
-        if idx <= 31 then
+        if controller.ESPStyle == "Highlight" and idx <= 31 then
             -- Vẽ Highlight phát sáng: Viền đặc (Outline = 0), Trong suốt bên trong (Fill = 1)
             local highlight = Instance.new("Highlight")
             highlight.FillColor = color
@@ -194,9 +194,9 @@ function Executor.updateESP(controller, hrp)
             highlight.Parent = targetModel
             table.insert(saved.Highlights, highlight)
         else
-            -- Vẽ dấu chấm (BillboardGui) cho các vật thể xa hơn khi vượt quá 31
+            -- Vẽ dấu chấm (BillboardGui) cho các vật thể xa hơn khi vượt quá 31 hoặc khi ở chế độ Dot (kích thước 2px)
             local billboard = Instance.new("BillboardGui")
-            billboard.Size = UDim2.new(0, 10, 0, 10)
+            billboard.Size = UDim2.new(0, 2, 0, 2)
             billboard.AlwaysOnTop = true
             
             local frame = Instance.new("Frame")
@@ -214,26 +214,11 @@ function Executor.updateESP(controller, hrp)
         end
     end
     
-    -- --- PHẦN 5: CẬP NHẬT CHỈ HƯỚNG / BEAMS GẦN NHẤT ---
+    -- --- PHẦN 5: CẬP NHẬT CHỈ HƯỚNG GẦN NHẤT ---
     -- A. Hộp quà
     if nearestGift then
         controller.NearestGiftPosition = nearestGift.Position
         getOrCreateArrow(saved, "ArrowGift", Color3.fromRGB(255, 255, 255))
-        
-        local att0 = Instance.new("Attachment", hrp)
-        table.insert(saved.Attachments, att0)
-        local att1 = Instance.new("Attachment", nearestGift)
-        table.insert(saved.Attachments, att1)
-        
-        local beam = Instance.new("Beam")
-        beam.Attachment0 = att0
-        beam.Attachment1 = att1
-        beam.Width0 = 0.4
-        beam.Width1 = 0.4
-        beam.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
-        beam.FaceCamera = true
-        beam.Parent = hrp
-        table.insert(saved.Beams, beam)
     else
         controller.NearestGiftPosition = nil
         if saved.ArrowGift then
@@ -246,21 +231,6 @@ function Executor.updateESP(controller, hrp)
     if nearestCadence then
         controller.NearestCadencePosition = nearestCadence.Position
         getOrCreateArrow(saved, "ArrowCadence", Color3.fromRGB(255, 0, 0))
-        
-        local att0 = Instance.new("Attachment", hrp)
-        table.insert(saved.Attachments, att0)
-        local att1 = Instance.new("Attachment", nearestCadence)
-        table.insert(saved.Attachments, att1)
-        
-        local beam = Instance.new("Beam")
-        beam.Attachment0 = att0
-        beam.Attachment1 = att1
-        beam.Width0 = 0.3
-        beam.Width1 = 0.3
-        beam.Color = ColorSequence.new(Color3.fromRGB(255, 0, 0))
-        beam.FaceCamera = true
-        beam.Parent = hrp
-        table.insert(saved.Beams, beam)
     else
         controller.NearestCadencePosition = nil
         if saved.ArrowCadence then
@@ -273,21 +243,6 @@ function Executor.updateESP(controller, hrp)
     if nearestAltar then
         controller.NearestAltarPosition = nearestAltar.Position
         getOrCreateArrow(saved, "ArrowAltar", Color3.fromRGB(255, 128, 0))
-        
-        local att0 = Instance.new("Attachment", hrp)
-        table.insert(saved.Attachments, att0)
-        local att1 = Instance.new("Attachment", nearestAltar)
-        table.insert(saved.Attachments, att1)
-        
-        local beam = Instance.new("Beam")
-        beam.Attachment0 = att0
-        beam.Attachment1 = att1
-        beam.Width0 = 0.3
-        beam.Width1 = 0.3
-        beam.Color = ColorSequence.new(Color3.fromRGB(255, 128, 0))
-        beam.FaceCamera = true
-        beam.Parent = hrp
-        table.insert(saved.Beams, beam)
     else
         controller.NearestAltarPosition = nil
         if saved.ArrowAltar then

@@ -12,6 +12,7 @@ local Controller = {
     GiftESPEnabled = false,
     CadenceESPEnabled = false,
     AltarESPEnabled = false,
+    ESPStyle = "Highlight", -- Mặc định: "Highlight" hoặc "Dot"
     Destroyed = false,
     
     NearestGiftPosition = nil,
@@ -59,6 +60,28 @@ function Controller:SetAltarESP(value)
     end
 end
 
+-- Hàm phát hiện nâng cấp Radar chính thức của game đã mở khóa
+local function checkRadarUnlocked()
+    local unlocked = false
+    local function check(parent)
+        for _, child in ipairs(parent:GetChildren()) do
+            local name = child.Name:lower()
+            if string.find(name, "radar") then
+                if child:IsA("BoolValue") and child.Value == true then
+                    unlocked = true
+                    break
+                elseif (child:IsA("NumberValue") or child:IsA("IntValue")) and child.Value >= 1 then
+                    unlocked = true
+                    break
+                end
+            end
+            check(child)
+        end
+    end
+    pcall(function() check(LocalPlayer) end)
+    return unlocked
+end
+
 -- Hàm dọn dẹp tài nguyên (GC) khi tắt hoặc hủy UI
 function Controller:CleanUp()
     -- Ngắt toàn bộ kết nối sự kiện
@@ -80,6 +103,19 @@ task.spawn(function()
     while not Controller.Destroyed do
         task.wait(1.5) -- Chu kỳ quét 1.5 giây một lần cực kỳ tối ưu
         if Controller.Destroyed then break end
+        
+        -- Nếu người chơi đã mở khóa Radar chính thức của game, tắt script ngay
+        if checkRadarUnlocked() then
+            if getgenv().Rayfield then
+                getgenv().Rayfield:Notify({
+                    Title = "Radar tự động tắt",
+                    Content = "Phát hiện bạn đã sở hữu Radar chính thức của game. Radar custom tự động tắt để tối ưu hiệu năng!",
+                    Duration = 5
+                })
+            end
+            Controller:CleanUp()
+            break
+        end
         
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")

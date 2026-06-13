@@ -11,6 +11,7 @@ local RadarLogic = {
     GiftESPEnabled = true,
     CadenceESPEnabled = true,
     AltarESPEnabled = true,
+    ESPStyle = "Highlight", -- Mặc định: "Highlight" hoặc "Dot"
     Destroyed = false,
     
     NearestGiftPosition = nil,
@@ -207,9 +208,9 @@ local function updateESP(hrp)
             highlight.Parent = targetModel
             table.insert(saved.Highlights, highlight)
         else
-            -- Vượt quá 31: Vẽ dấu chấm tròn (BillboardGui) cho các vật thể ở xa
+            -- Vượt quá 31: Vẽ dấu chấm tròn (BillboardGui) cho các vật thể ở xa (kích thước 2px)
             local billboard = Instance.new("BillboardGui")
-            billboard.Size = UDim2.new(0, 10, 0, 10)
+            billboard.Size = UDim2.new(0, 2, 0, 2)
             billboard.AlwaysOnTop = true
             
             local frame = Instance.new("Frame")
@@ -227,25 +228,11 @@ local function updateESP(hrp)
         end
     end
     
-    -- Cập nhật Beams và vị trí Mũi tên gần nhất
+    -- Cập nhật vị trí Mũi tên gần nhất
     -- A. Hộp quà
     if nearestGift then
         RadarLogic.NearestGiftPosition = nearestGift.Position
         getOrCreateArrow(saved, "ArrowGift", Color3.fromRGB(255, 255, 255))
-        
-        local att0 = Instance.new("Attachment", hrp)
-        table.insert(saved.Attachments, att0)
-        local att1 = Instance.new("Attachment", nearestGift)
-        table.insert(saved.Attachments, att1)
-        
-        local beam = Instance.new("Beam")
-        beam.Attachment0 = att0
-        beam.Attachment1 = att1
-        beam.Width0 = 0.4; beam.Width1 = 0.4
-        beam.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
-        beam.FaceCamera = true
-        beam.Parent = hrp
-        table.insert(saved.Beams, beam)
     else
         RadarLogic.NearestGiftPosition = nil
         if saved.ArrowGift then pcall(function() saved.ArrowGift:Destroy() end) saved.ArrowGift = nil end
@@ -255,20 +242,6 @@ local function updateESP(hrp)
     if nearestCadence then
         RadarLogic.NearestCadencePosition = nearestCadence.Position
         getOrCreateArrow(saved, "ArrowCadence", Color3.fromRGB(255, 0, 0))
-        
-        local att0 = Instance.new("Attachment", hrp)
-        table.insert(saved.Attachments, att0)
-        local att1 = Instance.new("Attachment", nearestCadence)
-        table.insert(saved.Attachments, att1)
-        
-        local beam = Instance.new("Beam")
-        beam.Attachment0 = att0
-        beam.Attachment1 = att1
-        beam.Width0 = 0.3; beam.Width1 = 0.3
-        beam.Color = ColorSequence.new(Color3.fromRGB(255, 0, 0))
-        beam.FaceCamera = true
-        beam.Parent = hrp
-        table.insert(saved.Beams, beam)
     else
         RadarLogic.NearestCadencePosition = nil
         if saved.ArrowCadence then pcall(function() saved.ArrowCadence:Destroy() end) saved.ArrowCadence = nil end
@@ -278,24 +251,32 @@ local function updateESP(hrp)
     if nearestAltar then
         RadarLogic.NearestAltarPosition = nearestAltar.Position
         getOrCreateArrow(saved, "ArrowAltar", Color3.fromRGB(255, 128, 0))
-        
-        local att0 = Instance.new("Attachment", hrp)
-        table.insert(saved.Attachments, att0)
-        local att1 = Instance.new("Attachment", nearestAltar)
-        table.insert(saved.Attachments, att1)
-        
-        local beam = Instance.new("Beam")
-        beam.Attachment0 = att0
-        beam.Attachment1 = att1
-        beam.Width0 = 0.3; beam.Width1 = 0.3
-        beam.Color = ColorSequence.new(Color3.fromRGB(255, 128, 0))
-        beam.FaceCamera = true
-        beam.Parent = hrp
-        table.insert(saved.Beams, beam)
     else
         RadarLogic.NearestAltarPosition = nil
         if saved.ArrowAltar then pcall(function() saved.ArrowAltar:Destroy() end) saved.ArrowAltar = nil end
     end
+end
+
+-- Hàm phát hiện nâng cấp Radar chính thức của game đã mở khóa
+local function checkRadarUnlocked()
+    local unlocked = false
+    local function check(parent)
+        for _, child in ipairs(parent:GetChildren()) do
+            local name = child.Name:lower()
+            if string.find(name, "radar") then
+                if child:IsA("BoolValue") and child.Value == true then
+                    unlocked = true
+                    break
+                elseif (child:IsA("NumberValue") or child:IsA("IntValue")) and child.Value >= 1 then
+                    unlocked = true
+                    break
+                end
+            end
+            check(child)
+        end
+    end
+    pcall(function() check(LocalPlayer) end)
+    return unlocked
 end
 
 -- Vòng lặp quét định kỳ
@@ -303,6 +284,20 @@ task.spawn(function()
     while not RadarLogic.Destroyed do
         task.wait(1.5)
         if RadarLogic.Destroyed then break end
+        
+        -- Tự động tắt nếu đã mở khóa Radar chính thức của game
+        if checkRadarUnlocked() then
+            if getgenv().Rayfield then
+                getgenv().Rayfield:Notify({
+                    Title = "Radar tự động tắt",
+                    Content = "Phát hiện bạn đã sở hữu Radar chính thức của game. Radar custom tự động tắt!",
+                    Duration = 5
+                })
+            end
+            RadarLogic.Destroyed = true
+            clearVisuals(RadarLogic.SavedVisuals, false)
+            break
+        end
         
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
