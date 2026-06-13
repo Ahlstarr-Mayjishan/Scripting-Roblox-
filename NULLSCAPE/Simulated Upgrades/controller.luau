@@ -1,6 +1,8 @@
 -- [[
---  NULLSCAPE - Unlock & Radar Controller
---  Quản lý trạng thái, vòng lặp quét định vị và thu gom rác (GC) tài nguyên.
+--  NULLSCAPE - Simulated Upgrades & Radar Controller
+--  Vai trò: Đảm nhiệm việc quan sát, điều chỉnh cấu hình định vị, điều phối luồng xử lý,
+--  gọi các tính năng dọn dẹp dọn rác (GC) để clean và giải phóng / giới hạn tài nguyên
+--  nhằm tránh sụt giảm FPS, tối ưu hóa hiệu suất game và nâng cao trải nghiệm người dùng.
 -- ]]
 
 local Players = game:GetService("Players")

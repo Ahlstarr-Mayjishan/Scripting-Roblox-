@@ -1,5 +1,6 @@
 -- [[
 --  NULLSCAPE - Simulated Upgrades & Radar Executor
+--  Vai trò: Chỉ đảm nhiệm việc thực thi và gọi các tính năng/API từ file logic chính (như Simulated Upgrades/Radar logic.luau).
 --  Thực thi dọn dẹp vẽ cũ và định vị vẽ ESP/Highlight mới.
 -- ]]
 

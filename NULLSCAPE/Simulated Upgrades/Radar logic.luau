@@ -1,6 +1,7 @@
 -- [[
 --  NULLSCAPE - Custom Radar & ESP Logic
---  Module định vị quà, nhạc cụ Cadence và đàn tế (Altar) dưới dạng mũi tên và Highlight/Dot.
+--  Vai trò: Chứa toàn bộ lõi logic định vị quà, nhạc cụ Cadence và đàn tế (Altar), các thuật toán tính toán,
+--  nhận diện khoảng cách và phân loại. Cung cấp API logic để Executor và Controller sử dụng.
 -- ]]
 
 local Players = game:GetService("Players")
