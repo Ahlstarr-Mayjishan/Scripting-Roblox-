@@ -6,7 +6,7 @@
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
-local Executor = getgenv().loadModule("NULLSCAPE/Unlock/executor.luau")
+local Executor = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/executor.luau")
 
 local Controller = {
     GiftESPEnabled = false,

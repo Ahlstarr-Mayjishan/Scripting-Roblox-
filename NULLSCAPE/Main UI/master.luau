@@ -204,7 +204,8 @@ SettingsTab:CreateButton({
 
 local function loadModule(path)
     local githubRawUrl = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
-    return loadstring(game:HttpGet(githubRawUrl .. path))()
+    local url = (githubRawUrl .. path):gsub(" ", "%%20")
+    return loadstring(game:HttpGet(url))()
 end
 getgenv().loadModule = loadModule
 
@@ -222,15 +223,15 @@ if not success then
 end
 
 local success2, err2 = pcall(function()
-    local UnlockController = loadModule("NULLSCAPE/Unlock/controller.luau")
+    local UnlockController = loadModule("NULLSCAPE/Simulated Upgrades/controller.luau")
     Client.Modules["UnlockController"] = UnlockController
-    local UnlockTab = loadModule("NULLSCAPE/Unlock/tab.luau")
+    local UnlockTab = loadModule("NULLSCAPE/Simulated Upgrades/tab.luau")
     
     UnlockTab(Client, UnlockController)
 end)
 
 if not success2 then
-    warn("[NULLSCAPE] Lỗi khi nạp module Unlock/Radar: " .. tostring(err2))
+    warn("[NULLSCAPE] Lỗi khi nạp module Simulated Upgrades/Radar: " .. tostring(err2))
 end
 
 -- Tải cấu hình lưu trữ của Rayfield

@@ -1,10 +1,10 @@
 -- [[
---  NULLSCAPE - Unlock & Radar UI Tab
---  Đóng vai trò tạo tab "Mở khóa & Radar" trên giao diện Rayfield
+--  NULLSCAPE - Simulated Upgrades & Radar UI Tab
+--  Đóng vai trò tạo tab "Mô phỏng Upgrades & Radar" trên giao diện Rayfield
 -- ]]
 
 return function(Client, Controller)
-    local Tab = Client.Window:CreateTab("Unlock & Radar", 4483362458)
+    local Tab = Client.Window:CreateTab("Simulated Upgrades & Radar", 4483362458)
     
     Tab:CreateSection("Custom ESP Locator")
     

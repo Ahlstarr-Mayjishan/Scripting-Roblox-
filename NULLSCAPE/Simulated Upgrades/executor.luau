@@ -1,5 +1,5 @@
 -- [[
---  NULLSCAPE - Unlock & Radar Executor
+--  NULLSCAPE - Simulated Upgrades & Radar Executor
 --  Thực thi dọn dẹp vẽ cũ và định vị vẽ ESP/Highlight mới.
 -- ]]
 
