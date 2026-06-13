@@ -1,0 +1,48 @@
+local Workspace = game:GetService("Workspace")
+
+local Aimbot = {}
+Aimbot.__index = Aimbot
+
+function Aimbot.new(config)
+    local self = setmetatable({}, Aimbot)
+    self.Config = config
+    self.Options = config.Options
+    self.Active = false
+    return self
+end
+
+function Aimbot:Init()
+    self.Active = false
+end
+
+function Aimbot:Update(targetPosition, smoothness)
+    if not targetPosition then
+        return
+    end
+
+    local camera = Workspace.CurrentCamera
+    if not camera then
+        return
+    end
+
+    local baseAlpha = math.clamp(smoothness or self.Options.Smoothness or 0.15, 0.01, 1)
+    local targetCFrame = CFrame.lookAt(camera.CFrame.Position, targetPosition)
+
+    if targetPosition.X == targetPosition.X then
+        local angleDot = math.clamp(camera.CFrame.LookVector:Dot(targetCFrame.LookVector), -1, 1)
+        local angle = math.acos(angleDot)
+        local angleBoost = math.clamp(angle / math.rad(15), 0, 1) * 0.45
+        local alpha = math.clamp(baseAlpha + angleBoost, baseAlpha, 0.95)
+        camera.CFrame = camera.CFrame:Lerp(targetCFrame, alpha)
+    end
+end
+
+function Aimbot:SetState(active)
+    self.Active = active
+end
+
+function Aimbot:Destroy()
+    self.Active = false
+end
+
+return Aimbot
