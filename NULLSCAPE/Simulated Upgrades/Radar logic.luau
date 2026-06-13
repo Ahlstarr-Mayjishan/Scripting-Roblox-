@@ -437,9 +437,19 @@ function Logic.updateRender(controller, gc, hrp)
         if nearestGiftPos then
             arrowGift.Transparency = 0
             arrowGift.Material = Enum.Material.Neon
-            local dir = (nearestGiftPos - hrp.Position).Unit
-            local arrowPos = hrp.Position + dir * 3
-            arrowGift.CFrame = CFrame.lookAt(arrowPos, nearestGiftPos)
+            
+            -- Tính hướng 2D nằm ngang để tránh mũi tên bị nghiêng lên/xuống đất khi lại gần
+            local flatDir = (nearestGiftPos - hrp.Position) * Vector3.new(1, 0, 1)
+            if flatDir.Magnitude > 0.01 then
+                flatDir = flatDir.Unit
+            else
+                flatDir = hrp.CFrame.LookVector * Vector3.new(1, 0, 1)
+                flatDir = flatDir.Magnitude > 0.01 and flatDir.Unit or Vector3.new(0, 0, -1)
+            end
+            
+            -- Đặt vị trí xoay quanh tâm HumanoidRootPart cách 3 studs horizontally, độ cao chân (tầng thấp)
+            local arrowPos = hrp.Position + flatDir * 3 + Vector3.new(0, -1, 0)
+            arrowGift.CFrame = CFrame.lookAt(arrowPos, arrowPos + flatDir) * CFrame.Angles(0, math.pi, 0)
         else
             arrowGift.Transparency = 1
         end
@@ -451,9 +461,18 @@ function Logic.updateRender(controller, gc, hrp)
         if nearestCadencePos then
             arrowCadence.Transparency = 0
             arrowCadence.Material = Enum.Material.Neon
-            local dir = (nearestCadencePos - hrp.Position).Unit
-            local arrowPos = hrp.Position + dir * 3
-            arrowCadence.CFrame = CFrame.lookAt(arrowPos, nearestCadencePos)
+            
+            local flatDir = (nearestCadencePos - hrp.Position) * Vector3.new(1, 0, 1)
+            if flatDir.Magnitude > 0.01 then
+                flatDir = flatDir.Unit
+            else
+                flatDir = hrp.CFrame.LookVector * Vector3.new(1, 0, 1)
+                flatDir = flatDir.Magnitude > 0.01 and flatDir.Unit or Vector3.new(0, 0, -1)
+            end
+            
+            -- Đặt vị trí xoay quanh tâm HumanoidRootPart cách 3 studs horizontally, độ cao ngang bụng/ngực (tầng trung)
+            local arrowPos = hrp.Position + flatDir * 3 + Vector3.new(0, 0.5, 0)
+            arrowCadence.CFrame = CFrame.lookAt(arrowPos, arrowPos + flatDir) * CFrame.Angles(0, math.pi, 0)
         else
             arrowCadence.Transparency = 1
         end
@@ -466,9 +485,18 @@ function Logic.updateRender(controller, gc, hrp)
             arrowAltar.Transparency = 0
             arrowAltar.Color = nearestAltarColor
             arrowAltar.Material = Enum.Material.Neon
-            local dir = (nearestAltarPos - hrp.Position).Unit
-            local arrowPos = hrp.Position + dir * 3
-            arrowAltar.CFrame = CFrame.lookAt(arrowPos, nearestAltarPos)
+            
+            local flatDir = (nearestAltarPos - hrp.Position) * Vector3.new(1, 0, 1)
+            if flatDir.Magnitude > 0.01 then
+                flatDir = flatDir.Unit
+            else
+                flatDir = hrp.CFrame.LookVector * Vector3.new(1, 0, 1)
+                flatDir = flatDir.Magnitude > 0.01 and flatDir.Unit or Vector3.new(0, 0, -1)
+            end
+            
+            -- Đặt vị trí xoay quanh tâm HumanoidRootPart cách 3 studs horizontally, độ cao trên đầu (tầng cao)
+            local arrowPos = hrp.Position + flatDir * 3 + Vector3.new(0, 2, 0)
+            arrowAltar.CFrame = CFrame.lookAt(arrowPos, arrowPos + flatDir) * CFrame.Angles(0, math.pi, 0)
         else
             arrowAltar.Transparency = 1
         end
