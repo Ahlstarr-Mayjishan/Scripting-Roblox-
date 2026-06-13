@@ -198,7 +198,7 @@ local function updateESP(hrp)
         local targetModel = target.model or targetPart
         local color = target.color
         
-        if idx <= 31 then
+        if RadarLogic.ESPStyle == "Highlight" and idx <= 31 then
             -- Highlight: viền đặc (Outline = 0), ruột trong suốt (Fill = 1)
             local highlight = Instance.new("Highlight")
             highlight.FillColor = color
@@ -208,7 +208,7 @@ local function updateESP(hrp)
             highlight.Parent = targetModel
             table.insert(saved.Highlights, highlight)
         else
-            -- Vượt quá 31: Vẽ dấu chấm tròn (BillboardGui) cho các vật thể ở xa (kích thước 2px)
+            -- Vượt quá 31 hoặc khi ở chế độ Dot: Vẽ dấu chấm tròn (BillboardGui) cho các vật thể ở xa (kích thước 2px)
             local billboard = Instance.new("BillboardGui")
             billboard.Size = UDim2.new(0, 2, 0, 2)
             billboard.AlwaysOnTop = true
