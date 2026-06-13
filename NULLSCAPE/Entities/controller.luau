@@ -98,16 +98,13 @@ end
 -- Tắt miễn nhiễm (khôi phục lại TouchInterest và CanTouch) cho một thực thể cụ thể
 function Controller:DisableImmunity(enemy)
     if not enemy then return end
-    for _, descendant in ipairs(enemy:GetDescendants()) do
-        if descendant:IsA("BasePart") then
-            local data = self.SavedPartsData[descendant]
-            if data then
-                if data.touch then
-                    pcall(function() data.touch.Parent = descendant end)
-                end
-                pcall(function() descendant.CanTouch = data.originalCanTouch end)
-                self.SavedPartsData[descendant] = nil
+    for part, data in pairs(self.SavedPartsData) do
+        if part and part.Parent and part:IsDescendantOf(enemy) then
+            if data.touch then
+                pcall(function() data.touch.Parent = part end)
             end
+            pcall(function() part.CanTouch = data.originalCanTouch end)
+            self.SavedPartsData[part] = nil
         end
     end
 end
