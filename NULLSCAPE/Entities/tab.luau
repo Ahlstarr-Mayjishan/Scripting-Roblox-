@@ -34,4 +34,20 @@ return function(Client, Controller)
             Controller:SetImmunity("Mart", Value)
         end
     })
+    
+    Tab:CreateSection("Altar Settings")
+    
+    Tab:CreateDropdown({
+        Name = "Chọn Loại Altar Highlight",
+        Options = {"Tất cả", "Purgatory", "Chance", "Chaos", "Echo", "Passage", "Protection", "Purification"},
+        CurrentOption = "Tất cả",
+        MultipleOptions = false,
+        Flag = "AltarFilterDropdown",
+        Callback = function(Option)
+            local unlockController = Client.Modules.UnlockController
+            if unlockController then
+                unlockController:SetAltarFilter(Option)
+            end
+        end
+    })
 end

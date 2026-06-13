@@ -5,33 +5,25 @@
 
 local Executor = {}
 
--- 2. Dọn dẹp toàn bộ Highlight, Beam & Dot cũ
+-- 2. Dọn dẹp toàn bộ Highlight, Beam, Dot và các đối tượng lưu đệm
 function Executor.clearVisuals(savedVisuals, keepArrows)
     if not savedVisuals then return end
     
-    for _, hl in ipairs(savedVisuals.Highlights) do
-        if hl then pcall(function() hl:Destroy() end) end
-    end
-    table.clear(savedVisuals.Highlights)
-    
-    for _, beam in ipairs(savedVisuals.Beams) do
-        if beam then pcall(function() beam:Destroy() end) end
-    end
-    table.clear(savedVisuals.Beams)
-    
-    for _, att in ipairs(savedVisuals.Attachments) do
-        if att then pcall(function() att:Destroy() end) end
-    end
-    table.clear(savedVisuals.Attachments)
-
-    if savedVisuals.Dots then
-        for _, dot in ipairs(savedVisuals.Dots) do
-            if dot then pcall(function() dot:Destroy() end) end
+    if savedVisuals.ActiveTargets then
+        for part, cached in pairs(savedVisuals.ActiveTargets) do
+            if cached.Highlight then pcall(function() cached.Highlight:Destroy() end) end
+            if cached.Dot then pcall(function() cached.Dot:Destroy() end) end
         end
-        table.clear(savedVisuals.Dots)
+        table.clear(savedVisuals.ActiveTargets)
     else
-        savedVisuals.Dots = {}
+        savedVisuals.ActiveTargets = {}
     end
+    
+    -- Xóa các mảng cũ (tương thích ngược)
+    if savedVisuals.Highlights then table.clear(savedVisuals.Highlights) end
+    if savedVisuals.Beams then table.clear(savedVisuals.Beams) end
+    if savedVisuals.Attachments then table.clear(savedVisuals.Attachments) end
+    if savedVisuals.Dots then table.clear(savedVisuals.Dots) end
 
     if not keepArrows then
         for _, key in ipairs({"ArrowGift", "ArrowCadence", "ArrowAltar"}) do
@@ -88,13 +80,52 @@ local function isInstrument(name)
     return false
 end
 
--- 3. Quét định vị và vẽ các chỉ dẫn/Highlight
-function Executor.updateESP(controller, hrp)
-    -- Xóa các chỉ dẫn cũ (giữ lại các mũi tên để cập nhật CFrame tránh nhấp nháy)
-    Executor.clearVisuals(controller.SavedVisuals, true)
+-- Danh sách màu sắc tương ứng cho các loại Altar
+local altarColors = {
+    Purgatory = Color3.new(1, 0.5, 0),
+    Chance = Color3.new(1, 1, 0.7),
+    Chaos = Color3.new(0.1, 0, 0),
+    Echo = Color3.new(0.5, 0.33333, 1),
+    Passage = Color3.new(0.7, 0, 0),
+    Protection = Color3.fromRGB(0, 255, 255),
+    Purification = Color3.fromRGB(255, 0, 255)
+}
+
+-- Nhận diện loại Altar dựa vào tên đối tượng hoặc cha/con của nó
+local function getAltarTypeAndColor(altarObj)
+    local objName = altarObj.Name:lower()
+    for name, color in pairs(altarColors) do
+        local nameLower = name:lower()
+        if string.find(objName, nameLower) then
+            return name, color
+        end
+    end
     
+    local parentName = altarObj.Parent and altarObj.Parent.Name:lower() or ""
+    for name, color in pairs(altarColors) do
+        local nameLower = name:lower()
+        if string.find(parentName, nameLower) then
+            return name, color
+        end
+    end
+    
+    for _, child in ipairs(altarObj:GetChildren()) do
+        local childName = child.Name:lower()
+        for name, color in pairs(altarColors) do
+            local nameLower = name:lower()
+            if string.find(childName, nameLower) then
+                return name, color
+            end
+        end
+    end
+    
+    return "Unknown", Color3.fromRGB(255, 128, 0) -- Mặc định là màu cam
+end
+
+-- 3. Quét định vị và vẽ các chỉ dẫn/Highlight bằng cơ chế lưu đệm (Caching & Reusing) để tránh giật lag
+function Executor.updateESP(controller, hrp)
     local saved = controller.SavedVisuals
-    if not saved.Dots then saved.Dots = {} end
+    if not saved.ActiveTargets then saved.ActiveTargets = {} end
     
     local nearestGift = nil
     local shortestGiftDist = math.huge
@@ -148,7 +179,7 @@ function Executor.updateESP(controller, hrp)
         if enemies then scanFolderForInstruments(enemies) end
     end
     
-    -- --- PHẦN 3: THU THẬP ĐÀN TẾ (ALTAR) ---
+    -- --- PHẦN 3: THU THẬP ĐÀN TẾ (ALTAR) CÓ LỌC THEO TÊN ---
     if controller.AltarESPEnabled then
         local currentRooms = workspace:FindFirstChild("CurrentRooms")
         if currentRooms then
@@ -157,19 +188,24 @@ function Executor.updateESP(controller, hrp)
                 if altarObj then
                     local targetPart = altarObj:IsA("Model") and (altarObj:FindFirstChild("HumanoidRootPart") or altarObj:FindFirstChildWhichIsA("BasePart")) or altarObj
                     if targetPart and targetPart:IsA("BasePart") then
-                        local distance = (hrp.Position - targetPart.Position).Magnitude
-                        if distance < shortestAltarDist then
-                            shortestAltarDist = distance
-                            nearestAltar = targetPart
+                        local altarName, altarColor = getAltarTypeAndColor(altarObj)
+                        local filter = controller.AltarFilter or "Tất cả"
+                        
+                        if filter == "Tất cả" or filter == altarName then
+                            local distance = (hrp.Position - targetPart.Position).Magnitude
+                            if distance < shortestAltarDist then
+                                shortestAltarDist = distance
+                                nearestAltar = targetPart
+                            end
+                            table.insert(altars, {part = targetPart, model = altarObj, distance = distance, color = altarColor, type = "Altar"})
                         end
-                        table.insert(altars, {part = targetPart, model = altarObj, distance = distance, color = Color3.fromRGB(255, 128, 0), type = "Altar"})
                     end
                 end
             end
         end
     end
     
-    -- --- PHẦN 4: GỘP VÀ SẮP XẾP ĐỂ RENDER HIGHLIGHTS / DOTS ---
+    -- --- PHẦN 4: GỘP VÀ SẮP XẾP ---
     local allTargets = {}
     for _, t in ipairs(gifts) do table.insert(allTargets, t) end
     for _, t in ipairs(instruments) do table.insert(allTargets, t) end
@@ -179,38 +215,114 @@ function Executor.updateESP(controller, hrp)
         return a.distance < b.distance
     end)
     
+    -- Xây dựng bảng các đối tượng cần hiển thị trong lần quét này
+    local currentTargets = {}
+    
     for idx, target in ipairs(allTargets) do
         local targetPart = target.part
         local targetModel = target.model or targetPart
         local color = target.color
         
+        local desiredStyle, parentObject
         if controller.ESPStyle == "Highlight" and idx <= 31 then
-            -- Vẽ Highlight phát sáng: Viền đặc (Outline = 0), Trong suốt bên trong (Fill = 1)
-            local highlight = Instance.new("Highlight")
-            highlight.FillColor = color
-            highlight.FillTransparency = 1.0
-            highlight.OutlineColor = color
-            highlight.OutlineTransparency = 0.0
-            highlight.Parent = targetModel
-            table.insert(saved.Highlights, highlight)
+            desiredStyle = "Highlight"
+            parentObject = targetModel
         else
-            -- Vẽ dấu chấm (BillboardGui) cho các vật thể xa hơn khi vượt quá 31 hoặc khi ở chế độ Dot (kích thước 2px)
-            local billboard = Instance.new("BillboardGui")
-            billboard.Size = UDim2.new(0, 2, 0, 2)
-            billboard.AlwaysOnTop = true
+            desiredStyle = "Dot"
+            parentObject = targetPart
+        end
+        
+        currentTargets[targetPart] = {
+            Style = desiredStyle,
+            Color = color,
+            ParentObject = parentObject
+        }
+    end
+    
+    local scanTime = os.clock()
+    
+    -- 1. Xóa các ESP lỗi thời hoặc bị đổi style hoặc không còn tồn tại
+    for targetPart, cached in pairs(saved.ActiveTargets) do
+        local current = currentTargets[targetPart]
+        if not current or current.Style ~= cached.Style or not targetPart:IsDescendantOf(workspace) then
+            if cached.Highlight then pcall(function() cached.Highlight:Destroy() end) end
+            if cached.Dot then pcall(function() cached.Dot:Destroy() end) end
+            saved.ActiveTargets[targetPart] = nil
+        end
+    end
+    
+    -- 2. Tạo hoặc Cập nhật ESP mới/hiện tại
+    for targetPart, current in pairs(currentTargets) do
+        local cached = saved.ActiveTargets[targetPart]
+        
+        if not cached then
+            local newCache = {
+                Style = current.Style,
+                Color = current.Color,
+                LastSeen = scanTime,
+                Highlight = nil,
+                Dot = nil
+            }
             
-            local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1, 0, 1, 0)
-            frame.BackgroundColor3 = color
-            frame.BorderSizePixel = 0
+            if current.Style == "Highlight" then
+                local highlight = Instance.new("Highlight")
+                highlight.Name = "NULLSCAPE_ESP_Highlight"
+                highlight.FillColor = current.Color
+                highlight.FillTransparency = 1.0
+                highlight.OutlineColor = current.Color
+                highlight.OutlineTransparency = 0.0
+                highlight.Parent = current.ParentObject
+                newCache.Highlight = highlight
+            else
+                local billboard = Instance.new("BillboardGui")
+                billboard.Name = "NULLSCAPE_ESP_Dot"
+                billboard.Size = UDim2.new(0, 2, 0, 2)
+                billboard.AlwaysOnTop = true
+                
+                local frame = Instance.new("Frame")
+                frame.Size = UDim2.new(1, 0, 1, 0)
+                frame.BackgroundColor3 = current.Color
+                frame.BorderSizePixel = 0
+                
+                local uiCorner = Instance.new("UICorner")
+                uiCorner.CornerRadius = UDim.new(1, 0)
+                uiCorner.Parent = frame
+                
+                frame.Parent = billboard
+                billboard.Parent = current.ParentObject
+                newCache.Dot = billboard
+            end
             
-            local uiCorner = Instance.new("UICorner")
-            uiCorner.CornerRadius = UDim.new(1, 0)
-            uiCorner.Parent = frame
-            
-            frame.Parent = billboard
-            billboard.Parent = targetPart
-            table.insert(saved.Dots, billboard)
+            saved.ActiveTargets[targetPart] = newCache
+        else
+            -- Đã có sẵn visual đúng loại, chỉ cập nhật LastSeen và kiểm tra màu
+            cached.LastSeen = scanTime
+            local inst = cached.Highlight or cached.Dot
+            if inst and inst.Parent then
+                if cached.Style == "Highlight" then
+                    if inst.OutlineColor ~= current.Color then
+                        inst.OutlineColor = current.Color
+                        inst.FillColor = current.Color
+                    end
+                else
+                    local frame = inst:FindFirstChildOfClass("Frame")
+                    if frame and frame.BackgroundColor3 ~= current.Color then
+                        frame.BackgroundColor3 = current.Color
+                    end
+                end
+            else
+                -- Instance đã bị hủy mất, đánh dấu xóa để lần sau tạo lại
+                saved.ActiveTargets[targetPart] = nil
+            end
+        end
+    end
+    
+    -- 3. Quét dọn các cache bị bỏ quên (an toàn bổ sung)
+    for targetPart, cached in pairs(saved.ActiveTargets) do
+        if cached.LastSeen ~= scanTime then
+            if cached.Highlight then pcall(function() cached.Highlight:Destroy() end) end
+            if cached.Dot then pcall(function() cached.Dot:Destroy() end) end
+            saved.ActiveTargets[targetPart] = nil
         end
     end
     
@@ -242,7 +354,8 @@ function Executor.updateESP(controller, hrp)
     -- C. Đàn tế (Altar)
     if nearestAltar then
         controller.NearestAltarPosition = nearestAltar.Position
-        getOrCreateArrow(saved, "ArrowAltar", Color3.fromRGB(255, 128, 0))
+        local _, altarColor = getAltarTypeAndColor(nearestAltar)
+        getOrCreateArrow(saved, "ArrowAltar", altarColor)
     else
         controller.NearestAltarPosition = nil
         if saved.ArrowAltar then

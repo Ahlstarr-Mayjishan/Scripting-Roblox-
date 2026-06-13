@@ -12,6 +12,7 @@ local Controller = {
     GiftESPEnabled = false,
     CadenceESPEnabled = false,
     AltarESPEnabled = false,
+    AltarFilter = "Tất cả",
     ESPStyle = "Highlight", -- Mặc định: "Highlight" hoặc "Dot"
     Destroyed = false,
     
@@ -24,46 +25,61 @@ local Controller = {
         Highlights = {}, -- Danh sách phát sáng
         Beams = {},      -- Danh sách tia sáng chỉ dẫn
         Attachments = {}, -- Danh sách các attachment đính kèm
+        Dots = {},
+        ActiveTargets = {}, -- Cache lưu các vật thể đang được vẽ ESP để tái sử dụng
         ArrowGift = nil,  -- Mũi tên chỉ hộp quà (Màu trắng)
         ArrowCadence = nil, -- Mũi tên chỉ nhạc cụ Cadence (Màu đỏ)
         ArrowAltar = nil  -- Mũi tên chỉ đàn tế / Altar (Màu cam)
     }
 }
 
+-- Hàm trigger cập nhật ESP tức thì khi thay đổi cấu hình
+local function triggerInstantUpdate()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        pcall(function()
+            Executor.updateESP(Controller, hrp)
+        end)
+    end
+end
+
 -- Bật/tắt định vị hộp quà
 function Controller:SetGiftESP(value)
     self.GiftESPEnabled = value
-    if not value then
-        pcall(function()
-            Executor.clearVisuals(self.SavedVisuals)
-        end)
-    end
+    triggerInstantUpdate()
 end
 
 -- Bật/tắt định vị nhạc cụ Cadence
 function Controller:SetCadenceESP(value)
     self.CadenceESPEnabled = value
-    if not value then
-        pcall(function()
-            Executor.clearVisuals(self.SavedVisuals)
-        end)
-    end
+    triggerInstantUpdate()
 end
 
 -- Bật/tắt định vị Đàn tế (Altar)
 function Controller:SetAltarESP(value)
     self.AltarESPEnabled = value
-    if not value then
-        pcall(function()
-            Executor.clearVisuals(self.SavedVisuals)
-        end)
-    end
+    triggerInstantUpdate()
 end
 
--- Hàm phát hiện nâng cấp Radar chính thức của game đã mở khóa
+-- Bộ lọc loại Altar
+function Controller:SetAltarFilter(option)
+    self.AltarFilter = option or "Tất cả"
+    triggerInstantUpdate()
+end
+
+-- Hàm phát hiện nâng cấp Radar chính thức của game đã mở khóa (Tối ưu hóa tránh đệ quy sâu)
 local function checkRadarUnlocked()
     local unlocked = false
     local function check(parent)
+        if not parent then return end
+        
+        -- Bỏ qua các thư mục GUI, Scripts, Backpack,... của Player để tránh lag
+        local pName = parent.Name
+        if pName == "PlayerGui" or pName == "PlayerScripts" or pName == "Backpack" or pName == "StarterGear" then
+            return
+        end
+        
         for _, child in ipairs(parent:GetChildren()) do
             local name = child.Name:lower()
             if string.find(name, "radar") then
@@ -75,7 +91,9 @@ local function checkRadarUnlocked()
                     break
                 end
             end
-            check(child)
+            if not unlocked then
+                check(child)
+            end
         end
     end
     pcall(function() check(LocalPlayer) end)
@@ -101,7 +119,7 @@ end
 -- Vòng lặp định kỳ tìm kiếm và cập nhật ESP (Không gây giật lag)
 task.spawn(function()
     while not Controller.Destroyed do
-        task.wait(1.5) -- Chu kỳ quét 1.5 giây một lần cực kỳ tối ưu
+        task.wait(3.0) -- Chu kỳ quét 3.0 giây một lần cực kỳ tối ưu
         if Controller.Destroyed then break end
         
         -- Nếu người chơi đã mở khóa Radar chính thức của game, tắt script ngay
