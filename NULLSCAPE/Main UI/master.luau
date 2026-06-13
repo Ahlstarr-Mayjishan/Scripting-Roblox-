@@ -89,7 +89,6 @@ Client.Tabs["Home"] = HomeTab
 
 HomeTab:CreateSection("Thông tin người chơi")
 HomeTab:CreateLabel("Tên tài khoản: " .. LocalPlayer.Name)
-HomeTab:CreateLabel("Tên hiển thị: " .. LocalPlayer.DisplayName)
 HomeTab:CreateLabel("Tuổi tài khoản: " .. LocalPlayer.AccountAge .. " ngày")
 
 HomeTab:CreateSection("Thông số máy chủ")
@@ -159,14 +158,36 @@ SettingsTab:CreateButton({
 -- ]]
 
 -- ==========================================
--- TẢI CÁC MODULE TÍNH NĂNG
+-- BỘ NẠP MODULE HYBRID (LOCAL / GITHUB CLOUD)
 -- ==========================================
+local function loadModule(path)
+    local githubRawUrl = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
+    
+    -- Kiểm tra xem có thể đọc file cục bộ không (dành cho DEV thử nghiệm trên PC)
+    local localSuccess, content = pcall(function()
+        if readfile then
+            return readfile(path)
+        end
+        return nil
+    end)
+    
+    if localSuccess and content then
+        return loadstring(content)()
+    else
+        -- Nếu không có file cục bộ, tự động tải trực tiếp từ GitHub
+        return loadstring(game:HttpGet(githubRawUrl .. path))()
+    end
+end
+getgenv().loadModule = loadModule
+
+-- Tải các module con
 local success, err = pcall(function()
-    local EntitiesController = loadstring(readfile("NULLSCAPE/Entities/controller.luau"))()
-    local EntitiesTab = loadstring(readfile("NULLSCAPE/Entities/tab.luau"))()
+    local EntitiesController = loadModule("NULLSCAPE/Entities/controller.luau")
+    local EntitiesTab = loadModule("NULLSCAPE/Entities/tab.luau")
     
     EntitiesTab(Client, EntitiesController)
 end)
+
 
 if not success then
     warn("[NULLSCAPE] Lỗi khi nạp module Entities: " .. tostring(err))
