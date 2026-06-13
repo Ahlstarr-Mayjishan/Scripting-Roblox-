@@ -565,13 +565,13 @@ runConn = RunService.RenderStepped:Connect(function()
                 local dist = (hrp.Position - targetPart.Position).Magnitude
                 local frame = cached.Dot:FindFirstChild("PingFrame")
                 if frame then
-                    if dist < 15 then
+                    if dist < 50 then
                         cached.Dot.Enabled = false
                         frame.Size = UDim2.new(0, 0, 0, 0)
                     else
                         cached.Dot.Enabled = true
-                        -- Thu nhỏ từ 10px (ở >= 35 studs) về 0px (ở <= 15 studs)
-                        local scale = math.clamp((dist - 15) / 20, 0, 1)
+                        -- Thu nhỏ từ 10px (ở >= 200 studs) về 0px (ở <= 50 studs)
+                        local scale = math.clamp((dist - 50) / 150, 0, 1)
                         local newSize = scale * 10
                         frame.Size = UDim2.new(0, newSize, 0, newSize)
                         frame.BackgroundTransparency = 0
