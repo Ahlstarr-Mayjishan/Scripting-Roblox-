@@ -1,9 +1,16 @@
 -- [[
---  NULLSCAPE - Entities Controller (Optimized Performance & GC Edition)
---  Chỉ tập trung vào quản lý, quan sát, tối ưu hiệu năng và tự động thu gom rác (GC).
+--  NULLSCAPE - Entities Controller
+--  Vai trò: Đảm nhiệm việc quan sát, điều chỉnh cấu hình bảo vệ thực thể, điều phối vòng lặp kiểm tra,
+--  gọi các tính năng dọn dẹp (GC) để clean và giải phóng / giới hạn tài nguyên nhằm tránh sụt giảm FPS,
+--  tối ưu hóa hiệu năng game và nâng cao trải nghiệm người dùng.
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+
+local Executor = getgenv().loadModule("NULLSCAPE/Entities/executor.luau")
+local Logic = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest Entities Types.luau")
 
 local Controller = {
     -- Trạng thái bật/tắt miễn nhiễm cho từng thực thể
@@ -16,25 +23,8 @@ local Controller = {
     ActiveConnections = {}, -- Lưu các sự kiện để disconnect khi thư mục Enemies bị hủy
     EntityConnections = {}, -- Kết nối riêng lẻ của từng thực thể
     EnemiesFolder = nil,
-    FolderObserver = nil,   -- Theo dõi sự thay đổi của thư mục Enemies trong Workspace
     SavedPartsData = setmetatable({}, { __mode = "k" }) -- Cache lưu TouchInterest & CanTouch
 }
-
-local targetNames = {
-    ["Baby"] = function() return Controller.BabyImmune end,
-    ["Bell"] = function() return Controller.BellImmune end,
-    ["Mart"] = function() return Controller.MartImmune end
-}
-
-local function getImmunityCheck(name)
-    if not name then return nil end
-    for entityName, checkFunc in pairs(targetNames) do
-        if string.find(name, entityName) then
-            return checkFunc
-        end
-    end
-    return nil
-end
 
 local inLobby = false       -- Đang ở sảnh chờ/lựa chọn
 local isHibernating = false -- Đã dọn sạch thực thể trong trận và đang ngủ đông
@@ -46,13 +36,11 @@ local function isInMatch()
         return inRoundVal.Value
     end
     
-    -- Fallback 1: Nếu thư mục Enemies tồn tại và có thực thể bên trong, chắc chắn đang trong trận
     local enemies = workspace:FindFirstChild("Enemies")
     if enemies and #enemies:GetChildren() > 0 then
         return true
     end
     
-    -- Fallback 2: Đếm phần tử con trong sảnh chờ
     local lobby = workspace:FindFirstChild("Lobby")
     local selectFolder = workspace:FindFirstChild("Select")
     
@@ -62,18 +50,16 @@ local function isInMatch()
     return lobbyCount == 0 and selectCount == 0
 end
 
--- Lắng nghe sự kiện đổi trạng thái game thời gian thực (Real-time change listener)
+-- Lắng nghe sự kiện đổi trạng thái game thời gian thực
 task.spawn(function()
     local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
     if inRoundVal and inRoundVal:IsA("BoolValue") then
         local conn = inRoundVal.Changed:Connect(function(val)
             if Controller.Destroyed then return end
             if val then
-                -- Bắt đầu trận mới, kích hoạt quét ngay lập tức
                 inLobby = false
                 isHibernating = false
             else
-                -- Về phòng chờ, tạm ngưng hoạt động quét
                 inLobby = true
                 isHibernating = false
             end
@@ -81,42 +67,6 @@ task.spawn(function()
         table.insert(Controller.ActiveConnections, conn)
     end
 end)
-
--- Bật miễn nhiễm (ẩn TouchInterest và tắt CanTouch) cho một thực thể cụ thể
-function Controller:EnableImmunity(enemy)
-    if not enemy then return end
-    for _, descendant in ipairs(enemy:GetDescendants()) do
-        if descendant:IsA("TouchTransmitter") or descendant.Name == "TouchInterest" then
-            local part = descendant.Parent
-            if part and part:IsA("BasePart") then
-                if not self.SavedPartsData[part] then
-                    self.SavedPartsData[part] = {
-                        touch = descendant,
-                        originalCanTouch = part.CanTouch,
-                        enemyName = enemy.Name
-                    }
-                end
-                pcall(function() descendant.Parent = nil end)
-                pcall(function() part.CanTouch = false end)
-            end
-        end
-    end
-end
-
--- Tắt miễn nhiễm (khôi phục lại TouchInterest và CanTouch) cho một loại thực thể cụ thể
-function Controller:DisableImmunityForType(entityName)
-    for part, data in pairs(self.SavedPartsData) do
-        if data and data.enemyName == entityName then
-            if part and part.Parent then
-                if data.touch then
-                    pcall(function() data.touch.Parent = part end)
-                end
-                pcall(function() part.CanTouch = data.originalCanTouch end)
-            end
-            self.SavedPartsData[part] = nil
-        end
-    end
-end
 
 -- Thiết lập cấu hình miễn nhiễm và kích hoạt dọn dẹp tức thời
 function Controller:SetImmunity(entityName, value)
@@ -135,12 +85,12 @@ function Controller:SetImmunity(entityName, value)
         if self.EnemiesFolder then
             for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
                 if child.Name == entityName then
-                    self:EnableImmunity(child)
+                    Executor.enableImmunity(self, child)
                 end
             end
         end
     else
-        self:DisableImmunityForType(entityName)
+        Executor.disableImmunityForType(self, entityName)
     end
     
     if getgenv().Rayfield then
@@ -154,18 +104,7 @@ end
 
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
 function Controller:CleanUp()
-    -- Khôi phục lại toàn bộ TouchInterest trước khi dọn dẹp (nếu có)
-    if self.SavedPartsData then
-        for part, data in pairs(self.SavedPartsData) do
-            if part and part.Parent and data then
-                if data.touch then
-                    pcall(function() data.touch.Parent = part end)
-                end
-                pcall(function() part.CanTouch = data.originalCanTouch end)
-            end
-        end
-        table.clear(self.SavedPartsData)
-    end
+    Executor.restoreAll(self)
 
     -- Disconnect các kết nối của từng thực thể
     for enemy, connections in pairs(self.EntityConnections) do
@@ -192,14 +131,14 @@ local function processEntity(enemy)
     local connections = Controller.EntityConnections[enemy]
 
     -- Nếu đang bật miễn nhiễm cho thực thể này thì ẩn ngay lập tức
-    local checkFunc = getImmunityCheck(enemy.Name)
+    local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
     if checkFunc and checkFunc() then
-        Controller:EnableImmunity(enemy)
+        Executor.enableImmunity(Controller, enemy)
     end
 
     -- Lắng nghe các bộ phận mới được thêm vào thực thể sau này (tránh sót hitbox khi đang replicate)
     local descConn = enemy.DescendantAdded:Connect(function(part)
-        local checkFunc = getImmunityCheck(enemy.Name)
+        local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
         if checkFunc and checkFunc() then
             if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
                 local parentPart = part.Parent
@@ -255,7 +194,7 @@ function Controller:ObserveFolder(folder)
     -- 4. Cơ chế tự động GC khi thư mục bị xóa/hủy khỏi Workspace
     local destroyingConn = folder.AncestryChanged:Connect(function(_, parent)
         if not parent then
-            -- Thư mục Enemies đã bị xóa hoàn toàn khỏi trò chơi (chuyển màn, game reset,...)
+            -- Thư mục Enemies đã bị xóa hoàn toàn khỏi trò chơi
             self:CleanUp()
         end
     end)
@@ -264,7 +203,6 @@ end
 
 -- Quét tìm thư mục Enemies trong Workspace
 local function startObserving()
-    -- Theo dõi khi thư mục Enemies xuất hiện trong Workspace
     local function checkAndObserve(child)
         if Controller.Destroyed then return end
         if child.Name == "Enemies" and child:IsA("Folder") then
@@ -275,7 +213,6 @@ local function startObserving()
     local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
     table.insert(Controller.ActiveConnections, wsConn)
     
-    -- Quét thư mục hiện có
     local initialFolder = workspace:FindFirstChild("Enemies")
     if initialFolder and initialFolder:IsA("Folder") then
         Controller:ObserveFolder(initialFolder)
@@ -283,78 +220,40 @@ local function startObserving()
 end
 task.spawn(startObserving)
 
--- Kiểm tra xem trong các thực thể mục tiêu còn TouchInterest nào không
-local function checkTargetsForTouchInterest()
-    if not Controller.EnemiesFolder then return false, false, false end
-    
-    local foundAny = false
-    local touchInterestsExist = false
-    local allLoaded = true
-    
-    for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
-        local checkFunc = getImmunityCheck(enemy.Name)
-        if checkFunc and checkFunc() then
-            foundAny = true
-            
-            -- Đảm bảo thực thể đã tải xong nhân vật trước khi kiểm tra trạng thái TouchInterest
-            local loaded = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildOfClass("Humanoid") or enemy:FindFirstChildWhichIsA("BasePart")
-            if not loaded then
-                allLoaded = false
-            end
-            
-            for _, part in ipairs(enemy:GetDescendants()) do
-                if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-                    touchInterestsExist = true
-                    break
-                end
-            end
-        end
-        if touchInterestsExist then break end
-    end
-    
-    return foundAny, touchInterestsExist, allLoaded
-end
-
 -- Vòng lặp quan sát TouchInterest của các mục tiêu đặc biệt với cơ chế ngủ đông
 task.spawn(function()
     while not Controller.Destroyed do
         task.wait(1) -- Kiểm tra 1 giây 1 lần
         if Controller.Destroyed then break end
         
-        -- Xác minh trạng thái phòng chờ / trong trận
         local currentInMatch = isInMatch()
         
         if not currentInMatch then
-            -- Nếu đang ở Lobby/Select -> Ngừng quét
             if not inLobby then
                 inLobby = true
-                isHibernating = false -- Reset trạng thái quét của trận cũ
+                isHibernating = false
             end
             continue
         else
-            -- Nếu đã vào trận -> Đánh thức hệ thống
             if inLobby then
                 inLobby = false
-                isHibernating = false -- Bắt đầu trận mới, kích hoạt quét
+                isHibernating = false
             end
         end
         
-        -- Nếu đang ở trạng thái ngủ đông (đã dọn sạch trận này), không làm gì cả
         if isHibernating then
             continue
         end
         
-        -- Nếu EnemiesFolder bị nil -> Chúng ta tiếp tục đợi cho đến khi nó xuất hiện
         if not Controller.EnemiesFolder then
             continue
         end
         
-        -- Thực hiện kiểm tra TouchInterest
-        local foundAny, touchInterestsExist, allLoaded = checkTargetsForTouchInterest()
+        -- Gọi logic kiểm tra trạng thái TouchInterest từ logic file
+        local foundAny, touchInterestsExist, allLoaded = Logic.checkTargetsForTouchInterest(Controller.EnemiesFolder, Controller)
         
         if foundAny then
             if not touchInterestsExist and allLoaded then
-                -- Tất cả TouchInterest của các thực thể mục tiêu hiện tại đã được xóa hoàn toàn và đã load xong
                 isHibernating = true
                 
                 if getgenv().Rayfield then
@@ -365,11 +264,10 @@ task.spawn(function()
                     })
                 end
             else
-                -- Nếu vẫn còn, kích hoạt ẩn đi và lưu trữ
                 for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
-                    local checkFunc = getImmunityCheck(enemy.Name)
+                    local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
                     if checkFunc and checkFunc() then
-                        Controller:EnableImmunity(enemy)
+                        Executor.enableImmunity(Controller, enemy)
                     end
                 end
             end
