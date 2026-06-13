@@ -1,16 +1,16 @@
 -- [[
 --  NULLSCAPE - Entities Controller
---  Vai trò: Đảm nhiệm việc quan sát, điều chỉnh cấu hình bảo vệ thực thể, điều phối vòng lặp kiểm tra,
---  gọi các tính năng dọn dẹp (GC) để clean và giải phóng / giới hạn tài nguyên nhằm tránh sụt giảm FPS,
---  tối ưu hóa hiệu năng game và nâng cao trải nghiệm người dùng.
+--  Vai trò: Đảm nhiệm việc quan sát hiệu năng, phân tích tài nguyên và đưa ra các quyết định điều phối:
+--  - Phát hiện trạng thái sảnh chờ/trận đấu (khi inLobby = false sẽ kích hoạt gọi quét scan).
+--  - Giám sát trạng thái hoạt động của script, điều phối chế độ ngủ đông (hibernating) tối ưu CPU.
+--  - Gửi kết nối đăng ký qua GC và phát lệnh dọn dẹp giải phóng tài nguyên.
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
 
 local Executor = getgenv().loadModule("NULLSCAPE/Entities/executor.luau")
 local Logic = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest Entities Types.luau")
+local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 
 local Controller = {
     -- Trạng thái bật/tắt miễn nhiễm cho từng thực thể
@@ -19,11 +19,7 @@ local Controller = {
     MartImmune = false,
     Destroyed = false,
     
-    -- Bộ nhớ đệm quản lý tài nguyên (GC)
-    ActiveConnections = {}, -- Lưu các sự kiện để disconnect khi thư mục Enemies bị hủy
-    EntityConnections = {}, -- Kết nối riêng lẻ của từng thực thể
-    EnemiesFolder = nil,
-    SavedPartsData = setmetatable({}, { __mode = "k" }) -- Cache lưu TouchInterest & CanTouch
+    EnemiesFolder = nil
 }
 
 local inLobby = false       -- Đang ở sảnh chờ/lựa chọn
@@ -64,7 +60,7 @@ task.spawn(function()
                 isHibernating = false
             end
         end)
-        table.insert(Controller.ActiveConnections, conn)
+        GC.registerConnection(conn)
     end
 end)
 
@@ -85,12 +81,12 @@ function Controller:SetImmunity(entityName, value)
         if self.EnemiesFolder then
             for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
                 if child.Name == entityName then
-                    Executor.enableImmunity(self, child)
+                    Executor.enableImmunity(GC, child)
                 end
             end
         end
     else
-        Executor.disableImmunityForType(self, entityName)
+        Executor.disableImmunityForType(GC, entityName)
     end
     
     if getgenv().Rayfield then
@@ -104,22 +100,7 @@ end
 
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
 function Controller:CleanUp()
-    Executor.restoreAll(self)
-
-    -- Disconnect các kết nối của từng thực thể
-    for enemy, connections in pairs(self.EntityConnections) do
-        for _, conn in ipairs(connections) do
-            if conn then conn:Disconnect() end
-        end
-    end
-    self.EntityConnections = {}
-
-    -- Disconnect các kết nối chung của thư mục
-    for _, conn in ipairs(self.ActiveConnections) do
-        if conn then conn:Disconnect() end
-    end
-    self.ActiveConnections = {}
-
+    GC.cleanAll()
     self.EnemiesFolder = nil
 end
 
@@ -127,13 +108,10 @@ end
 local function processEntity(enemy)
     if not enemy then return end
     
-    Controller.EntityConnections[enemy] = Controller.EntityConnections[enemy] or {}
-    local connections = Controller.EntityConnections[enemy]
-
     -- Nếu đang bật miễn nhiễm cho thực thể này thì ẩn ngay lập tức
     local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
     if checkFunc and checkFunc() then
-        Executor.enableImmunity(Controller, enemy)
+        Executor.enableImmunity(GC, enemy)
     end
 
     -- Lắng nghe các bộ phận mới được thêm vào thực thể sau này (tránh sót hitbox khi đang replicate)
@@ -143,8 +121,8 @@ local function processEntity(enemy)
             if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
                 local parentPart = part.Parent
                 if parentPart and parentPart:IsA("BasePart") then
-                    if not Controller.SavedPartsData[parentPart] then
-                        Controller.SavedPartsData[parentPart] = {
+                    if not GC.SavedPartsData[parentPart] then
+                        GC.SavedPartsData[parentPart] = {
                             touch = part,
                             originalCanTouch = parentPart.CanTouch,
                             enemyName = enemy.Name
@@ -156,17 +134,12 @@ local function processEntity(enemy)
             end
         end
     end)
-    table.insert(connections, descConn)
+    GC.registerEntityConnection(enemy, descConn)
 end
 
 -- Gỡ bỏ lắng nghe của thực thể khi nó bị xóa
 local function removeEntity(enemy)
-    if Controller.EntityConnections[enemy] then
-        for _, conn in ipairs(Controller.EntityConnections[enemy]) do
-            if conn then conn:Disconnect() end
-        end
-        Controller.EntityConnections[enemy] = nil
-    end
+    GC.removeEntityConnections(enemy)
 end
 
 -- Thiết lập quan sát thư mục Enemies trong Workspace
@@ -178,13 +151,13 @@ function Controller:ObserveFolder(folder)
     local childAddedConn = folder.ChildAdded:Connect(function(child)
         processEntity(child)
     end)
-    table.insert(self.ActiveConnections, childAddedConn)
+    GC.registerConnection(childAddedConn)
 
     -- 2. Lắng nghe khi thực thể bị xóa khỏi game
     local childRemovedConn = folder.ChildRemoved:Connect(function(child)
         removeEntity(child)
     end)
-    table.insert(self.ActiveConnections, childRemovedConn)
+    GC.registerConnection(childRemovedConn)
 
     -- 3. Xử lý các thực thể đã có sẵn trong thư mục
     for _, child in ipairs(folder:GetChildren()) do
@@ -198,7 +171,7 @@ function Controller:ObserveFolder(folder)
             self:CleanUp()
         end
     end)
-    table.insert(self.ActiveConnections, destroyingConn)
+    GC.registerConnection(destroyingConn)
 end
 
 -- Quét tìm thư mục Enemies trong Workspace
@@ -211,7 +184,7 @@ local function startObserving()
     end
 
     local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
-    table.insert(Controller.ActiveConnections, wsConn)
+    GC.registerConnection(wsConn)
     
     local initialFolder = workspace:FindFirstChild("Enemies")
     if initialFolder and initialFolder:IsA("Folder") then
@@ -267,7 +240,7 @@ task.spawn(function()
                 for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
                     local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
                     if checkFunc and checkFunc() then
-                        Executor.enableImmunity(Controller, enemy)
+                        Executor.enableImmunity(GC, enemy)
                     end
                 end
             end
