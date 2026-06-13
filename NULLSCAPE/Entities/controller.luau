@@ -5,6 +5,7 @@
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 -- Nạp module dọn dẹp riêng biệt (Cleaner)
@@ -32,23 +33,46 @@ local targetNames = {
 local inLobby = false       -- Đang ở sảnh chờ/lựa chọn
 local isHibernating = false -- Đã dọn sạch thực thể trong trận và đang ngủ đông
 
--- Xác minh 2 bước kiểm tra trạng thái game (trong trận hay ở sảnh chờ)
+-- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
 local function isInMatch()
-    -- Ưu tiên 1: Nếu thư mục Enemies tồn tại và có thực thể bên trong, chắc chắn đang trong trận
+    local inRoundVal = ReplicatedStorage:FindFirstChild("InRound")
+    if inRoundVal and inRoundVal:IsA("BoolValue") then
+        return inRoundVal.Value
+    end
+    
+    -- Fallback 1: Nếu thư mục Enemies tồn tại và có thực thể bên trong, chắc chắn đang trong trận
     local enemies = workspace:FindFirstChild("Enemies")
     if enemies and #enemies:GetChildren() > 0 then
         return true
     end
     
+    -- Fallback 2: Đếm phần tử con trong sảnh chờ
     local lobby = workspace:FindFirstChild("Lobby")
     local selectFolder = workspace:FindFirstChild("Select")
     
     local lobbyCount = lobby and #lobby:GetChildren() or 0
     local selectCount = selectFolder and #selectFolder:GetChildren() or 0
     
-    -- Nếu cả hai thư mục đều trống (0 children) hoặc không tồn tại, tức là đang trong trận
     return lobbyCount == 0 and selectCount == 0
 end
+
+-- Lắng nghe sự kiện đổi trạng thái game thời gian thực (Real-time change listener)
+task.spawn(function()
+    local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
+    if inRoundVal and inRoundVal:IsA("BoolValue") then
+        inRoundVal.Changed:Connect(function(val)
+            if val then
+                -- Bắt đầu trận mới, kích hoạt quét ngay lập tức
+                inLobby = false
+                isHibernating = false
+            else
+                -- Về phòng chờ, tạm ngưng hoạt động quét
+                inLobby = true
+                isHibernating = false
+            end
+        end)
+    end
+end)
 
 -- Thiết lập cấu hình miễn nhiễm và kích hoạt dọn dẹp tức thời
 function Controller:SetImmunity(entityName, value)
@@ -229,18 +253,18 @@ task.spawn(function()
     while true do
         task.wait(1) -- Kiểm tra 1 giây 1 lần
         
-        -- Xác minh 2 bước kiểm tra trạng thái phòng chờ / trong trận
+        -- Xác minh trạng thái phòng chờ / trong trận
         local currentInMatch = isInMatch()
         
         if not currentInMatch then
-            -- Nếu đang ở Lobby/Select (có phần tử con) -> Ngừng quét
+            -- Nếu đang ở Lobby/Select -> Ngừng quét
             if not inLobby then
                 inLobby = true
                 isHibernating = false -- Reset trạng thái quét của trận cũ
             end
             continue
         else
-            -- Nếu đã vào trận (Lobby & Select trống) -> Đánh thức hệ thống
+            -- Nếu đã vào trận -> Đánh thức hệ thống
             if inLobby then
                 inLobby = false
                 isHibernating = false -- Bắt đầu trận mới, kích hoạt quét
