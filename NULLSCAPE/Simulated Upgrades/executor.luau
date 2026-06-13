@@ -12,9 +12,14 @@ function Executor.clearVisuals(gc, keepArrows)
     Logic.clearVisuals(gc, keepArrows)
 end
 
--- Thực thi vẽ ESP mới
-function Executor.updateESP(controller, gc, hrp)
-    Logic.updateESP(controller, gc, hrp)
+-- Thực thi quét phát hiện mục tiêu mới
+function Executor.scanTargets(controller, gc, hrp)
+    Logic.scanTargets(controller, gc, hrp)
+end
+
+-- Thực thi cập nhật khoảng cách và style visual
+function Executor.updateESPStyles(controller, gc, hrp)
+    Logic.updateESPStyles(controller, gc, hrp)
 end
 
 return Executor

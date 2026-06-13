@@ -121,14 +121,8 @@ function Logic.clearVisuals(gc, keepArrows)
     end
 end
 
--- Vòng lặp quét định vị và vẽ các chỉ dẫn/Highlight bằng cơ chế lưu đệm
-function Logic.updateESP(controller, gc, hrp)
-    local saved = gc.SavedVisuals
-    if not saved.ActiveTargets then saved.ActiveTargets = {} end
-    
-    local nearestAltar = nil
-    local shortestAltarDist = math.huge
-    
+-- Vòng quét định kỳ thu thập và phát hiện các mục tiêu ESP mới (chạy chậm)
+function Logic.scanTargets(controller, gc, hrp)
     local gifts = {}
     local instruments = {}
     local altars = {}
@@ -139,8 +133,7 @@ function Logic.updateESP(controller, gc, hrp)
         if itemPools then
             for _, obj in ipairs(itemPools:GetDescendants()) do
                 if obj:IsA("BasePart") and (string.find(obj.Name:lower(), "gift") or string.find(obj.Name:lower(), "present")) then
-                    local distance = (hrp.Position - obj.Position).Magnitude
-                    table.insert(gifts, {part = obj, distance = distance, color = Color3.fromRGB(255, 255, 255), type = "Gift"})
+                    table.insert(gifts, {part = obj, color = Color3.fromRGB(255, 255, 255), type = "Gift"})
                 end
             end
         end
@@ -153,8 +146,7 @@ function Logic.updateESP(controller, gc, hrp)
                 if (obj:IsA("BasePart") or obj:IsA("Model")) and isInstrument(obj.Name) then
                     local targetPart = obj:IsA("Model") and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")) or obj
                     if targetPart and targetPart:IsA("BasePart") then
-                        local distance = (hrp.Position - targetPart.Position).Magnitude
-                        table.insert(instruments, {part = targetPart, model = obj, distance = distance, color = Color3.fromRGB(255, 0, 0), type = "Cadence"})
+                        table.insert(instruments, {part = targetPart, model = obj, color = Color3.fromRGB(255, 0, 0), type = "Cadence"})
                     end
                 end
             end
@@ -190,12 +182,7 @@ function Logic.updateESP(controller, gc, hrp)
                         end
                         
                         if matchesFilter then
-                            local distance = (hrp.Position - targetPart.Position).Magnitude
-                            if distance < shortestAltarDist then
-                                shortestAltarDist = distance
-                                nearestAltar = targetPart
-                            end
-                            table.insert(altars, {part = targetPart, model = altarObj, distance = distance, color = altarColor, type = "Altar"})
+                            table.insert(altars, {part = targetPart, model = altarObj, color = altarColor, type = "Altar"})
                         end
                     end
                 end
@@ -203,12 +190,67 @@ function Logic.updateESP(controller, gc, hrp)
         end
     end
     
-    -- Gộp toàn bộ để xử lý giới hạn 31 Highlight
-    local allTargets = {}
-    for _, t in ipairs(gifts) do table.insert(allTargets, t) end
-    for _, t in ipairs(instruments) do table.insert(allTargets, t) end
-    for _, t in ipairs(altars) do table.insert(allTargets, t) end
+    controller.CachedGiftParts = gifts
+    controller.CachedCadenceParts = instruments
+    controller.CachedAltarParts = altars
+end
+
+-- Vòng lặp cập nhật khoảng cách, sắp xếp độ ưu tiên và chuyển đổi visual styles (chạy cực nhanh)
+function Logic.updateESPStyles(controller, gc, hrp)
+    local saved = gc.SavedVisuals
+    if not saved.ActiveTargets then saved.ActiveTargets = {} end
+    if not hrp then return end
     
+    local gifts = controller.CachedGiftParts or {}
+    local instruments = controller.CachedCadenceParts or {}
+    local altars = controller.CachedAltarParts or {}
+    
+    local allTargets = {}
+    local validGifts = {}
+    local validInstruments = {}
+    local validAltars = {}
+    
+    local nearestAltar = nil
+    local shortestAltarDist = math.huge
+    
+    -- Cập nhật khoảng cách thực tế thời gian thực
+    for _, t in ipairs(gifts) do
+        local part = t.part
+        if part and part.Parent and part:IsDescendantOf(workspace) then
+            local distance = (hrp.Position - part.Position).Magnitude
+            t.distance = distance
+            table.insert(allTargets, t)
+            table.insert(validGifts, t)
+        end
+    end
+    
+    for _, t in ipairs(instruments) do
+        local part = t.part
+        if part and part.Parent and part:IsDescendantOf(workspace) then
+            local distance = (hrp.Position - part.Position).Magnitude
+            t.distance = distance
+            table.insert(allTargets, t)
+            table.insert(validInstruments, t)
+        end
+    end
+    
+    for _, t in ipairs(altars) do
+        local part = t.part
+        local model = t.model or part
+        if part and part.Parent and part:IsDescendantOf(workspace) then
+            local distance = (hrp.Position - part.Position).Magnitude
+            t.distance = distance
+            table.insert(allTargets, t)
+            table.insert(validAltars, t)
+            
+            if distance < shortestAltarDist then
+                shortestAltarDist = distance
+                nearestAltar = model
+            end
+        end
+    end
+    
+    -- Sắp xếp tất cả theo khoảng cách gần nhất
     table.sort(allTargets, function(a, b)
         return a.distance < b.distance
     end)
@@ -220,10 +262,11 @@ function Logic.updateESP(controller, gc, hrp)
         local color = target.color
         
         local desiredStyle, parentObject
-        if controller.ESPStyle == "Highlight" and idx <= 12 then
+        -- Hạ giới hạn vẽ Highlight đồng thời từ 12 xuống 8 để cải thiện FPS
+        if controller.ESPStyle == "Highlight" and idx <= 8 then
             desiredStyle = "Highlight"
             parentObject = targetModel
-        elseif controller.ESPStyle == "Ping" and idx <= 12 then
+        elseif controller.ESPStyle == "Ping" and idx <= 8 then
             desiredStyle = "Ping"
             parentObject = targetPart
         else
@@ -240,7 +283,7 @@ function Logic.updateESP(controller, gc, hrp)
     
     local scanTime = os.clock()
     
-    -- 1. Xóa các ESP không còn tồn tại hoặc đã rời khỏi workspace
+    -- 1. Xóa các ESP của mục tiêu không còn tồn tại
     for targetPart, cached in pairs(saved.ActiveTargets) do
         local current = currentTargets[targetPart]
         if not current or not targetPart:IsDescendantOf(workspace) then
@@ -250,14 +293,12 @@ function Logic.updateESP(controller, gc, hrp)
         end
     end
     
-    -- 2. Tạo hoặc Cập nhật ESP mới/hiện tại với cơ chế Budget-rate limiting (Tránh giật màn hình)
+    -- 2. Tạo hoặc chuyển đổi style mới với cơ chế trì hoãn 0.02s
     local creationsThisFrame = 0
     for targetPart, current in pairs(currentTargets) do
         local cached = saved.ActiveTargets[targetPart]
         
         if not cached or cached.Style ~= current.Style then
-            -- Đây là tạo mới hoặc chuyển đổi style (Transition)
-            -- Lưu lại tham chiếu visual cũ để dọn dẹp nguyên tử (Atomic) trong luồng sau
             local oldHighlight = cached and cached.Highlight
             local oldDot = cached and cached.Dot
             
@@ -272,8 +313,8 @@ function Logic.updateESP(controller, gc, hrp)
             saved.ActiveTargets[targetPart] = newCache
             
             if creationsThisFrame >= 3 then
-                -- Vượt budget 3 tạo mới/chuyển đổi trong frame: Trải đều qua các frame tiếp theo
-                local delayTime = (creationsThisFrame - 3) * 0.03
+                -- Độ trễ tối ưu xuống 0.02s thay vì 0.03s để tăng tính phản hồi nhạy bén
+                local delayTime = (creationsThisFrame - 3) * 0.02
                 task.spawn(function()
                     task.wait(delayTime)
                     if not targetPart or not targetPart.Parent or not targetPart:IsDescendantOf(workspace) then
@@ -287,13 +328,11 @@ function Logic.updateESP(controller, gc, hrp)
                     
                     local currentCache = saved.ActiveTargets[targetPart]
                     if currentCache ~= newCache or not currentCache.Pending then
-                        -- Cache đã bị thay đổi bởi lần quét sau hoặc đã xử lý xong
                         if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
                         if oldDot then pcall(function() oldDot:Destroy() end) end
                         return
                     end
                     
-                    -- Dọn dẹp visual cũ ngay tại thời điểm tạo visual mới để tránh chớp nháy
                     if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
                     if oldDot then pcall(function() oldDot:Destroy() end) end
                     
@@ -348,7 +387,6 @@ function Logic.updateESP(controller, gc, hrp)
                     end)
                 end)
             else
-                -- Đồng bộ ngay lập tức (trong budget 3 của frame hiện tại)
                 if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
                 if oldDot then pcall(function() oldDot:Destroy() end) end
                 
@@ -404,7 +442,6 @@ function Logic.updateESP(controller, gc, hrp)
             end
             creationsThisFrame = creationsThisFrame + 1
         else
-            -- Đã tồn tại và đúng style, chỉ cập nhật nếu đổi màu
             cached.LastSeen = scanTime
             local inst = cached.Highlight or cached.Dot
             if inst and inst.Parent then
@@ -439,26 +476,21 @@ function Logic.updateESP(controller, gc, hrp)
         end
     end
     
-    -- Cập nhật danh sách chi tiết để tính real-time trong RenderStepped
-    controller.CachedGiftParts = gifts
-    controller.CachedCadenceParts = instruments
-    controller.CachedAltarParts = altars
-    
-    -- Đảm bảo các mũi tên tồn tại/hủy phù hợp
-    if controller.GiftESPEnabled and #gifts > 0 then
+    -- Đảm bảo các mũi tên tồn tại/hủy phù hợp dựa trên số lượng hợp lệ thực tế
+    if controller.GiftESPEnabled and #validGifts > 0 then
         getOrCreateArrow(saved, "ArrowGift", Color3.fromRGB(255, 255, 255))
     else
         if saved.ArrowGift then pcall(function() saved.ArrowGift:Destroy() end) saved.ArrowGift = nil end
     end
     
-    if controller.CadenceESPEnabled and #instruments > 0 then
+    if controller.CadenceESPEnabled and #validInstruments > 0 then
         getOrCreateArrow(saved, "ArrowCadence", Color3.fromRGB(255, 0, 0))
     else
         if saved.ArrowCadence then pcall(function() saved.ArrowCadence:Destroy() end) saved.ArrowCadence = nil end
     end
     
-    if controller.AltarESPEnabled and #altars > 0 then
-        local _, altarColor = getAltarTypeAndColor(nearestAltar or altars[1].part)
+    if controller.AltarESPEnabled and #validAltars > 0 then
+        local _, altarColor = getAltarTypeAndColor(nearestAltar or validAltars[1].model or validAltars[1].part)
         getOrCreateArrow(saved, "ArrowAltar", altarColor)
     else
         if saved.ArrowAltar then pcall(function() saved.ArrowAltar:Destroy() end) saved.ArrowAltar = nil end

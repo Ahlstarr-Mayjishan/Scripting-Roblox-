@@ -65,7 +65,8 @@ local function triggerInstantUpdate()
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if hrp then
         pcall(function()
-            Executor.updateESP(Controller, GC, hrp)
+            Executor.scanTargets(Controller, GC, hrp)
+            Executor.updateESPStyles(Controller, GC, hrp)
         end)
     end
 end
@@ -184,7 +185,25 @@ task.spawn(function()
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if hrp then
             pcall(function()
-                Executor.updateESP(Controller, GC, hrp)
+                Executor.scanTargets(Controller, GC, hrp)
+                Executor.updateESPStyles(Controller, GC, hrp)
+            end)
+        end
+    end
+end)
+
+-- Vòng lặp cập nhật khoảng cách & styles hiển thị (Dot <-> Highlight) cực nhanh mỗi 0.3 giây
+task.spawn(function()
+    while not Controller.Destroyed do
+        task.wait(0.3)
+        if Controller.Destroyed then break end
+        if inLobby then continue end
+        
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            pcall(function()
+                Executor.updateESPStyles(Controller, GC, hrp)
             end)
         end
     end
