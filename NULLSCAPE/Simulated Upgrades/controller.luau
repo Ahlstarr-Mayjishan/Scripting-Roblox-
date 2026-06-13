@@ -2,12 +2,14 @@
 --  NULLSCAPE - Simulated Upgrades & Radar Controller
 --  Vai trò: Đảm nhiệm việc quan sát hiệu năng, phân tích tài nguyên và đưa ra các quyết định điều phối:
 --  - Giám sát trạng thái hoạt động của script, điều phối chế độ ngủ đông (hibernating) tối ưu CPU.
+--  - Phát hiện trạng thái sảnh chờ/trận đấu (khi inLobby = false sẽ kích hoạt gọi quét scan).
 --  - Phát lệnh gọi quét định vị (scan) định kỳ thông qua Executor.
 --  - Gửi kết nối đăng ký qua GC và phát lệnh dọn dẹp giải phóng tài nguyên.
 -- ]]
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 local Executor = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/executor.luau")
@@ -29,6 +31,45 @@ local Controller = {
     CachedCadenceParts = {},
     CachedAltarParts = {},
 }
+
+local inLobby = false       -- Đang ở sảnh chờ/lựa chọn
+
+-- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
+local function isInMatch()
+    local inRoundVal = ReplicatedStorage:FindFirstChild("InRound")
+    if inRoundVal and inRoundVal:IsA("BoolValue") then
+        return inRoundVal.Value
+    end
+    
+    local enemies = workspace:FindFirstChild("Enemies")
+    if enemies and #enemies:GetChildren() > 0 then
+        return true
+    end
+    
+    local lobby = workspace:FindFirstChild("Lobby")
+    local selectFolder = workspace:FindFirstChild("Select")
+    
+    local lobbyCount = lobby and #lobby:GetChildren() or 0
+    local selectCount = selectFolder and #selectFolder:GetChildren() or 0
+    
+    return lobbyCount == 0 and selectCount == 0
+end
+
+-- Lắng nghe sự kiện đổi trạng thái game thời gian thực
+task.spawn(function()
+    local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
+    if inRoundVal and inRoundVal:IsA("BoolValue") then
+        local conn = inRoundVal.Changed:Connect(function(val)
+            if Controller.Destroyed then return end
+            if val then
+                inLobby = false
+            else
+                inLobby = true
+            end
+        end)
+        GC.registerConnection(conn)
+    end
+end)
 
 -- Hàm trigger cập nhật ESP tức thì khi thay đổi cấu hình
 local function triggerInstantUpdate()
@@ -116,7 +157,7 @@ function Controller:CleanUp()
     GC.cleanAll()
 end
 
--- Vòng lặp định kỳ tìm kiếm và cập nhật ESP (Không gây giật lag)
+-- Vòng lặp định kỳ tìm kiếm và cập nhật ESP (Không gây giật lag, hỗ trợ ngủ đông)
 task.spawn(function()
     while not Controller.Destroyed do
         task.wait(3.0) -- Chu kỳ quét 3.0 giây một lần cực kỳ tối ưu
@@ -135,6 +176,22 @@ task.spawn(function()
             break
         end
         
+        local currentInMatch = isInMatch()
+        if not currentInMatch then
+            if not inLobby then
+                inLobby = true
+                -- Dọn dẹp Visuals khi quay về Lobby
+                pcall(function()
+                    Executor.clearVisuals(GC, false)
+                end)
+            end
+            continue
+        else
+            if inLobby then
+                inLobby = false
+            end
+        end
+        
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if hrp then
@@ -151,6 +208,11 @@ task.spawn(function()
     runConn = RunService.RenderStepped:Connect(function()
         if Controller.Destroyed then
             if runConn then runConn:Disconnect() end
+            return
+        end
+        
+        -- Bỏ qua Render khi đang ở Lobby để tiết kiệm tài nguyên
+        if inLobby then
             return
         end
         
