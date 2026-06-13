@@ -18,6 +18,9 @@ local RadarLogic = {
     NearestGiftPosition = nil,
     NearestCadencePosition = nil,
     NearestAltarPosition = nil,
+    CachedGiftParts = {},
+    CachedCadenceParts = {},
+    CachedAltarParts = {},
     
     ActiveConnections = {},
     SavedVisuals = {
@@ -151,10 +154,6 @@ local function updateESP(hrp)
     local saved = RadarLogic.SavedVisuals
     if not saved.ActiveTargets then saved.ActiveTargets = {} end
     
-    local nearestGift = nil
-    local shortestGiftDist = math.huge
-    local nearestCadence = nil
-    local shortestCadenceDist = math.huge
     local nearestAltar = nil
     local shortestAltarDist = math.huge
     
@@ -169,10 +168,6 @@ local function updateESP(hrp)
             for _, obj in ipairs(itemPools:GetDescendants()) do
                 if obj:IsA("BasePart") and (string.find(obj.Name:lower(), "gift") or string.find(obj.Name:lower(), "present")) then
                     local distance = (hrp.Position - obj.Position).Magnitude
-                    if distance < shortestGiftDist then
-                        shortestGiftDist = distance
-                        nearestGift = obj
-                    end
                     table.insert(gifts, {part = obj, distance = distance, color = Color3.fromRGB(255, 255, 255), type = "Gift"})
                 end
             end
@@ -187,10 +182,6 @@ local function updateESP(hrp)
                     local targetPart = obj:IsA("Model") and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")) or obj
                     if targetPart and targetPart:IsA("BasePart") then
                         local distance = (hrp.Position - targetPart.Position).Magnitude
-                        if distance < shortestCadenceDist then
-                            shortestCadenceDist = distance
-                            nearestCadence = targetPart
-                        end
                         table.insert(instruments, {part = targetPart, model = obj, distance = distance, color = Color3.fromRGB(255, 0, 0), type = "Cadence"})
                     end
                 end
@@ -374,32 +365,28 @@ local function updateESP(hrp)
         end
     end
     
-    -- Cập nhật vị trí Mũi tên gần nhất
-    -- A. Hộp quà
-    if nearestGift then
-        RadarLogic.NearestGiftPosition = nearestGift.Position
+    -- --- PHẦN 5: CẬP NHẬT DANH SÁCH CHI TIẾT ĐỂ TÍNH REAL-TIME TRONG RENDERSTEPPED ---
+    RadarLogic.CachedGiftParts = gifts
+    RadarLogic.CachedCadenceParts = instruments
+    RadarLogic.CachedAltarParts = altars
+    
+    -- Đảm bảo các mũi tên tồn tại/hủy phù hợp với cấu hình bật/tắt
+    if RadarLogic.GiftESPEnabled and #gifts > 0 then
         getOrCreateArrow(saved, "ArrowGift", Color3.fromRGB(255, 255, 255))
     else
-        RadarLogic.NearestGiftPosition = nil
         if saved.ArrowGift then pcall(function() saved.ArrowGift:Destroy() end) saved.ArrowGift = nil end
     end
     
-    -- B. Nhạc cụ
-    if nearestCadence then
-        RadarLogic.NearestCadencePosition = nearestCadence.Position
+    if RadarLogic.CadenceESPEnabled and #instruments > 0 then
         getOrCreateArrow(saved, "ArrowCadence", Color3.fromRGB(255, 0, 0))
     else
-        RadarLogic.NearestCadencePosition = nil
         if saved.ArrowCadence then pcall(function() saved.ArrowCadence:Destroy() end) saved.ArrowCadence = nil end
     end
     
-    -- C. Đàn tế
-    if nearestAltar then
-        RadarLogic.NearestAltarPosition = nearestAltar.Position
-        local _, altarColor = getAltarTypeAndColor(nearestAltar)
+    if RadarLogic.AltarESPEnabled and #altars > 0 then
+        local _, altarColor = getAltarTypeAndColor(nearestAltar or altars[1].part)
         getOrCreateArrow(saved, "ArrowAltar", altarColor)
     else
-        RadarLogic.NearestAltarPosition = nil
         if saved.ArrowAltar then pcall(function() saved.ArrowAltar:Destroy() end) saved.ArrowAltar = nil end
     end
 end
@@ -519,37 +506,86 @@ runConn = RunService.RenderStepped:Connect(function()
         return
     end
     
-    -- 1. Hộp quà (Trắng, tầng thấp)
+    -- 1. Tìm vị trí các vật thể gần nhất thời gian thực (real-time) từ danh sách cache bộ nhớ
+    local nearestGiftPos = nil
+    if RadarLogic.GiftESPEnabled and RadarLogic.CachedGiftParts then
+        local shortestDist = math.huge
+        for _, t in ipairs(RadarLogic.CachedGiftParts) do
+            local part = t.part
+            if part and part.Parent and part:IsDescendantOf(workspace) then
+                local dist = (hrp.Position - part.Position).Magnitude
+                if dist < shortestDist then
+                    shortestDist = dist
+                    nearestGiftPos = part.Position
+                end
+            end
+        end
+    end
+
+    local nearestCadencePos = nil
+    if RadarLogic.CadenceESPEnabled and RadarLogic.CachedCadenceParts then
+        local shortestDist = math.huge
+        for _, t in ipairs(RadarLogic.CachedCadenceParts) do
+            local part = t.part
+            if part and part.Parent and part:IsDescendantOf(workspace) then
+                local dist = (hrp.Position - part.Position).Magnitude
+                if dist < shortestDist then
+                    shortestDist = dist
+                    nearestCadencePos = part.Position
+                end
+            end
+        end
+    end
+
+    local nearestAltarPos = nil
+    local nearestAltarColor = Color3.fromRGB(255, 128, 0)
+    if RadarLogic.AltarESPEnabled and RadarLogic.CachedAltarParts then
+        local shortestDist = math.huge
+        for _, t in ipairs(RadarLogic.CachedAltarParts) do
+            local part = t.part
+            if part and part.Parent and part:IsDescendantOf(workspace) then
+                local dist = (hrp.Position - part.Position).Magnitude
+                if dist < shortestDist then
+                    shortestDist = dist
+                    nearestAltarPos = part.Position
+                    nearestAltarColor = t.color
+                end
+            end
+        end
+    end
+
+    -- 2. Cập nhật hiển thị và hướng xoay cho Mũi tên Hộp quà (Trắng, tầng thấp)
     local arrowGift = RadarLogic.SavedVisuals.ArrowGift
     if arrowGift and arrowGift.Parent then
-        if RadarLogic.NearestGiftPosition then
+        if nearestGiftPos then
             arrowGift.Transparency = 0
             local arrowPos = hrp.Position + Vector3.new(0, 3.5, 0)
-            arrowGift.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestGiftPosition) * CFrame.Angles(0, math.pi, 0)
+            arrowGift.CFrame = CFrame.lookAt(arrowPos, nearestGiftPos) * CFrame.Angles(0, math.pi, 0)
         else
             arrowGift.Transparency = 1
         end
     end
     
-    -- 2. Nhạc cụ (Đỏ, tầng trung)
+    -- 3. Cập nhật hiển thị và hướng xoay cho Mũi tên Nhạc cụ (Đỏ, tầng trung)
     local arrowCadence = RadarLogic.SavedVisuals.ArrowCadence
     if arrowCadence and arrowCadence.Parent then
-        if RadarLogic.NearestCadencePosition then
+        if nearestCadencePos then
             arrowCadence.Transparency = 0
             local arrowPos = hrp.Position + Vector3.new(0, 4.7, 0)
-            arrowCadence.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestCadencePosition) * CFrame.Angles(0, math.pi, 0)
+            arrowCadence.CFrame = CFrame.lookAt(arrowPos, nearestCadencePos) * CFrame.Angles(0, math.pi, 0)
         else
             arrowCadence.Transparency = 1
         end
     end
     
-    -- 3. Đàn tế (Cam, tầng cao)
+    -- 4. Cập nhật hiển thị và hướng xoay cho Mũi tên Đàn tế / Altar (Màu tương ứng, tầng cao)
     local arrowAltar = RadarLogic.SavedVisuals.ArrowAltar
     if arrowAltar and arrowAltar.Parent then
-        if RadarLogic.NearestAltarPosition then
+        if nearestAltarPos then
             arrowAltar.Transparency = 0
+            arrowAltar.Color = nearestAltarColor
             local arrowPos = hrp.Position + Vector3.new(0, 5.9, 0)
-            arrowAltar.CFrame = CFrame.lookAt(arrowPos, RadarLogic.NearestAltarPosition) * CFrame.Angles(0, math.pi, 0)
+            arrowAltar.CFrame = CFrame.lookAt(arrowPos, nearestAltarPos) * CFrame.Angles(0, math.pi, 0)
         else
             arrowAltar.Transparency = 1
         end

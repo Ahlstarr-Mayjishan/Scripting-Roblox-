@@ -19,6 +19,9 @@ local Controller = {
     NearestGiftPosition = nil,
     NearestCadencePosition = nil,
     NearestAltarPosition = nil,
+    CachedGiftParts = {},
+    CachedCadenceParts = {},
+    CachedAltarParts = {},
     
     ActiveConnections = {},
     SavedVisuals = {
@@ -175,37 +178,86 @@ task.spawn(function()
             return
         end
         
-        -- 1. Mũi tên Hộp quà (Màu trắng neon, tầng thấp)
+        -- 1. Tìm vị trí các vật thể gần nhất thời gian thực (real-time) từ danh sách cache bộ nhớ
+        local nearestGiftPos = nil
+        if Controller.GiftESPEnabled and Controller.CachedGiftParts then
+            local shortestDist = math.huge
+            for _, t in ipairs(Controller.CachedGiftParts) do
+                local part = t.part
+                if part and part.Parent and part:IsDescendantOf(workspace) then
+                    local dist = (hrp.Position - part.Position).Magnitude
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        nearestGiftPos = part.Position
+                    end
+                end
+            end
+        end
+
+        local nearestCadencePos = nil
+        if Controller.CadenceESPEnabled and Controller.CachedCadenceParts then
+            local shortestDist = math.huge
+            for _, t in ipairs(Controller.CachedCadenceParts) do
+                local part = t.part
+                if part and part.Parent and part:IsDescendantOf(workspace) then
+                    local dist = (hrp.Position - part.Position).Magnitude
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        nearestCadencePos = part.Position
+                    end
+                end
+            end
+        end
+
+        local nearestAltarPos = nil
+        local nearestAltarColor = Color3.fromRGB(255, 128, 0)
+        if Controller.AltarESPEnabled and Controller.CachedAltarParts then
+            local shortestDist = math.huge
+            for _, t in ipairs(Controller.CachedAltarParts) do
+                local part = t.part
+                if part and part.Parent and part:IsDescendantOf(workspace) then
+                    local dist = (hrp.Position - part.Position).Magnitude
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        nearestAltarPos = part.Position
+                        nearestAltarColor = t.color
+                    end
+                end
+            end
+        end
+
+        -- 2. Cập nhật hiển thị và hướng xoay cho Mũi tên Hộp quà (Trắng, tầng thấp)
         local arrowGift = Controller.SavedVisuals.ArrowGift
         if arrowGift and arrowGift.Parent then
-            if Controller.NearestGiftPosition then
+            if nearestGiftPos then
                 arrowGift.Transparency = 0
                 local arrowPos = hrp.Position + Vector3.new(0, 3.5, 0)
-                arrowGift.CFrame = CFrame.lookAt(arrowPos, Controller.NearestGiftPosition) * CFrame.Angles(0, math.pi, 0)
+                arrowGift.CFrame = CFrame.lookAt(arrowPos, nearestGiftPos) * CFrame.Angles(0, math.pi, 0)
             else
                 arrowGift.Transparency = 1
             end
         end
         
-        -- 2. Mũi tên Nhạc cụ Cadence (Màu đỏ neon, tầng trung)
+        -- 3. Cập nhật hiển thị và hướng xoay cho Mũi tên Nhạc cụ Cadence (Màu đỏ neon, tầng trung)
         local arrowCadence = Controller.SavedVisuals.ArrowCadence
         if arrowCadence and arrowCadence.Parent then
-            if Controller.NearestCadencePosition then
+            if nearestCadencePos then
                 arrowCadence.Transparency = 0
                 local arrowPos = hrp.Position + Vector3.new(0, 4.7, 0)
-                arrowCadence.CFrame = CFrame.lookAt(arrowPos, Controller.NearestCadencePosition) * CFrame.Angles(0, math.pi, 0)
+                arrowCadence.CFrame = CFrame.lookAt(arrowPos, nearestCadencePos) * CFrame.Angles(0, math.pi, 0)
             else
                 arrowCadence.Transparency = 1
             end
         end
         
-        -- 3. Mũi tên Đàn tế / Altar (Màu cam neon, tầng cao)
+        -- 4. Cập nhật hiển thị và hướng xoay cho Mũi tên Đàn tế / Altar (Màu tương ứng, tầng cao)
         local arrowAltar = Controller.SavedVisuals.ArrowAltar
         if arrowAltar and arrowAltar.Parent then
-            if Controller.NearestAltarPosition then
+            if nearestAltarPos then
                 arrowAltar.Transparency = 0
+                arrowAltar.Color = nearestAltarColor
                 local arrowPos = hrp.Position + Vector3.new(0, 5.9, 0)
-                arrowAltar.CFrame = CFrame.lookAt(arrowPos, Controller.NearestAltarPosition) * CFrame.Angles(0, math.pi, 0)
+                arrowAltar.CFrame = CFrame.lookAt(arrowPos, nearestAltarPos) * CFrame.Angles(0, math.pi, 0)
             else
                 arrowAltar.Transparency = 1
             end

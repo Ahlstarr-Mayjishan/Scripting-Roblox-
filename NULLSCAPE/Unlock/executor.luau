@@ -127,10 +127,6 @@ function Executor.updateESP(controller, hrp)
     local saved = controller.SavedVisuals
     if not saved.ActiveTargets then saved.ActiveTargets = {} end
     
-    local nearestGift = nil
-    local shortestGiftDist = math.huge
-    local nearestCadence = nil
-    local shortestCadenceDist = math.huge
     local nearestAltar = nil
     local shortestAltarDist = math.huge
     
@@ -145,10 +141,6 @@ function Executor.updateESP(controller, hrp)
             for _, obj in ipairs(itemPools:GetDescendants()) do
                 if obj:IsA("BasePart") and (string.find(obj.Name:lower(), "gift") or string.find(obj.Name:lower(), "present")) then
                     local distance = (hrp.Position - obj.Position).Magnitude
-                    if distance < shortestGiftDist then
-                        shortestGiftDist = distance
-                        nearestGift = obj
-                    end
                     table.insert(gifts, {part = obj, distance = distance, color = Color3.fromRGB(255, 255, 255), type = "Gift"})
                 end
             end
@@ -163,10 +155,6 @@ function Executor.updateESP(controller, hrp)
                     local targetPart = obj:IsA("Model") and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")) or obj
                     if targetPart and targetPart:IsA("BasePart") then
                         local distance = (hrp.Position - targetPart.Position).Magnitude
-                        if distance < shortestCadenceDist then
-                            shortestCadenceDist = distance
-                            nearestCadence = targetPart
-                        end
                         table.insert(instruments, {part = targetPart, model = obj, distance = distance, color = Color3.fromRGB(255, 0, 0), type = "Cadence"})
                     end
                 end
@@ -359,42 +347,29 @@ function Executor.updateESP(controller, hrp)
         end
     end
     
-    -- --- PHẦN 5: CẬP NHẬT CHỈ HƯỚNG GẦN NHẤT ---
-    -- A. Hộp quà
-    if nearestGift then
-        controller.NearestGiftPosition = nearestGift.Position
+    -- --- PHẦN 5: CẬP NHẬT DANH SÁCH CHI TIẾT ĐỂ TÍNH REAL-TIME TRONG RENDERSTEPPED ---
+    controller.CachedGiftParts = gifts
+    controller.CachedCadenceParts = instruments
+    controller.CachedAltarParts = altars
+    
+    -- Đảm bảo các mũi tên tồn tại/hủy phù hợp với cấu hình bật/tắt
+    if controller.GiftESPEnabled and #gifts > 0 then
         getOrCreateArrow(saved, "ArrowGift", Color3.fromRGB(255, 255, 255))
     else
-        controller.NearestGiftPosition = nil
-        if saved.ArrowGift then
-            pcall(function() saved.ArrowGift:Destroy() end)
-            saved.ArrowGift = nil
-        end
+        if saved.ArrowGift then pcall(function() saved.ArrowGift:Destroy() end) saved.ArrowGift = nil end
     end
     
-    -- B. Nhạc cụ Cadence
-    if nearestCadence then
-        controller.NearestCadencePosition = nearestCadence.Position
+    if controller.CadenceESPEnabled and #instruments > 0 then
         getOrCreateArrow(saved, "ArrowCadence", Color3.fromRGB(255, 0, 0))
     else
-        controller.NearestCadencePosition = nil
-        if saved.ArrowCadence then
-            pcall(function() saved.ArrowCadence:Destroy() end)
-            saved.ArrowCadence = nil
-        end
+        if saved.ArrowCadence then pcall(function() saved.ArrowCadence:Destroy() end) saved.ArrowCadence = nil end
     end
     
-    -- C. Đàn tế (Altar)
-    if nearestAltar then
-        controller.NearestAltarPosition = nearestAltar.Position
-        local _, altarColor = getAltarTypeAndColor(nearestAltar)
+    if controller.AltarESPEnabled and #altars > 0 then
+        local _, altarColor = getAltarTypeAndColor(nearestAltar or altars[1].part)
         getOrCreateArrow(saved, "ArrowAltar", altarColor)
     else
-        controller.NearestAltarPosition = nil
-        if saved.ArrowAltar then
-            pcall(function() saved.ArrowAltar:Destroy() end)
-            saved.ArrowAltar = nil
-        end
+        if saved.ArrowAltar then pcall(function() saved.ArrowAltar:Destroy() end) saved.ArrowAltar = nil end
     end
 end
 
