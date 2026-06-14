@@ -142,7 +142,10 @@ function Controller:SetImmunity(entityName, value)
         if self.EnemiesFolder then
             for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
                 if child.Name == entityName or string.find(child.Name, entityName) then
-                    Executor.enableImmunity(GC, child)
+                    -- Chỉ áp dụng bảo vệ TouchInterest cho Baby, Bell, Mart
+                    if entityName == "Baby" or entityName == "Bell" or entityName == "Mart" then
+                        Executor.enableImmunity(GC, child)
+                    end
                 end
                 if entityName == "Springer" and string.find(child.Name, "Springer") and self.SpringerImmunityMode == "Blatant" then
                     for _, subChild in ipairs(child:GetChildren()) do
@@ -154,7 +157,9 @@ function Controller:SetImmunity(entityName, value)
             end
         end
     else
-        Executor.disableImmunityForType(GC, entityName)
+        if entityName == "Baby" or entityName == "Bell" or entityName == "Mart" then
+            Executor.disableImmunityForType(GC, entityName)
+        end
         if entityName == "Springer" then
             for part, data in pairs(disabledShockwaves) do
                 restoreShockwave(part)
@@ -210,13 +215,36 @@ end
 local function processEntity(enemy)
     if not enemy then return end
     
-    -- Nếu đang bật miễn nhiễm cho thực thể này thì ẩn ngay lập tức
-    local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
-    if checkFunc and checkFunc() then
-        Executor.enableImmunity(GC, enemy)
+    -- Chỉ áp dụng bảo vệ TouchInterest đối với các thực thể được hỗ trợ (Baby, Bell, Mart)
+    if Logic.isTargetEntity(enemy.Name) then
+        local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
+        if checkFunc and checkFunc() then
+            Executor.enableImmunity(GC, enemy)
+        end
+
+        -- Lắng nghe các bộ phận mới được thêm vào thực thể sau này (tránh sót hitbox khi đang replicate)
+        local descConn = enemy.DescendantAdded:Connect(function(part)
+            local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
+            if checkFunc and checkFunc() then
+                if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
+                    local parentPart = part.Parent
+                    if parentPart and parentPart:IsA("BasePart") then
+                        if not GC.SavedPartsData[parentPart] then
+                            GC.SavedPartsData[parentPart] = {
+                                touch = part,
+                                originalCanTouch = parentPart.CanTouch,
+                                enemyName = enemy.Name
+                            }
+                        end
+                        pcall(function() parentPart.CanTouch = false end)
+                    end
+                end
+            end
+        end)
+        GC.registerEntityConnection(enemy, descConn)
     end
 
-    -- Xử lý vô hiệu hóa shockwave cho Springer
+    -- Xử lý vô hiệu hóa shockwave cho Springer (Springer không có TouchInterest, chỉ có ClientEvent và ShockwaveEvent)
     if string.find(enemy.Name, "Springer") then
         local childAddedConn = enemy.ChildAdded:Connect(function(child)
             if (child.Name == "SpringerShockwave" or child.Name == "DemonShockwave") and Controller.SpringerImmune and Controller.SpringerImmunityMode == "Blatant" then
@@ -231,41 +259,6 @@ local function processEntity(enemy)
             end
         end
     end
-
-    -- Lắng nghe các bộ phận mới được thêm vào thực thể sau này (tránh sót hitbox khi đang replicate)
-    local descConn = enemy.DescendantAdded:Connect(function(part)
-        local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
-        if checkFunc and checkFunc() then
-            if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-                local parentPart = part.Parent
-                if parentPart and parentPart:IsA("BasePart") then
-                    if not GC.SavedPartsData[parentPart] then
-                        GC.SavedPartsData[parentPart] = {
-                            touch = part,
-                            originalCanTouch = parentPart.CanTouch,
-                            enemyName = enemy.Name
-                        }
-                    end
-                    pcall(function() part.Parent = nil end)
-                    pcall(function() parentPart.CanTouch = false end)
-                end
-            elseif string.find(enemy.Name, "Springer") and part:IsA("BasePart") then
-                -- Đối với Springer, nếu là bộ phận mới thêm vào (BasePart) ngoại trừ shockwave thì gán CanTouch = false
-                local name = part.Name
-                if name ~= "SpringerShockwave" and name ~= "DemonShockwave" then
-                    if not GC.SavedPartsData[part] then
-                        GC.SavedPartsData[part] = {
-                            touch = nil,
-                            originalCanTouch = part.CanTouch,
-                            enemyName = enemy.Name
-                        }
-                    end
-                    pcall(function() part.CanTouch = false end)
-                end
-            end
-        end
-    end)
-    GC.registerEntityConnection(enemy, descConn)
 end
 
 -- Gỡ bỏ lắng nghe của thực thể khi nó bị xóa
@@ -388,6 +381,13 @@ local function initializeICBMHook()
                 local args = {...}
                 local shouldBlock, entityName = ClientSideHitLogic.shouldBlockRemoteCall(self, args)
                 if shouldBlock then
+                    -- Nếu là Springer và là ShockwaveEvent, chỉ chặn khi ở chế độ Blatant
+                    if entityName == "Springer" and self.Name == "ShockwaveEvent" then
+                        if Controller.SpringerImmunityMode ~= "Blatant" then
+                            return false -- Cho phép truyền nhận shockwave ở chế độ Legit
+                        end
+                    end
+                    
                     local immuneProperty = entityName .. "Immune"
                     if Controller[immuneProperty] == true then
                         return true -- Trả về true chỉ ra cần chặn cuộc gọi này
