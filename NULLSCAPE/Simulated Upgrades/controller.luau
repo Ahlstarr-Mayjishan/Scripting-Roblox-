@@ -621,9 +621,10 @@ local function hookUpgradeHandler()
                     if typeof(hookfunction) == "function" then
                         local oldIsUpgradeEnabled
                         oldIsUpgradeEnabled = hookfunction(UpgradeHandler.IsUpgradeEnabled, function(...)
+                            local args = {...}
                             local isDefuse = false
-                            for i = 1, select("#", ...) do
-                                if select(i, ...) == "DefuseKit" then
+                            for _, v in ipairs(args) do
+                                if v == "DefuseKit" then
                                     isDefuse = true
                                     break
                                 end
@@ -636,9 +637,10 @@ local function hookUpgradeHandler()
                     else
                         local oldIsUpgradeEnabled = UpgradeHandler.IsUpgradeEnabled
                         UpgradeHandler.IsUpgradeEnabled = function(...)
+                            local args = {...}
                             local isDefuse = false
-                            for i = 1, select("#", ...) do
-                                if select(i, ...) == "DefuseKit" then
+                            for _, v in ipairs(args) do
+                                if v == "DefuseKit" then
                                     isDefuse = true
                                     break
                                 end
@@ -655,9 +657,10 @@ local function hookUpgradeHandler()
                     if typeof(hookfunction) == "function" then
                         local oldGetUpgradeStack
                         oldGetUpgradeStack = hookfunction(UpgradeHandler.GetUpgradeStack, function(...)
+                            local args = {...}
                             local isDefuse = false
-                            for i = 1, select("#", ...) do
-                                if select(i, ...) == "DefuseKit" then
+                            for _, v in ipairs(args) do
+                                if v == "DefuseKit" then
                                     isDefuse = true
                                     break
                                 end
@@ -670,9 +673,10 @@ local function hookUpgradeHandler()
                     else
                         local oldGetUpgradeStack = UpgradeHandler.GetUpgradeStack
                         UpgradeHandler.GetUpgradeStack = function(...)
+                            local args = {...}
                             local isDefuse = false
-                            for i = 1, select("#", ...) do
-                                if select(i, ...) == "DefuseKit" then
+                            for _, v in ipairs(args) do
+                                if v == "DefuseKit" then
                                     isDefuse = true
                                     break
                                 end

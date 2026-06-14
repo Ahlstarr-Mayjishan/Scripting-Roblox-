@@ -28,6 +28,9 @@ return function(Client, Controller)
         MultipleOptions = true,
         Flag = "ESPSelectionDropdown",
         Callback = function(SelectedOptions)
+            if typeof(SelectedOptions) ~= "table" then
+                SelectedOptions = {}
+            end
             -- Thiết lập các trạng thái tương ứng trong Controller
             local giftSelected = table.find(SelectedOptions, "Gift") ~= nil
             local cadenceSelected = table.find(SelectedOptions, "Cadence") ~= nil
@@ -80,6 +83,9 @@ return function(Client, Controller)
         MultipleOptions = true,
         Flag = "AltarFilterDropdown",
         Callback = function(SelectedOptions)
+            if typeof(SelectedOptions) ~= "table" then
+                SelectedOptions = {}
+            end
             Controller:SetAltarFilter(SelectedOptions)
             
             -- Đồng bộ hóa hiển thị giao diện Rayfield khi load config bị lỗi text "none"
