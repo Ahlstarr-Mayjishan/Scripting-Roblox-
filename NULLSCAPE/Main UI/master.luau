@@ -210,6 +210,9 @@ SettingsTab:CreateButton({
 })
 
 local function loadModule(path)
+    if isfile and readfile and isfile(path) then
+        return loadstring(readfile(path))()
+    end
     local githubRawUrl = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
     local url = (githubRawUrl .. path):gsub(" ", "%%20")
     return loadstring(game:HttpGet(url))()

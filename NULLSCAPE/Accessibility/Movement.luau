@@ -1,10 +1,9 @@
 -- [[
---  NULLSCAPE - Movement Control Logic (Friction Hack Edition)
+--  NULLSCAPE - Movement Control Logic (Friction Hook Edition)
 --  Vai trò: Hook phương thức SetMoveDirection của MovementCore để giảm/triệt tiêu momentum mượt mà.
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local MovementCoreModule = ReplicatedStorage:FindFirstChild("Movement") and ReplicatedStorage.Movement:FindFirstChild("MovementCore")
 
 local Logic = {
     MomentumReduction = 0,
@@ -12,7 +11,15 @@ local Logic = {
     Hooked = false
 }
 
+-- Tìm kiếm MovementCore động để tránh lỗi nếu ReplicatedStorage chưa tải xong
+local function getMovementCore()
+    local movement = ReplicatedStorage:FindFirstChild("Movement")
+    if not movement then return nil end
+    return movement:FindFirstChild("MovementCore")
+end
+
 function Logic.start(controller, gc)
+    local MovementCoreModule = getMovementCore()
     if not MovementCoreModule then return end
     
     local success, MovementCore = pcall(require, MovementCoreModule)
@@ -37,6 +44,8 @@ end
 
 function Logic.stop()
     if not Logic.Hooked then return end
+    
+    local MovementCoreModule = getMovementCore()
     if not MovementCoreModule then return end
     
     local success, MovementCore = pcall(require, MovementCoreModule)
