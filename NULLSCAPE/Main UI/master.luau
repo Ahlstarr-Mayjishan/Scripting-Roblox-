@@ -234,6 +234,18 @@ if not success2 then
     warn("[NULLSCAPE] Lỗi khi nạp module Simulated Upgrades/Radar: " .. tostring(err2))
 end
 
+local success3, err3 = pcall(function()
+    local AccessibilityController = loadModule("NULLSCAPE/Accessibility/controller.luau")
+    Client.Modules["AccessibilityController"] = AccessibilityController
+    local AccessibilityTab = loadModule("NULLSCAPE/Accessibility/tab.luau")
+    
+    AccessibilityTab(Client, AccessibilityController)
+end)
+
+if not success3 then
+    warn("[NULLSCAPE] Lỗi khi nạp module Accessibility: " .. tostring(err3))
+end
+
 -- Tải cấu hình lưu trữ của Rayfield
 Rayfield:LoadConfiguration()
 

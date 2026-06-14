@@ -29,4 +29,22 @@ return function(Client, Controller)
             Controller:SetImmunity("Mart", Value)
         end
     })
+    
+    Tab:CreateToggle({
+        Name = "ICBM",
+        CurrentValue = Controller.ICBMImmune,
+        Flag = "ImmunityICBMToggle",
+        Callback = function(Value)
+            Controller:SetImmunity("ICBM", Value)
+        end
+    })
+    
+    Tab:CreateToggle({
+        Name = "Springer",
+        CurrentValue = Controller.SpringerImmune,
+        Flag = "ImmunitySpringerToggle",
+        Callback = function(Value)
+            Controller:SetImmunity("Springer", Value)
+        end
+    })
 end

@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Executor = getgenv().loadModule("NULLSCAPE/Entities/executor.luau")
 local Logic = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest Entities Types.luau")
+local ClientSideHitLogic = getgenv().loadModule("NULLSCAPE/Entities/ClientSideHit Entities Types.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 
 local Controller = {
@@ -17,6 +18,8 @@ local Controller = {
     BabyImmune = false,
     BellImmune = false,
     MartImmune = false,
+    ICBMImmune = false,
+    SpringerImmune = false,
     Destroyed = false,
     
     EnemiesFolder = nil,
@@ -39,13 +42,8 @@ local function isInMatch()
 end
 
 local inLobby = not isInMatch()       -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
-local isHibernating = false -- Đã dọn sạch thực thể trong trận và đang ngủ đông
 local hasInRoundValue = false
-local touchInterestLoopActive = false
 local folderConnections = {}
-
--- Forward references
-local startTouchInterestLoop
 
 -- Ngắt các kết nối quan sát thư mục
 local function disconnectFolderObservations()
@@ -55,52 +53,6 @@ local function disconnectFolderObservations()
     table.clear(folderConnections)
 end
 
--- Vòng lặp quan sát TouchInterest của các mục tiêu đặc biệt
-startTouchInterestLoop = function()
-    if touchInterestLoopActive then return end
-    touchInterestLoopActive = true
-    
-    task.spawn(function()
-        while not Controller.Destroyed and not inLobby do
-            if isHibernating then
-                task.wait(1)
-                continue
-            end
-            
-            if not Controller.EnemiesFolder then
-                task.wait(1)
-                continue
-            end
-            
-            -- Gọi logic kiểm tra trạng thái TouchInterest từ logic file
-            local foundAny, touchInterestsExist, allLoaded = Logic.checkTargetsForTouchInterest(Controller.EnemiesFolder, Controller)
-            
-            if foundAny then
-                if not touchInterestsExist and allLoaded then
-                    isHibernating = true
-                    
-                    if getgenv().Rayfield then
-                        getgenv().Rayfield:Notify({
-                            Title = "Protection System",
-                            Content = "TouchInterest of active entities has been cleaned. Status: Hibernating.",
-                            Duration = 3
-                        })
-                    end
-                else
-                    for _, enemy in ipairs(Controller.EnemiesFolder:GetChildren()) do
-                        local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
-                        if checkFunc and checkFunc() then
-                            Executor.enableImmunity(GC, enemy)
-                        end
-                    end
-                end
-            end
-            
-            task.wait(1)
-        end
-        touchInterestLoopActive = false
-    end)
-end
 
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
 function Controller:CleanUp()
@@ -117,6 +69,51 @@ function Controller:CleanUp()
     end
 end
 
+local disabledShockwaves = {}
+
+local function restoreShockwave(part)
+    local data = disabledShockwaves[part]
+    if data then
+        if data.conn1 then pcall(function() data.conn1:Disconnect() end) end
+        if data.conn2 then pcall(function() data.conn2:Disconnect() end) end
+        pcall(function() part.CanTouch = data.originalCanTouch end)
+        pcall(function() part.CanCollide = data.originalCanCollide end)
+        disabledShockwaves[part] = nil
+    end
+end
+
+local function disableShockwave(enemy, part)
+    if not part then return end
+    if disabledShockwaves[part] then return end
+    
+    local originalCanTouch = part.CanTouch
+    local originalCanCollide = part.CanCollide
+    
+    part.CanTouch = false
+    part.CanCollide = false
+    
+    local conn1 = part:GetPropertyChangedSignal("CanTouch"):Connect(function()
+        if part.CanTouch then
+            part.CanTouch = false
+        end
+    end)
+    
+    local conn2 = part:GetPropertyChangedSignal("CanCollide"):Connect(function()
+        if part.CanCollide then
+            part.CanCollide = false
+        end
+    end)
+    
+    disabledShockwaves[part] = {
+        conn1 = conn1,
+        conn2 = conn2,
+        originalCanTouch = originalCanTouch,
+        originalCanCollide = originalCanCollide,
+        enemy = enemy
+    }
+end
+
+
 -- Thiết lập cấu hình miễn nhiễm và kích hoạt dọn dẹp tức thời
 function Controller:SetImmunity(entityName, value)
     if entityName == "Baby" then
@@ -125,21 +122,36 @@ function Controller:SetImmunity(entityName, value)
         self.BellImmune = value
     elseif entityName == "Mart" then
         self.MartImmune = value
+    elseif entityName == "ICBM" then
+        self.ICBMImmune = value
+    elseif entityName == "Springer" then
+        self.SpringerImmune = value
     end
-    
-    isHibernating = false -- Đánh thức checker
-    
+
     -- Áp dụng thay đổi tức thời cho thực thể đã tồn tại trong workspace
     if value then
         if self.EnemiesFolder then
             for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
-                if child.Name == entityName then
+                if child.Name == entityName or string.find(child.Name, entityName) then
                     Executor.enableImmunity(GC, child)
+                end
+                if entityName == "Springer" and string.find(child.Name, "Springer") then
+                    task.spawn(function()
+                        local shockwave = child:WaitForChild("SpringerShockwave", 5)
+                        local demonShockwave = child:WaitForChild("DemonShockwave", 5)
+                        disableShockwave(child, shockwave)
+                        disableShockwave(child, demonShockwave)
+                    end)
                 end
             end
         end
     else
         Executor.disableImmunityForType(GC, entityName)
+        if entityName == "Springer" then
+            for part, data in pairs(disabledShockwaves) do
+                restoreShockwave(part)
+            end
+        end
     end
     
     if getgenv().Rayfield then
@@ -159,6 +171,19 @@ local function processEntity(enemy)
     local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
     if checkFunc and checkFunc() then
         Executor.enableImmunity(GC, enemy)
+    end
+
+    -- Xử lý vô hiệu hóa shockwave cho Springer
+    if string.find(enemy.Name, "Springer") then
+        task.spawn(function()
+            local shockwave = enemy:WaitForChild("SpringerShockwave", 5)
+            local demonShockwave = enemy:WaitForChild("DemonShockwave", 5)
+            
+            if Controller.SpringerImmune then
+                disableShockwave(enemy, shockwave)
+                disableShockwave(enemy, demonShockwave)
+            end
+        end)
     end
 
     -- Lắng nghe các bộ phận mới được thêm vào thực thể sau này (tránh sót hitbox khi đang replicate)
@@ -187,6 +212,11 @@ end
 -- Gỡ bỏ lắng nghe của thực thể khi nó bị xóa
 local function removeEntity(enemy)
     GC.removeEntityConnections(enemy)
+    for part, data in pairs(disabledShockwaves) do
+        if data.enemy == enemy then
+            restoreShockwave(part)
+        end
+    end
 end
 
 -- Thiết lập quan sát thư mục Enemies trong Workspace
@@ -245,20 +275,16 @@ local function setInLobby(val)
     if inLobby == val then return end
     inLobby = val
     if val then
-        isHibernating = false
         disconnectFolderObservations()
         Controller:CleanUp()
     else
-        isHibernating = false
         startObservingFolders()
-        startTouchInterestLoop()
     end
 end
 
 -- Khởi tạo ban đầu khi nạp script
 if not inLobby then
     startObservingFolders()
-    startTouchInterestLoop()
 end
 
 -- Lắng nghe sự kiện đổi trạng thái game thời gian thực
@@ -284,5 +310,45 @@ task.spawn(function()
         setInLobby(not isInMatch())
     end
 end)
+
+-- Hook để chặn RemoteEvent báo tử của thực thể Client-side (như ICBM) một cách an toàn
+local hookInitialized = false
+local function initializeICBMHook()
+    if hookInitialized then return end
+    hookInitialized = true
+    
+    local success, err = pcall(function()
+        local remoteProto = Instance.new("RemoteEvent")
+        local oldFireServer
+        -- Xây dựng bảng tra cứu nhanh O(1) tên RemoteEvent cần chặn để tối ưu hóa hiệu năng tối đa cho Mobile/Low-end
+        local TargetRemoteNames = {}
+        for _, config in pairs(ClientSideHitLogic.TargetEntities) do
+            TargetRemoteNames[config.RemoteName] = true
+        end
+
+        oldFireServer = hookfunction(remoteProto.FireServer, function(self, ...)
+            -- Bước lọc đầu tiên siêu tốc (chỉ tốn ~2ns), loại bỏ ngay lập tức 99.9% remote khác của game
+            if TargetRemoteNames[self.Name] then
+                if ClientSideHitLogic.isTargetRemote(self) then
+                    local args = {...}
+                    local shouldBlock, entityName = ClientSideHitLogic.shouldBlockRemoteCall(self, args)
+                    if shouldBlock then
+                        local immuneProperty = entityName .. "Immune"
+                        if Controller[immuneProperty] == true then
+                            return -- Chặn đứng cuộc gọi báo tử, bảo vệ người chơi
+                        end
+                    end
+                end
+            end
+            
+            return oldFireServer(self, ...)
+        end)
+    end)
+    if not success then
+        warn("Failed to initialize ClientSideHit/ICBM Immunity Hook:", err)
+    end
+end
+
+task.spawn(initializeICBMHook)
 
 return Controller

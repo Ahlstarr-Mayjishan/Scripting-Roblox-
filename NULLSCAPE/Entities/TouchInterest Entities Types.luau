@@ -42,37 +42,6 @@ function Logic.isTargetEntity(name)
     return false
 end
 
--- Kiểm tra xem trong các thực thể mục tiêu còn TouchInterest nào không
-function Logic.checkTargetsForTouchInterest(enemiesFolder, controller)
-    if not enemiesFolder then return false, false, false end
-    
-    local foundAny = false
-    local touchInterestsExist = false
-    local allLoaded = true
-    
-    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-        local checkFunc = Logic.getImmunityCheck(enemy.Name, controller)
-        if checkFunc and checkFunc() then
-            foundAny = true
-            
-            -- Đảm bảo thực thể đã tải xong nhân vật trước khi kiểm tra trạng thái TouchInterest
-            local loaded = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildOfClass("Humanoid") or enemy:FindFirstChildWhichIsA("BasePart")
-            if not loaded then
-                allLoaded = false
-            end
-            
-            for _, part in ipairs(enemy:GetDescendants()) do
-                if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-                    touchInterestsExist = true
-                    break
-                end
-            end
-        end
-        if touchInterestsExist then break end
-    end
-    
-    return foundAny, touchInterestsExist, allLoaded
-end
 
 -- Bật miễn nhiễm (ẩn TouchInterest và tắt CanTouch) cho một thực thể cụ thể
 function Logic.enableImmunity(gc, enemy)

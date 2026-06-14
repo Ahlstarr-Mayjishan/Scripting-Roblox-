@@ -390,10 +390,56 @@ end
 -- Hàm phát hiện nâng cấp Radar chính thức của game đã mở khóa (Tối ưu hóa tránh đệ quy sâu)
 local function checkRadarUnlocked()
     local unlocked = false
+    local checkValue = function(val)
+        if not val then return false end
+        if val:IsA("BoolValue") and val.Value == true then
+            return true
+        elseif (val:IsA("NumberValue") or val:IsA("IntValue")) and val.Value >= 1 then
+            return true
+        end
+        return false
+    end
+
+    -- 1. Check trực tiếp trong LocalPlayer
+    for _, name in ipairs({"Radar", "RadarUpgrade", "RadarUnlocked"}) do
+        local child = LocalPlayer:FindFirstChild(name)
+        if checkValue(child) then return true end
+    end
+
+    -- 2. Check trong các thư mục Upgrades/Stats/Passives/Perks của LocalPlayer
+    for _, folderName in ipairs({"Upgrades", "Passives", "Perks", "Stats", "UpgradesFolder"}) do
+        local folder = LocalPlayer:FindFirstChild(folderName)
+        if folder then
+            for _, child in ipairs(folder:GetChildren()) do
+                if string.find(child.Name:lower(), "radar") and checkValue(child) then
+                    return true
+                end
+            end
+        end
+    end
+
+    -- 3. Check trong ReplicatedStorage (chứa Upgrades toàn cục hoặc theo tên người chơi)
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    for _, folderName in ipairs({
+        "Upgrades", 
+        "PlayerUpgrades", 
+        "Upgrades_" .. LocalPlayer.Name, 
+        LocalPlayer.Name .. "_Upgrades"
+    }) do
+        local folder = ReplicatedStorage:FindFirstChild(folderName)
+        if folder then
+            local playerFolder = folder:FindFirstChild(LocalPlayer.Name) or folder
+            for _, child in ipairs(playerFolder:GetChildren()) do
+                if string.find(child.Name:lower(), "radar") and checkValue(child) then
+                    return true
+                end
+            end
+        end
+    end
+
+    -- 4. Fallback: Quét đệ quy nhanh trên LocalPlayer như cũ
     local function check(parent)
-        if not parent then return end
-        
-        -- Bỏ qua các thư mục GUI, Scripts, Backpack,... của Player để tránh lag
+        if not parent or unlocked then return end
         local pName = parent.Name
         if pName == "PlayerGui" or pName == "PlayerScripts" or pName == "Backpack" or pName == "StarterGear" then
             return
@@ -401,14 +447,9 @@ local function checkRadarUnlocked()
         
         for _, child in ipairs(parent:GetChildren()) do
             local name = child.Name:lower()
-            if string.find(name, "radar") then
-                if child:IsA("BoolValue") and child.Value == true then
-                    unlocked = true
-                    break
-                elseif (child:IsA("NumberValue") or child:IsA("IntValue")) and child.Value >= 1 then
-                    unlocked = true
-                    break
-                end
+            if string.find(name, "radar") and checkValue(child) then
+                unlocked = true
+                break
             end
             if not unlocked then
                 check(child)

@@ -1,0 +1,137 @@
+-- [[
+--  NULLSCAPE - Client-Side Hit (RemoteEvent) Entities Types
+--  Vai trò: Định nghĩa danh sách các thực thể gây sát thương thông qua cơ chế
+--  báo tử client-side (RemoteEvent), cùng danh sách các event và tham số cần chặn.
+-- ]]
+
+local Logic = {}
+
+-- Danh sách các thực thể gây sát thương client-side và cấu hình chặn của chúng
+Logic.TargetEntities = {
+    ["ClientEvent"] = {
+        ["ICBM"] = {
+            ["Kill"] = true,
+            ["Combust"] = true
+        },
+        ["Springer"] = {
+            ["Kill"] = true,
+            ["DemonKill"] = true
+        }
+    },
+    ["ShockwaveEvent"] = {
+        ["Springer"] = {
+            ["Debuff"] = true
+        }
+    }
+}
+
+-- Kiểm tra nhanh xem RemoteEvent có khớp với cấu hình không (Pre-filter để tối ưu hiệu năng)
+function Logic.isTargetRemote(remote)
+    if not remote or not remote:IsA("RemoteEvent") then
+        return false
+    end
+    
+    local parent = remote.Parent
+    local parentName = parent and parent.Name
+    if not parentName then
+        return false
+    end
+    
+    local remoteName = remote.Name
+    local entities = Logic.TargetEntities[remoteName]
+    if entities then
+        for entityName, _ in pairs(entities) do
+            if string.find(parentName, entityName) then
+                return true
+            end
+        end
+    end
+    
+    return false
+end
+
+-- Kiểm tra xem RemoteEvent có thuộc diện cần chặn hay không
+function Logic.shouldBlockRemoteCall(remote, args)
+    if not remote or not remote:IsA("RemoteEvent") then
+        return false, nil
+    end
+    
+    local parent = remote.Parent
+    if not parent then
+        return false, nil
+    end
+    
+    local parentName = parent.Name
+    local firstArg = args[1]
+    
+    local remoteName = remote.Name
+    local entities = Logic.TargetEntities[remoteName]
+    if not entities then
+        return false, nil
+    end
+    
+    for entityName, blockedArgs in pairs(entities) do
+        -- Kiểm tra chặt chẽ: tên folder cha chứa tên thực thể trùng khớp
+        if string.find(parentName, entityName) then
+            -- Chỉ chặn nếu tham số đầu tiên khớp chính xác với danh sách chặn
+            if blockedArgs[firstArg] then
+                -- Bảo đảm chỉ chặn khi mục tiêu tác động là local player
+                -- Để tránh chặn nhầm gói tin của các player khác
+                local targetsLocal = false
+                local Players = game:GetService("Players")
+                local LocalPlayer = Players.LocalPlayer
+                local char = LocalPlayer and LocalPlayer.Character
+                
+                -- Đếm xem có tham số target cụ thể nào khác không
+                local hasTarget = false
+                for i = 2, #args do
+                    if args[i] ~= nil then
+                        hasTarget = true
+                        break
+                    end
+                end
+                
+                if not hasTarget then
+                    -- Không có tham số target cụ thể nào khác, mặc định tác động lên người chơi hiện tại (local player)
+                    targetsLocal = true
+                else
+                    -- Duyệt qua các tham số tiếp theo để kiểm tra xem có chỉ định local player/character không
+                    for i = 2, #args do
+                        local arg = args[i]
+                        if arg == LocalPlayer or arg == char then
+                            targetsLocal = true
+                            break
+                        end
+                        if typeof(arg) == "Instance" then
+                            if char and (arg:IsDescendantOf(char) or arg == char) then
+                                targetsLocal = true
+                                break
+                            end
+                        elseif typeof(arg) == "table" then
+                            -- Nếu tham số là một bảng (ví dụ: {Character = game.Workspace.Noriko_Ellen}), kiểm tra các phần tử bên trong
+                            for _, val in pairs(arg) do
+                                if val == LocalPlayer or val == char then
+                                    targetsLocal = true
+                                    break
+                                end
+                                if typeof(val) == "Instance" and char and (val:IsDescendantOf(char) or val == char) then
+                                    targetsLocal = true
+                                    break
+                                end
+                            end
+                        end
+                        if targetsLocal then break end
+                    end
+                end
+                
+                if targetsLocal then
+                    return true, entityName
+                end
+            end
+        end
+    end
+    
+    return false, nil
+end
+
+return Logic
