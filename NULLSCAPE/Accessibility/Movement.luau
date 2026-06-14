@@ -33,18 +33,23 @@ function Logic.start(controller, gc)
     MovementCore.SetMoveDirection = function(self, direction)
         local r = Logic.MomentumReduction
         if r > 0 and self.WantDirection and typeof(self.WantDirection) == "Vector3" and typeof(direction) == "Vector3" then
-            -- Chỉ can thiệp khi không ở trong trạng thái quay đầu gấp (quick turn) để giữ lại animation phanh/quay đầu
-            if not self.doingQuickTurn then
+            local bypassQuickTurn = (r >= 0.7)
+            if bypassQuickTurn or not self.doingQuickTurn then
                 local k = r
                 if r < 1 then
                     -- Áp dụng đường cong lũy thừa để các mức nhỏ (như 10%, 20%) mượt mà và tự nhiên hơn
                     k = (r ^ 2) * 0.4
                 end
                 
+                if bypassQuickTurn then
+                    self.doingQuickTurn = false
+                    k = r -- Sử dụng lực gốc mạnh hơn khi >= 70% để triệt tiêu nhanh
+                end
+                
                 -- In log chẩn đoán mỗi 2 giây để kiểm tra giá trị thực tế truyền vào
                 if not self._lastPrint or os.clock() - self._lastPrint > 2 then
                     self._lastPrint = os.clock()
-                    print(string.format("[NULLSCAPE] Hook Active - r: %.3f, k: %.4f", r, k))
+                    print(string.format("[NULLSCAPE] Hook Active - r: %.3f, k: %.4f, bypassQuickTurn: %s", r, k, tostring(bypassQuickTurn)))
                 end
                 
                 direction = direction:Lerp(self.WantDirection, k)

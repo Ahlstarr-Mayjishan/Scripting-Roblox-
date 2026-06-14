@@ -16,6 +16,7 @@ return function(Client, Controller)
 
     Tab:CreateSlider({
         Name = "Momentum Reduction",
+        Info = "Higher values make control easier. Values >= 70% remove the braking/turn animation.",
         Range = {0, 100},
         Increment = 10,
         CurrentValue = math.clamp((Controller.MomentumReduction or 0) * 100, 0, 100),
@@ -25,4 +26,6 @@ return function(Client, Controller)
             Controller:SetMomentumReduction(Value / 100)
         end
     })
+    
+    Tab:CreateLabel("Higher ratio = easier control. Setting to >= 70% will remove the braking animation.")
 end
