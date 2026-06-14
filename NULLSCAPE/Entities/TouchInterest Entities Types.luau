@@ -49,9 +49,9 @@ end
 
 -- Bật miễn nhiễm (ẩn TouchInterest và tắt CanTouch) cho một thực thể cụ thể
 function Logic.enableImmunity(gc, enemy)
-    if not enemy then return end
+    if not enemy or not enemy:IsA("Model") or enemy.Name == "Skinwalkers" then return end
     
-    local isSkinwalker = string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") or (enemy:GetAttribute("OriginalName") and (string.find(enemy:GetAttribute("OriginalName"), "Skinwalker") or string.find(enemy:GetAttribute("OriginalName"), "Husk")))
+    local isSkinwalker = (string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk")) and enemy.Name ~= "Skinwalkers" or (enemy:GetAttribute("OriginalName") and (string.find(enemy:GetAttribute("OriginalName"), "Skinwalker") or string.find(enemy:GetAttribute("OriginalName"), "Husk")))
     
     if isSkinwalker then
         -- Đổi tên Model để bypass check FindFirstChild/Name của LocalScript

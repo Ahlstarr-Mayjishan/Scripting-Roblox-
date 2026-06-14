@@ -11,6 +11,7 @@ local ScriptContext = game:GetService("ScriptContext")
 local Logic = {
     Connection = nil,
     DescendantConn = nil,
+    CharAddedConn = nil,
     MomentumReduction = 0,
     SavedFrictionData = {},
     DiagnosticsInitialized = false
@@ -117,12 +118,12 @@ function Logic.start(controller, gc)
     end
     
     -- Lắng nghe khi nhân vật hồi sinh
-    local charAddedConn = LocalPlayer.CharacterAdded:Connect(function(char)
+    Logic.CharAddedConn = LocalPlayer.CharacterAdded:Connect(function(char)
         table.clear(Logic.SavedFrictionData)
         processCharacter(char)
     end)
     if gc then
-        gc.registerConnection(charAddedConn)
+        gc.registerConnection(Logic.CharAddedConn)
     end
     
     -- Chạy vòng lặp LERP bẻ hướng an toàn
@@ -179,6 +180,10 @@ function Logic.stop()
     if Logic.DescendantConn then
         pcall(function() Logic.DescendantConn:Disconnect() end)
         Logic.DescendantConn = nil
+    end
+    if Logic.CharAddedConn then
+        pcall(function() Logic.CharAddedConn:Disconnect() end)
+        Logic.CharAddedConn = nil
     end
     
     -- Khôi phục ma sát gốc của nhân vật

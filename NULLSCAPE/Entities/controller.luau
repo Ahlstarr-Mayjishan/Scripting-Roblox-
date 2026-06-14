@@ -152,12 +152,12 @@ function Controller:SetImmunity(entityName, value)
         local function applyImmunityToChild(child)
             local isTarget = false
             if entityName == "Skinwalker" then
-                isTarget = string.find(child.Name, "Skinwalker") or string.find(child.Name, "Husk")
+                isTarget = (string.find(child.Name, "Skinwalker") or string.find(child.Name, "Husk")) and child.Name ~= "Skinwalkers"
             else
                 isTarget = child.Name == entityName or string.find(child.Name, entityName)
             end
             
-            if isTarget then
+            if isTarget and child:IsA("Model") then
                 Executor.enableImmunity(GC, child)
             end
             
@@ -175,8 +175,14 @@ function Controller:SetImmunity(entityName, value)
                 applyImmunityToChild(child)
             end
         end
+        local skinwalkersFolder = workspace:FindFirstChild("Skinwalkers")
+        if skinwalkersFolder and skinwalkersFolder:IsA("Folder") then
+            for _, child in ipairs(skinwalkersFolder:GetChildren()) do
+                applyImmunityToChild(child)
+            end
+        end
         for _, child in ipairs(workspace:GetChildren()) do
-            if child.Name ~= "Enemies" then
+            if child.Name ~= "Enemies" and child.Name ~= "Skinwalkers" then
                 applyImmunityToChild(child)
             end
         end
@@ -325,7 +331,7 @@ end)
 
 -- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
 local function processEntity(enemy)
-    if not enemy then return end
+    if not enemy or not enemy:IsA("Model") or enemy.Name == "Skinwalkers" then return end
     
     local name = enemy.Name
     if Logic.isTargetEntity(name) then
@@ -443,13 +449,13 @@ function Controller:ObserveFolder(folder)
     table.insert(folderConnections, destroyingConn)
 end
 
--- Quét tìm thư mục Enemies trong Workspace và lắng nghe sự thay đổi
+-- Quét tìm thư mục Enemies và Skinwalkers trong Workspace và lắng nghe sự thay đổi
 local function startObservingFolders()
     disconnectFolderObservations()
     
     local function checkAndObserve(child)
         if Controller.Destroyed then return end
-        if child.Name == "Enemies" and child:IsA("Folder") then
+        if (child.Name == "Enemies" or child.Name == "Skinwalkers") and child:IsA("Folder") then
             Controller:ObserveFolder(child)
         else
             -- Đề phòng thực thể spawn trực tiếp ở workspace
@@ -464,10 +470,15 @@ local function startObservingFolders()
     if initialFolder and initialFolder:IsA("Folder") then
         Controller:ObserveFolder(initialFolder)
     end
+    
+    local skinwalkersFolder = workspace:FindFirstChild("Skinwalkers")
+    if skinwalkersFolder and skinwalkersFolder:IsA("Folder") then
+        Controller:ObserveFolder(skinwalkersFolder)
+    end
 
     -- Xử lý các con có sẵn ở workspace
     for _, child in ipairs(workspace:GetChildren()) do
-        if child.Name ~= "Enemies" then
+        if child.Name ~= "Enemies" and child.Name ~= "Skinwalkers" then
             processEntity(child)
         end
     end
