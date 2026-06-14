@@ -73,23 +73,27 @@ function Controller:SetSpringerAutoJump(value)
     end
 end
 
+local function handleSpringerShockwave(enemy, child)
+    if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
+        Executor.setupAutoJump(enemy, child, Controller, GC)
+    end
+end
+
 -- Xử lý từng thực thể Springer khi xuất hiện
 local function processEntity(enemy)
     if not enemy then return end
     
     if string.find(enemy.Name, "Springer") then
-        task.spawn(function()
-            local shockwave = enemy:WaitForChild("SpringerShockwave", 5)
-            if shockwave then
-                Executor.setupAutoJump(enemy, shockwave, Controller, GC)
-            end
+        -- 1. Lắng nghe các shockwave được thêm vào động sau này (khi Springer nhảy)
+        local childAddedConn = enemy.ChildAdded:Connect(function(child)
+            handleSpringerShockwave(enemy, child)
         end)
-        task.spawn(function()
-            local demonShockwave = enemy:WaitForChild("DemonShockwave", 5)
-            if demonShockwave then
-                Executor.setupAutoJump(enemy, demonShockwave, Controller, GC)
-            end
-        end)
+        GC.registerEntityConnection(enemy, childAddedConn)
+        
+        -- 2. Xử lý các shockwave đã có sẵn trong model
+        for _, child in ipairs(enemy:GetChildren()) do
+            handleSpringerShockwave(enemy, child)
+        end
     end
 end
 

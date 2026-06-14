@@ -137,14 +137,11 @@ function Controller:SetImmunity(entityName, value)
                     Executor.enableImmunity(GC, child)
                 end
                 if entityName == "Springer" and string.find(child.Name, "Springer") and self.SpringerImmunityMode == "Blatant" then
-                    task.spawn(function()
-                        local shockwave = child:WaitForChild("SpringerShockwave", 5)
-                        if shockwave then disableShockwave(child, shockwave) end
-                    end)
-                    task.spawn(function()
-                        local demonShockwave = child:WaitForChild("DemonShockwave", 5)
-                        if demonShockwave then disableShockwave(child, demonShockwave) end
-                    end)
+                    for _, subChild in ipairs(child:GetChildren()) do
+                        if subChild.Name == "SpringerShockwave" or subChild.Name == "DemonShockwave" then
+                            disableShockwave(child, subChild)
+                        end
+                    end
                 end
             end
         end
@@ -174,16 +171,13 @@ function Controller:SetSpringerImmunityMode(mode)
         if mode == "Blatant" then
             -- Tắt toàn bộ sóng đang tồn tại
             if self.EnemiesFolder then
-                for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
-                    if string.find(child.Name, "Springer") then
-                        task.spawn(function()
-                            local shockwave = child:WaitForChild("SpringerShockwave", 5)
-                            if shockwave then disableShockwave(child, shockwave) end
-                        end)
-                        task.spawn(function()
-                            local demonShockwave = child:WaitForChild("DemonShockwave", 5)
-                            if demonShockwave then disableShockwave(child, demonShockwave) end
-                        end)
+                for _, enemy in ipairs(self.EnemiesFolder:GetChildren()) do
+                    if string.find(enemy.Name, "Springer") then
+                        for _, child in ipairs(enemy:GetChildren()) do
+                            if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
+                                disableShockwave(enemy, child)
+                            end
+                        end
                     end
                 end
             end
@@ -208,18 +202,18 @@ local function processEntity(enemy)
 
     -- Xử lý vô hiệu hóa shockwave cho Springer
     if string.find(enemy.Name, "Springer") then
-        task.spawn(function()
-            local shockwave = enemy:WaitForChild("SpringerShockwave", 5)
-            if shockwave and Controller.SpringerImmune and Controller.SpringerImmunityMode == "Blatant" then
-                disableShockwave(enemy, shockwave)
+        local childAddedConn = enemy.ChildAdded:Connect(function(child)
+            if (child.Name == "SpringerShockwave" or child.Name == "DemonShockwave") and Controller.SpringerImmune and Controller.SpringerImmunityMode == "Blatant" then
+                disableShockwave(enemy, child)
             end
         end)
-        task.spawn(function()
-            local demonShockwave = enemy:WaitForChild("DemonShockwave", 5)
-            if demonShockwave and Controller.SpringerImmune and Controller.SpringerImmunityMode == "Blatant" then
-                disableShockwave(enemy, demonShockwave)
+        GC.registerEntityConnection(enemy, childAddedConn)
+        
+        for _, child in ipairs(enemy:GetChildren()) do
+            if (child.Name == "SpringerShockwave" or child.Name == "DemonShockwave") and Controller.SpringerImmune and Controller.SpringerImmunityMode == "Blatant" then
+                disableShockwave(enemy, child)
             end
-        end)
+        end
     end
 
     -- Lắng nghe các bộ phận mới được thêm vào thực thể sau này (tránh sót hitbox khi đang replicate)

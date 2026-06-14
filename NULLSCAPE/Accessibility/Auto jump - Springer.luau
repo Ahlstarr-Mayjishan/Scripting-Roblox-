@@ -40,9 +40,17 @@ end
 function Logic.setupAutoJump(enemy, shockwave, controller, gc)
     if not shockwave then return end
     
-    local conn = shockwave:GetPropertyChangedSignal("CanTouch"):Connect(function()
+    local hasTriggered = false
+    local function runJumpCheck()
+        if hasTriggered then return end
         if not controller.SpringerAutoJumpEnabled then return end
         if not shockwave.CanTouch then return end
+        
+        local shockwavePos = shockwave.Position
+        -- Nếu vị trí chưa được khởi tạo (bằng 0,0,0 do clone chưa gán Position), bỏ qua chờ cập nhật tiếp theo
+        if shockwavePos.Magnitude == 0 then
+            return
+        end
         
         local Players = game:GetService("Players")
         local LocalPlayer = Players.LocalPlayer
@@ -51,7 +59,6 @@ function Logic.setupAutoJump(enemy, shockwave, controller, gc)
         local humanoid = char and char:FindFirstChildOfClass("Humanoid")
         
         if hrp and humanoid and humanoid.FloorMaterial ~= Enum.Material.Air then
-            local shockwavePos = shockwave.Position
             local playerPos = hrp.Position
             
             -- Tránh hiểu lầm khi làn sóng ở trên đầu hoặc dưới chân (khác cao độ/level)
@@ -67,6 +74,8 @@ function Logic.setupAutoJump(enemy, shockwave, controller, gc)
             local duration = isSpringloaded and 2.5 or 1.5
             
             if dist < maxRadius then
+                hasTriggered = true -- Chỉ kích hoạt nhảy một lần duy nhất cho mỗi vòng sóng
+                
                 -- Tính toán chính xác thời điểm sóng chạm chân người chơi theo phương trình Easing EasingStyle.Sine, EasingDirection.Out
                 local ratio = math.clamp(dist / maxRadius, 0, 1)
                 local t_reach = duration * (2 / math.pi) * math.asin(ratio)
@@ -88,9 +97,16 @@ function Logic.setupAutoJump(enemy, shockwave, controller, gc)
                 end
             end
         end
-    end)
+    end
     
-    gc.registerEntityConnection(enemy, conn)
+    -- 1. Lắng nghe nếu thuộc tính CanTouch hoặc Position thay đổi để xử lý bất đồng bộ
+    local conn1 = shockwave:GetPropertyChangedSignal("CanTouch"):Connect(runJumpCheck)
+    local conn2 = shockwave:GetPropertyChangedSignal("Position"):Connect(runJumpCheck)
+    gc.registerEntityConnection(enemy, conn1)
+    gc.registerEntityConnection(enemy, conn2)
+    
+    -- 2. Trì hoãn nhẹ kiểm tra lần đầu để cho phép luồng khởi tạo gán xong Position và CanTouch
+    task.defer(runJumpCheck)
 end
 
 return Logic
