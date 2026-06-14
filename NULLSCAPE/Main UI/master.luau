@@ -24,12 +24,17 @@ pcall(function()
         makefolder(folder)
         
         local defaultSettings = {
+            RadarEnabledToggle = false,
             ESPSelectionDropdown = {},
             ESPStyleDropdown = "Highlight",
             AltarFilterDropdown = "All",
             ImmunityBabyToggle = false,
             ImmunityBellToggle = false,
-            ImmunityMartToggle = false
+            ImmunityMartToggle = false,
+            ImmunityICBMToggle = false,
+            ImmunitySpringerToggle = false,
+            SpringerAutoJumpToggle = false,
+            SpringerImmunityModeDropdown = "Legit"
         }
         
         local currentSettings = {}

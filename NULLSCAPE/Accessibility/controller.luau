@@ -80,10 +80,15 @@ local function processEntity(enemy)
     if string.find(enemy.Name, "Springer") then
         task.spawn(function()
             local shockwave = enemy:WaitForChild("SpringerShockwave", 5)
+            if shockwave then
+                Executor.setupAutoJump(enemy, shockwave, Controller, GC)
+            end
+        end)
+        task.spawn(function()
             local demonShockwave = enemy:WaitForChild("DemonShockwave", 5)
-            
-            Executor.setupAutoJump(enemy, shockwave, Controller, GC)
-            Executor.setupAutoJump(enemy, demonShockwave, Controller, GC)
+            if demonShockwave then
+                Executor.setupAutoJump(enemy, demonShockwave, Controller, GC)
+            end
         end)
     end
 end

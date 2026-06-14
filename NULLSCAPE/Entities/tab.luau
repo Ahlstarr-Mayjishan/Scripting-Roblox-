@@ -30,6 +30,8 @@ return function(Client, Controller)
         end
     })
     
+    Tab:CreateSection("Entities - Client Side")
+
     Tab:CreateToggle({
         Name = "ICBM",
         CurrentValue = Controller.ICBMImmune,
@@ -45,6 +47,21 @@ return function(Client, Controller)
         Flag = "ImmunitySpringerToggle",
         Callback = function(Value)
             Controller:SetImmunity("Springer", Value)
+        end
+    })
+
+    Tab:CreateDropdown({
+        Name = "Springer Mode",
+        Options = {"Blatant", "Legit"},
+        CurrentOption = Controller.SpringerImmunityMode or "Legit",
+        MultipleOptions = false,
+        Flag = "SpringerImmunityModeDropdown",
+        Callback = function(Option)
+            local selected = Option
+            if typeof(Option) == "table" then
+                selected = Option[1]
+            end
+            Controller:SetSpringerImmunityMode(selected)
         end
     })
 end

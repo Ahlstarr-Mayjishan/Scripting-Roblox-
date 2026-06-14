@@ -20,6 +20,7 @@ local Controller = {
     MartImmune = false,
     ICBMImmune = false,
     SpringerImmune = false,
+    SpringerImmunityMode = "Legit",
     Destroyed = false,
     
     EnemiesFolder = nil,
@@ -135,12 +136,14 @@ function Controller:SetImmunity(entityName, value)
                 if child.Name == entityName or string.find(child.Name, entityName) then
                     Executor.enableImmunity(GC, child)
                 end
-                if entityName == "Springer" and string.find(child.Name, "Springer") then
+                if entityName == "Springer" and string.find(child.Name, "Springer") and self.SpringerImmunityMode == "Blatant" then
                     task.spawn(function()
                         local shockwave = child:WaitForChild("SpringerShockwave", 5)
+                        if shockwave then disableShockwave(child, shockwave) end
+                    end)
+                    task.spawn(function()
                         local demonShockwave = child:WaitForChild("DemonShockwave", 5)
-                        disableShockwave(child, shockwave)
-                        disableShockwave(child, demonShockwave)
+                        if demonShockwave then disableShockwave(child, demonShockwave) end
                     end)
                 end
             end
@@ -163,6 +166,36 @@ function Controller:SetImmunity(entityName, value)
     end
 end
 
+-- Cấu hình chế độ bảo vệ Springer (Blatant: tắt hẳn sóng, Legit: giữ lại lực đẩy sóng)
+function Controller:SetSpringerImmunityMode(mode)
+    self.SpringerImmunityMode = mode
+    
+    if self.SpringerImmune then
+        if mode == "Blatant" then
+            -- Tắt toàn bộ sóng đang tồn tại
+            if self.EnemiesFolder then
+                for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
+                    if string.find(child.Name, "Springer") then
+                        task.spawn(function()
+                            local shockwave = child:WaitForChild("SpringerShockwave", 5)
+                            if shockwave then disableShockwave(child, shockwave) end
+                        end)
+                        task.spawn(function()
+                            local demonShockwave = child:WaitForChild("DemonShockwave", 5)
+                            if demonShockwave then disableShockwave(child, demonShockwave) end
+                        end)
+                    end
+                end
+            end
+        else
+            -- Legit: Khôi phục lại toàn bộ sóng để có lực đẩy
+            for part, data in pairs(disabledShockwaves) do
+                restoreShockwave(part)
+            end
+        end
+    end
+end
+
 -- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
 local function processEntity(enemy)
     if not enemy then return end
@@ -177,10 +210,13 @@ local function processEntity(enemy)
     if string.find(enemy.Name, "Springer") then
         task.spawn(function()
             local shockwave = enemy:WaitForChild("SpringerShockwave", 5)
-            local demonShockwave = enemy:WaitForChild("DemonShockwave", 5)
-            
-            if Controller.SpringerImmune then
+            if shockwave and Controller.SpringerImmune and Controller.SpringerImmunityMode == "Blatant" then
                 disableShockwave(enemy, shockwave)
+            end
+        end)
+        task.spawn(function()
+            local demonShockwave = enemy:WaitForChild("DemonShockwave", 5)
+            if demonShockwave and Controller.SpringerImmune and Controller.SpringerImmunityMode == "Blatant" then
                 disableShockwave(enemy, demonShockwave)
             end
         end)
@@ -322,8 +358,8 @@ local function initializeICBMHook()
         local oldFireServer
         -- Xây dựng bảng tra cứu nhanh O(1) tên RemoteEvent cần chặn để tối ưu hóa hiệu năng tối đa cho Mobile/Low-end
         local TargetRemoteNames = {}
-        for _, config in pairs(ClientSideHitLogic.TargetEntities) do
-            TargetRemoteNames[config.RemoteName] = true
+        for remoteName, _ in pairs(ClientSideHitLogic.TargetEntities) do
+            TargetRemoteNames[remoteName] = true
         end
 
         oldFireServer = hookfunction(remoteProto.FireServer, function(self, ...)

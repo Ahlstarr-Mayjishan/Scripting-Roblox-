@@ -1,7 +1,7 @@
 return function(Client, Controller)
     local Tab = Client.Window:CreateTab("Accessibility", 4483362458)
     
-    Tab:CreateSection("Accessibility Features - Trợ năng")
+    Tab:CreateSection("Accessibility Features")
     
     Tab:CreateToggle({
         Name = "Auto jump - Springer",

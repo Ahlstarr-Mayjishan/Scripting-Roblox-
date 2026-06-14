@@ -17,6 +17,7 @@ local Logic = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Radar logic.lua
 local GC = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/GC.luau")
 
 local Controller = {
+    RadarEnabled = false,
     GiftESPEnabled = false,
     CadenceESPEnabled = false,
     AltarESPEnabled = false,
@@ -53,6 +54,7 @@ local startMatchLoops, startRenderStepped, stopRenderStepped
 -- Kiểm tra xem có mục tiêu hợp lệ nào được bật hay không
 local function checkActiveState()
     if inLobby then return false end
+    if not Controller.RadarEnabled then return false end
     
     if Controller.GiftESPEnabled and #Controller.ActiveGifts > 0 then
         return true
@@ -348,6 +350,17 @@ local function triggerInstantUpdate()
             Executor.updateESPStyles(Controller, GC, hrp)
         end)
     end
+end
+
+-- Bật/tắt radar tổng
+function Controller:SetRadarEnabled(value)
+    self.RadarEnabled = value
+    if not value then
+        pcall(function()
+            Executor.clearVisuals(GC, false)
+        end)
+    end
+    triggerInstantUpdate()
 end
 
 -- Bật/tắt định vị hộp quà
