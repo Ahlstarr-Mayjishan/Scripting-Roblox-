@@ -308,7 +308,7 @@ startMatchLoops = function()
                     Executor.updateESPStyles(Controller, GC, hrp)
                 end)
             end
-            task.wait(0.15)
+            task.wait(0.5)
         end
         matchLoopsActive = false
         -- Xóa visuals cũ khi dừng loop (hủy cả các mũi tên chỉ hướng)

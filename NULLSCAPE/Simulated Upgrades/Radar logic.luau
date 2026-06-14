@@ -206,37 +206,72 @@ function Logic.updateESPStyles(controller, gc, hrp)
     
     local currentTargets = {}
     
-    -- Xử lý styles dựa trên ESPStyle
-    if controller.ESPStyle == "Highlight" then
-        for _, t in ipairs(eligibleForHighlight) do
-            currentTargets[t.part] = {
-                Style = "Highlight",
-                Color = t.color,
-                ParentObject = t.model or t.part
-            }
-        end
+    -- 1. Xử lý Cadence & Altar (Luôn ưu tiên Highlight)
+    for _, t in ipairs(validInstruments) do
+        currentTargets[t.part] = {
+            Style = "Highlight",
+            Color = t.color,
+            ParentObject = t.model or t.part
+        }
+    end
+    
+    for _, t in ipairs(validAltars) do
+        currentTargets[t.part] = {
+            Style = "Highlight",
+            Color = t.color,
+            ParentObject = t.model or t.part
+        }
+    end
+    
+    -- 2. Xử lý Gifts
+    local normalGifts = {}
+    for _, t in ipairs(validGifts) do
+        local part = t.part
+        local targetModel = t.model or part
+        local isGolden = (string.find(part.Name:lower(), "golden") ~= nil) or (string.find(targetModel.Name:lower(), "golden") ~= nil) or (part.Parent ~= nil and string.find(part.Parent.Name:lower(), "golden") ~= nil)
         
-        -- Golden target bắt buộc phải dùng Dot
-        for _, t in ipairs(mustBeBillboard) do
-            currentTargets[t.part] = {
+        if isGolden then
+            currentTargets[part] = {
                 Style = "Dot",
                 Color = t.color,
-                ParentObject = t.part
+                ParentObject = part
             }
+        else
+            table.insert(normalGifts, t)
+        end
+    end
+    
+    if controller.ESPStyle == "Highlight" then
+        if #normalGifts <= 25 then
+            for _, t in ipairs(normalGifts) do
+                currentTargets[t.part] = {
+                    Style = "Highlight",
+                    Color = t.color,
+                    ParentObject = t.model or t.part
+                }
+            end
+        else
+            table.sort(normalGifts, function(a, b) return a.distance < b.distance end)
+            for i, t in ipairs(normalGifts) do
+                if i <= 25 then
+                    currentTargets[t.part] = {
+                        Style = "Highlight",
+                        Color = t.color,
+                        ParentObject = t.model or t.part
+                    }
+                else
+                    currentTargets[t.part] = {
+                        Style = "Dot",
+                        Color = t.color,
+                        ParentObject = t.part
+                    }
+                end
+            end
         end
     else
         -- ESPStyle là Dot hoặc Ping
         local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
-        
-        for _, t in ipairs(eligibleForHighlight) do
-            currentTargets[t.part] = {
-                Style = style,
-                Color = t.color,
-                ParentObject = t.part
-            }
-        end
-        
-        for _, t in ipairs(mustBeBillboard) do
+        for _, t in ipairs(normalGifts) do
             currentTargets[t.part] = {
                 Style = style,
                 Color = t.color,
@@ -302,14 +337,16 @@ function Logic.updateESPStyles(controller, gc, hrp)
                     
                     pcall(function()
                         if current.Style == "Highlight" then
-                            local sBox = Instance.new("SelectionBox")
-                            sBox.Name = "NULLSCAPE_ESP_SelectionBox"
-                            sBox.Color3 = current.Color
-                            sBox.LineThickness = 0.05
-                            sBox.SurfaceTransparency = 1.0
-                            sBox.Adornee = current.ParentObject
-                            sBox.Parent = current.ParentObject
-                            newCache.Highlight = sBox
+                            local hl = Instance.new("Highlight")
+                            hl.Name = "NULLSCAPE_ESP_Highlight"
+                            hl.FillColor = current.Color
+                            hl.FillTransparency = 1.0
+                            hl.OutlineColor = current.Color
+                            hl.OutlineTransparency = 0
+                            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                            hl.Adornee = current.ParentObject
+                            hl.Parent = current.ParentObject
+                            newCache.Highlight = hl
                         elseif current.Style == "Ping" then
                             local billboard = Instance.new("BillboardGui")
                             billboard.Name = "NULLSCAPE_ESP_Ping"
@@ -329,10 +366,10 @@ function Logic.updateESPStyles(controller, gc, hrp)
                             billboard.Parent = current.ParentObject
                             newCache.Dot = billboard
                         else
-                            local billboard = Instance.new("BillboardGui")
-                            billboard.Name = "NULLSCAPE_ESP_Dot"
-                            billboard.Size = UDim2.new(0, 2, 0, 2)
-                            billboard.AlwaysOnTop = true
+                             local billboard = Instance.new("BillboardGui")
+                             billboard.Name = "NULLSCAPE_ESP_Dot"
+                             billboard.Size = UDim2.new(0, 1, 0, 1)
+                             billboard.AlwaysOnTop = true
                             
                             local frame = Instance.new("Frame")
                             frame.Size = UDim2.new(1, 0, 1, 0)
@@ -356,14 +393,16 @@ function Logic.updateESPStyles(controller, gc, hrp)
                 
                 pcall(function()
                     if current.Style == "Highlight" then
-                        local sBox = Instance.new("SelectionBox")
-                        sBox.Name = "NULLSCAPE_ESP_SelectionBox"
-                        sBox.Color3 = current.Color
-                        sBox.LineThickness = 0.05
-                        sBox.SurfaceTransparency = 1.0
-                        sBox.Adornee = current.ParentObject
-                        sBox.Parent = current.ParentObject
-                        newCache.Highlight = sBox
+                        local hl = Instance.new("Highlight")
+                        hl.Name = "NULLSCAPE_ESP_Highlight"
+                        hl.FillColor = current.Color
+                        hl.FillTransparency = 1.0
+                        hl.OutlineColor = current.Color
+                        hl.OutlineTransparency = 0
+                        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                        hl.Adornee = current.ParentObject
+                        hl.Parent = current.ParentObject
+                        newCache.Highlight = hl
                     elseif current.Style == "Ping" then
                         local billboard = Instance.new("BillboardGui")
                         billboard.Name = "NULLSCAPE_ESP_Ping"
@@ -383,10 +422,10 @@ function Logic.updateESPStyles(controller, gc, hrp)
                         billboard.Parent = current.ParentObject
                         newCache.Dot = billboard
                     else
-                        local billboard = Instance.new("BillboardGui")
-                        billboard.Name = "NULLSCAPE_ESP_Dot"
-                        billboard.Size = UDim2.new(0, 2, 0, 2)
-                        billboard.AlwaysOnTop = true
+                         local billboard = Instance.new("BillboardGui")
+                         billboard.Name = "NULLSCAPE_ESP_Dot"
+                         billboard.Size = UDim2.new(0, 1, 0, 1)
+                         billboard.AlwaysOnTop = true
                         
                         local frame = Instance.new("Frame")
                         frame.Size = UDim2.new(1, 0, 1, 0)
