@@ -106,6 +106,7 @@ function Logic.enableImmunity(gc, enemy)
                             enemyName = enemy.Name
                         }
                     end
+                    pcall(function() descendant.Parent = nil end)
                     pcall(function() part.CanTouch = false end)
                 end
             end

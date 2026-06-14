@@ -343,6 +343,26 @@ startMatchLoops = function()
                 pcall(function()
                     Executor.updateESPStyles(Controller, GC, hrp)
                 end)
+            end
+            task.wait(0.1)
+        end
+        matchLoopsActive = false
+        -- Xóa visuals cũ khi dừng loop (hủy cả các mũi tên chỉ hướng)
+        pcall(function()
+            Executor.clearVisuals(GC, false)
+        end)
+    end)
+end
+
+local utilityLoopActive = false
+local function startUtilityLoop()
+    if utilityLoopActive then return end
+    utilityLoopActive = true
+    task.spawn(function()
+        while not Controller.Destroyed and not inLobby do
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
                 pcall(function()
                     Executor.updateMagnet(Controller, hrp)
                 end)
@@ -352,11 +372,7 @@ startMatchLoops = function()
             end
             task.wait(0.1)
         end
-        matchLoopsActive = false
-        -- Xóa visuals cũ khi dừng loop (hủy cả các mũi tên chỉ hướng)
-        pcall(function()
-            Executor.clearVisuals(GC, false)
-        end)
+        utilityLoopActive = false
     end)
 end
 
@@ -376,6 +392,7 @@ local function setInLobby(val)
     else
         startObservingFolders()
         updateRunningState()
+        startUtilityLoop()
     end
 end
 
@@ -563,6 +580,7 @@ end
 if not inLobby then
     startObservingFolders()
     updateRunningState()
+    startUtilityLoop()
 end
 
 -- Vòng lặp phát hiện Radar chính thức của game

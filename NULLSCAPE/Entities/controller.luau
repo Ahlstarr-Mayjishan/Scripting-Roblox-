@@ -27,7 +27,7 @@ local Controller = {
     
     EnemiesFolder = nil,
     PermanentConnections = {},
-    StartSkinwalkerEvasion = nil :: any
+    StartSkinwalkerEvasion = nil
 }
 
 local skinwalkerNear = false
@@ -250,35 +250,35 @@ function Controller:StartSkinwalkerEvasion()
             local LocalPlayer = game:GetService("Players").LocalPlayer
             local char = LocalPlayer and LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
-            if not root then continue end
-            
-            local function checkAndEvade(enemy)
-                if string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") then
-                    local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildOfClass("BasePart")
-                    if head then
-                        local distance = (root.Position - head.Position).Magnitude
-                        if distance < 9 then
-                            -- Đẩy lùi player ra xa để tránh va chạm vật lý/server-side
-                            local direction = (root.Position - head.Position)
-                            if direction.Magnitude == 0 then
-                                direction = Vector3.new(0, 0, 1)
-                            else
-                                direction = direction.Unit
+            if root then
+                local function checkAndEvade(enemy)
+                    if string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") then
+                        local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildOfClass("BasePart")
+                        if head then
+                            local distance = (root.Position - head.Position).Magnitude
+                            if distance < 9 then
+                                -- Đẩy lùi player ra xa để tránh va chạm vật lý/server-side
+                                local direction = (root.Position - head.Position)
+                                if direction.Magnitude == 0 then
+                                    direction = Vector3.new(0, 0, 1)
+                                else
+                                    direction = direction.Unit
+                                end
+                                root.CFrame = root.CFrame + direction * 3
                             end
-                            root.CFrame = root.CFrame + direction * 3
                         end
                     end
                 end
-            end
-            
-            local enemies = workspace:FindFirstChild("Enemies")
-            if enemies then
-                for _, enemy in ipairs(enemies:GetChildren()) do
-                    checkAndEvade(enemy)
+                
+                local enemies = workspace:FindFirstChild("Enemies")
+                if enemies then
+                    for _, enemy in ipairs(enemies:GetChildren()) do
+                        checkAndEvade(enemy)
+                    end
                 end
-            end
-            for _, child in ipairs(workspace:GetChildren()) do
-                checkAndEvade(child)
+                for _, child in ipairs(workspace:GetChildren()) do
+                    checkAndEvade(child)
+                end
             end
         end
         skinwalkerThread = nil
@@ -294,38 +294,37 @@ task.spawn(function()
         local root = char and char:FindFirstChild("HumanoidRootPart")
         if not root then
             skinwalkerNear = false
-            continue
-        end
-        
-        local foundNear = false
-        local function checkNear(enemy)
-            if string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") then
-                local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildOfClass("BasePart")
-                if head then
-                    local distance = (root.Position - head.Position).Magnitude
-                    if distance < 25 then
-                        foundNear = true
+        else
+            local foundNear = false
+            local function checkNear(enemy)
+                if string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") then
+                    local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildOfClass("BasePart")
+                    if head then
+                        local distance = (root.Position - head.Position).Magnitude
+                        if distance < 25 then
+                            foundNear = true
+                        end
                     end
                 end
             end
-        end
-        
-        local enemies = workspace:FindFirstChild("Enemies")
-        if enemies then
-            for _, enemy in ipairs(enemies:GetChildren()) do
-                checkNear(enemy)
-                if foundNear then break end
+            
+            local enemies = workspace:FindFirstChild("Enemies")
+            if enemies then
+                for _, enemy in ipairs(enemies:GetChildren()) do
+                    checkNear(enemy)
+                    if foundNear then break end
+                end
             end
-        end
-        
-        if not foundNear then
-            for _, child in ipairs(workspace:GetChildren()) do
-                checkNear(child)
-                if foundNear then break end
+            
+            if not foundNear then
+                for _, child in ipairs(workspace:GetChildren()) do
+                    checkNear(child)
+                    if foundNear then break end
+                end
             end
+            
+            skinwalkerNear = foundNear
         end
-        
-        skinwalkerNear = foundNear
     end
 end)
 
@@ -382,6 +381,7 @@ local function processEntity(enemy)
                                     enemyName = enemy.Name
                                 }
                             end
+                            pcall(function() part.Parent = nil end)
                             pcall(function() parentPart.CanTouch = false end)
                         end
                     end

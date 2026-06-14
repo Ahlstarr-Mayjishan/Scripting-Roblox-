@@ -35,29 +35,62 @@ function Magnet.update(controller, hrp)
         
     if not GiftCollected then return end
     
-    local gifts = CollectionService:GetTagged("Gift")
-    local hrpPos = hrp.Position
+    local gifts = {}
     
+    -- 1. Thêm từ ActiveGifts của controller
+    if controller.ActiveGifts then
+        for _, g in ipairs(controller.ActiveGifts) do
+            if g.part and g.type ~= "Tripmine" and g.type ~= "GoldenTripmine" then
+                if not table.find(gifts, g.part) then
+                    table.insert(gifts, g.part)
+                end
+            end
+        end
+    end
+    
+    -- 2. Thêm từ CollectionService (Dự phòng)
+    local tagged = CollectionService:GetTagged("Gift")
+    for _, g in ipairs(tagged) do
+        if not table.find(gifts, g) then
+            table.insert(gifts, g)
+        end
+    end
+    
+    -- 3. Quét trực tiếp từ workspace.Item_Pools (Dự phòng)
+    local itemPools = workspace:FindFirstChild("Item_Pools")
+    if itemPools then
+        for _, desc in ipairs(itemPools:GetDescendants()) do
+            if desc:IsA("BasePart") then
+                local nameLower = desc.Name:lower()
+                if (string.find(nameLower, "gift") or string.find(nameLower, "present")) and not string.find(nameLower, "tripmine") then
+                    if not table.find(gifts, desc) then
+                        table.insert(gifts, desc)
+                    end
+                end
+            end
+        end
+    end
+    
+    local hrpPos = hrp.Position
     local validGifts = {}
     
     for _, gift in ipairs(gifts) do
-        if not gift:IsDescendantOf(workspace) then continue end
-        if gift:GetAttribute("Collected") == true or gift:GetAttribute("ClientCollected") == true then
-            continue
-        end
-        
-        -- Tuyệt đối bỏ qua Tripmine (bẫy mìn nổ)
-        local giftType = gift:GetAttribute("GiftType")
-        local giftName = gift.Name:lower()
-        if (giftType and string.find(giftType:lower(), "tripmine")) or string.find(giftName, "tripmine") then
-            continue
-        end
-        
-        local startPos = gift:GetAttribute("StartPosition") or gift.Position
-        local distance = (hrpPos - startPos).Magnitude
-        
-        if distance <= range then
-            table.insert(validGifts, {part = gift, dist = distance})
+        if gift:IsDescendantOf(workspace) then
+            local isCollected = (gift:GetAttribute("Collected") == true) or (gift:GetAttribute("ClientCollected") == true)
+            if not isCollected then
+                -- Tuyệt đối bỏ qua Tripmine (bẫy mìn nổ)
+                local giftType = gift:GetAttribute("GiftType")
+                local giftName = gift.Name:lower()
+                local isMine = (giftType and string.find(giftType:lower(), "tripmine")) or string.find(giftName, "tripmine")
+                if not isMine then
+                    local startPos = gift:GetAttribute("StartPosition") or gift.Position
+                    local distance = (hrpPos - startPos).Magnitude
+                    
+                    if distance <= range then
+                        table.insert(validGifts, {part = gift, dist = distance})
+                    end
+                end
+            end
         end
     end
     

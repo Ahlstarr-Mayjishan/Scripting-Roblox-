@@ -6,7 +6,7 @@
 return function(Client, Controller)
     local Tab = Client.Window:CreateTab("Upgrade Simulations", 4483362458)
     
-    Tab:CreateSection("Radar Master Switch")
+    Tab:CreateSection("Radar")
     
     Tab:CreateToggle({
         Name = "Enable Radar",
@@ -16,13 +16,11 @@ return function(Client, Controller)
             Controller:SetRadarEnabled(Value)
         end
     })
-    
-    Tab:CreateSection("Custom ESP Locator")
-    
+        
     local ESPSelection
     local isSettingESP = false
     ESPSelection = Tab:CreateDropdown({
-        Name = "Select ESP Type",
+        Name = "ESP types",
         Options = {"Gift", "Cadence", "Altar"},
         CurrentOption = {},
         MultipleOptions = true,
@@ -71,8 +69,6 @@ return function(Client, Controller)
             end
         end
     })
-
-    Tab:CreateSection("Altar Settings")
     
     local AltarFilter
     local isSettingAltar = false
@@ -99,10 +95,10 @@ return function(Client, Controller)
         end
     })
 
-    Tab:CreateSection("Auto Collect Gifts")
+    Tab:CreateSection("Gifts Magnet")
 
     Tab:CreateToggle({
-        Name = "Auto Collect Gifts (Magnet Bypass)",
+        Name = "Enable Magnet Gifts",
         CurrentValue = Controller.AutoCollectEnabled,
         Flag = "AutoCollectGiftsToggle",
         Callback = function(Value)
@@ -136,6 +132,9 @@ return function(Client, Controller)
             Controller:SetAutoCollectRange(Value)
         end
     })
+
+    Tab:CreateSection("Defuse Kits")
+
 
     Tab:CreateToggle({
         Name = "Tripmine Immunity (Bypass)",
