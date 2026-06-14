@@ -103,15 +103,18 @@ end
 
 -- Đăng ký các hàm helper để quan sát vật thể thời gian thực
 local function registerGift(obj)
-    if not obj:IsA("BasePart") then return end
+    if not (obj:IsA("BasePart") or obj:IsA("Model")) then return end
     local nameLower = obj.Name:lower()
     
     local isGift = string.find(nameLower, "gift") or string.find(nameLower, "present")
     local isTripmine = string.find(nameLower, "tripmine")
     
     if isGift or isTripmine then
+        local targetPart = obj:IsA("Model") and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart") or obj) or obj
+        if not targetPart then return end
+        
         for _, g in ipairs(Controller.ActiveGifts) do
-            if g.part == obj then return end
+            if g.part == targetPart or g.model == obj then return end
         end
         
         -- Xác định màu sắc và phân loại từ bảng màu dùng chung
@@ -129,7 +132,7 @@ local function registerGift(obj)
             giftType = "PassageGift"
         end
         
-        table.insert(Controller.ActiveGifts, {part = obj, color = color, type = giftType})
+        table.insert(Controller.ActiveGifts, {part = targetPart, model = obj, color = color, type = giftType})
         updateRunningState()
     end
 end
@@ -137,7 +140,7 @@ end
 local function unregisterGift(obj)
     local removed = false
     for i, g in ipairs(Controller.ActiveGifts) do
-        if g.part == obj then
+        if g.part == obj or g.model == obj then
             table.remove(Controller.ActiveGifts, i)
             removed = true
             break

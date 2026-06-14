@@ -5,7 +5,6 @@
 -- ]]
 
 local Logic = {}
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Bảng màu dùng chung cho các Highlight/Dot (Định nghĩa tập trung)
 local ESPColors = {
@@ -81,20 +80,13 @@ end
 local function getOrCreateArrow(saved, key, color)
     local arrow = saved[key]
     if not arrow or not arrow.Parent then
-        local success = pcall(function()
-            arrow = Instance.new("MeshPart")
-            arrow.Name = key
-            arrow.MeshId = "rbxassetid://118015691029311"
-        end)
+        arrow = Instance.new("Part")
+        arrow.Name = key
         
-        if not success or not arrow then
-            arrow = Instance.new("Part")
-            arrow.Name = key
-            local mesh = Instance.new("SpecialMesh")
-            mesh.MeshType = Enum.MeshType.FileMesh
-            mesh.MeshId = "rbxassetid://118015691029311"
-            mesh.Parent = arrow
-        end
+        local mesh = Instance.new("SpecialMesh")
+        mesh.MeshType = Enum.MeshType.FileMesh
+        mesh.MeshId = "rbxassetid://118015691029311"
+        mesh.Parent = arrow
         
         arrow.Material = Enum.Material.Neon
         arrow.Size = Vector3.new(1.3, 1.3, 1.3)
@@ -449,7 +441,8 @@ function Logic.updateESPStyles(controller, gc, hrp)
                 Style = current.Style,
                 Color = current.Color,
                 LastSeen = scanTime,
-                Dot = nil
+                Dot = nil,
+                Frame = nil
             }
             saved.ActiveTargets[targetPart] = newCache
             if oldDot then pcall(function() oldDot:Destroy() end) end
@@ -473,6 +466,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
                     frame.Parent = billboard
                     billboard.Parent = current.ParentObject
                     newCache.Dot = billboard
+                    newCache.Frame = frame
                 else
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NULLSCAPE_ESP_Dot"
@@ -491,22 +485,15 @@ function Logic.updateESPStyles(controller, gc, hrp)
                     frame.Parent = billboard
                     billboard.Parent = current.ParentObject
                     newCache.Dot = billboard
+                    newCache.Frame = frame
                 end
             end)
         else
             cached.LastSeen = scanTime
-            local inst = cached.Dot
-            if inst and inst.Parent then
-                if cached.Style == "Ping" then
-                    local frame = inst:FindFirstChild("PingFrame")
-                    if frame and frame.BackgroundColor3 ~= current.Color then
-                        frame.BackgroundColor3 = current.Color
-                    end
-                else
-                    local frame = inst:FindFirstChildOfClass("Frame")
-                    if frame and frame.BackgroundColor3 ~= current.Color then
-                        frame.BackgroundColor3 = current.Color
-                    end
+            local frame = cached.Frame
+            if frame and frame.Parent and frame.Parent.Parent then
+                if frame.BackgroundColor3 ~= current.Color then
+                    frame.BackgroundColor3 = current.Color
                 end
             else
                 saved.ActiveTargets[targetPart] = nil
@@ -523,13 +510,10 @@ function Logic.updateESPStyles(controller, gc, hrp)
     end
     
     -- Tìm các vị trí và khoảng cách gần nhất để render mũi tên trong RenderStepped (O(1))
-    local GiftCounters = ReplicatedStorage:FindFirstChild("GiftCounters")
-    local normalGiftsCount = GiftCounters and GiftCounters:FindFirstChild("Normal") and GiftCounters.Normal.Value or 0
-
     local nearestGiftPos = nil
     local nearestGiftColor = ESPColors.Gift
     local shortestGiftDist = math.huge
-    if controller.GiftESPEnabled and #validGifts > 0 and normalGiftsCount > 0 then
+    if controller.GiftESPEnabled and #validGifts > 0 then
         for _, t in ipairs(validGifts) do
             -- Chỉ chỉ hướng tới quà thật (Gift, GoldenGift, PassageGift), tuyệt đối không chỉ vào mìn (Tripmine)
             if t.type and not string.find(t.type:lower(), "tripmine") then
@@ -638,10 +622,7 @@ function Logic.updateRender(controller, gc, hrp)
     -- 2. Cập nhật hiển thị và hướng xoay cho Mũi tên Hộp quà (Trắng / Vàng / Đỏ)
     local arrowGift = saved.ArrowGift
     if arrowGift and arrowGift.Parent then
-        local GiftCounters = ReplicatedStorage:FindFirstChild("GiftCounters")
-        local normalGiftsCount = GiftCounters and GiftCounters:FindFirstChild("Normal") and GiftCounters.Normal.Value or 0
-        
-        if nearestGiftPos and nearestGiftDist > 3.5 and normalGiftsCount > 0 then
+        if nearestGiftPos and nearestGiftDist > 3.5 then
             arrowGift.Transparency = 0
             arrowGift.Color = nearestGiftColor
             arrowGift.Material = Enum.Material.Neon
@@ -715,16 +696,15 @@ function Logic.updateRender(controller, gc, hrp)
     if controller.ESPStyle == "Ping" and saved.ActiveTargets then
         for targetPart, cached in pairs(saved.ActiveTargets) do
             if cached.Style == "Ping" and cached.Dot then
-                if not targetPart or not targetPart.Parent or not targetPart:IsDescendantOf(workspace) then
-                    continue
-                end
-                local dist = (hrp.Position - targetPart.Position).Magnitude
-                local frame = cached.Dot:FindFirstChild("PingFrame")
-                if frame then
-                    cached.Dot.Enabled = true
-                    local size = math.clamp(dist / 20, 6, 10)
-                    frame.Size = UDim2.new(0, size, 0, size)
-                    frame.BackgroundTransparency = 0
+                if targetPart and targetPart.Parent and targetPart:IsDescendantOf(workspace) then
+                    local dist = (hrp.Position - targetPart.Position).Magnitude
+                    local frame = cached.Frame
+                    if frame then
+                        cached.Dot.Enabled = true
+                        local size = math.clamp(dist / 20, 6, 10)
+                        frame.Size = UDim2.new(0, size, 0, size)
+                        frame.BackgroundTransparency = 0
+                    end
                 end
             end
         end
