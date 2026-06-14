@@ -82,10 +82,16 @@ end
 
 -- Thiết lập hệ số giảm quán tính di chuyển (Momentum Reduction)
 function Controller:SetMomentumReduction(value)
-    self.MomentumReduction = value
+    local val = tonumber(value) or 0
+    if val > 1 then
+        val = val / 100
+    end
+    val = math.clamp(val, 0, 1)
+    
+    self.MomentumReduction = val
     if MovementLogic then
-        MovementLogic.setReduction(value)
-        if value > 0 then
+        MovementLogic.setReduction(val)
+        if val > 0 then
             MovementLogic.start(self, GC)
         else
             MovementLogic.stop()
