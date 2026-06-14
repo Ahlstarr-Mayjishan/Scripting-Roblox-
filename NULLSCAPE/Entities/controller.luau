@@ -353,35 +353,64 @@ local function initializeICBMHook()
     if hookInitialized then return end
     hookInitialized = true
     
-    local success, err = pcall(function()
-        local remoteProto = Instance.new("RemoteEvent")
-        local oldFireServer
-        -- Xây dựng bảng tra cứu nhanh O(1) tên RemoteEvent cần chặn để tối ưu hóa hiệu năng tối đa cho Mobile/Low-end
-        local TargetRemoteNames = {}
-        for remoteName, _ in pairs(ClientSideHitLogic.TargetEntities) do
-            TargetRemoteNames[remoteName] = true
-        end
+    -- Xây dựng bảng tra cứu nhanh O(1) tên RemoteEvent cần chặn để tối ưu hóa hiệu năng tối đa cho Mobile/Low-end
+    local TargetRemoteNames = {}
+    for remoteName, _ in pairs(ClientSideHitLogic.TargetEntities) do
+        TargetRemoteNames[remoteName] = true
+    end
 
-        oldFireServer = hookfunction(remoteProto.FireServer, function(self, ...)
-            -- Bước lọc đầu tiên siêu tốc (chỉ tốn ~2ns), loại bỏ ngay lập tức 99.9% remote khác của game
-            if TargetRemoteNames[self.Name] then
-                if ClientSideHitLogic.isTargetRemote(self) then
-                    local args = {...}
-                    local shouldBlock, entityName = ClientSideHitLogic.shouldBlockRemoteCall(self, args)
-                    if shouldBlock then
-                        local immuneProperty = entityName .. "Immune"
-                        if Controller[immuneProperty] == true then
-                            return -- Chặn đứng cuộc gọi báo tử, bảo vệ người chơi
-                        end
+    local function handleRemoteCall(self, ...)
+        if TargetRemoteNames[self.Name] then
+            if ClientSideHitLogic.isTargetRemote(self) then
+                local args = {...}
+                local shouldBlock, entityName = ClientSideHitLogic.shouldBlockRemoteCall(self, args)
+                if shouldBlock then
+                    local immuneProperty = entityName .. "Immune"
+                    if Controller[immuneProperty] == true then
+                        return true -- Trả về true chỉ ra cần chặn cuộc gọi này
                     end
                 end
             end
-            
-            return oldFireServer(self, ...)
+        end
+        return false
+    end
+
+    -- 1. Hook __namecall (Phương pháp chuẩn và mạnh nhất cho các cuộc gọi dạng Remote:FireServer(...))
+    local namecallSuccess = false
+    if typeof(hookmetamethod) == "function" then
+        local success, err = pcall(function()
+            local oldNamecall
+            oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+                local method = getnamecallmethod()
+                if method == "FireServer" and self:IsA("RemoteEvent") then
+                    if handleRemoteCall(self, ...) then
+                        return -- Chặn đứng cuộc gọi
+                    end
+                end
+                return oldNamecall(self, ...)
+            end)
+            namecallSuccess = true
         end)
-    end)
-    if not success then
-        warn("Failed to initialize ClientSideHit/ICBM Immunity Hook:", err)
+    end
+
+    -- 2. Hook FireServer prototype (Dự phòng cho cuộc gọi dạng Remote.FireServer(Remote, ...))
+    local prototypeSuccess = false
+    if typeof(hookfunction) == "function" then
+        local success, err = pcall(function()
+            local remoteProto = Instance.new("RemoteEvent")
+            local oldFireServer
+            oldFireServer = hookfunction(remoteProto.FireServer, function(self, ...)
+                if handleRemoteCall(self, ...) then
+                    return -- Chặn đứng cuộc gọi
+                end
+                return oldFireServer(self, ...)
+            end)
+            prototypeSuccess = true
+        end)
+    end
+    
+    if not namecallSuccess and not prototypeSuccess then
+        warn("Failed to initialize any ClientSideHit hook. Exploits might not be supported.")
     end
 end
 
