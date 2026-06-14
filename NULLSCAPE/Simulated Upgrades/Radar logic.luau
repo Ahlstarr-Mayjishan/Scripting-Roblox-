@@ -232,15 +232,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
     
     local currentTargets = {}
     
-    -- 1. Xử lý Cadence & Altar (Luôn ưu tiên Highlight)
-    for _, t in ipairs(validInstruments) do
-        currentTargets[t.part] = {
-            Style = "Highlight",
-            Color = t.color,
-            ParentObject = t.model or t.part
-        }
-    end
-    
+    -- 1. Xử lý Altar (Luôn ưu tiên Highlight)
     for _, t in ipairs(validAltars) do
         currentTargets[t.part] = {
             Style = "Highlight",
