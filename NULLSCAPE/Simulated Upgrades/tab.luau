@@ -127,8 +127,7 @@ return function(Client, Controller)
 
     Tab:CreateSlider({
         Name = "Collection Range",
-        Min = 5,
-        Max = 30,
+        Range = {5, 30},
         CurrentValue = Controller.AutoCollectRange,
         Increment = 1,
         ValueName = "Studs",
@@ -158,8 +157,7 @@ return function(Client, Controller)
 
     Tab:CreateSlider({
         Name = "Defuse Kit Stacks",
-        Min = 1,
-        Max = 5,
+        Range = {1, 5},
         CurrentValue = Controller.DefuseKitStack or 3,
         Increment = 1,
         ValueName = "Stacks",
