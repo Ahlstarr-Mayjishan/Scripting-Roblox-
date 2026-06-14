@@ -378,35 +378,16 @@ local function initializeICBMHook()
     local function handleRemoteCall(self, ...)
         local args = {...}
         
-        -- Debug logging để hỗ trợ người dùng tìm đúng remote khi bị crash hoặc kill
-        pcall(function()
-            local remoteName = self.Name
-            local firstArg = args[1]
-            if string.find(remoteName, "Kill") or string.find(remoteName, "Damage") or string.find(remoteName, "Hit") or string.find(remoteName, "Springer") or (typeof(firstArg) == "string" and (string.find(firstArg, "Kill") or string.find(firstArg, "Demon") or string.find(firstArg, "Combust"))) then
-                print(string.format("[NULLSCAPE Debug] RemoteEvent Fired: %s | Arg1: %s", self:GetFullName(), tostring(firstArg)))
-                for i = 2, #args do
-                    print(string.format("   Arg [%d]: %s (%s)", i, tostring(args[i]), typeof(args[i])))
-                end
-            end
-        end)
-
-        if TargetRemoteNames[self.Name] then
-            if ClientSideHitLogic.isTargetRemote(self) then
-                local shouldBlock, entityName = ClientSideHitLogic.shouldBlockRemoteCall(self, args)
-                if shouldBlock then
-                    -- Nếu là Springer và là ShockwaveEvent, chỉ chặn khi ở chế độ Blatant
-                    if entityName == "Springer" and self.Name == "ShockwaveEvent" then
-                        if Controller.SpringerImmunityMode ~= "Blatant" then
-                            return false -- Cho phép truyền nhận shockwave ở chế độ Legit
-                        end
-                    end
-                    
-                    local immuneProperty = entityName .. "Immune"
-                    if Controller[immuneProperty] == true then
-                        return true -- Trả về true chỉ ra cần chặn cuộc gọi này
-                    end
-                end
-            end
+        -- Kiểm tra nhanh tên remote trước (O(1) lookup)
+        if not TargetRemoteNames[self.Name] then
+            return false
+        end
+        
+        -- Không dùng self:GetFullName() hay bất kỳ method call nào bên trong hook này
+        -- để tránh đệ quy __namecall gây crash
+        local shouldBlock = ClientSideHitLogic.shouldBlockRemoteCall(self, args, Controller)
+        if shouldBlock then
+            return true
         end
         return false
     end
