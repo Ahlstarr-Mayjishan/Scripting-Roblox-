@@ -5,6 +5,7 @@
 -- ]]
 
 local Logic = {}
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Bảng màu dùng chung cho các Highlight/Dot (Định nghĩa tập trung)
 local ESPColors = {
@@ -164,7 +165,6 @@ function Logic.clearVisuals(gc, keepArrows)
     
     if saved.ActiveTargets then
         for part, cached in pairs(saved.ActiveTargets) do
-            if cached.Highlight then pcall(function() cached.Highlight:Destroy() end) end
             if cached.Dot then pcall(function() cached.Dot:Destroy() end) end
         end
         table.clear(saved.ActiveTargets)
@@ -172,12 +172,33 @@ function Logic.clearVisuals(gc, keepArrows)
         saved.ActiveTargets = {}
     end
     
+    -- Vô hiệu hóa và dọn dẹp Highlight Pool
+    if saved.HighlightPool then
+        for _, hl in ipairs(saved.HighlightPool) do
+            hl.Adornee = nil
+            hl.Enabled = false
+        end
+    end
+    
     if saved.Highlights then table.clear(saved.Highlights) end
     if saved.Beams then table.clear(saved.Beams) end
     if saved.Attachments then table.clear(saved.Attachments) end
     if saved.Dots then table.clear(saved.Dots) end
 
+    if saved.Barriers then
+        for part, barrier in pairs(saved.Barriers) do
+            pcall(function() barrier:Destroy() end)
+        end
+        table.clear(saved.Barriers)
+    end
+
     if not keepArrows then
+        if saved.HighlightPoolFolder then
+            pcall(function() saved.HighlightPoolFolder:Destroy() end)
+            saved.HighlightPoolFolder = nil
+        end
+        saved.HighlightPool = nil
+        
         for _, key in ipairs({"ArrowGift", "ArrowCadence", "ArrowAltar"}) do
             if saved[key] then
                 pcall(function() saved[key]:Destroy() end)
@@ -193,6 +214,28 @@ function Logic.updateESPStyles(controller, gc, hrp)
     if not saved.ActiveTargets then saved.ActiveTargets = {} end
     if not hrp then return end
     
+    -- Khởi tạo bể chứa Highlight (Highlight Pool) cố định nếu chưa có
+    if not saved.HighlightPool then
+        saved.HighlightPool = {}
+        local folder = Instance.new("Folder")
+        folder.Name = "NULLSCAPE_HighlightPool"
+        folder.Parent = workspace
+        saved.HighlightPoolFolder = folder
+        
+        -- Tạo sẵn 15 Highlight dùng chung để tối ưu hóa hiệu năng render
+        for i = 1, 15 do
+            local hl = Instance.new("Highlight")
+            hl.FillColor = Color3.fromRGB(255, 255, 255)
+            hl.FillTransparency = 1.0
+            hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+            hl.OutlineTransparency = 0
+            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            hl.Enabled = false
+            hl.Parent = folder
+            table.insert(saved.HighlightPool, hl)
+        end
+    end
+    
     local gifts = controller.GiftESPEnabled and (controller.ActiveGifts or {}) or {}
     local instruments = controller.CadenceESPEnabled and (controller.ActiveInstruments or {}) or {}
     local altars = controller.AltarESPEnabled and (controller.ActiveAltars or {}) or {}
@@ -204,25 +247,20 @@ function Logic.updateESPStyles(controller, gc, hrp)
     -- Lọc các target hợp lệ và cập nhật khoảng cách
     for _, t in ipairs(gifts) do
         if isGiftValid(t) then
-            local part = t.part
-            local distance = (hrp.Position - part.Position).Magnitude
-            t.distance = distance
+            t.distance = (hrp.Position - t.part.Position).Magnitude
             table.insert(validGifts, t)
         end
     end
     
     for _, t in ipairs(instruments) do
         if isInstrumentValid(t) then
-            local part = t.part
-            local distance = (hrp.Position - part.Position).Magnitude
-            t.distance = distance
+            t.distance = (hrp.Position - t.part.Position).Magnitude
             table.insert(validInstruments, t)
         end
     end
     
     for _, t in ipairs(altars) do
         if isAltarValid(t) then
-            local part = t.part
             local altarName = t.altarName or "Unknown"
             local filter = controller.AltarFilter
             local matchesFilter = false
@@ -239,73 +277,21 @@ function Logic.updateESPStyles(controller, gc, hrp)
             end
             
             if matchesFilter then
-                local distance = (hrp.Position - part.Position).Magnitude
-                t.distance = distance
+                t.distance = (hrp.Position - t.part.Position).Magnitude
                 table.insert(validAltars, t)
             end
         end
     end
     
-    local currentTargets = {}
+    local currentTargets = {}  -- Chứa các mục tiêu vẽ 2D Dot/Ping
+    local highlightTargets = {} -- Chứa các mục tiêu vẽ Highlight
     
-    -- 1. Xử lý Altar (Luôn ưu tiên Highlight)
+    -- Phân loại: Altars
     for _, t in ipairs(validAltars) do
-        currentTargets[t.part] = {
-            Style = "Highlight",
-            Color = t.color,
-            ParentObject = t.model or t.part
-        }
-    end
-    
-    -- 2. Xử lý Gifts
-    local normalGifts = {}
-    for _, t in ipairs(validGifts) do
-        local part = t.part
-        local targetModel = t.model or part
-        local isGolden = (string.find(part.Name:lower(), "golden") ~= nil) or (string.find(targetModel.Name:lower(), "golden") ~= nil) or (part.Parent ~= nil and string.find(part.Parent.Name:lower(), "golden") ~= nil)
-        
-        if isGolden then
-            currentTargets[part] = {
-                Style = "Dot",
-                Color = t.color,
-                ParentObject = part
-            }
+        if controller.ESPStyle == "Highlight" then
+            table.insert(highlightTargets, t)
         else
-            table.insert(normalGifts, t)
-        end
-    end
-    
-    if controller.ESPStyle == "Highlight" then
-        if #normalGifts <= 25 then
-            for _, t in ipairs(normalGifts) do
-                currentTargets[t.part] = {
-                    Style = "Highlight",
-                    Color = t.color,
-                    ParentObject = t.model or t.part
-                }
-            end
-        else
-            table.sort(normalGifts, function(a, b) return a.distance < b.distance end)
-            for i, t in ipairs(normalGifts) do
-                if i <= 25 then
-                    currentTargets[t.part] = {
-                        Style = "Highlight",
-                        Color = t.color,
-                        ParentObject = t.model or t.part
-                    }
-                else
-                    currentTargets[t.part] = {
-                        Style = "Dot",
-                        Color = t.color,
-                        ParentObject = t.part
-                    }
-                end
-            end
-        end
-    else
-        -- ESPStyle là Dot hoặc Ping
-        local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
-        for _, t in ipairs(normalGifts) do
+            local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
             currentTargets[t.part] = {
                 Style = style,
                 Color = t.color,
@@ -314,52 +300,162 @@ function Logic.updateESPStyles(controller, gc, hrp)
         end
     end
     
+    -- Phân loại: Nhạc cụ Cadence
+    for _, t in ipairs(validInstruments) do
+        if controller.ESPStyle == "Highlight" then
+            table.insert(highlightTargets, t)
+        else
+            local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
+            currentTargets[t.part] = {
+                Style = style,
+                Color = t.color,
+                ParentObject = t.part
+            }
+        end
+    end
+    
+    -- Phân loại: Quà & Bẫy mìn
+    for _, t in ipairs(validGifts) do
+        local part = t.part
+        local targetModel = t.model or part
+        local isGolden = (string.find(part.Name:lower(), "golden") ~= nil) or (string.find(targetModel.Name:lower(), "golden") ~= nil) or (part.Parent ~= nil and string.find(part.Parent.Name:lower(), "golden") ~= nil)
+        
+        if isGolden then
+            -- Quà vàng/Mìn vàng luôn vẽ chấm Dot để không chiếm dụng Highlight pool
+            currentTargets[part] = {
+                Style = "Dot",
+                Color = t.color,
+                ParentObject = part
+            }
+        else
+            if controller.ESPStyle == "Highlight" then
+                table.insert(highlightTargets, t)
+            else
+                local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
+                currentTargets[part] = {
+                    Style = style,
+                    Color = t.color,
+                    ParentObject = part
+                }
+            end
+        end
+    end
+    
+    -- Phân bổ Highlight Pool cho tối đa 15 mục tiêu gần nhất sử dụng stable mapping để tránh lag giật FPS
+    if not saved.Highlights then
+        saved.Highlights = {}
+    end
+    local activeHighlights = saved.Highlights
+    
+    local desiredSet = {}
+    local closestTargets = {}
+    local numHighlights = math.min(#highlightTargets, 15)
+    
+    if #highlightTargets > 0 then
+        table.sort(highlightTargets, function(a, b) return a.distance < b.distance end)
+        
+        for i = 1, numHighlights do
+            local t = highlightTargets[i]
+            local targetObject = t.model or t.part
+            desiredSet[targetObject] = t
+            table.insert(closestTargets, t)
+        end
+        
+        -- Bất kỳ mục tiêu nào ngoài 15 mục tiêu gần nhất đều chuyển sang Dot
+        for i = numHighlights + 1, #highlightTargets do
+            local t = highlightTargets[i]
+            currentTargets[t.part] = {
+                Style = "Dot",
+                Color = t.color,
+                ParentObject = t.part
+            }
+        end
+    end
+    
+    -- 1. Giải phóng các Highlight của các mục tiêu không còn trong top 15 nữa
+    for targetObject, hl in pairs(activeHighlights) do
+        if not desiredSet[targetObject] then
+            hl.Adornee = nil
+            hl.Enabled = false
+            activeHighlights[targetObject] = nil
+        end
+    end
+    
+    -- 2. Tìm danh sách các Highlight đang rảnh trong pool
+    local usedSet = {}
+    for _, usedHl in pairs(activeHighlights) do
+        usedSet[usedHl] = true
+    end
+    
+    local freeHighlights = {}
+    local pool = saved.HighlightPool
+    for _, hl in ipairs(pool) do
+        if not usedSet[hl] then
+            table.insert(freeHighlights, hl)
+        end
+    end
+    
+    -- 3. Phân bổ Highlight cho các mục tiêu mới hoặc cập nhật thuộc tính
+    for _, t in ipairs(closestTargets) do
+        local targetObject = t.model or t.part
+        local hl = activeHighlights[targetObject]
+        
+        if hl then
+            -- Giữ nguyên Adornee để game engine không phải tính toán lại hình học (tránh drop FPS)
+            if hl.OutlineColor ~= t.color then
+                hl.OutlineColor = t.color
+            end
+            if not hl.Enabled then
+                hl.Enabled = true
+            end
+        else
+            -- Phân bổ một cái rảnh từ pool
+            if #freeHighlights > 0 then
+                local newHl = table.remove(freeHighlights)
+                newHl.Adornee = targetObject
+                newHl.OutlineColor = t.color
+                newHl.Enabled = true
+                activeHighlights[targetObject] = newHl
+            else
+                -- Fallback sang Dot
+                currentTargets[t.part] = {
+                    Style = "Dot",
+                    Color = t.color,
+                    ParentObject = t.part
+                }
+            end
+        end
+    end
+    
     local scanTime = os.clock()
     
-    -- 1. Xóa các ESP của mục tiêu không còn tồn tại
+    -- 1. Xóa các BillboardGui (Dot/Ping) không còn tồn tại
     for targetPart, cached in pairs(saved.ActiveTargets) do
         local current = currentTargets[targetPart]
         if not current or not targetPart:IsDescendantOf(workspace) then
-            if cached.Highlight then pcall(function() cached.Highlight:Destroy() end) end
             if cached.Dot then pcall(function() cached.Dot:Destroy() end) end
             saved.ActiveTargets[targetPart] = nil
         end
     end
     
-    -- 2. Tạo hoặc chuyển đổi style mới đồng bộ (Không delay để phản hồi tức thì)
+    -- 2. Tạo hoặc cập nhật BillboardGui (Dot/Ping)
     for targetPart, current in pairs(currentTargets) do
         local cached = saved.ActiveTargets[targetPart]
         
         if not cached or cached.Style ~= current.Style then
-            local oldHighlight = cached and cached.Highlight
             local oldDot = cached and cached.Dot
             
             local newCache = {
                 Style = current.Style,
                 Color = current.Color,
                 LastSeen = scanTime,
-                Highlight = nil,
-                Dot = nil,
-                Pending = nil
+                Dot = nil
             }
             saved.ActiveTargets[targetPart] = newCache
-            
-            if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
             if oldDot then pcall(function() oldDot:Destroy() end) end
             
             pcall(function()
-                if current.Style == "Highlight" then
-                    local hl = Instance.new("Highlight")
-                    hl.Name = "NULLSCAPE_ESP_Highlight"
-                    hl.FillColor = current.Color
-                    hl.FillTransparency = 1.0
-                    hl.OutlineColor = current.Color
-                    hl.OutlineTransparency = 0
-                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                    hl.Adornee = current.ParentObject
-                    hl.Parent = current.ParentObject
-                    newCache.Highlight = hl
-                elseif current.Style == "Ping" then
+                if current.Style == "Ping" then
                     local billboard = Instance.new("BillboardGui")
                     billboard.Name = "NULLSCAPE_ESP_Ping"
                     billboard.Size = UDim2.new(0, 16, 0, 16)
@@ -378,10 +474,10 @@ function Logic.updateESPStyles(controller, gc, hrp)
                     billboard.Parent = current.ParentObject
                     newCache.Dot = billboard
                 else
-                     local billboard = Instance.new("BillboardGui")
-                     billboard.Name = "NULLSCAPE_ESP_Dot"
-                     billboard.Size = UDim2.new(0, 1, 0, 1)
-                     billboard.AlwaysOnTop = true
+                    local billboard = Instance.new("BillboardGui")
+                    billboard.Name = "NULLSCAPE_ESP_Dot"
+                    billboard.Size = UDim2.new(0, 1, 0, 1)
+                    billboard.AlwaysOnTop = true
                     
                     local frame = Instance.new("Frame")
                     frame.Size = UDim2.new(1, 0, 1, 0)
@@ -399,13 +495,9 @@ function Logic.updateESPStyles(controller, gc, hrp)
             end)
         else
             cached.LastSeen = scanTime
-            local inst = cached.Highlight or cached.Dot
+            local inst = cached.Dot
             if inst and inst.Parent then
-                if cached.Style == "Highlight" then
-                    if inst.OutlineColor ~= current.Color then
-                        inst.OutlineColor = current.Color
-                    end
-                elseif cached.Style == "Ping" then
+                if cached.Style == "Ping" then
                     local frame = inst:FindFirstChild("PingFrame")
                     if frame and frame.BackgroundColor3 ~= current.Color then
                         frame.BackgroundColor3 = current.Color
@@ -422,26 +514,31 @@ function Logic.updateESPStyles(controller, gc, hrp)
         end
     end
     
-    -- 3. Quét dọn các cache bị bỏ quên
+    -- 3. Xóa các BillboardGui (Dot/Ping) bị bỏ quên
     for targetPart, cached in pairs(saved.ActiveTargets) do
         if cached.LastSeen ~= scanTime then
-            if cached.Highlight then pcall(function() cached.Highlight:Destroy() end) end
             if cached.Dot then pcall(function() cached.Dot:Destroy() end) end
             saved.ActiveTargets[targetPart] = nil
         end
     end
     
     -- Tìm các vị trí và khoảng cách gần nhất để render mũi tên trong RenderStepped (O(1))
+    local GiftCounters = ReplicatedStorage:FindFirstChild("GiftCounters")
+    local normalGiftsCount = GiftCounters and GiftCounters:FindFirstChild("Normal") and GiftCounters.Normal.Value or 0
+
     local nearestGiftPos = nil
     local nearestGiftColor = ESPColors.Gift
     local shortestGiftDist = math.huge
-    if controller.GiftESPEnabled and #validGifts > 0 then
+    if controller.GiftESPEnabled and #validGifts > 0 and normalGiftsCount > 0 then
         for _, t in ipairs(validGifts) do
-            local dist = t.distance
-            if dist < shortestGiftDist then
-                shortestGiftDist = dist
-                nearestGiftPos = t.part.Position
-                nearestGiftColor = t.color
+            -- Chỉ chỉ hướng tới quà thật (Gift, GoldenGift, PassageGift), tuyệt đối không chỉ vào mìn (Tripmine)
+            if t.type and not string.find(t.type:lower(), "tripmine") then
+                local dist = t.distance
+                if dist < shortestGiftDist then
+                    shortestGiftDist = dist
+                    nearestGiftPos = t.part.Position
+                    nearestGiftColor = t.color
+                end
             end
         end
     end
@@ -541,7 +638,10 @@ function Logic.updateRender(controller, gc, hrp)
     -- 2. Cập nhật hiển thị và hướng xoay cho Mũi tên Hộp quà (Trắng / Vàng / Đỏ)
     local arrowGift = saved.ArrowGift
     if arrowGift and arrowGift.Parent then
-        if nearestGiftPos and nearestGiftDist > 3.5 then
+        local GiftCounters = ReplicatedStorage:FindFirstChild("GiftCounters")
+        local normalGiftsCount = GiftCounters and GiftCounters:FindFirstChild("Normal") and GiftCounters.Normal.Value or 0
+        
+        if nearestGiftPos and nearestGiftDist > 3.5 and normalGiftsCount > 0 then
             arrowGift.Transparency = 0
             arrowGift.Color = nearestGiftColor
             arrowGift.Material = Enum.Material.Neon

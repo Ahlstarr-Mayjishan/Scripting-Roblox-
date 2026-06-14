@@ -36,7 +36,12 @@ pcall(function()
             ImmunitySkinwalkerToggle = false,
             SpringerAutoJumpToggle = false,
             SpringerImmunityModeDropdown = "Legit",
-            MomentumReductionSlider = 0
+            MomentumReductionSlider = 0,
+            AutoCollectGiftsToggle = false,
+            AutoCollectRangeSlider = 20,
+            TripmineBarrierToggle = false,
+            SimulateDefuseKitToggle = false,
+            DefuseKitStackSlider = 3
         }
         
         local currentSettings = {}

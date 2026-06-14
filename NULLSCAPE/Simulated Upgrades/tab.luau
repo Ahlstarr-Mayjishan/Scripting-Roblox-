@@ -92,4 +92,74 @@ return function(Client, Controller)
             end
         end
     })
+
+    Tab:CreateSection("Auto Collect Gifts")
+
+    Tab:CreateToggle({
+        Name = "Auto Collect Gifts (Magnet Bypass)",
+        CurrentValue = Controller.AutoCollectEnabled,
+        Flag = "AutoCollectGiftsToggle",
+        Callback = function(Value)
+            Controller:SetAutoCollectEnabled(Value)
+        end
+    })
+
+    Tab:CreateDropdown({
+        Name = "Collection Mode",
+        Options = {"Legit", "Blatant"},
+        CurrentOption = Controller.AutoCollectMode or "Legit",
+        MultipleOptions = false,
+        Flag = "AutoCollectModeDropdown",
+        Callback = function(Option)
+            local selected = Option
+            if typeof(Option) == "table" then
+                selected = Option[1]
+            end
+            Controller:SetAutoCollectMode(selected)
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "Collection Range",
+        Min = 5,
+        Max = 30,
+        CurrentValue = Controller.AutoCollectRange,
+        Increment = 1,
+        ValueName = "Studs",
+        Flag = "AutoCollectRangeSlider",
+        Callback = function(Value)
+            Controller:SetAutoCollectRange(Value)
+        end
+    })
+
+    Tab:CreateToggle({
+        Name = "Tripmine Immunity (Bypass)",
+        CurrentValue = Controller.TripmineBarrierEnabled,
+        Flag = "TripmineBarrierToggle",
+        Callback = function(Value)
+            Controller:SetTripmineBarrier(Value)
+        end
+    })
+
+    Tab:CreateToggle({
+        Name = "Simulate Defuse Kit",
+        CurrentValue = Controller.SimulateDefuseKit or false,
+        Flag = "SimulateDefuseKitToggle",
+        Callback = function(Value)
+            Controller:SetSimulateDefuseKit(Value)
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "Defuse Kit Stacks",
+        Min = 1,
+        Max = 5,
+        CurrentValue = Controller.DefuseKitStack or 3,
+        Increment = 1,
+        ValueName = "Stacks",
+        Flag = "DefuseKitStackSlider",
+        Callback = function(Value)
+            Controller:SetDefuseKitStack(Value)
+        end
+    })
 end

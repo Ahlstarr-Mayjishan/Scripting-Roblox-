@@ -25,6 +25,14 @@ local Controller = {
     ESPStyle = "Highlight", -- Mặc định: "Highlight" hoặc "Dot"
     Destroyed = false,
     
+    AutoCollectEnabled = false,
+    AutoCollectRange = 20,
+    AutoCollectMode = "Legit",
+    
+    TripmineBarrierEnabled = false,
+    SimulateDefuseKit = false,
+    DefuseKitStack = 3,
+    
     NearestGiftPosition = nil,
     NearestCadencePosition = nil,
     NearestAltarPosition = nil,
@@ -335,6 +343,12 @@ startMatchLoops = function()
                 pcall(function()
                     Executor.updateESPStyles(Controller, GC, hrp)
                 end)
+                pcall(function()
+                    Executor.updateMagnet(Controller, hrp)
+                end)
+                pcall(function()
+                    Executor.updateBarriers(Controller, GC)
+                end)
             end
             task.wait(0.1)
         end
@@ -424,6 +438,36 @@ function Controller:SetESPStyle(style)
         Executor.clearVisuals(GC, true)
     end)
     triggerInstantUpdate()
+end
+
+-- Bật/tắt Auto Collect
+function Controller:SetAutoCollectEnabled(value)
+    self.AutoCollectEnabled = value
+end
+
+-- Điều chỉnh khoảng cách Auto Collect
+function Controller:SetAutoCollectRange(value)
+    self.AutoCollectRange = value
+end
+
+-- Thiết lập chế độ Auto Collect (Legit / Blatant)
+function Controller:SetAutoCollectMode(value)
+    self.AutoCollectMode = value or "Legit"
+end
+
+-- Bật/tắt rào cản vật lý mìn (Tripmine Barrier)
+function Controller:SetTripmineBarrier(value)
+    self.TripmineBarrierEnabled = value
+end
+
+-- Bật/tắt mô phỏng Defuse Kit
+function Controller:SetSimulateDefuseKit(value)
+    self.SimulateDefuseKit = value
+end
+
+-- Điều chỉnh số stack Defuse Kit mô phỏng
+function Controller:SetDefuseKitStack(value)
+    self.DefuseKitStack = value
 end
 
 -- Hàm phát hiện nâng cấp Radar chính thức của game đã mở khóa (Tối ưu hóa tránh đệ quy sâu)
@@ -564,5 +608,87 @@ task.spawn(function()
         setInLobby(not isInMatch())
     end
 end)
+
+local function hookUpgradeHandler()
+    task.spawn(function()
+        local ReplicatedFirst = game:GetService("ReplicatedFirst")
+        local ClientModules = ReplicatedFirst:WaitForChild("ClientModules", 15)
+        local UpgradeHandlerModule = ClientModules and ClientModules:WaitForChild("UpgradeHandler", 15)
+        if UpgradeHandlerModule then
+            local success, UpgradeHandler = pcall(require, UpgradeHandlerModule)
+            if success and typeof(UpgradeHandler) == "table" then
+                if UpgradeHandler.IsUpgradeEnabled then
+                    if typeof(hookfunction) == "function" then
+                        local oldIsUpgradeEnabled
+                        oldIsUpgradeEnabled = hookfunction(UpgradeHandler.IsUpgradeEnabled, function(...)
+                            local isDefuse = false
+                            for i = 1, select("#", ...) do
+                                if select(i, ...) == "DefuseKit" then
+                                    isDefuse = true
+                                    break
+                                end
+                            end
+                            if isDefuse and Controller.SimulateDefuseKit then
+                                return true
+                            end
+                            return oldIsUpgradeEnabled(...)
+                        end)
+                    else
+                        local oldIsUpgradeEnabled = UpgradeHandler.IsUpgradeEnabled
+                        UpgradeHandler.IsUpgradeEnabled = function(...)
+                            local isDefuse = false
+                            for i = 1, select("#", ...) do
+                                if select(i, ...) == "DefuseKit" then
+                                    isDefuse = true
+                                    break
+                                end
+                            end
+                            if isDefuse and Controller.SimulateDefuseKit then
+                                return true
+                            end
+                            return oldIsUpgradeEnabled(...)
+                        end
+                    end
+                end
+                
+                if UpgradeHandler.GetUpgradeStack then
+                    if typeof(hookfunction) == "function" then
+                        local oldGetUpgradeStack
+                        oldGetUpgradeStack = hookfunction(UpgradeHandler.GetUpgradeStack, function(...)
+                            local isDefuse = false
+                            for i = 1, select("#", ...) do
+                                if select(i, ...) == "DefuseKit" then
+                                    isDefuse = true
+                                    break
+                                end
+                            end
+                            if isDefuse and Controller.SimulateDefuseKit then
+                                return Controller.DefuseKitStack or 3
+                            end
+                            return oldGetUpgradeStack(...)
+                        end)
+                    else
+                        local oldGetUpgradeStack = UpgradeHandler.GetUpgradeStack
+                        UpgradeHandler.GetUpgradeStack = function(...)
+                            local isDefuse = false
+                            for i = 1, select("#", ...) do
+                                if select(i, ...) == "DefuseKit" then
+                                    isDefuse = true
+                                    break
+                                end
+                            end
+                            if isDefuse and Controller.SimulateDefuseKit then
+                                return Controller.DefuseKitStack or 3
+                            end
+                            return oldGetUpgradeStack(...)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+pcall(hookUpgradeHandler)
 
 return Controller
