@@ -30,7 +30,7 @@ local Controller = {
     StartSkinwalkerEvasion = nil
 }
 
-local skinwalkerNear = false
+
 
 -- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
 local function isInMatch()
@@ -150,14 +150,20 @@ function Controller:SetImmunity(entityName, value)
     -- Áp dụng thay đổi tức thời cho thực thể đã tồn tại trong workspace
     if value then
         local function applyImmunityToChild(child)
-            local isTarget = false
+            if not child:IsA("Model") then return end
+
+            -- Husk / Skinwalker dùng module Magnitude Types
             if entityName == "Skinwalker" then
-                isTarget = (string.find(child.Name, "Skinwalker") or string.find(child.Name, "Husk")) and child.Name ~= "Skinwalkers"
-            else
-                isTarget = child.Name == entityName or string.find(child.Name, entityName)
+                local isHusk = (string.find(child.Name, "Skinwalker") or string.find(child.Name, "Husk")) and child.Name ~= "Skinwalkers"
+                if isHusk then
+                    ICBMEntitiesTypes.enableHuskImmunity(GC, child)
+                end
+                return
             end
-            
-            if isTarget and child:IsA("Model") then
+
+            -- Baby / Bell / Mart dùng module TouchInterest Types
+            local isTarget = child.Name == entityName or string.find(child.Name, entityName)
+            if isTarget then
                 Executor.enableImmunity(GC, child)
             end
             
@@ -187,8 +193,10 @@ function Controller:SetImmunity(entityName, value)
             end
         end
     else
-        if entityName == "Baby" or entityName == "Bell" or entityName == "Mart" or entityName == "Skinwalker" then
+        if entityName == "Baby" or entityName == "Bell" or entityName == "Mart" then
             Executor.disableImmunityForType(GC, entityName)
+        elseif entityName == "Skinwalker" then
+            ICBMEntitiesTypes.disableHuskImmunity(GC)
         end
         if entityName == "Springer" then
             for part, data in pairs(disabledShockwaves) do
@@ -285,107 +293,55 @@ function Controller:StartSkinwalkerEvasion()
     end)
 end
 
--- Vòng lặp quét phát hiện cận cảnh Skinwalker phục vụ gỡ lỗi logs
-task.spawn(function()
-    while not Controller.Destroyed do
-        task.wait(0.1)
-        local LocalPlayer = game:GetService("Players").LocalPlayer
-        local char = LocalPlayer and LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if not root then
-            skinwalkerNear = false
-        else
-            local foundNear = false
-            local function checkNear(enemy)
-                if string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") then
-                    local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildOfClass("BasePart")
-                    if head then
-                        local distance = (root.Position - head.Position).Magnitude
-                        if distance < 25 then
-                            foundNear = true
-                        end
-                    end
-                end
-            end
-            
-            local enemies = workspace:FindFirstChild("Enemies")
-            if enemies then
-                for _, enemy in ipairs(enemies:GetChildren()) do
-                    checkNear(enemy)
-                    if foundNear then break end
-                end
-            end
-            
-            if not foundNear then
-                for _, child in ipairs(workspace:GetChildren()) do
-                    checkNear(child)
-                    if foundNear then break end
-                end
-            end
-            
-            skinwalkerNear = foundNear
-        end
-    end
-end)
+
 
 -- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
 local function processEntity(enemy)
     if not enemy or not enemy:IsA("Model") or enemy.Name == "Skinwalkers" then return end
-    
+
     local name = enemy.Name
+
+    -- ── Baby / Bell / Mart (xóa TouchInterest) ──────────────────────────────
     if Logic.isTargetEntity(name) then
         local checkFunc = Logic.getImmunityCheck(name, Controller)
         if checkFunc and checkFunc() then
             Executor.enableImmunity(GC, enemy)
         end
 
-        -- Lắng nghe các bộ phận mới được thêm vào thực thể sau này (tránh sót hitbox khi đang replicate)
+        -- Lắng nghe bộ phận mới được thêm vào (tránh sót hitbox khi replicate)
         local descConn = enemy.DescendantAdded:Connect(function(part)
-            local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
-            if checkFunc and checkFunc() then
-                local isSkinwalker = string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") or (enemy:GetAttribute("OriginalName") and (string.find(enemy:GetAttribute("OriginalName"), "Skinwalker") or string.find(enemy:GetAttribute("OriginalName"), "Husk")))
-                
-                if isSkinwalker then
-                    if part:IsA("BasePart") then
-                        if not GC.SavedPartsData[part] then
-                            GC.SavedPartsData[part] = {
-                                touch = nil,
-                                originalCanTouch = part.CanTouch,
-                                originalName = part.Name,
-                                enemyName = enemy:GetAttribute("OriginalName") or enemy.Name
+            local cf = Logic.getImmunityCheck(enemy.Name, Controller)
+            if cf and cf() then
+                if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
+                    local parentPart = part.Parent
+                    if parentPart and parentPart:IsA("BasePart") then
+                        if GC.SavedPartsData[parentPart] then
+                            GC.SavedPartsData[parentPart].touch = part
+                        else
+                            GC.SavedPartsData[parentPart] = {
+                                touch     = part,
+                                enemyName = enemy.Name
                             }
                         end
-                        pcall(function() part.CanTouch = false end)
-                        if part.Name == "head" then
-                            pcall(function() part.Name = "SafeHead" end)
-                        end
-                    elseif part:IsA("Decal") or part:IsA("Texture") then
-                        if part.Name == "sprite" then
-                            if not GC.SavedPartsData[part] then
-                                GC.SavedPartsData[part] = {
-                                    originalName = part.Name,
-                                    enemyName = enemy:GetAttribute("OriginalName") or enemy.Name
-                                }
-                            end
-                            pcall(function() part.Name = "SafeSprite" end)
-                        end
-                    end
-                else
-                    if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-                        local parentPart = part.Parent
-                        if parentPart and parentPart:IsA("BasePart") then
-                            if not GC.SavedPartsData[parentPart] then
-                                GC.SavedPartsData[parentPart] = {
-                                    touch = part,
-                                    originalCanTouch = parentPart.CanTouch,
-                                    enemyName = enemy.Name
-                                }
-                            end
-                            pcall(function() part.Parent = nil end)
-                            pcall(function() parentPart.CanTouch = false end)
-                        end
+                        pcall(function() part.Parent = nil end)
                     end
                 end
+            end
+        end)
+        GC.registerEntityConnection(enemy, descConn)
+    end
+
+    -- ── Husk / Skinwalker (đổi tên + CanTouch) ─────────────────────────────
+    if ICBMEntitiesTypes.isHuskEntity(name) or
+       (enemy:GetAttribute("OriginalName") and ICBMEntitiesTypes.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
+        if Controller.SkinwalkerImmune then
+            ICBMEntitiesTypes.enableHuskImmunity(GC, enemy)
+        end
+
+        -- Lắng nghe bộ phận mới được thêm vào
+        local descConn = enemy.DescendantAdded:Connect(function(part)
+            if Controller.SkinwalkerImmune then
+                ICBMEntitiesTypes.onHuskDescendantAdded(GC, enemy, part)
             end
         end)
         GC.registerEntityConnection(enemy, descConn)
