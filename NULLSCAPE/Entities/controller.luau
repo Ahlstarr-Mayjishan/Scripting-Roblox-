@@ -10,7 +10,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Executor = getgenv().loadModule("NULLSCAPE/Entities/executor.luau")
 local Logic = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest Entities Types.luau")
-local ClientSideHitLogic = getgenv().loadModule("NULLSCAPE/Entities/ClientSideHit Entities Types.luau")
+local ICBMEntitiesTypes = getgenv().loadModule("NULLSCAPE/Entities/Magnitude Types.luau")
+local SpringerEntitiesTypes = getgenv().loadModule("NULLSCAPE/Entities/Raycast - Magnitude.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 
 local Controller = {
@@ -363,17 +364,17 @@ task.spawn(function()
     end
 end)
 
--- Hook để chặn RemoteEvent báo tử của thực thể Client-side (như ICBM) một cách an toàn
+-- Hook để chặn RemoteEvent báo tử của thực thể Client-side (như ICBM và Springer) một cách an toàn
 local hookInitialized = false
 local function initializeICBMHook()
     if hookInitialized then return end
     hookInitialized = true
     
-    -- Xây dựng bảng tra cứu nhanh O(1) tên RemoteEvent cần chặn để tối ưu hóa hiệu năng tối đa cho Mobile/Low-end
-    local TargetRemoteNames = {}
-    for remoteName, _ in pairs(ClientSideHitLogic.TargetEntities) do
-        TargetRemoteNames[remoteName] = true
-    end
+    -- Xây dựng bảng tra cứu nhanh O(1) tên các RemoteEvent cần chặn
+    local TargetRemoteNames = {
+        ["ClientEvent"] = true,
+        ["ShockwaveEvent"] = true
+    }
 
     local function handleRemoteCall(self, ...)
         local args = {...}
@@ -383,12 +384,18 @@ local function initializeICBMHook()
             return false
         end
         
-        -- Không dùng self:GetFullName() hay bất kỳ method call nào bên trong hook này
-        -- để tránh đệ quy __namecall gây crash
-        local shouldBlock = ClientSideHitLogic.shouldBlockRemoteCall(self, args, Controller)
-        if shouldBlock then
+        -- 1. Chạy logic chống ICBM
+        local blockICBM = ICBMEntitiesTypes.shouldBlockRemoteCall(self, args, Controller)
+        if blockICBM then
             return true
         end
+        
+        -- 2. Chạy logic chống Springer
+        local blockSpringer = SpringerEntitiesTypes.shouldBlockRemoteCall(self, args, Controller)
+        if blockSpringer then
+            return true
+        end
+        
         return false
     end
 
