@@ -376,9 +376,22 @@ local function initializeICBMHook()
     end
 
     local function handleRemoteCall(self, ...)
+        local args = {...}
+        
+        -- Debug logging để hỗ trợ người dùng tìm đúng remote khi bị crash hoặc kill
+        pcall(function()
+            local remoteName = self.Name
+            local firstArg = args[1]
+            if string.find(remoteName, "Kill") or string.find(remoteName, "Damage") or string.find(remoteName, "Hit") or string.find(remoteName, "Springer") or (typeof(firstArg) == "string" and (string.find(firstArg, "Kill") or string.find(firstArg, "Demon") or string.find(firstArg, "Combust"))) then
+                print(string.format("[NULLSCAPE Debug] RemoteEvent Fired: %s | Arg1: %s", self:GetFullName(), tostring(firstArg)))
+                for i = 2, #args do
+                    print(string.format("   Arg [%d]: %s (%s)", i, tostring(args[i]), typeof(args[i])))
+                end
+            end
+        end)
+
         if TargetRemoteNames[self.Name] then
             if ClientSideHitLogic.isTargetRemote(self) then
-                local args = {...}
                 local shouldBlock, entityName = ClientSideHitLogic.shouldBlockRemoteCall(self, args)
                 if shouldBlock then
                     -- Nếu là Springer và là ShockwaveEvent, chỉ chặn khi ở chế độ Blatant
@@ -414,7 +427,9 @@ local function initializeICBMHook()
                     end)
                     if isRemoteEvent then
                         local success, shouldBlock = pcall(handleRemoteCall, self, ...)
-                        if success and shouldBlock then
+                        if not success then
+                            warn("[NULLSCAPE Hook Error] handleRemoteCall failed: " .. tostring(shouldBlock))
+                        elseif shouldBlock then
                             return -- Chặn đứng cuộc gọi
                         end
                     end
@@ -433,7 +448,9 @@ local function initializeICBMHook()
             local oldFireServer
             oldFireServer = hookfunction(remoteProto.FireServer, function(self, ...)
                 local success, shouldBlock = pcall(handleRemoteCall, self, ...)
-                if success and shouldBlock then
+                if not success then
+                    warn("[NULLSCAPE Hook Error] FireServer hook failed: " .. tostring(shouldBlock))
+                elseif shouldBlock then
                     return -- Chặn đứng cuộc gọi
                 end
                 return oldFireServer(self, ...)

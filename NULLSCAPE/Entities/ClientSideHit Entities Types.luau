@@ -40,32 +40,22 @@ end
 
 -- Kiểm tra nhanh xem RemoteEvent có khớp với cấu hình không (Pre-filter để tối ưu hiệu năng)
 function Logic.isTargetRemote(remote)
-    -- Dùng remote.ClassName để tránh kích hoạt __namecall đệ quy
     if typeof(remote) ~= "Instance" or remote.ClassName ~= "RemoteEvent" then
         return false
     end
     
     local remoteName = remote.Name
-    local entities = Logic.TargetEntities[remoteName]
-    if entities then
-        for entityName, _ in pairs(entities) do
-            -- Kiểm tra từ cha trực tiếp ngược lên tổ tiên có tên chứa entityName, giới hạn trong Workspace
-            local current = remote.Parent
-            while current and current ~= workspace and current ~= game do
-                if string.find(current.Name, entityName) then
-                    return true
-                end
-                current = current.Parent
-            end
-        end
+    if Logic.TargetEntities[remoteName] then
+        return true
     end
     
     return false
 end
 
+local Players = game:GetService("Players")
+
 -- Kiểm tra xem RemoteEvent có thuộc diện cần chặn hay không
 function Logic.shouldBlockRemoteCall(remote, args)
-    -- Dùng remote.ClassName để tránh kích hoạt __namecall đệ quy
     if typeof(remote) ~= "Instance" or remote.ClassName ~= "RemoteEvent" then
         return false, nil
     end
@@ -82,24 +72,55 @@ function Logic.shouldBlockRemoteCall(remote, args)
     end
     
     for entityName, blockedArgs in pairs(entities) do
-        -- Kiểm tra tổ tiên chứa tên thực thể (hỗ trợ RemoteEvent lồng sâu trong KillPart), giới hạn trong Workspace
-        local hasEntityAncestor = false
-        local current = remote.Parent
-        while current and current ~= workspace and current ~= game do
-            if string.find(current.Name, entityName) then
-                hasEntityAncestor = true
-                break
+        -- Chỉ chặn nếu tham số đầu tiên khớp chính xác với danh sách chặn
+        if blockedArgs[firstArg] then
+            local isEntityRelated = false
+            
+            -- 1. Kiểm tra tổ tiên chứa tên thực thể (giới hạn Workspace, tối đa 50 cấp để tránh treo/crash client)
+            local current = remote.Parent
+            local depth = 0
+            while current and current ~= workspace and current ~= game and depth < 50 do
+                depth = depth + 1
+                local nameSuccess, name = pcall(function() return current.Name end)
+                if nameSuccess and name and string.find(name, entityName) then
+                    isEntityRelated = true
+                    break
+                end
+                local parentSuccess, parent = pcall(function() return current.Parent end)
+                if parentSuccess then
+                    current = parent
+                else
+                    break
+                end
             end
-            current = current.Parent
-        end
-        
-        if hasEntityAncestor then
-            -- Chỉ chặn nếu tham số đầu tiên khớp chính xác với danh sách chặn
-            if blockedArgs[firstArg] then
+            
+            -- 2. Fallback 1: Kiểm tra các tham số truyền vào có chứa Instance của thực thể hoặc tên thực thể không
+            if not isEntityRelated then
+                for _, arg in ipairs(args) do
+                    if typeof(arg) == "Instance" then
+                        local nameSuccess, name = pcall(function() return arg.Name end)
+                        if nameSuccess and name and string.find(name, entityName) then
+                            isEntityRelated = true
+                            break
+                        end
+                    elseif typeof(arg) == "string" then
+                        if string.find(arg, entityName) then
+                            isEntityRelated = true
+                            break
+                        end
+                    end
+                end
+            end
+            
+            -- 3. Fallback 2: Nếu tên remote là "ClientEvent", mặc định khớp với bất kỳ ICBM/Springer nào
+            -- vì ClientEvent thường nằm ở ReplicatedStorage và dùng chung cho toàn bộ client-side hit
+            if not isEntityRelated and remoteName == "ClientEvent" then
+                isEntityRelated = true
+            end
+            
+            if isEntityRelated then
                 -- Bảo đảm chỉ chặn khi mục tiêu tác động là local player
-                -- Để tránh chặn nhầm gói tin của các player khác
                 local targetsLocal = false
-                local Players = game:GetService("Players")
                 local LocalPlayer = Players.LocalPlayer
                 local char = LocalPlayer and LocalPlayer.Character
                 
@@ -113,10 +134,8 @@ function Logic.shouldBlockRemoteCall(remote, args)
                 end
                 
                 if not hasTarget then
-                    -- Không có tham số target cụ thể nào khác, mặc định tác động lên người chơi hiện tại (local player)
                     targetsLocal = true
                 else
-                    -- Duyệt qua các tham số tiếp theo để kiểm tra xem có chỉ định local player/character không
                     for i = 2, #args do
                         local arg = args[i]
                         if arg == LocalPlayer or arg == char then
@@ -129,7 +148,6 @@ function Logic.shouldBlockRemoteCall(remote, args)
                                 break
                             end
                         elseif typeof(arg) == "table" then
-                            -- Nếu tham số là một bảng (ví dụ: {Character = game.Workspace.Noriko_Ellen}), kiểm tra các phần tử bên trong
                             for _, val in pairs(arg) do
                                 if val == LocalPlayer or val == char then
                                     targetsLocal = true
@@ -156,3 +174,4 @@ function Logic.shouldBlockRemoteCall(remote, args)
 end
 
 return Logic
+
