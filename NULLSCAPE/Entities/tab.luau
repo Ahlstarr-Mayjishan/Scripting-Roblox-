@@ -50,6 +50,15 @@ return function(Client, Controller)
         end
     })
 
+    Tab:CreateToggle({
+        Name = "Skinwalker (Husk)",
+        CurrentValue = Controller.SkinwalkerImmune,
+        Flag = "ImmunitySkinwalkerToggle",
+        Callback = function(Value)
+            Controller:SetImmunity("Skinwalker", Value)
+        end
+    })
+
     Tab:CreateDropdown({
         Name = "Springer Mode",
         Options = {"Blatant", "Legit"},

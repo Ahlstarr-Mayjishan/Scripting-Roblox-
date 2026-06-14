@@ -11,7 +11,9 @@ local Logic = {}
 Logic.TargetNames = {
     ["Baby"] = "Baby",
     ["Bell"] = "Bell",
-    ["Mart"] = "Mart"
+    ["Mart"] = "Mart",
+    ["Skinwalker"] = "Skinwalker",
+    ["Husk"] = "Husk"
 }
 
 -- Trả về chức năng kiểm tra trạng thái miễn nhiễm tương ứng
@@ -25,6 +27,8 @@ function Logic.getImmunityCheck(name, controller)
                 return function() return controller.BellImmune end
             elseif entityName == "Mart" then
                 return function() return controller.MartImmune end
+            elseif entityName == "Skinwalker" or entityName == "Husk" then
+                return function() return controller.SkinwalkerImmune end
             end
         end
     end
@@ -46,19 +50,64 @@ end
 -- Bật miễn nhiễm (ẩn TouchInterest và tắt CanTouch) cho một thực thể cụ thể
 function Logic.enableImmunity(gc, enemy)
     if not enemy then return end
-    for _, descendant in ipairs(enemy:GetDescendants()) do
-        if descendant:IsA("TouchTransmitter") or descendant.Name == "TouchInterest" then
-            local part = descendant.Parent
-            if part and part:IsA("BasePart") then
+    
+    local isSkinwalker = string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") or (enemy:GetAttribute("OriginalName") and (string.find(enemy:GetAttribute("OriginalName"), "Skinwalker") or string.find(enemy:GetAttribute("OriginalName"), "Husk")))
+    
+    if isSkinwalker then
+        -- Đổi tên Model để bypass check FindFirstChild/Name của LocalScript
+        if not enemy:GetAttribute("OriginalName") then
+            enemy:SetAttribute("OriginalName", enemy.Name)
+        end
+        pcall(function()
+            if not string.find(enemy.Name, "SafeWalker") then
+                enemy.Name = "SafeWalker_" .. enemy.Name
+            end
+        end)
+
+        -- Với Skinwalker/Husk, tắt CanTouch và đổi tên các bộ phận nhạy cảm để chặn sự kiện Touched
+        for _, part in ipairs(enemy:GetDescendants()) do
+            if part:IsA("BasePart") then
                 if not gc.SavedPartsData[part] then
                     gc.SavedPartsData[part] = {
-                        touch = descendant,
+                        touch = nil,
                         originalCanTouch = part.CanTouch,
-                        enemyName = enemy.Name
+                        originalName = part.Name,
+                        enemyName = enemy:GetAttribute("OriginalName") or enemy.Name
                     }
                 end
-                -- pcall(function() descendant.Parent = nil end) -- Giữ nguyên TouchInterest để tránh giằng co (tug-of-war) với replication/engine
                 pcall(function() part.CanTouch = false end)
+                
+                -- Đổi tên đầu của Skinwalker
+                if part.Name == "head" then
+                    pcall(function() part.Name = "SafeHead" end)
+                end
+            elseif part:IsA("Decal") or part:IsA("Texture") then
+                if part.Name == "sprite" then
+                    if not gc.SavedPartsData[part] then
+                        gc.SavedPartsData[part] = {
+                            originalName = part.Name,
+                            enemyName = enemy:GetAttribute("OriginalName") or enemy.Name
+                        }
+                    end
+                    pcall(function() part.Name = "SafeSprite" end)
+                end
+            end
+        end
+    else
+        -- Với Baby/Bell/Mart, tìm TouchTransmitter cụ thể
+        for _, descendant in ipairs(enemy:GetDescendants()) do
+            if descendant:IsA("TouchTransmitter") or descendant.Name == "TouchInterest" then
+                local part = descendant.Parent
+                if part and part:IsA("BasePart") then
+                    if not gc.SavedPartsData[part] then
+                        gc.SavedPartsData[part] = {
+                            touch = descendant,
+                            originalCanTouch = part.CanTouch,
+                            enemyName = enemy.Name
+                        }
+                    end
+                    pcall(function() part.CanTouch = false end)
+                end
             end
         end
     end
@@ -66,15 +115,39 @@ end
 
 function Logic.disableImmunityForType(gc, entityName)
     for part, data in pairs(gc.SavedPartsData) do
-        if data and string.find(data.enemyName, entityName) then
+        if data and (string.find(data.enemyName, entityName) or (entityName == "Skinwalker" and string.find(data.enemyName, "Husk"))) then
             if part and part.Parent then
                 if data.touch then
                     pcall(function() data.touch.Parent = part end)
                 end
                 pcall(function() part.CanTouch = data.originalCanTouch end)
+                if data.originalName then
+                    pcall(function() part.Name = data.originalName end)
+                end
             end
             gc.SavedPartsData[part] = nil
         end
+    end
+
+    if entityName == "Skinwalker" then
+        -- Khôi phục lại tên của Model
+        local function restoreModelNames(namePattern)
+            local function process(parent)
+                if not parent then return end
+                for _, child in ipairs(parent:GetChildren()) do
+                    local originalName = child:GetAttribute("OriginalName")
+                    if originalName and (string.find(originalName, namePattern) or (namePattern == "Skinwalker" and string.find(originalName, "Husk"))) then
+                        pcall(function()
+                            child.Name = originalName
+                        end)
+                        child:SetAttribute("OriginalName", nil)
+                    end
+                end
+            end
+            process(workspace:FindFirstChild("Enemies"))
+            process(workspace)
+        end
+        restoreModelNames("Skinwalker")
     end
 end
 
@@ -87,10 +160,32 @@ function Logic.restoreAll(gc)
                     pcall(function() data.touch.Parent = part end)
                 end
                 pcall(function() part.CanTouch = data.originalCanTouch end)
+                if data.originalName then
+                    pcall(function() part.Name = data.originalName end)
+                end
             end
         end
         table.clear(gc.SavedPartsData)
     end
+
+    -- Khôi phục tất cả các Model Skinwalker/Husk
+    local function restoreAllModelNames()
+        local function process(parent)
+            if not parent then return end
+            for _, child in ipairs(parent:GetChildren()) do
+                local originalName = child:GetAttribute("OriginalName")
+                if originalName then
+                    pcall(function()
+                        child.Name = originalName
+                    end)
+                    child:SetAttribute("OriginalName", nil)
+                end
+            end
+        end
+        process(workspace:FindFirstChild("Enemies"))
+        process(workspace)
+    end
+    restoreAllModelNames()
 end
 
 return Logic

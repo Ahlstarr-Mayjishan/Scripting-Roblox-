@@ -33,6 +33,7 @@ pcall(function()
             ImmunityMartToggle = false,
             ImmunityICBMToggle = false,
             ImmunitySpringerToggle = false,
+            ImmunitySkinwalkerToggle = false,
             SpringerAutoJumpToggle = false,
             SpringerImmunityModeDropdown = "Legit"
         }

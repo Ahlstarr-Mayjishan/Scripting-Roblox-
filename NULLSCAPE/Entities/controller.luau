@@ -21,12 +21,16 @@ local Controller = {
     MartImmune = false,
     ICBMImmune = false,
     SpringerImmune = false,
+    SkinwalkerImmune = false,
     SpringerImmunityMode = "Legit",
     Destroyed = false,
     
     EnemiesFolder = nil,
-    PermanentConnections = {}
+    PermanentConnections = {},
+    StartSkinwalkerEvasion = nil :: any
 }
+
+local skinwalkerNear = false
 
 -- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
 local function isInMatch()
@@ -126,6 +130,11 @@ function Controller:SetImmunity(entityName, value)
         self.MartImmune = value
     elseif entityName == "ICBM" then
         self.ICBMImmune = value
+    elseif entityName == "Skinwalker" then
+        self.SkinwalkerImmune = value
+        if value then
+            Controller:StartSkinwalkerEvasion()
+        end
     elseif entityName == "Springer" then
         self.SpringerImmune = value
         
@@ -140,25 +149,39 @@ function Controller:SetImmunity(entityName, value)
 
     -- Áp dụng thay đổi tức thời cho thực thể đã tồn tại trong workspace
     if value then
-        if self.EnemiesFolder then
-            for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
-                if child.Name == entityName or string.find(child.Name, entityName) then
-                    -- Chỉ áp dụng bảo vệ TouchInterest cho Baby, Bell, Mart
-                    if entityName == "Baby" or entityName == "Bell" or entityName == "Mart" then
-                        Executor.enableImmunity(GC, child)
-                    end
-                end
-                if entityName == "Springer" and string.find(child.Name, "Springer") and self.SpringerImmunityMode == "Blatant" then
-                    for _, subChild in ipairs(child:GetChildren()) do
-                        if subChild.Name == "SpringerShockwave" or subChild.Name == "DemonShockwave" then
-                            disableShockwave(child, subChild)
-                        end
+        local function applyImmunityToChild(child)
+            local isTarget = false
+            if entityName == "Skinwalker" then
+                isTarget = string.find(child.Name, "Skinwalker") or string.find(child.Name, "Husk")
+            else
+                isTarget = child.Name == entityName or string.find(child.Name, entityName)
+            end
+            
+            if isTarget then
+                Executor.enableImmunity(GC, child)
+            end
+            
+            if entityName == "Springer" and string.find(child.Name, "Springer") and self.SpringerImmunityMode == "Blatant" then
+                for _, subChild in ipairs(child:GetChildren()) do
+                    if subChild.Name == "SpringerShockwave" or subChild.Name == "DemonShockwave" then
+                        disableShockwave(child, subChild)
                     end
                 end
             end
         end
+
+        if self.EnemiesFolder then
+            for _, child in ipairs(self.EnemiesFolder:GetChildren()) do
+                applyImmunityToChild(child)
+            end
+        end
+        for _, child in ipairs(workspace:GetChildren()) do
+            if child.Name ~= "Enemies" then
+                applyImmunityToChild(child)
+            end
+        end
     else
-        if entityName == "Baby" or entityName == "Bell" or entityName == "Mart" then
+        if entityName == "Baby" or entityName == "Bell" or entityName == "Mart" or entityName == "Skinwalker" then
             Executor.disableImmunityForType(GC, entityName)
         end
         if entityName == "Springer" then
@@ -212,13 +235,101 @@ function Controller:SetSpringerImmunityMode(mode)
     end
 end
 
+local skinwalkerThread = nil
+function Controller:StartSkinwalkerEvasion()
+    if skinwalkerThread then return end
+    skinwalkerThread = task.spawn(function()
+        while self.SkinwalkerImmune and not self.Destroyed do
+            task.wait(0.01) -- Chạy cực nhanh để dịch chuyển tránh chạm
+            local LocalPlayer = game:GetService("Players").LocalPlayer
+            local char = LocalPlayer and LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if not root then continue end
+            
+            local function checkAndEvade(enemy)
+                if string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") then
+                    local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildOfClass("BasePart")
+                    if head then
+                        local distance = (root.Position - head.Position).Magnitude
+                        if distance < 9 then
+                            -- Đẩy lùi player ra xa để tránh va chạm vật lý/server-side
+                            local direction = (root.Position - head.Position)
+                            if direction.Magnitude == 0 then
+                                direction = Vector3.new(0, 0, 1)
+                            else
+                                direction = direction.Unit
+                            end
+                            root.CFrame = root.CFrame + direction * 3
+                        end
+                    end
+                end
+            end
+            
+            local enemies = workspace:FindFirstChild("Enemies")
+            if enemies then
+                for _, enemy in ipairs(enemies:GetChildren()) do
+                    checkAndEvade(enemy)
+                end
+            end
+            for _, child in ipairs(workspace:GetChildren()) do
+                checkAndEvade(child)
+            end
+        end
+        skinwalkerThread = nil
+    end)
+end
+
+-- Vòng lặp quét phát hiện cận cảnh Skinwalker phục vụ gỡ lỗi logs
+task.spawn(function()
+    while not Controller.Destroyed do
+        task.wait(0.1)
+        local LocalPlayer = game:GetService("Players").LocalPlayer
+        local char = LocalPlayer and LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if not root then
+            skinwalkerNear = false
+            continue
+        end
+        
+        local foundNear = false
+        local function checkNear(enemy)
+            if string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") then
+                local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChildOfClass("BasePart")
+                if head then
+                    local distance = (root.Position - head.Position).Magnitude
+                    if distance < 25 then
+                        foundNear = true
+                    end
+                end
+            end
+        end
+        
+        local enemies = workspace:FindFirstChild("Enemies")
+        if enemies then
+            for _, enemy in ipairs(enemies:GetChildren()) do
+                checkNear(enemy)
+                if foundNear then break end
+            end
+        end
+        
+        if not foundNear then
+            for _, child in ipairs(workspace:GetChildren()) do
+                checkNear(child)
+                if foundNear then break end
+            end
+        end
+        
+        skinwalkerNear = foundNear
+    end
+end)
+
 -- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
 local function processEntity(enemy)
     if not enemy then return end
     
-    -- Chỉ áp dụng bảo vệ TouchInterest đối với các thực thể được hỗ trợ (Baby, Bell, Mart)
-    if Logic.isTargetEntity(enemy.Name) then
-        local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
+    local name = enemy.Name
+    if Logic.isTargetEntity(name) then
+        local checkFunc = Logic.getImmunityCheck(name, Controller)
         if checkFunc and checkFunc() then
             Executor.enableImmunity(GC, enemy)
         end
@@ -227,17 +338,46 @@ local function processEntity(enemy)
         local descConn = enemy.DescendantAdded:Connect(function(part)
             local checkFunc = Logic.getImmunityCheck(enemy.Name, Controller)
             if checkFunc and checkFunc() then
-                if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-                    local parentPart = part.Parent
-                    if parentPart and parentPart:IsA("BasePart") then
-                        if not GC.SavedPartsData[parentPart] then
-                            GC.SavedPartsData[parentPart] = {
-                                touch = part,
-                                originalCanTouch = parentPart.CanTouch,
-                                enemyName = enemy.Name
+                local isSkinwalker = string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") or (enemy:GetAttribute("OriginalName") and (string.find(enemy:GetAttribute("OriginalName"), "Skinwalker") or string.find(enemy:GetAttribute("OriginalName"), "Husk")))
+                
+                if isSkinwalker then
+                    if part:IsA("BasePart") then
+                        if not GC.SavedPartsData[part] then
+                            GC.SavedPartsData[part] = {
+                                touch = nil,
+                                originalCanTouch = part.CanTouch,
+                                originalName = part.Name,
+                                enemyName = enemy:GetAttribute("OriginalName") or enemy.Name
                             }
                         end
-                        pcall(function() parentPart.CanTouch = false end)
+                        pcall(function() part.CanTouch = false end)
+                        if part.Name == "head" then
+                            pcall(function() part.Name = "SafeHead" end)
+                        end
+                    elseif part:IsA("Decal") or part:IsA("Texture") then
+                        if part.Name == "sprite" then
+                            if not GC.SavedPartsData[part] then
+                                GC.SavedPartsData[part] = {
+                                    originalName = part.Name,
+                                    enemyName = enemy:GetAttribute("OriginalName") or enemy.Name
+                                }
+                            end
+                            pcall(function() part.Name = "SafeSprite" end)
+                        end
+                    end
+                else
+                    if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
+                        local parentPart = part.Parent
+                        if parentPart and parentPart:IsA("BasePart") then
+                            if not GC.SavedPartsData[parentPart] then
+                                GC.SavedPartsData[parentPart] = {
+                                    touch = part,
+                                    originalCanTouch = parentPart.CanTouch,
+                                    enemyName = enemy.Name
+                                }
+                            end
+                            pcall(function() parentPart.CanTouch = false end)
+                        end
                     end
                 end
             end
@@ -311,6 +451,9 @@ local function startObservingFolders()
         if Controller.Destroyed then return end
         if child.Name == "Enemies" and child:IsA("Folder") then
             Controller:ObserveFolder(child)
+        else
+            -- Đề phòng thực thể spawn trực tiếp ở workspace
+            processEntity(child)
         end
     end
 
@@ -320,6 +463,13 @@ local function startObservingFolders()
     local initialFolder = workspace:FindFirstChild("Enemies")
     if initialFolder and initialFolder:IsA("Folder") then
         Controller:ObserveFolder(initialFolder)
+    end
+
+    -- Xử lý các con có sẵn ở workspace
+    for _, child in ipairs(workspace:GetChildren()) do
+        if child.Name ~= "Enemies" then
+            processEntity(child)
+        end
     end
 end
 
