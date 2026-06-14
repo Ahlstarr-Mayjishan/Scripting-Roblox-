@@ -7,18 +7,6 @@ local Logic = {}
 
 local Players = game:GetService("Players")
 
--- Hàm bổ trợ duyệt cây cha-con tránh gọi method namecall (chống đệ quy vô hạn trong __namecall hook)
-local function isDescendantOrSelf(child, parent)
-    if not child or not parent then return false end
-    local current = child
-    while current do
-        if current == parent then
-            return true
-        end
-        current = current.Parent
-    end
-    return false
-end
 
 function Logic.isTargetRemote(remote)
     if typeof(remote) ~= "Instance" or remote.ClassName ~= "RemoteEvent" then
@@ -123,50 +111,47 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         return false
     end
 
-    -- Kiểm tra xem mục tiêu có phải local player không
-    local targetsLocal = false
+    -- Kiểm tra xem mục tiêu có phải là một người chơi khác hay không
+    local targetsSomeoneElse = false
     local LocalPlayer = Players.LocalPlayer
     local char = LocalPlayer and LocalPlayer.Character
 
-    local hasTarget = false
     for i = 2, #args do
-        if args[i] ~= nil then
-            hasTarget = true
-            break
-        end
-    end
-
-    if not hasTarget then
-        targetsLocal = true
-    else
-        for i = 2, #args do
-            local arg = args[i]
-            if arg == LocalPlayer or arg == char then
-                targetsLocal = true
-                break
-            end
-            if typeof(arg) == "Instance" then
-                if char and isDescendantOrSelf(arg, char) then
-                    targetsLocal = true
+        local arg = args[i]
+        if typeof(arg) == "Instance" then
+            if arg:IsA("Player") then
+                if arg ~= LocalPlayer then
+                    targetsSomeoneElse = true
                     break
                 end
-            elseif typeof(arg) == "table" then
-                for _, val in pairs(arg) do
-                    if val == LocalPlayer or val == char then
-                        targetsLocal = true
-                        break
-                    end
-                    if typeof(val) == "Instance" and char and isDescendantOrSelf(val, char) then
-                        targetsLocal = true
-                        break
+            elseif arg:IsA("Model") and arg:FindFirstChildOfClass("Humanoid") then
+                if arg ~= char then
+                    targetsSomeoneElse = true
+                    break
+                end
+            end
+        elseif typeof(arg) == "table" then
+            for _, val in pairs(arg) do
+                if typeof(val) == "Instance" then
+                    if val:IsA("Player") then
+                        if val ~= LocalPlayer then
+                            targetsSomeoneElse = true
+                            break
+                        end
+                    elseif val:IsA("Model") and val:FindFirstChildOfClass("Humanoid") then
+                        if val ~= char then
+                            targetsSomeoneElse = true
+                            break
+                        end
                     end
                 end
             end
-            if targetsLocal then break end
         end
+        if targetsSomeoneElse then break end
     end
 
-    return targetsLocal
+    -- Nếu không nhắm vào người khác, mặc định là tự tác động lên bản thân (Local Player) -> chặn
+    return not targetsSomeoneElse
 end
 
 return Logic
