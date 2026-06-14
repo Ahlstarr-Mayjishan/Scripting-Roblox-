@@ -20,6 +20,7 @@ local Controller = {
     GiftESPEnabled = false,
     CadenceESPEnabled = false,
     AltarESPEnabled = false,
+    RoomESPEnabled = false,
     AltarFilter = {"All"},
     ESPStyle = "Highlight", -- Mặc định: "Highlight" hoặc "Dot"
     Destroyed = false,
@@ -47,6 +48,37 @@ local hasInRoundValue = false
 local matchLoopsActive = false
 local folderConnections = {}
 
+-- Forward references cho việc quản lý các loop
+local startMatchLoops, startRenderStepped, stopRenderStepped
+
+-- Kiểm tra xem có mục tiêu hợp lệ nào được bật hay không
+local function checkActiveState()
+    if inLobby then return false end
+    if Controller.RoomESPEnabled then return true end
+    
+    if Controller.GiftESPEnabled and #Controller.ActiveGifts > 0 then
+        return true
+    end
+    if Controller.CadenceESPEnabled and #Controller.ActiveInstruments > 0 then
+        return true
+    end
+    if Controller.AltarESPEnabled and #Controller.ActiveAltars > 0 then
+        return true
+    end
+    
+    return false
+end
+
+-- Điều phối trạng thái chạy/dừng của các loop và render
+local function updateRunningState()
+    if checkActiveState() then
+        startMatchLoops()
+        startRenderStepped()
+    else
+        stopRenderStepped()
+    end
+end
+
 -- Ngắt các kết nối sự kiện thư mục
 local function disconnectFolderObservations()
     for _, conn in ipairs(folderConnections) do
@@ -64,15 +96,21 @@ local function registerGift(obj)
             if g.part == obj then return end
         end
         table.insert(Controller.ActiveGifts, {part = obj, color = Color3.fromRGB(255, 255, 255), type = "Gift"})
+        updateRunningState()
     end
 end
 
 local function unregisterGift(obj)
+    local removed = false
     for i, g in ipairs(Controller.ActiveGifts) do
         if g.part == obj then
             table.remove(Controller.ActiveGifts, i)
+            removed = true
             break
         end
+    end
+    if removed then
+        updateRunningState()
     end
 end
 
@@ -86,15 +124,21 @@ local function registerInstrument(obj)
             if inst.model == obj or inst.part == targetPart then return end
         end
         table.insert(Controller.ActiveInstruments, {part = targetPart, model = obj, color = Color3.fromRGB(255, 0, 0), type = "Cadence"})
+        updateRunningState()
     end
 end
 
 local function unregisterInstrument(obj)
+    local removed = false
     for i, inst in ipairs(Controller.ActiveInstruments) do
         if inst.model == obj or inst.part == obj then
             table.remove(Controller.ActiveInstruments, i)
+            removed = true
             break
         end
+    end
+    if removed then
+        updateRunningState()
     end
 end
 
@@ -106,15 +150,21 @@ local function registerAltar(altarObj)
         end
         local altarName, altarColor = Logic.getAltarTypeAndColor(altarObj)
         table.insert(Controller.ActiveAltars, {part = targetPart, model = altarObj, color = altarColor, type = "Altar", altarName = altarName})
+        updateRunningState()
     end
 end
 
 local function unregisterAltar(altarObj)
+    local removed = false
     for i, a in ipairs(Controller.ActiveAltars) do
         if a.model == altarObj or a.part == altarObj then
             table.remove(Controller.ActiveAltars, i)
+            removed = true
             break
         end
+    end
+    if removed then
+        updateRunningState()
     end
 end
 
@@ -154,6 +204,10 @@ local function observeEnemies(folder)
 end
 
 local function checkRoomForAltar(room)
+    pcall(function()
+        Logic.updateRoomVisuals(room, Controller.RoomESPEnabled)
+    end)
+
     local altarObj = room:FindFirstChild("AltarLocation") or room:FindFirstChild("AltarModel") or room:FindFirstChild("Altar")
     if altarObj then
         registerAltar(altarObj)
@@ -219,21 +273,21 @@ end
 -- RenderStepped connection management
 local renderConn = nil
 
-local function stopRenderStepped()
+stopRenderStepped = function()
     if renderConn then
         renderConn:Disconnect()
         renderConn = nil
     end
 end
 
-local function startRenderStepped()
+startRenderStepped = function()
     if renderConn then return end
     renderConn = RunService.RenderStepped:Connect(function()
         if Controller.Destroyed then
             stopRenderStepped()
             return
         end
-        if inLobby then
+        if inLobby or not checkActiveState() then
             stopRenderStepped()
             return
         end
@@ -246,13 +300,13 @@ local function startRenderStepped()
     end)
 end
 
--- Vòng lặp cập nhật styles hiển thị (Dot <-> Highlight) cực nhanh mỗi 0.3 giây
-local function startMatchLoops()
+-- Vòng lặp cập nhật styles hiển thị (Dot <-> Highlight) cực nhanh mỗi 0.15 giây
+startMatchLoops = function()
     if matchLoopsActive then return end
     matchLoopsActive = true
     
     task.spawn(function()
-        while not Controller.Destroyed and not inLobby do
+        while not Controller.Destroyed and not inLobby and checkActiveState() do
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if hrp then
@@ -260,9 +314,13 @@ local function startMatchLoops()
                     Executor.updateESPStyles(Controller, GC, hrp)
                 end)
             end
-            task.wait(0.3)
+            task.wait(0.15)
         end
         matchLoopsActive = false
+        -- Xóa visuals cũ khi dừng loop
+        pcall(function()
+            Executor.clearVisuals(GC, true)
+        end)
     end)
 end
 
@@ -274,6 +332,15 @@ local function setInLobby(val)
         pcall(function()
             Executor.clearVisuals(GC, false)
         end)
+        pcall(function()
+            -- Dọn sạch proxy phòng khi vào sảnh
+            local currentRooms = workspace:FindFirstChild("CurrentRooms")
+            if currentRooms then
+                for _, room in ipairs(currentRooms:GetChildren()) do
+                    Logic.updateRoomVisuals(room, false)
+                end
+            end
+        end)
         disconnectFolderObservations()
         stopRenderStepped()
         table.clear(Controller.ActiveGifts)
@@ -281,17 +348,17 @@ local function setInLobby(val)
         table.clear(Controller.ActiveAltars)
     else
         startObservingFolders()
-        startMatchLoops()
-        startRenderStepped()
+        updateRunningState()
     end
 end
 
 -- Hàm trigger cập nhật ESP tức thì khi thay đổi cấu hình
 local function triggerInstantUpdate()
     if inLobby then return end
+    updateRunningState()
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if hrp then
+    if hrp and checkActiveState() then
         pcall(function()
             Executor.updateESPStyles(Controller, GC, hrp)
         end)
@@ -314,6 +381,15 @@ end
 function Controller:SetAltarESP(value)
     self.AltarESPEnabled = value
     triggerInstantUpdate()
+end
+
+-- Bật/tắt định vị phòng/map
+function Controller:SetRoomESP(value)
+    self.RoomESPEnabled = value
+    pcall(function()
+        Logic.updateAllRoomVisuals(self)
+    end)
+    updateRunningState()
 end
 
 -- Bộ lọc loại Altar (Hỗ trợ multi-select table)
@@ -386,8 +462,7 @@ end
 -- Khởi tạo ban đầu khi nạp script
 if not inLobby then
     startObservingFolders()
-    startMatchLoops()
-    startRenderStepped()
+    updateRunningState()
 end
 
 -- Vòng lặp phát hiện Radar chính thức của game

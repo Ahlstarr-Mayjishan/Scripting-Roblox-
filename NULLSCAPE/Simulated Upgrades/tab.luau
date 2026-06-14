@@ -42,7 +42,7 @@ return function(Client, Controller)
     local ESPDropdown
     ESPDropdown = Tab:CreateDropdown({
         Name = "Select ESP Type",
-        Options = {"None", "Gift", "Cadence", "Altar"},
+        Options = {"None", "Gift", "Cadence", "Altar", "Room"},
         CurrentOption = {"None"},
         MultipleOptions = true,
         Flag = "ESPSelectionDropdown",
@@ -101,10 +101,12 @@ return function(Client, Controller)
             local giftSelected = table.find(finalSelection, "Gift") ~= nil
             local cadenceSelected = table.find(finalSelection, "Cadence") ~= nil
             local altarSelected = table.find(finalSelection, "Altar") ~= nil
+            local roomSelected = table.find(finalSelection, "Room") ~= nil
             
             Controller:SetGiftESP(giftSelected)
             Controller:SetCadenceESP(cadenceSelected)
             Controller:SetAltarESP(altarSelected)
+            Controller:SetRoomESP(roomSelected)
             
             -- Tự động đóng dropdown nếu lựa chọn duy nhất hiện tại là "None"
             if #finalSelection == 1 and finalSelection[1] == "None" then
@@ -150,8 +152,6 @@ return function(Client, Controller)
         Flag = "AltarFilterDropdown",
         Callback = function(SelectedOptions)
             if isSettingAltar then return end
-            local unlockController = Client.Modules.UnlockController
-            if not unlockController then return end
             
             local hasNone = table.find(SelectedOptions, "None") ~= nil
             local finalSelection = SelectedOptions
@@ -201,7 +201,7 @@ return function(Client, Controller)
             
             lastAltarSelection = finalSelection
             
-            unlockController:SetAltarFilter(finalSelection)
+            Controller:SetAltarFilter(finalSelection)
             
             -- Tự động đóng dropdown nếu lựa chọn duy nhất hiện tại là "None"
             if #finalSelection == 1 and finalSelection[1] == "None" then

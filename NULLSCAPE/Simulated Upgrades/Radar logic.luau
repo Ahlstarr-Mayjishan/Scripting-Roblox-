@@ -199,13 +199,13 @@ end
 function Logic.updateESPStyles(controller, gc, hrp)
     local saved = gc.SavedVisuals
     if not saved.ActiveTargets then saved.ActiveTargets = {} end
+    if not saved.CurrentlyHighlighted then saved.CurrentlyHighlighted = {} end
     if not hrp then return end
     
     local gifts = controller.GiftESPEnabled and (controller.ActiveGifts or {}) or {}
     local instruments = controller.CadenceESPEnabled and (controller.ActiveInstruments or {}) or {}
     local altars = controller.AltarESPEnabled and (controller.ActiveAltars or {}) or {}
     
-    local allTargets = {}
     local validGifts = {}
     local validInstruments = {}
     local validAltars = {}
@@ -213,14 +213,26 @@ function Logic.updateESPStyles(controller, gc, hrp)
     local nearestAltar = nil
     local shortestAltarDist = math.huge
     
-    -- Cập nhật khoảng cách thực tế thời gian thực
+    -- Lọc các target hợp lệ và cập nhật khoảng cách
+    local eligibleForHighlight = {}
+    local mustBeBillboard = {}
+    
     for _, t in ipairs(gifts) do
         local part = t.part
         if part and part.Parent and part:IsDescendantOf(workspace) then
             local distance = (hrp.Position - part.Position).Magnitude
             t.distance = distance
-            table.insert(allTargets, t)
             table.insert(validGifts, t)
+            
+            -- Kiểm tra xem có phải Golden Gift không
+            local targetModel = t.model or part
+            local isGolden = (string.find(part.Name:lower(), "golden") ~= nil) or (string.find(targetModel.Name:lower(), "golden") ~= nil) or (part.Parent ~= nil and string.find(part.Parent.Name:lower(), "golden") ~= nil)
+            
+            if isGolden then
+                table.insert(mustBeBillboard, t)
+            else
+                table.insert(eligibleForHighlight, t)
+            end
         end
     end
     
@@ -229,8 +241,8 @@ function Logic.updateESPStyles(controller, gc, hrp)
         if part and part.Parent and part:IsDescendantOf(workspace) then
             local distance = (hrp.Position - part.Position).Magnitude
             t.distance = distance
-            table.insert(allTargets, t)
             table.insert(validInstruments, t)
+            table.insert(eligibleForHighlight, t)
         end
     end
     
@@ -238,7 +250,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
         local part = t.part
         local model = t.model or part
         if part and part.Parent and part:IsDescendantOf(workspace) then
-            -- Áp dụng bộ lọc AltarFilter
             local altarName = t.altarName or "Unknown"
             local filter = controller.AltarFilter
             local matchesFilter = false
@@ -257,8 +268,8 @@ function Logic.updateESPStyles(controller, gc, hrp)
             if matchesFilter then
                 local distance = (hrp.Position - part.Position).Magnitude
                 t.distance = distance
-                table.insert(allTargets, t)
                 table.insert(validAltars, t)
+                table.insert(eligibleForHighlight, t)
                 
                 if distance < shortestAltarDist then
                     shortestAltarDist = distance
@@ -268,44 +279,106 @@ function Logic.updateESPStyles(controller, gc, hrp)
         end
     end
     
-    -- Sắp xếp tất cả theo khoảng cách gần nhất
-    table.sort(allTargets, function(a, b)
-        return a.distance < b.distance
-    end)
-    
     local currentTargets = {}
-    for idx, target in ipairs(allTargets) do
-        local targetPart = target.part
-        local targetModel = target.model or targetPart
-        local color = target.color
+    
+    -- Xử lý styles dựa trên ESPStyle
+    if controller.ESPStyle == "Highlight" then
+        -- Chia thành 2 nhóm: đang được highlight và ứng viên mới
+        local activeHighlights = {}
+        local candidates = {}
         
-        local isGolden = false
-        local targetName = targetPart.Name:lower()
-        local modelName = targetModel.Name:lower()
-        local parentName = targetPart.Parent and targetPart.Parent.Name:lower() or ""
-        if string.find(targetName, "golden") or string.find(modelName, "golden") or string.find(parentName, "golden") then
-            isGolden = true
-        end
-
-        local desiredStyle, parentObject
-        -- Hạ giới hạn vẽ Highlight đồng thời từ 12 xuống 8 để cải thiện FPS
-        -- Không sử dụng Highlight cho Golden Gift (ép buộc dùng Dot)
-        if controller.ESPStyle == "Highlight" and idx <= 8 and not isGolden then
-            desiredStyle = "Highlight"
-            parentObject = targetModel
-        elseif controller.ESPStyle == "Ping" then
-            desiredStyle = "Ping"
-            parentObject = targetPart
-        else
-            desiredStyle = "Dot"
-            parentObject = targetPart
+        for _, t in ipairs(eligibleForHighlight) do
+            if saved.CurrentlyHighlighted[t.part] then
+                table.insert(activeHighlights, t)
+            else
+                table.insert(candidates, t)
+            end
         end
         
-        currentTargets[targetPart] = {
-            Style = desiredStyle,
-            Color = color,
-            ParentObject = parentObject
-        }
+        -- Sắp xếp cả hai nhóm theo khoảng cách
+        table.sort(activeHighlights, function(a, b) return a.distance < b.distance end)
+        table.sort(candidates, function(a, b) return a.distance < b.distance end)
+        
+        -- Nếu chưa đủ 8 Highlight, lấy từ candidates
+        while #activeHighlights < 8 and #candidates > 0 do
+            local nextCandidate = table.remove(candidates, 1)
+            table.insert(activeHighlights, nextCandidate)
+        end
+        table.sort(activeHighlights, function(a, b) return a.distance < b.distance end)
+        
+        -- Áp dụng hysteresis (trễ) 15%: tráo đổi nếu candidate gần nhất gần hơn 15% so với highlight xa nhất
+        if #activeHighlights == 8 and #candidates > 0 then
+            local swapped = true
+            while swapped and #candidates > 0 do
+                swapped = false
+                local farHighlight = activeHighlights[8]
+                local nearCandidate = candidates[1]
+                
+                if nearCandidate.distance < farHighlight.distance * 0.85 then
+                    -- Tráo đổi
+                    activeHighlights[8] = nearCandidate
+                    candidates[1] = farHighlight
+                    
+                    -- Sắp xếp lại
+                    table.sort(activeHighlights, function(a, b) return a.distance < b.distance end)
+                    table.sort(candidates, function(a, b) return a.distance < b.distance end)
+                    swapped = true
+                end
+            end
+        end
+        
+        -- Cập nhật CurrentlyHighlighted và thiết lập styles
+        local newHighlighted = {}
+        for _, t in ipairs(activeHighlights) do
+            newHighlighted[t.part] = true
+            
+            currentTargets[t.part] = {
+                Style = "Highlight",
+                Color = t.color,
+                ParentObject = t.model or t.part
+            }
+        end
+        saved.CurrentlyHighlighted = newHighlighted
+        
+        -- Những cái không được Highlight sẽ chuyển thành Dot
+        for _, t in ipairs(candidates) do
+            currentTargets[t.part] = {
+                Style = "Dot",
+                Color = t.color,
+                ParentObject = t.part
+            }
+        end
+        
+        -- Golden target bắt buộc phải dùng Dot
+        for _, t in ipairs(mustBeBillboard) do
+            currentTargets[t.part] = {
+                Style = "Dot",
+                Color = t.color,
+                ParentObject = t.part
+            }
+        end
+    else
+        -- Xóa CurrentlyHighlighted
+        table.clear(saved.CurrentlyHighlighted)
+        
+        -- ESPStyle là Dot hoặc Ping
+        local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
+        
+        for _, t in ipairs(eligibleForHighlight) do
+            currentTargets[t.part] = {
+                Style = style,
+                Color = t.color,
+                ParentObject = t.part
+            }
+        end
+        
+        for _, t in ipairs(mustBeBillboard) do
+            currentTargets[t.part] = {
+                Style = style,
+                Color = t.color,
+                ParentObject = t.part
+            }
+        end
     end
     
     local scanTime = os.clock()
@@ -507,20 +580,29 @@ function Logic.updateESPStyles(controller, gc, hrp)
     if controller.GiftESPEnabled and #validGifts > 0 then
         getOrCreateArrow(saved, "ArrowGift", Color3.fromRGB(255, 255, 255))
     else
-        if saved.ArrowGift then pcall(function() saved.ArrowGift:Destroy() end) saved.ArrowGift = nil end
+        if saved.ArrowGift then
+            pcall(function() saved.ArrowGift:Destroy() end)
+            saved.ArrowGift = nil
+        end
     end
     
     if controller.CadenceESPEnabled and #validInstruments > 0 then
         getOrCreateArrow(saved, "ArrowCadence", Color3.fromRGB(255, 0, 0))
     else
-        if saved.ArrowCadence then pcall(function() saved.ArrowCadence:Destroy() end) saved.ArrowCadence = nil end
+        if saved.ArrowCadence then
+            pcall(function() saved.ArrowCadence:Destroy() end)
+            saved.ArrowCadence = nil
+        end
     end
     
     if controller.AltarESPEnabled and #validAltars > 0 then
         local _, altarColor = getAltarTypeAndColor(nearestAltar or validAltars[1].model or validAltars[1].part)
         getOrCreateArrow(saved, "ArrowAltar", altarColor)
     else
-        if saved.ArrowAltar then pcall(function() saved.ArrowAltar:Destroy() end) saved.ArrowAltar = nil end
+        if saved.ArrowAltar then
+            pcall(function() saved.ArrowAltar:Destroy() end)
+            saved.ArrowAltar = nil
+        end
     end
 end
 
@@ -682,6 +764,51 @@ function Logic.updateRender(controller, gc, hrp)
                     frame.BackgroundTransparency = 0
                 end
             end
+        end
+    end
+end
+
+-- Quản lý visual cho phòng bằng SelectionBox proxy
+function Logic.updateRoomVisuals(room, enabled)
+    local proxy = room:FindFirstChild("_RoomProxy")
+    if enabled then
+        if not proxy then
+            local success, cframe, size = pcall(function() return room:GetBoundingBox() end)
+            if not success or not cframe then return end
+            
+            proxy = Instance.new("Part")
+            proxy.Name = "_RoomProxy"
+            proxy.Size = size
+            proxy.CFrame = cframe
+            proxy.Transparency = 1
+            proxy.Anchored = true
+            proxy.CanCollide = false
+            proxy.CastShadow = false
+            proxy.Parent = room
+        end
+        
+        local sBox = proxy:FindFirstChild("RoomSelectionBox")
+        if not sBox then
+            sBox = Instance.new("SelectionBox")
+            sBox.Name = "RoomSelectionBox"
+            sBox.Color3 = Color3.fromRGB(0, 255, 128) -- Màu neon cực đẹp
+            sBox.LineThickness = 0.05
+            sBox.AlwaysOnTop = true
+            sBox.Adornee = proxy
+            sBox.Parent = proxy
+        end
+    else
+        if proxy then
+            pcall(function() proxy:Destroy() end)
+        end
+    end
+end
+
+function Logic.updateAllRoomVisuals(controller)
+    local currentRooms = workspace:FindFirstChild("CurrentRooms")
+    if currentRooms then
+        for _, room in ipairs(currentRooms:GetChildren()) do
+            Logic.updateRoomVisuals(room, controller.RoomESPEnabled)
         end
     end
 end
