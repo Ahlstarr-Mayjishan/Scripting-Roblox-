@@ -121,80 +121,6 @@ function Logic.clearVisuals(gc, keepArrows)
     end
 end
 
--- Vòng quét định kỳ thu thập và phát hiện các mục tiêu ESP mới (chạy chậm)
-function Logic.scanTargets(controller, gc, hrp)
-    local gifts = {}
-    local instruments = {}
-    local altars = {}
-    
-    -- 1. Thu thập Hộp quà
-    if controller.GiftESPEnabled then
-        local itemPools = workspace:FindFirstChild("Item_Pools")
-        if itemPools then
-            for _, obj in ipairs(itemPools:GetDescendants()) do
-                if obj:IsA("BasePart") and (string.find(obj.Name:lower(), "gift") or string.find(obj.Name:lower(), "present")) then
-                    table.insert(gifts, {part = obj, color = Color3.fromRGB(255, 255, 255), type = "Gift"})
-                end
-            end
-        end
-    end
-    
-    -- 2. Thu thập Nhạc cụ
-    if controller.CadenceESPEnabled then
-        local function scanFolder(folder)
-            for _, obj in ipairs(folder:GetDescendants()) do
-                if (obj:IsA("BasePart") or obj:IsA("Model")) and isInstrument(obj.Name) then
-                    local targetPart = obj:IsA("Model") and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")) or obj
-                    if targetPart and targetPart:IsA("BasePart") then
-                        table.insert(instruments, {part = targetPart, model = obj, color = Color3.fromRGB(255, 0, 0), type = "Cadence"})
-                    end
-                end
-            end
-        end
-        local itemPools = workspace:FindFirstChild("Item_Pools")
-        if itemPools then scanFolder(itemPools) end
-        local enemies = workspace:FindFirstChild("Enemies")
-        if enemies then scanFolder(enemies) end
-    end
-    
-    -- 3. Thu thập Đàn tế (Altar)
-    if controller.AltarESPEnabled then
-        local currentRooms = workspace:FindFirstChild("CurrentRooms")
-        if currentRooms then
-            for _, room in ipairs(currentRooms:GetChildren()) do
-                local altarObj = room:FindFirstChild("AltarLocation") or room:FindFirstChild("AltarModel") or room:FindFirstChild("Altar")
-                if altarObj then
-                    local targetPart = altarObj:IsA("Model") and (altarObj:FindFirstChild("HumanoidRootPart") or altarObj:FindFirstChildWhichIsA("BasePart")) or altarObj
-                    if targetPart and targetPart:IsA("BasePart") then
-                        local altarName, altarColor = getAltarTypeAndColor(altarObj)
-                        local filter = controller.AltarFilter
-                        local matchesFilter = false
-                        
-                        if typeof(filter) == "table" then
-                            if table.find(filter, "All") or table.find(filter, "Tất cả") or #filter == 0 then
-                                matchesFilter = true
-                            else
-                                matchesFilter = table.find(filter, altarName) ~= nil
-                            end
-                        else
-                            local filterStr = tostring(filter or "All")
-                            matchesFilter = (filterStr == "All" or filterStr == "Tất cả" or filterStr == altarName)
-                        end
-                        
-                        if matchesFilter then
-                            table.insert(altars, {part = targetPart, model = altarObj, color = altarColor, type = "Altar"})
-                        end
-                    end
-                end
-            end
-        end
-    end
-    
-    controller.CachedGiftParts = gifts
-    controller.CachedCadenceParts = instruments
-    controller.CachedAltarParts = altars
-end
-
 -- Vòng lặp cập nhật khoảng cách, sắp xếp độ ưu tiên và chuyển đổi visual styles (chạy cực nhanh)
 function Logic.updateESPStyles(controller, gc, hrp)
     local saved = gc.SavedVisuals
@@ -438,14 +364,15 @@ function Logic.updateESPStyles(controller, gc, hrp)
                     
                     pcall(function()
                         if current.Style == "Highlight" then
-                            local highlight = Instance.new("Highlight")
-                            highlight.Name = "NULLSCAPE_ESP_Highlight"
-                            highlight.FillColor = current.Color
-                            highlight.FillTransparency = 1.0
-                            highlight.OutlineColor = current.Color
-                            highlight.OutlineTransparency = 0.0
-                            highlight.Parent = current.ParentObject
-                            newCache.Highlight = highlight
+                            local sBox = Instance.new("SelectionBox")
+                            sBox.Name = "NULLSCAPE_ESP_SelectionBox"
+                            sBox.Color3 = current.Color
+                            sBox.LineThickness = 0.04
+                            sBox.SurfaceTransparency = 1.0
+                            sBox.AlwaysOnTop = true
+                            sBox.Adornee = current.ParentObject
+                            sBox.Parent = current.ParentObject
+                            newCache.Highlight = sBox
                         elseif current.Style == "Ping" then
                             local billboard = Instance.new("BillboardGui")
                             billboard.Name = "NULLSCAPE_ESP_Ping"
@@ -492,14 +419,15 @@ function Logic.updateESPStyles(controller, gc, hrp)
                 
                 pcall(function()
                     if current.Style == "Highlight" then
-                        local highlight = Instance.new("Highlight")
-                        highlight.Name = "NULLSCAPE_ESP_Highlight"
-                        highlight.FillColor = current.Color
-                        highlight.FillTransparency = 1.0
-                        highlight.OutlineColor = current.Color
-                        highlight.OutlineTransparency = 0.0
-                        highlight.Parent = current.ParentObject
-                        newCache.Highlight = highlight
+                        local sBox = Instance.new("SelectionBox")
+                        sBox.Name = "NULLSCAPE_ESP_SelectionBox"
+                        sBox.Color3 = current.Color
+                        sBox.LineThickness = 0.04
+                        sBox.SurfaceTransparency = 1.0
+                        sBox.AlwaysOnTop = true
+                        sBox.Adornee = current.ParentObject
+                        sBox.Parent = current.ParentObject
+                        newCache.Highlight = sBox
                     elseif current.Style == "Ping" then
                         local billboard = Instance.new("BillboardGui")
                         billboard.Name = "NULLSCAPE_ESP_Ping"
@@ -546,9 +474,8 @@ function Logic.updateESPStyles(controller, gc, hrp)
             local inst = cached.Highlight or cached.Dot
             if inst and inst.Parent then
                 if cached.Style == "Highlight" then
-                    if inst.OutlineColor ~= current.Color then
-                        inst.OutlineColor = current.Color
-                        inst.FillColor = current.Color
+                    if inst.Color3 ~= current.Color then
+                        inst.Color3 = current.Color
                     end
                 elseif cached.Style == "Ping" then
                     local frame = inst:FindFirstChild("PingFrame")
@@ -764,51 +691,6 @@ function Logic.updateRender(controller, gc, hrp)
                     frame.BackgroundTransparency = 0
                 end
             end
-        end
-    end
-end
-
--- Quản lý visual cho phòng bằng SelectionBox proxy
-function Logic.updateRoomVisuals(room, enabled)
-    local proxy = room:FindFirstChild("_RoomProxy")
-    if enabled then
-        if not proxy then
-            local success, cframe, size = pcall(function() return room:GetBoundingBox() end)
-            if not success or not cframe then return end
-            
-            proxy = Instance.new("Part")
-            proxy.Name = "_RoomProxy"
-            proxy.Size = size
-            proxy.CFrame = cframe
-            proxy.Transparency = 1
-            proxy.Anchored = true
-            proxy.CanCollide = false
-            proxy.CastShadow = false
-            proxy.Parent = room
-        end
-        
-        local sBox = proxy:FindFirstChild("RoomSelectionBox")
-        if not sBox then
-            sBox = Instance.new("SelectionBox")
-            sBox.Name = "RoomSelectionBox"
-            sBox.Color3 = Color3.fromRGB(0, 255, 128) -- Màu neon cực đẹp
-            sBox.LineThickness = 0.05
-            sBox.AlwaysOnTop = true
-            sBox.Adornee = proxy
-            sBox.Parent = proxy
-        end
-    else
-        if proxy then
-            pcall(function() proxy:Destroy() end)
-        end
-    end
-end
-
-function Logic.updateAllRoomVisuals(controller)
-    local currentRooms = workspace:FindFirstChild("CurrentRooms")
-    if currentRooms then
-        for _, room in ipairs(currentRooms:GetChildren()) do
-            Logic.updateRoomVisuals(room, controller.RoomESPEnabled)
         end
     end
 end

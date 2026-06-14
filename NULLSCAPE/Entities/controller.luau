@@ -42,9 +42,21 @@ local inLobby = not isInMatch()       -- Đang ở sảnh chờ/lựa chọn (Kh
 local isHibernating = false -- Đã dọn sạch thực thể trong trận và đang ngủ đông
 local hasInRoundValue = false
 local touchInterestLoopActive = false
+local folderConnections = {}
+
+-- Forward references
+local startTouchInterestLoop
+
+-- Ngắt các kết nối quan sát thư mục
+local function disconnectFolderObservations()
+    for _, conn in ipairs(folderConnections) do
+        if conn then pcall(function() conn:Disconnect() end) end
+    end
+    table.clear(folderConnections)
+end
 
 -- Vòng lặp quan sát TouchInterest của các mục tiêu đặc biệt
-local function startTouchInterestLoop()
+startTouchInterestLoop = function()
     if touchInterestLoopActive then return end
     touchInterestLoopActive = true
     
@@ -92,6 +104,7 @@ end
 
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
 function Controller:CleanUp()
+    disconnectFolderObservations()
     GC.cleanAll()
     self.EnemiesFolder = nil
     
@@ -178,20 +191,19 @@ end
 
 -- Thiết lập quan sát thư mục Enemies trong Workspace
 function Controller:ObserveFolder(folder)
-    self:CleanUp() -- Dọn dẹp tàn dư cũ trước khi gán mới
     self.EnemiesFolder = folder
 
     -- 1. Lắng nghe khi thực thể mới xuất hiện
     local childAddedConn = folder.ChildAdded:Connect(function(child)
         processEntity(child)
     end)
-    GC.registerConnection(childAddedConn)
+    table.insert(folderConnections, childAddedConn)
 
     -- 2. Lắng nghe khi thực thể bị xóa khỏi game
     local childRemovedConn = folder.ChildRemoved:Connect(function(child)
         removeEntity(child)
     end)
-    GC.registerConnection(childRemovedConn)
+    table.insert(folderConnections, childRemovedConn)
 
     -- 3. Xử lý các thực thể đã có sẵn trong thư mục
     for _, child in ipairs(folder:GetChildren()) do
@@ -205,11 +217,13 @@ function Controller:ObserveFolder(folder)
             self:CleanUp()
         end
     end)
-    GC.registerConnection(destroyingConn)
+    table.insert(folderConnections, destroyingConn)
 end
 
--- Quét tìm thư mục Enemies trong Workspace
-local function startObserving()
+-- Quét tìm thư mục Enemies trong Workspace và lắng nghe sự thay đổi
+local function startObservingFolders()
+    disconnectFolderObservations()
+    
     local function checkAndObserve(child)
         if Controller.Destroyed then return end
         if child.Name == "Enemies" and child:IsA("Folder") then
@@ -218,17 +232,32 @@ local function startObserving()
     end
 
     local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
-    table.insert(Controller.PermanentConnections, wsConn)
+    table.insert(folderConnections, wsConn)
     
     local initialFolder = workspace:FindFirstChild("Enemies")
     if initialFolder and initialFolder:IsA("Folder") then
         Controller:ObserveFolder(initialFolder)
     end
 end
-task.spawn(startObserving)
+
+-- Hàm cập nhật trạng thái sảnh chờ và tự động dọn dẹp visual/connections
+local function setInLobby(val)
+    if inLobby == val then return end
+    inLobby = val
+    if val then
+        isHibernating = false
+        disconnectFolderObservations()
+        Controller:CleanUp()
+    else
+        isHibernating = false
+        startObservingFolders()
+        startTouchInterestLoop()
+    end
+end
 
 -- Khởi tạo ban đầu khi nạp script
 if not inLobby then
+    startObservingFolders()
     startTouchInterestLoop()
 end
 
@@ -237,23 +266,11 @@ task.spawn(function()
     local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
     if inRoundVal and inRoundVal:IsA("BoolValue") then
         hasInRoundValue = true
-        inLobby = not inRoundVal.Value
-        isHibernating = false
-        if not inLobby then
-            startTouchInterestLoop()
-        end
+        setInLobby(not inRoundVal.Value)
         
         local conn = inRoundVal.Changed:Connect(function(val)
             if Controller.Destroyed then return end
-            if val then
-                inLobby = false
-                isHibernating = false
-                startTouchInterestLoop()
-            else
-                inLobby = true
-                isHibernating = false
-                Controller:CleanUp()
-            end
+            setInLobby(not val)
         end)
         table.insert(Controller.PermanentConnections, conn)
     end
@@ -264,21 +281,7 @@ task.spawn(function()
     while not Controller.Destroyed and not hasInRoundValue do
         task.wait(3.0)
         if Controller.Destroyed or hasInRoundValue then break end
-        
-        local currentInMatch = isInMatch()
-        if currentInMatch then
-            if inLobby then
-                inLobby = false
-                isHibernating = false
-                startTouchInterestLoop()
-            end
-        else
-            if not inLobby then
-                inLobby = true
-                isHibernating = false
-                Controller:CleanUp()
-            end
-        end
+        setInLobby(not isInMatch())
     end
 end)
 

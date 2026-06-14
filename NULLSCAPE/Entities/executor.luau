@@ -7,18 +7,18 @@ local Logic = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest Entities Ty
 local Executor = {}
 
 -- Thực thi bật miễn nhiễm cho một thực thể
-function Executor.enableImmunity(controller, enemy)
-    Logic.enableImmunity(controller, enemy)
+function Executor.enableImmunity(gc, enemy)
+    Logic.enableImmunity(gc, enemy)
 end
 
 -- Thực thi tắt miễn nhiễm cho một loại thực thể
-function Executor.disableImmunityForType(controller, entityName)
-    Logic.disableImmunityForType(controller, entityName)
+function Executor.disableImmunityForType(gc, entityName)
+    Logic.disableImmunityForType(gc, entityName)
 end
 
 -- Thực thi khôi phục toàn bộ TouchInterest và giải phóng bộ nhớ
-function Executor.restoreAll(controller)
-    Logic.restoreAll(controller)
+function Executor.restoreAll(gc)
+    Logic.restoreAll(gc)
 end
 
 return Executor

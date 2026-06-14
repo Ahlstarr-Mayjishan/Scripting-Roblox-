@@ -20,7 +20,6 @@ local Controller = {
     GiftESPEnabled = false,
     CadenceESPEnabled = false,
     AltarESPEnabled = false,
-    RoomESPEnabled = false,
     AltarFilter = {"All"},
     ESPStyle = "Highlight", -- Mặc định: "Highlight" hoặc "Dot"
     Destroyed = false,
@@ -54,7 +53,6 @@ local startMatchLoops, startRenderStepped, stopRenderStepped
 -- Kiểm tra xem có mục tiêu hợp lệ nào được bật hay không
 local function checkActiveState()
     if inLobby then return false end
-    if Controller.RoomESPEnabled then return true end
     
     if Controller.GiftESPEnabled and #Controller.ActiveGifts > 0 then
         return true
@@ -204,10 +202,6 @@ local function observeEnemies(folder)
 end
 
 local function checkRoomForAltar(room)
-    pcall(function()
-        Logic.updateRoomVisuals(room, Controller.RoomESPEnabled)
-    end)
-
     local altarObj = room:FindFirstChild("AltarLocation") or room:FindFirstChild("AltarModel") or room:FindFirstChild("Altar")
     if altarObj then
         registerAltar(altarObj)
@@ -295,7 +289,7 @@ startRenderStepped = function()
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         pcall(function()
-            Logic.updateRender(Controller, GC, hrp)
+            Executor.updateRender(Controller, GC, hrp)
         end)
     end)
 end
@@ -317,9 +311,9 @@ startMatchLoops = function()
             task.wait(0.15)
         end
         matchLoopsActive = false
-        -- Xóa visuals cũ khi dừng loop
+        -- Xóa visuals cũ khi dừng loop (hủy cả các mũi tên chỉ hướng)
         pcall(function()
-            Executor.clearVisuals(GC, true)
+            Executor.clearVisuals(GC, false)
         end)
     end)
 end
@@ -331,15 +325,6 @@ local function setInLobby(val)
     if val then
         pcall(function()
             Executor.clearVisuals(GC, false)
-        end)
-        pcall(function()
-            -- Dọn sạch proxy phòng khi vào sảnh
-            local currentRooms = workspace:FindFirstChild("CurrentRooms")
-            if currentRooms then
-                for _, room in ipairs(currentRooms:GetChildren()) do
-                    Logic.updateRoomVisuals(room, false)
-                end
-            end
         end)
         disconnectFolderObservations()
         stopRenderStepped()
@@ -381,15 +366,6 @@ end
 function Controller:SetAltarESP(value)
     self.AltarESPEnabled = value
     triggerInstantUpdate()
-end
-
--- Bật/tắt định vị phòng/map
-function Controller:SetRoomESP(value)
-    self.RoomESPEnabled = value
-    pcall(function()
-        Logic.updateAllRoomVisuals(self)
-    end)
-    updateRunningState()
 end
 
 -- Bộ lọc loại Altar (Hỗ trợ multi-select table)

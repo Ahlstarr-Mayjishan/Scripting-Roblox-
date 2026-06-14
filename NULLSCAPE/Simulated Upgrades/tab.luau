@@ -42,7 +42,7 @@ return function(Client, Controller)
     local ESPDropdown
     ESPDropdown = Tab:CreateDropdown({
         Name = "Select ESP Type",
-        Options = {"None", "Gift", "Cadence", "Altar", "Room"},
+        Options = {"None", "Gift", "Cadence", "Altar"},
         CurrentOption = {"None"},
         MultipleOptions = true,
         Flag = "ESPSelectionDropdown",
@@ -101,12 +101,10 @@ return function(Client, Controller)
             local giftSelected = table.find(finalSelection, "Gift") ~= nil
             local cadenceSelected = table.find(finalSelection, "Cadence") ~= nil
             local altarSelected = table.find(finalSelection, "Altar") ~= nil
-            local roomSelected = table.find(finalSelection, "Room") ~= nil
             
             Controller:SetGiftESP(giftSelected)
             Controller:SetCadenceESP(cadenceSelected)
             Controller:SetAltarESP(altarSelected)
-            Controller:SetRoomESP(roomSelected)
             
             -- Tự động đóng dropdown nếu lựa chọn duy nhất hiện tại là "None"
             if #finalSelection == 1 and finalSelection[1] == "None" then
