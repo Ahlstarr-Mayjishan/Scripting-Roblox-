@@ -185,9 +185,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
     local validInstruments = {}
     local validAltars = {}
     
-    local nearestAltar = nil
-    local shortestAltarDist = math.huge
-    
     -- Lọc các target hợp lệ và cập nhật khoảng cách
     for _, t in ipairs(gifts) do
         if isGiftValid(t) then
@@ -210,7 +207,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
     for _, t in ipairs(altars) do
         if isAltarValid(t) then
             local part = t.part
-            local model = t.model or part
             local altarName = t.altarName or "Unknown"
             local filter = controller.AltarFilter
             local matchesFilter = false
@@ -230,11 +226,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
                 local distance = (hrp.Position - part.Position).Magnitude
                 t.distance = distance
                 table.insert(validAltars, t)
-                
-                if distance < shortestAltarDist then
-                    shortestAltarDist = distance
-                    nearestAltar = model
-                end
             end
         end
     end
@@ -441,6 +432,68 @@ function Logic.updateESPStyles(controller, gc, hrp)
             saved.ArrowGift = nil
         end
     end
+    -- Tìm các vị trí gần nhất để render mũi tên trong RenderStepped (O(1))
+    local nearestGiftPos = nil
+    if controller.GiftESPEnabled and #validGifts > 0 then
+        local shortestDist = math.huge
+        local giftsWithin10 = 0
+        local tempNearestPos = nil
+        
+        for _, t in ipairs(validGifts) do
+            local dist = t.distance
+            if dist <= 10 then
+                giftsWithin10 = giftsWithin10 + 1
+            end
+            if dist < shortestDist then
+                shortestDist = dist
+                tempNearestPos = t.part.Position
+            end
+        end
+        
+        if giftsWithin10 <= 1 then
+            nearestGiftPos = tempNearestPos
+        end
+    end
+    saved.NearestGiftPos = nearestGiftPos
+
+    local nearestCadencePos = nil
+    if controller.CadenceESPEnabled and #validInstruments > 0 then
+        local shortestDist = math.huge
+        for _, t in ipairs(validInstruments) do
+            local dist = t.distance
+            if dist < shortestDist then
+                shortestDist = dist
+                nearestCadencePos = t.part.Position
+            end
+        end
+    end
+    saved.NearestCadencePos = nearestCadencePos
+
+    local nearestAltarPos = nil
+    local nearestAltarColor = Color3.fromRGB(255, 128, 0)
+    if controller.AltarESPEnabled and #validAltars > 0 then
+        local shortestDist = math.huge
+        for _, t in ipairs(validAltars) do
+            local dist = t.distance
+            if dist < shortestDist then
+                shortestDist = dist
+                nearestAltarPos = t.part.Position
+                nearestAltarColor = t.color
+            end
+        end
+    end
+    saved.NearestAltarPos = nearestAltarPos
+    saved.NearestAltarColor = nearestAltarColor
+
+    -- Đảm bảo các mũi tên tồn tại/hủy phù hợp dựa trên số lượng hợp lệ thực tế
+    if controller.GiftESPEnabled and #validGifts > 0 then
+        getOrCreateArrow(saved, "ArrowGift", Color3.fromRGB(255, 255, 255))
+    else
+        if saved.ArrowGift then
+            pcall(function() saved.ArrowGift:Destroy() end)
+            saved.ArrowGift = nil
+        end
+    end
     
     if controller.CadenceESPEnabled and #validInstruments > 0 then
         getOrCreateArrow(saved, "ArrowCadence", Color3.fromRGB(255, 0, 0))
@@ -452,8 +505,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
     end
     
     if controller.AltarESPEnabled and #validAltars > 0 then
-        local _, altarColor = getAltarTypeAndColor(nearestAltar or validAltars[1].model or validAltars[1].part)
-        getOrCreateArrow(saved, "ArrowAltar", altarColor)
+        getOrCreateArrow(saved, "ArrowAltar", nearestAltarColor)
     else
         if saved.ArrowAltar then
             pcall(function() saved.ArrowAltar:Destroy() end)
@@ -473,65 +525,10 @@ function Logic.updateRender(controller, gc, hrp)
         return
     end
     
-    -- 1. Tìm vị trí các vật thể gần nhất thời gian thực (real-time) từ danh sách cache bộ nhớ
-    local nearestGiftPos = nil
-    if controller.GiftESPEnabled and controller.ActiveGifts then
-        local shortestDist = math.huge
-        local giftsWithin10 = 0
-        local tempNearestPos = nil
-        
-        -- Đếm số lượng quà trong phạm vi 10 studs và tìm vị trí quà gần nhất
-        for _, t in ipairs(controller.ActiveGifts) do
-            if isGiftValid(t) then
-                local part = t.part
-                local dist = (hrp.Position - part.Position).Magnitude
-                if dist <= 10 then
-                    giftsWithin10 = giftsWithin10 + 1
-                end
-                if dist < shortestDist then
-                    shortestDist = dist
-                    tempNearestPos = part.Position
-                end
-            end
-        end
-        
-        -- Ngừng track nếu số quà trong phạm vi 10 studs > 1, bật lại khi <= 1 quà
-        if giftsWithin10 <= 1 then
-            nearestGiftPos = tempNearestPos
-        end
-    end
-
-    local nearestCadencePos = nil
-    if controller.CadenceESPEnabled and controller.ActiveInstruments then
-        local shortestDist = math.huge
-        for _, t in ipairs(controller.ActiveInstruments) do
-            if isInstrumentValid(t) then
-                local part = t.part
-                local dist = (hrp.Position - part.Position).Magnitude
-                if dist < shortestDist then
-                    shortestDist = dist
-                    nearestCadencePos = part.Position
-                end
-            end
-        end
-    end
-
-    local nearestAltarPos = nil
-    local nearestAltarColor = Color3.fromRGB(255, 128, 0)
-    if controller.AltarESPEnabled and controller.ActiveAltars then
-        local shortestDist = math.huge
-        for _, t in ipairs(controller.ActiveAltars) do
-            if isAltarValid(t) then
-                local part = t.part
-                local dist = (hrp.Position - part.Position).Magnitude
-                if dist < shortestDist then
-                    shortestDist = dist
-                    nearestAltarPos = part.Position
-                    nearestAltarColor = t.color
-                end
-            end
-        end
-    end
+    local nearestGiftPos = saved.NearestGiftPos
+    local nearestCadencePos = saved.NearestCadencePos
+    local nearestAltarPos = saved.NearestAltarPos
+    local nearestAltarColor = saved.NearestAltarColor or Color3.fromRGB(255, 128, 0)
 
     -- 2. Cập nhật hiển thị và hướng xoay cho Mũi tên Hộp quà (Trắng)
     local arrowGift = saved.ArrowGift
@@ -605,7 +602,7 @@ function Logic.updateRender(controller, gc, hrp)
     end
     
     -- 5. Cập nhật kích thước và ẩn/hiện chế độ Ping
-    if saved.ActiveTargets then
+    if controller.ESPStyle == "Ping" and saved.ActiveTargets then
         for targetPart, cached in pairs(saved.ActiveTargets) do
             if cached.Style == "Ping" and cached.Dot then
                 if not targetPart or not targetPart.Parent or not targetPart:IsDescendantOf(workspace) then
