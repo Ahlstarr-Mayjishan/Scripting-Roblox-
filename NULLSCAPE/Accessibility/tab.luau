@@ -16,13 +16,13 @@ return function(Client, Controller)
 
     Tab:CreateSlider({
         Name = "Momentum Reduction",
-        Range = {0, 1},
-        Increment = 0.1,
-        CurrentValue = Controller.MomentumReduction or 0,
+        Range = {0, 100},
+        Increment = 10,
+        CurrentValue = math.clamp((Controller.MomentumReduction or 0) * 100, 0, 100),
         Flag = "MomentumReductionSlider",
-        Suffix = " ratio",
+        Suffix = "%",
         Callback = function(Value)
-            Controller:SetMomentumReduction(Value)
+            Controller:SetMomentumReduction(Value / 100)
         end
     })
 end
