@@ -50,18 +50,11 @@ return function(Client, Controller)
         end
     })
 
-    Tab:CreateToggle({
-        Name = "Skinwalker (Husk)",
-        CurrentValue = Controller.SkinwalkerImmune,
-        Flag = "ImmunitySkinwalkerToggle",
-        Callback = function(Value)
-            Controller:SetImmunity("Skinwalker", Value)
-        end
-    })
+
 
     Tab:CreateDropdown({
         Name = "Springer Mode",
-        Options = {"Blatant", "Legit"},
+        Options = {"Legit", "Blatant"},
         CurrentOption = Controller.SpringerImmunityMode or "Legit",
         MultipleOptions = false,
         Flag = "SpringerImmunityModeDropdown",
@@ -71,6 +64,17 @@ return function(Client, Controller)
                 selected = Option[1]
             end
             Controller:SetSpringerImmunityMode(selected)
+        end
+    })
+
+    Tab:CreateSection("Entities - Mimics")
+
+    Tab:CreateToggle({
+        Name = "Husk",
+        CurrentValue = Controller.SkinwalkerImmune,
+        Flag = "ImmunitySkinwalkerToggle",
+        Callback = function(Value)
+            Controller:SetImmunity("Skinwalker", Value)
         end
     })
 end

@@ -4,7 +4,7 @@
 -- ]]
 
 return function(Client, Controller)
-    local Tab = Client.Window:CreateTab("Radar Simulations", 4483362458)
+    local Tab = Client.Window:CreateTab("Upgrade Simulations", 4483362458)
     
     Tab:CreateSection("Radar Master Switch")
     

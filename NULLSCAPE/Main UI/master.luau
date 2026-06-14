@@ -35,7 +35,8 @@ pcall(function()
             ImmunitySpringerToggle = false,
             ImmunitySkinwalkerToggle = false,
             SpringerAutoJumpToggle = false,
-            SpringerImmunityModeDropdown = "Legit"
+            SpringerImmunityModeDropdown = "Legit",
+            MomentumReductionSlider = 0
         }
         
         local currentSettings = {}

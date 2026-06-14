@@ -11,4 +11,18 @@ return function(Client, Controller)
             Controller:SetSpringerAutoJump(Value)
         end
     })
+
+    Tab:CreateSection("Movement")
+
+    Tab:CreateSlider({
+        Name = "Momentum Reduction",
+        Range = {0, 1},
+        Increment = 0.1,
+        CurrentValue = Controller.MomentumReduction or 0,
+        Flag = "MomentumReductionSlider",
+        Suffix = " ratio",
+        Callback = function(Value)
+            Controller:SetMomentumReduction(Value)
+        end
+    })
 end
