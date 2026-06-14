@@ -91,6 +91,56 @@ local function getOrCreateArrow(saved, key, color)
     return arrow
 end
 
+-- Các hàm helper kiểm tra tính hợp lệ thời gian thực (lọc các đối tượng đã bị nhặt/ẩn/đổi tên)
+local function isGiftValid(t)
+    local part = t.part
+    if not part or not part.Parent or not part:IsDescendantOf(workspace) then
+        return false
+    end
+    local targetModel = t.model or part
+    local nameLower = part.Name:lower()
+    local parentNameLower = part.Parent and part.Parent.Name:lower() or ""
+    local modelNameLower = targetModel.Name:lower()
+    
+    if not (string.find(nameLower, "gift") or string.find(nameLower, "present") or 
+            string.find(parentNameLower, "gift") or string.find(parentNameLower, "present") or
+            string.find(modelNameLower, "gift") or string.find(modelNameLower, "present")) then
+        return false
+    end
+    
+    if part.Transparency >= 0.99 then
+        return false
+    end
+    
+    return true
+end
+
+local function isInstrumentValid(t)
+    local part = t.part
+    if not part or not part.Parent or not part:IsDescendantOf(workspace) then
+        return false
+    end
+    local model = t.model or part
+    if not isInstrument(model.Name) and not isInstrument(part.Name) then
+        return false
+    end
+    if part.Transparency >= 0.99 then
+        return false
+    end
+    return true
+end
+
+local function isAltarValid(t)
+    local part = t.part
+    if not part or not part.Parent or not part:IsDescendantOf(workspace) then
+        return false
+    end
+    if part.Transparency >= 0.99 then
+        return false
+    end
+    return true
+end
+
 -- Dọn dẹp toàn bộ Highlight, Beam, Dot và các đối tượng lưu đệm
 function Logic.clearVisuals(gc, keepArrows)
     local saved = gc.SavedVisuals
@@ -139,42 +189,28 @@ function Logic.updateESPStyles(controller, gc, hrp)
     local shortestAltarDist = math.huge
     
     -- Lọc các target hợp lệ và cập nhật khoảng cách
-    local eligibleForHighlight = {}
-    local mustBeBillboard = {}
-    
     for _, t in ipairs(gifts) do
-        local part = t.part
-        if part and part.Parent and part:IsDescendantOf(workspace) then
+        if isGiftValid(t) then
+            local part = t.part
             local distance = (hrp.Position - part.Position).Magnitude
             t.distance = distance
             table.insert(validGifts, t)
-            
-            -- Kiểm tra xem có phải Golden Gift không
-            local targetModel = t.model or part
-            local isGolden = (string.find(part.Name:lower(), "golden") ~= nil) or (string.find(targetModel.Name:lower(), "golden") ~= nil) or (part.Parent ~= nil and string.find(part.Parent.Name:lower(), "golden") ~= nil)
-            
-            if isGolden then
-                table.insert(mustBeBillboard, t)
-            else
-                table.insert(eligibleForHighlight, t)
-            end
         end
     end
     
     for _, t in ipairs(instruments) do
-        local part = t.part
-        if part and part.Parent and part:IsDescendantOf(workspace) then
+        if isInstrumentValid(t) then
+            local part = t.part
             local distance = (hrp.Position - part.Position).Magnitude
             t.distance = distance
             table.insert(validInstruments, t)
-            table.insert(eligibleForHighlight, t)
         end
     end
     
     for _, t in ipairs(altars) do
-        local part = t.part
-        local model = t.model or part
-        if part and part.Parent and part:IsDescendantOf(workspace) then
+        if isAltarValid(t) then
+            local part = t.part
+            local model = t.model or part
             local altarName = t.altarName or "Unknown"
             local filter = controller.AltarFilter
             local matchesFilter = false
@@ -194,7 +230,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
                 local distance = (hrp.Position - part.Position).Magnitude
                 t.distance = distance
                 table.insert(validAltars, t)
-                table.insert(eligibleForHighlight, t)
                 
                 if distance < shortestAltarDist then
                     shortestAltarDist = distance
@@ -292,8 +327,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
         end
     end
     
-    -- 2. Tạo hoặc chuyển đổi style mới với cơ chế trì hoãn 0.02s
-    local creationsThisFrame = 0
+    -- 2. Tạo hoặc chuyển đổi style mới đồng bộ (Không delay để phản hồi tức thì)
     for targetPart, current in pairs(currentTargets) do
         local cached = saved.ActiveTargets[targetPart]
         
@@ -307,150 +341,70 @@ function Logic.updateESPStyles(controller, gc, hrp)
                 LastSeen = scanTime,
                 Highlight = nil,
                 Dot = nil,
-                Pending = true
+                Pending = nil
             }
             saved.ActiveTargets[targetPart] = newCache
             
-            if creationsThisFrame >= 3 then
-                -- Độ trễ tối ưu xuống 0.02s thay vì 0.03s để tăng tính phản hồi nhạy bén
-                local delayTime = (creationsThisFrame - 3) * 0.02
-                task.spawn(function()
-                    task.wait(delayTime)
-                    if not targetPart or not targetPart.Parent or not targetPart:IsDescendantOf(workspace) then
-                        if saved.ActiveTargets[targetPart] == newCache then
-                            saved.ActiveTargets[targetPart] = nil
-                        end
-                        if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
-                        if oldDot then pcall(function() oldDot:Destroy() end) end
-                        return
-                    end
+            if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
+            if oldDot then pcall(function() oldDot:Destroy() end) end
+            
+            pcall(function()
+                if current.Style == "Highlight" then
+                    local hl = Instance.new("Highlight")
+                    hl.Name = "NULLSCAPE_ESP_Highlight"
+                    hl.FillColor = current.Color
+                    hl.FillTransparency = 1.0
+                    hl.OutlineColor = current.Color
+                    hl.OutlineTransparency = 0
+                    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                    hl.Adornee = current.ParentObject
+                    hl.Parent = current.ParentObject
+                    newCache.Highlight = hl
+                elseif current.Style == "Ping" then
+                    local billboard = Instance.new("BillboardGui")
+                    billboard.Name = "NULLSCAPE_ESP_Ping"
+                    billboard.Size = UDim2.new(0, 16, 0, 16)
+                    billboard.AlwaysOnTop = true
                     
-                    local currentCache = saved.ActiveTargets[targetPart]
-                    if currentCache ~= newCache or not currentCache.Pending then
-                        if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
-                        if oldDot then pcall(function() oldDot:Destroy() end) end
-                        return
-                    end
+                    local frame = Instance.new("Frame")
+                    frame.Name = "PingFrame"
+                    frame.Size = UDim2.new(0, 10, 0, 10)
+                    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+                    frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+                    frame.Rotation = 45
+                    frame.BackgroundColor3 = current.Color
+                    frame.BorderSizePixel = 0
                     
-                    if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
-                    if oldDot then pcall(function() oldDot:Destroy() end) end
+                    frame.Parent = billboard
+                    billboard.Parent = current.ParentObject
+                    newCache.Dot = billboard
+                else
+                     local billboard = Instance.new("BillboardGui")
+                     billboard.Name = "NULLSCAPE_ESP_Dot"
+                     billboard.Size = UDim2.new(0, 1, 0, 1)
+                     billboard.AlwaysOnTop = true
                     
-                    pcall(function()
-                        if current.Style == "Highlight" then
-                            local hl = Instance.new("Highlight")
-                            hl.Name = "NULLSCAPE_ESP_Highlight"
-                            hl.FillColor = current.Color
-                            hl.FillTransparency = 1.0
-                            hl.OutlineColor = current.Color
-                            hl.OutlineTransparency = 0
-                            hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                            hl.Adornee = current.ParentObject
-                            hl.Parent = current.ParentObject
-                            newCache.Highlight = hl
-                        elseif current.Style == "Ping" then
-                            local billboard = Instance.new("BillboardGui")
-                            billboard.Name = "NULLSCAPE_ESP_Ping"
-                            billboard.Size = UDim2.new(0, 16, 0, 16)
-                            billboard.AlwaysOnTop = true
-                            
-                            local frame = Instance.new("Frame")
-                            frame.Name = "PingFrame"
-                            frame.Size = UDim2.new(0, 10, 0, 10)
-                            frame.AnchorPoint = Vector2.new(0.5, 0.5)
-                            frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-                            frame.Rotation = 45
-                            frame.BackgroundColor3 = current.Color
-                            frame.BorderSizePixel = 0
-                            
-                            frame.Parent = billboard
-                            billboard.Parent = current.ParentObject
-                            newCache.Dot = billboard
-                        else
-                             local billboard = Instance.new("BillboardGui")
-                             billboard.Name = "NULLSCAPE_ESP_Dot"
-                             billboard.Size = UDim2.new(0, 1, 0, 1)
-                             billboard.AlwaysOnTop = true
-                            
-                            local frame = Instance.new("Frame")
-                            frame.Size = UDim2.new(1, 0, 1, 0)
-                            frame.BackgroundColor3 = current.Color
-                            frame.BorderSizePixel = 0
-                            
-                            local uiCorner = Instance.new("UICorner")
-                            uiCorner.CornerRadius = UDim.new(1, 0)
-                            uiCorner.Parent = frame
-                            
-                            frame.Parent = billboard
-                            billboard.Parent = current.ParentObject
-                            newCache.Dot = billboard
-                        end
-                        newCache.Pending = nil
-                    end)
-                end)
-            else
-                if oldHighlight then pcall(function() oldHighlight:Destroy() end) end
-                if oldDot then pcall(function() oldDot:Destroy() end) end
-                
-                pcall(function()
-                    if current.Style == "Highlight" then
-                        local hl = Instance.new("Highlight")
-                        hl.Name = "NULLSCAPE_ESP_Highlight"
-                        hl.FillColor = current.Color
-                        hl.FillTransparency = 1.0
-                        hl.OutlineColor = current.Color
-                        hl.OutlineTransparency = 0
-                        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                        hl.Adornee = current.ParentObject
-                        hl.Parent = current.ParentObject
-                        newCache.Highlight = hl
-                    elseif current.Style == "Ping" then
-                        local billboard = Instance.new("BillboardGui")
-                        billboard.Name = "NULLSCAPE_ESP_Ping"
-                        billboard.Size = UDim2.new(0, 16, 0, 16)
-                        billboard.AlwaysOnTop = true
-                        
-                        local frame = Instance.new("Frame")
-                        frame.Name = "PingFrame"
-                        frame.Size = UDim2.new(0, 10, 0, 10)
-                        frame.AnchorPoint = Vector2.new(0.5, 0.5)
-                        frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-                        frame.Rotation = 45
-                        frame.BackgroundColor3 = current.Color
-                        frame.BorderSizePixel = 0
-                        
-                        frame.Parent = billboard
-                        billboard.Parent = current.ParentObject
-                        newCache.Dot = billboard
-                    else
-                         local billboard = Instance.new("BillboardGui")
-                         billboard.Name = "NULLSCAPE_ESP_Dot"
-                         billboard.Size = UDim2.new(0, 1, 0, 1)
-                         billboard.AlwaysOnTop = true
-                        
-                        local frame = Instance.new("Frame")
-                        frame.Size = UDim2.new(1, 0, 1, 0)
-                        frame.BackgroundColor3 = current.Color
-                        frame.BorderSizePixel = 0
-                        
-                        local uiCorner = Instance.new("UICorner")
-                        uiCorner.CornerRadius = UDim.new(1, 0)
-                        uiCorner.Parent = frame
-                        
-                        frame.Parent = billboard
-                        billboard.Parent = current.ParentObject
-                        newCache.Dot = billboard
-                    end
-                    newCache.Pending = nil
-                end)
-            end
-            creationsThisFrame = creationsThisFrame + 1
+                    local frame = Instance.new("Frame")
+                    frame.Size = UDim2.new(1, 0, 1, 0)
+                    frame.BackgroundColor3 = current.Color
+                    frame.BorderSizePixel = 0
+                    
+                    local uiCorner = Instance.new("UICorner")
+                    uiCorner.CornerRadius = UDim.new(1, 0)
+                    uiCorner.Parent = frame
+                    
+                    frame.Parent = billboard
+                    billboard.Parent = current.ParentObject
+                    newCache.Dot = billboard
+                end
+            end)
         else
             cached.LastSeen = scanTime
             local inst = cached.Highlight or cached.Dot
             if inst and inst.Parent then
                 if cached.Style == "Highlight" then
-                    if inst.Color3 ~= current.Color then
-                        inst.Color3 = current.Color
+                    if inst.OutlineColor ~= current.Color then
+                        inst.OutlineColor = current.Color
                     end
                 elseif cached.Style == "Ping" then
                     local frame = inst:FindFirstChild("PingFrame")
@@ -463,7 +417,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
                         frame.BackgroundColor3 = current.Color
                     end
                 end
-            elseif not cached.Pending then
+            else
                 saved.ActiveTargets[targetPart] = nil
             end
         end
@@ -528,8 +482,8 @@ function Logic.updateRender(controller, gc, hrp)
         
         -- Đếm số lượng quà trong phạm vi 10 studs và tìm vị trí quà gần nhất
         for _, t in ipairs(controller.ActiveGifts) do
-            local part = t.part
-            if part and part.Parent and part:IsDescendantOf(workspace) then
+            if isGiftValid(t) then
+                local part = t.part
                 local dist = (hrp.Position - part.Position).Magnitude
                 if dist <= 10 then
                     giftsWithin10 = giftsWithin10 + 1
@@ -551,8 +505,8 @@ function Logic.updateRender(controller, gc, hrp)
     if controller.CadenceESPEnabled and controller.ActiveInstruments then
         local shortestDist = math.huge
         for _, t in ipairs(controller.ActiveInstruments) do
-            local part = t.part
-            if part and part.Parent and part:IsDescendantOf(workspace) then
+            if isInstrumentValid(t) then
+                local part = t.part
                 local dist = (hrp.Position - part.Position).Magnitude
                 if dist < shortestDist then
                     shortestDist = dist
@@ -567,8 +521,8 @@ function Logic.updateRender(controller, gc, hrp)
     if controller.AltarESPEnabled and controller.ActiveAltars then
         local shortestDist = math.huge
         for _, t in ipairs(controller.ActiveAltars) do
-            local part = t.part
-            if part and part.Parent and part:IsDescendantOf(workspace) then
+            if isAltarValid(t) then
+                local part = t.part
                 local dist = (hrp.Position - part.Position).Magnitude
                 if dist < shortestDist then
                     shortestDist = dist
