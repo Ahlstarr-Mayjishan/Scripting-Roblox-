@@ -376,7 +376,7 @@ local function initializeICBMHook()
             local oldNamecall
             oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 local method = getnamecallmethod()
-                if method == "FireServer" and self:IsA("RemoteEvent") then
+                if method == "FireServer" and self.ClassName == "RemoteEvent" then
                     local success, shouldBlock = pcall(handleRemoteCall, self, ...)
                     if success and shouldBlock then
                         return -- Chặn đứng cuộc gọi

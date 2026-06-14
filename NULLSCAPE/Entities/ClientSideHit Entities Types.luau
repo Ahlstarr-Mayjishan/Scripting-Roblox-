@@ -25,9 +25,23 @@ Logic.TargetEntities = {
     }
 }
 
+-- Hàm bổ trợ duyệt cây cha-con tránh gọi method namecall (chống đệ quy vô hạn trong __namecall hook)
+local function isDescendantOrSelf(child, parent)
+    if not child or not parent then return false end
+    local current = child
+    while current do
+        if current == parent then
+            return true
+        end
+        current = current.Parent
+    end
+    return false
+end
+
 -- Kiểm tra nhanh xem RemoteEvent có khớp với cấu hình không (Pre-filter để tối ưu hiệu năng)
 function Logic.isTargetRemote(remote)
-    if not remote or not remote:IsA("RemoteEvent") then
+    -- Dùng remote.ClassName để tránh kích hoạt __namecall đệ quy
+    if not remote or remote.ClassName ~= "RemoteEvent" then
         return false
     end
     
@@ -52,7 +66,8 @@ end
 
 -- Kiểm tra xem RemoteEvent có thuộc diện cần chặn hay không
 function Logic.shouldBlockRemoteCall(remote, args)
-    if not remote or not remote:IsA("RemoteEvent") then
+    -- Dùng remote.ClassName để tránh kích hoạt __namecall đệ quy
+    if not remote or remote.ClassName ~= "RemoteEvent" then
         return false, nil
     end
     
@@ -106,7 +121,7 @@ function Logic.shouldBlockRemoteCall(remote, args)
                             break
                         end
                         if typeof(arg) == "Instance" then
-                            if char and (arg:IsDescendantOf(char) or arg == char) then
+                            if char and isDescendantOrSelf(arg, char) then
                                 targetsLocal = true
                                 break
                             end
@@ -117,7 +132,7 @@ function Logic.shouldBlockRemoteCall(remote, args)
                                     targetsLocal = true
                                     break
                                 end
-                                if typeof(val) == "Instance" and char and (val:IsDescendantOf(char) or val == char) then
+                                if typeof(val) == "Instance" and char and isDescendantOrSelf(val, char) then
                                     targetsLocal = true
                                     break
                                 end
