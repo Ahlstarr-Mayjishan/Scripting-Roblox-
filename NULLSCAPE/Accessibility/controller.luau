@@ -17,7 +17,7 @@ local Controller = {
     PermanentConnections = {}
 }
 
-local LocalPlayer = Players.LocalPlayer
+local _LocalPlayer = Players.LocalPlayer
 local inLobby = true
 local folderConnections = {}
 
@@ -63,6 +63,7 @@ end
 -- Thiết lập cấu hình tự động nhảy
 function Controller:SetSpringerAutoJump(value)
     self.SpringerAutoJumpEnabled = value
+    self:updateSpringerAutoJumpState()
     
     if getgenv().Rayfield then
         getgenv().Rayfield:Notify({
@@ -152,6 +153,24 @@ local function startObservingFolders()
     end
 end
 
+-- Cập nhật động trạng thái Auto Jump của Springer dựa trên cài đặt và immunity mode
+function Controller:updateSpringerAutoJumpState()
+    local entitiesController = getgenv().loadModule("NULLSCAPE/Entities/controller.luau")
+    local isBlatant = entitiesController and entitiesController.SpringerImmunityMode == "Blatant"
+    
+    if self.SpringerAutoJumpEnabled and not isBlatant then
+        -- Kích hoạt quan sát thư mục nếu chưa kích hoạt
+        if not next(folderConnections) then
+            startObservingFolders()
+        end
+    else
+        -- Blatant mode hoặc Auto Jump tắt -> Giải phóng hoàn toàn để CPU nghỉ ngơi
+        disconnectFolderObservations()
+        GC.cleanAll()
+        self.EnemiesFolder = nil
+    end
+end
+
 -- Hàm cập nhật trạng thái sảnh chờ
 local function setInLobby(val)
     if inLobby == val then return end
@@ -160,13 +179,13 @@ local function setInLobby(val)
         disconnectFolderObservations()
         Controller:CleanUp()
     else
-        startObservingFolders()
+        Controller:updateSpringerAutoJumpState()
     end
 end
 
 -- Khởi tạo ban đầu khi nạp script
 if not inLobby then
-    startObservingFolders()
+    Controller:updateSpringerAutoJumpState()
 end
 
 -- Lắng nghe sự kiện đổi trạng thái game thời gian thực

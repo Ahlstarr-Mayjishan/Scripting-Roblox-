@@ -127,6 +127,14 @@ function Controller:SetImmunity(entityName, value)
         self.ICBMImmune = value
     elseif entityName == "Springer" then
         self.SpringerImmune = value
+        
+        -- Thông báo cho Accessibility controller cập nhật lại trạng thái Auto Jump
+        local accessibilityController = getgenv().loadModule("NULLSCAPE/Accessibility/controller.luau")
+        if accessibilityController and accessibilityController.updateSpringerAutoJumpState then
+            pcall(function()
+                accessibilityController:updateSpringerAutoJumpState()
+            end)
+        end
     end
 
     -- Áp dụng thay đổi tức thời cho thực thể đã tồn tại trong workspace
@@ -166,6 +174,14 @@ end
 -- Cấu hình chế độ bảo vệ Springer (Blatant: tắt hẳn sóng, Legit: giữ lại lực đẩy sóng)
 function Controller:SetSpringerImmunityMode(mode)
     self.SpringerImmunityMode = mode
+    
+    -- Thông báo cho Accessibility controller cập nhật lại trạng thái Auto Jump
+    local accessibilityController = getgenv().loadModule("NULLSCAPE/Accessibility/controller.luau")
+    if accessibilityController and accessibilityController.updateSpringerAutoJumpState then
+        pcall(function()
+            accessibilityController:updateSpringerAutoJumpState()
+        end)
+    end
     
     if self.SpringerImmune then
         if mode == "Blatant" then

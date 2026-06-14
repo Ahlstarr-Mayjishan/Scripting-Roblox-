@@ -11,7 +11,8 @@ local Logic = {}
 Logic.TargetNames = {
     ["Baby"] = "Baby",
     ["Bell"] = "Bell",
-    ["Mart"] = "Mart"
+    ["Mart"] = "Mart",
+    ["Springer"] = "Springer"
 }
 
 -- Trả về chức năng kiểm tra trạng thái miễn nhiễm tương ứng
@@ -25,6 +26,8 @@ function Logic.getImmunityCheck(name, controller)
                 return function() return controller.BellImmune end
             elseif entityName == "Mart" then
                 return function() return controller.MartImmune end
+            elseif entityName == "Springer" then
+                return function() return controller.SpringerImmune end
             end
         end
     end
@@ -46,6 +49,9 @@ end
 -- Bật miễn nhiễm (ẩn TouchInterest và tắt CanTouch) cho một thực thể cụ thể
 function Logic.enableImmunity(gc, enemy)
     if not enemy then return end
+    
+    local isSpringer = string.find(enemy.Name, "Springer")
+    
     for _, descendant in ipairs(enemy:GetDescendants()) do
         if descendant:IsA("TouchTransmitter") or descendant.Name == "TouchInterest" then
             local part = descendant.Parent
@@ -60,6 +66,16 @@ function Logic.enableImmunity(gc, enemy)
                 pcall(function() descendant.Parent = nil end)
                 pcall(function() part.CanTouch = false end)
             end
+        elseif isSpringer and descendant:IsA("BasePart") then
+            -- Tắt CanTouch cho tất cả BasePart của Springer nếu chưa lưu (hỗ trợ việc Springer không có TouchInterest nhưng có KillPart)
+            if not gc.SavedPartsData[descendant] then
+                gc.SavedPartsData[descendant] = {
+                    touch = nil,
+                    originalCanTouch = descendant.CanTouch,
+                    enemyName = enemy.Name
+                }
+            end
+            pcall(function() descendant.CanTouch = false end)
         end
     end
 end

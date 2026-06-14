@@ -40,6 +40,12 @@ local function isInMatch()
     if inRoundVal and inRoundVal:IsA("BoolValue") then
         return inRoundVal.Value
     end
+    
+    local enemies = workspace:FindFirstChild("Enemies")
+    if enemies and #enemies:GetChildren() > 0 then
+        return true
+    end
+    
     return false
 end
 

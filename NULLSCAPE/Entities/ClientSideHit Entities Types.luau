@@ -45,18 +45,17 @@ function Logic.isTargetRemote(remote)
         return false
     end
     
-    local parent = remote.Parent
-    local parentName = parent and parent.Name
-    if not parentName then
-        return false
-    end
-    
     local remoteName = remote.Name
     local entities = Logic.TargetEntities[remoteName]
     if entities then
         for entityName, _ in pairs(entities) do
-            if string.find(parentName, entityName) then
-                return true
+            -- Kiểm tra từ cha trực tiếp ngược lên tổ tiên có tên chứa entityName
+            local current = remote.Parent
+            while current and current ~= game do
+                if string.find(current.Name, entityName) then
+                    return true
+                end
+                current = current.Parent
             end
         end
     end
@@ -71,12 +70,6 @@ function Logic.shouldBlockRemoteCall(remote, args)
         return false, nil
     end
     
-    local parent = remote.Parent
-    if not parent then
-        return false, nil
-    end
-    
-    local parentName = parent.Name
     local firstArg = args[1]
     if typeof(firstArg) ~= "string" then
         return false, nil
@@ -89,8 +82,18 @@ function Logic.shouldBlockRemoteCall(remote, args)
     end
     
     for entityName, blockedArgs in pairs(entities) do
-        -- Kiểm tra chặt chẽ: tên folder cha chứa tên thực thể trùng khớp
-        if string.find(parentName, entityName) then
+        -- Kiểm tra tổ tiên chứa tên thực thể (hỗ trợ RemoteEvent lồng sâu trong KillPart)
+        local hasEntityAncestor = false
+        local current = remote.Parent
+        while current and current ~= game do
+            if string.find(current.Name, entityName) then
+                hasEntityAncestor = true
+                break
+            end
+            current = current.Parent
+        end
+        
+        if hasEntityAncestor then
             -- Chỉ chặn nếu tham số đầu tiên khớp chính xác với danh sách chặn
             if blockedArgs[firstArg] then
                 -- Bảo đảm chỉ chặn khi mục tiêu tác động là local player

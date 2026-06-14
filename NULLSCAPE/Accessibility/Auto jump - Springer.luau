@@ -5,6 +5,10 @@
 
 local Logic = {}
 
+-- Caching CurseHandler to prevent multiple require calls and pcall overhead on the main thread
+local cachedCurseHandler = nil
+local isCurseHandlerCached = false
+
 -- Kiểm tra trạng thái Curse đang hoạt động (Tìm kiếm BoolValue trước, fallback về Module)
 local function isCurseActive(curseName)
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -26,14 +30,29 @@ local function isCurseActive(curseName)
         end
     end
     
-    -- 3. Fallback: Require Module của game nếu không tìm thấy Value
-    local isActive = false
-    pcall(function()
-        local ReplicatedFirst = game:GetService("ReplicatedFirst")
-        local CurseHandler = require(ReplicatedFirst.ClientModules.CurseHandler)
-        isActive = CurseHandler.IsCurseEnabled(curseName)
-    end)
-    return isActive
+    -- 3. Fallback: Require Module của game nếu không tìm thấy Value (Sử dụng cache tránh require liên tục)
+    if not isCurseHandlerCached then
+        isCurseHandlerCached = true
+        pcall(function()
+            local ReplicatedFirst = game:GetService("ReplicatedFirst")
+            local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+            local curseHandlerMod = clientModules and clientModules:FindFirstChild("CurseHandler")
+            if curseHandlerMod and curseHandlerMod:IsA("ModuleScript") then
+                cachedCurseHandler = require(curseHandlerMod)
+            end
+        end)
+    end
+    
+    if cachedCurseHandler then
+        local success, result = pcall(function()
+            return cachedCurseHandler.IsCurseEnabled(curseName)
+        end)
+        if success then
+            return result
+        end
+    end
+    
+    return false
 end
 
 -- Thiết lập tự động nhảy né tránh sóng cho Springer
@@ -41,6 +60,12 @@ function Logic.setupAutoJump(enemy, shockwave, controller, gc)
     if not shockwave then return end
     
     local hasTriggered = false
+    
+    -- Precalculate curse state, maxRadius and duration outside the listener to avoid CPU overhead inside the Position-changed loop
+    local isSpringloaded = isCurseActive("Springloaded")
+    local maxRadius = isSpringloaded and 128 or 64
+    local duration = isSpringloaded and 2.5 or 1.5
+    
     local function runJumpCheck()
         if hasTriggered then return end
         if not controller.SpringerAutoJumpEnabled then return end
@@ -67,11 +92,6 @@ function Logic.setupAutoJump(enemy, shockwave, controller, gc)
             
             local dist = (Vector3.new(playerPos.X, 0, playerPos.Z) - Vector3.new(shockwavePos.X, 0, shockwavePos.Z)).Magnitude
             if dist > 150 then return end
-            
-            local isSpringloaded = isCurseActive("Springloaded")
-            
-            local maxRadius = isSpringloaded and 128 or 64
-            local duration = isSpringloaded and 2.5 or 1.5
             
             if dist < maxRadius then
                 hasTriggered = true -- Chỉ kích hoạt nhảy một lần duy nhất cho mỗi vòng sóng
