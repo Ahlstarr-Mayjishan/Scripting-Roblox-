@@ -67,15 +67,18 @@ function Logic.enableImmunity(gc, enemy)
                 pcall(function() part.CanTouch = false end)
             end
         elseif isSpringer and descendant:IsA("BasePart") then
-            -- Tắt CanTouch cho tất cả BasePart của Springer nếu chưa lưu (hỗ trợ việc Springer không có TouchInterest nhưng có KillPart)
-            if not gc.SavedPartsData[descendant] then
-                gc.SavedPartsData[descendant] = {
-                    touch = nil,
-                    originalCanTouch = descendant.CanTouch,
-                    enemyName = enemy.Name
-                }
+            -- Tắt CanTouch cho tất cả BasePart của Springer nếu chưa lưu, ngoại trừ các shockwave
+            local name = descendant.Name
+            if name ~= "SpringerShockwave" and name ~= "DemonShockwave" then
+                if not gc.SavedPartsData[descendant] then
+                    gc.SavedPartsData[descendant] = {
+                        touch = nil,
+                        originalCanTouch = descendant.CanTouch,
+                        enemyName = enemy.Name
+                    }
+                end
+                pcall(function() descendant.CanTouch = false end)
             end
-            pcall(function() descendant.CanTouch = false end)
         end
     end
 end

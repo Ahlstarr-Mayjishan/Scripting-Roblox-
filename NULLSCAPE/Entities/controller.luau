@@ -249,6 +249,19 @@ local function processEntity(enemy)
                     pcall(function() part.Parent = nil end)
                     pcall(function() parentPart.CanTouch = false end)
                 end
+            elseif string.find(enemy.Name, "Springer") and part:IsA("BasePart") then
+                -- Đối với Springer, nếu là bộ phận mới thêm vào (BasePart) ngoại trừ shockwave thì gán CanTouch = false
+                local name = part.Name
+                if name ~= "SpringerShockwave" and name ~= "DemonShockwave" then
+                    if not GC.SavedPartsData[part] then
+                        GC.SavedPartsData[part] = {
+                            touch = nil,
+                            originalCanTouch = part.CanTouch,
+                            enemyName = enemy.Name
+                        }
+                    end
+                    pcall(function() part.CanTouch = false end)
+                end
             end
         end
     end)
@@ -388,14 +401,22 @@ local function initializeICBMHook()
     -- 1. Hook __namecall (Phương pháp chuẩn và mạnh nhất cho các cuộc gọi dạng Remote:FireServer(...))
     local namecallSuccess = false
     if typeof(hookmetamethod) == "function" then
-        local success, err = pcall(function()
+        pcall(function()
             local oldNamecall
             oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 local method = getnamecallmethod()
-                if method == "FireServer" and self.ClassName == "RemoteEvent" then
-                    local success, shouldBlock = pcall(handleRemoteCall, self, ...)
-                    if success and shouldBlock then
-                        return -- Chặn đứng cuộc gọi
+                if method == "FireServer" then
+                    local isRemoteEvent = false
+                    pcall(function()
+                        if typeof(self) == "Instance" and self.ClassName == "RemoteEvent" then
+                            isRemoteEvent = true
+                        end
+                    end)
+                    if isRemoteEvent then
+                        local success, shouldBlock = pcall(handleRemoteCall, self, ...)
+                        if success and shouldBlock then
+                            return -- Chặn đứng cuộc gọi
+                        end
                     end
                 end
                 return oldNamecall(self, ...)
@@ -407,7 +428,7 @@ local function initializeICBMHook()
     -- 2. Hook FireServer prototype (Dự phòng cho cuộc gọi dạng Remote.FireServer(Remote, ...))
     local prototypeSuccess = false
     if typeof(hookfunction) == "function" then
-        local success, err = pcall(function()
+        pcall(function()
             local remoteProto = Instance.new("RemoteEvent")
             local oldFireServer
             oldFireServer = hookfunction(remoteProto.FireServer, function(self, ...)

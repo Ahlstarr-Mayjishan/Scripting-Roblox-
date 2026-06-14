@@ -41,7 +41,7 @@ end
 -- Kiểm tra nhanh xem RemoteEvent có khớp với cấu hình không (Pre-filter để tối ưu hiệu năng)
 function Logic.isTargetRemote(remote)
     -- Dùng remote.ClassName để tránh kích hoạt __namecall đệ quy
-    if not remote or remote.ClassName ~= "RemoteEvent" then
+    if typeof(remote) ~= "Instance" or remote.ClassName ~= "RemoteEvent" then
         return false
     end
     
@@ -49,9 +49,9 @@ function Logic.isTargetRemote(remote)
     local entities = Logic.TargetEntities[remoteName]
     if entities then
         for entityName, _ in pairs(entities) do
-            -- Kiểm tra từ cha trực tiếp ngược lên tổ tiên có tên chứa entityName
+            -- Kiểm tra từ cha trực tiếp ngược lên tổ tiên có tên chứa entityName, giới hạn trong Workspace
             local current = remote.Parent
-            while current and current ~= game do
+            while current and current ~= workspace and current ~= game do
                 if string.find(current.Name, entityName) then
                     return true
                 end
@@ -66,7 +66,7 @@ end
 -- Kiểm tra xem RemoteEvent có thuộc diện cần chặn hay không
 function Logic.shouldBlockRemoteCall(remote, args)
     -- Dùng remote.ClassName để tránh kích hoạt __namecall đệ quy
-    if not remote or remote.ClassName ~= "RemoteEvent" then
+    if typeof(remote) ~= "Instance" or remote.ClassName ~= "RemoteEvent" then
         return false, nil
     end
     
@@ -82,10 +82,10 @@ function Logic.shouldBlockRemoteCall(remote, args)
     end
     
     for entityName, blockedArgs in pairs(entities) do
-        -- Kiểm tra tổ tiên chứa tên thực thể (hỗ trợ RemoteEvent lồng sâu trong KillPart)
+        -- Kiểm tra tổ tiên chứa tên thực thể (hỗ trợ RemoteEvent lồng sâu trong KillPart), giới hạn trong Workspace
         local hasEntityAncestor = false
         local current = remote.Parent
-        while current and current ~= game do
+        while current and current ~= workspace and current ~= game do
             if string.find(current.Name, entityName) then
                 hasEntityAncestor = true
                 break
