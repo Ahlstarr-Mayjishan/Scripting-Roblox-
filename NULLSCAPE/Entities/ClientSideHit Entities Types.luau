@@ -63,6 +63,9 @@ function Logic.shouldBlockRemoteCall(remote, args)
     
     local parentName = parent.Name
     local firstArg = args[1]
+    if typeof(firstArg) ~= "string" then
+        return false, nil
+    end
     
     local remoteName = remote.Name
     local entities = Logic.TargetEntities[remoteName]

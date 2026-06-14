@@ -64,10 +64,9 @@ function Logic.enableImmunity(gc, enemy)
     end
 end
 
--- Tắt miễn nhiễm (khôi phục lại TouchInterest và CanTouch) cho một loại thực thể cụ thể
 function Logic.disableImmunityForType(gc, entityName)
     for part, data in pairs(gc.SavedPartsData) do
-        if data and data.enemyName == entityName then
+        if data and string.find(data.enemyName, entityName) then
             if part and part.Parent then
                 if data.touch then
                     pcall(function() data.touch.Parent = part end)
