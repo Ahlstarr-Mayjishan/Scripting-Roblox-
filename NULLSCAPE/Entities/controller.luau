@@ -379,6 +379,18 @@ local function initializeICBMHook()
     local function handleRemoteCall(self, ...)
         local args = {...}
         
+        -- Logger gỡ lỗi an toàn (không gọi method nào trên self để tránh đệ quy __namecall)
+        pcall(function()
+            local remoteName = self.Name
+            local firstArg = args[1]
+            if string.find(remoteName, "Client") or string.find(remoteName, "Kill") or string.find(remoteName, "Damage") or string.find(remoteName, "Hit") or (typeof(firstArg) == "string" and (string.find(firstArg, "Kill") or string.find(firstArg, "Demon") or string.find(firstArg, "Combust"))) then
+                print(string.format("[DEBUG Remote] Remote Fired: %s | Arg1: %s", tostring(remoteName), tostring(firstArg)))
+                for i = 2, #args do
+                    print(string.format("   Arg [%d]: %s (%s)", i, tostring(args[i]), typeof(args[i])))
+                end
+            end
+        end)
+
         -- Kiểm tra nhanh tên remote trước (O(1) lookup)
         if not TargetRemoteNames[self.Name] then
             return false
@@ -399,27 +411,38 @@ local function initializeICBMHook()
         return false
     end
 
-    -- 1. Hook __namecall (Phương pháp chuẩn và mạnh nhất cho các cuộc gọi dạng Remote:FireServer(...))
+    -- 1. Hook __namecall (Phương pháp chuẩn và mạnh nhất cho các cuộc gọi dạng Remote:FireServer(...) hoặc Remote:InvokeServer(...))
     local namecallSuccess = false
     if typeof(hookmetamethod) == "function" then
         pcall(function()
             local oldNamecall
             oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 local method = getnamecallmethod()
-                if method == "FireServer" then
-                    local isRemoteEvent = false
+                local isRemote = false
+                local isRemoteFunction = false
+                
+                if method == "FireServer" or method == "InvokeServer" then
                     pcall(function()
-                        if typeof(self) == "Instance" and self.ClassName == "RemoteEvent" then
-                            isRemoteEvent = true
+                        if typeof(self) == "Instance" then
+                            if self.ClassName == "RemoteEvent" then
+                                isRemote = true
+                            elseif self.ClassName == "RemoteFunction" then
+                                isRemote = true
+                                isRemoteFunction = true
+                            end
                         end
                     end)
-                    if isRemoteEvent then
-                        local success, shouldBlock = pcall(handleRemoteCall, self, ...)
-                        if not success then
-                            warn("[NULLSCAPE Hook Error] handleRemoteCall failed: " .. tostring(shouldBlock))
-                        elseif shouldBlock then
-                            return -- Chặn đứng cuộc gọi
+                end
+                
+                if isRemote then
+                    local success, shouldBlock = pcall(handleRemoteCall, self, ...)
+                    if not success then
+                        warn("[NULLSCAPE Hook Error] handleRemoteCall failed: " .. tostring(shouldBlock))
+                    elseif shouldBlock then
+                        if isRemoteFunction then
+                            return nil -- Chặn đứng InvokeServer và trả về nil
                         end
+                        return -- Chặn đứng FireServer
                     end
                 end
                 return oldNamecall(self, ...)
@@ -428,7 +451,7 @@ local function initializeICBMHook()
         end)
     end
 
-    -- 2. Hook FireServer prototype (Dự phòng cho cuộc gọi dạng Remote.FireServer(Remote, ...))
+    -- 2. Hook FireServer/InvokeServer prototype (Dự phòng)
     local prototypeSuccess = false
     if typeof(hookfunction) == "function" then
         pcall(function()
@@ -442,6 +465,18 @@ local function initializeICBMHook()
                     return -- Chặn đứng cuộc gọi
                 end
                 return oldFireServer(self, ...)
+            end)
+            
+            local funcProto = Instance.new("RemoteFunction")
+            local oldInvokeServer
+            oldInvokeServer = hookfunction(funcProto.InvokeServer, function(self, ...)
+                local success, shouldBlock = pcall(handleRemoteCall, self, ...)
+                if not success then
+                    warn("[NULLSCAPE Hook Error] InvokeServer hook failed: " .. tostring(shouldBlock))
+                elseif shouldBlock then
+                    return nil -- Chặn đứng cuộc gọi và trả về nil
+                end
+                return oldInvokeServer(self, ...)
             end)
             prototypeSuccess = true
         end)
