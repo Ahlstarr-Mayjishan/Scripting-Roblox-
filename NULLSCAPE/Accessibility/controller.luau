@@ -8,6 +8,7 @@ local Players = game:GetService("Players")
 
 local Executor = getgenv().loadModule("NULLSCAPE/Accessibility/executor.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Accessibility/GC.luau")
+local MovementLogic = getgenv().loadModule("NULLSCAPE/Accessibility/Movement.luau")
 
 local Controller = {
     SpringerAutoJumpEnabled = false,
@@ -53,7 +54,6 @@ function Controller:CleanUp()
     GC.cleanAll()
     self.EnemiesFolder = nil
     
-    local MovementLogic = getgenv().loadModule("NULLSCAPE/Accessibility/Movement.luau")
     if MovementLogic then
         pcall(function() MovementLogic.stop() end)
     end
@@ -83,7 +83,6 @@ end
 -- Thiết lập hệ số giảm quán tính di chuyển (Momentum Reduction)
 function Controller:SetMomentumReduction(value)
     self.MomentumReduction = value
-    local MovementLogic = getgenv().loadModule("NULLSCAPE/Accessibility/Movement.luau")
     if MovementLogic then
         MovementLogic.setReduction(value)
         if value > 0 then
