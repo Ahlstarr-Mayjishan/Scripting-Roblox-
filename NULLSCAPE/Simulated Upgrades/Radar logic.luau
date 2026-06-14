@@ -6,20 +6,36 @@
 
 local Logic = {}
 
--- Nhận diện loại Altar dựa vào tên đối tượng hoặc cha/con của nó
-local altarColors = {
-    Purgatory = Color3.new(1, 0.5, 0),
-    Chance = Color3.new(1, 1, 0.7),
-    Chaos = Color3.new(0.1, 0, 0),
-    Echo = Color3.new(0.5, 0.33333, 1),
-    Passage = Color3.new(0.7, 0, 0),
-    Protection = Color3.fromRGB(0, 255, 255),
-    Purification = Color3.fromRGB(255, 0, 255)
+-- Bảng màu dùng chung cho các Highlight/Dot (Định nghĩa tập trung)
+local ESPColors = {
+    -- 1. Gifts & Mines
+    Gift = Color3.fromRGB(255, 255, 255),          -- Trắng
+    GoldenGift = Color3.fromRGB(255, 215, 0),      -- Vàng Gold
+    PassageGift = Color3.fromRGB(135, 206, 250),   -- Light Sky Blue
+    Tripmine = Color3.fromRGB(255, 0, 0),          -- Đỏ
+    GoldenTripmine = Color3.fromRGB(255, 0, 0),    -- Đỏ
+    
+    -- 2. Cadence Instruments
+    Cadence = Color3.fromRGB(255, 85, 255),        -- Hồng đậm / Magenta để phân biệt với Tripmine đỏ
+    
+    -- 3. Altars
+    Altar = {
+        Purgatory = Color3.new(1, 0.5, 0),
+        Chance = Color3.new(1, 1, 0.7),
+        Chaos = Color3.new(0.1, 0, 0),
+        Echo = Color3.new(0.5, 0.33333, 1),
+        Passage = Color3.new(0.7, 0, 0),
+        Protection = Color3.fromRGB(0, 255, 255),
+        Purification = Color3.fromRGB(255, 0, 255),
+        Unknown = Color3.fromRGB(255, 128, 0)
+    }
 }
+Logic.ESPColors = ESPColors
 
+-- Nhận diện loại Altar dựa vào tên đối tượng hoặc cha/con của nó
 local function getAltarTypeAndColor(altarObj)
     local objName = altarObj.Name:lower()
-    for name, color in pairs(altarColors) do
+    for name, color in pairs(ESPColors.Altar) do
         local nameLower = name:lower()
         if string.find(objName, nameLower) then
             return name, color
@@ -27,7 +43,7 @@ local function getAltarTypeAndColor(altarObj)
     end
     
     local parentName = altarObj.Parent and altarObj.Parent.Name:lower() or ""
-    for name, color in pairs(altarColors) do
+    for name, color in pairs(ESPColors.Altar) do
         local nameLower = name:lower()
         if string.find(parentName, nameLower) then
             return name, color
@@ -36,7 +52,7 @@ local function getAltarTypeAndColor(altarObj)
     
     for _, child in ipairs(altarObj:GetChildren()) do
         local childName = child.Name:lower()
-        for name, color in pairs(altarColors) do
+        for name, color in pairs(ESPColors.Altar) do
             local nameLower = name:lower()
             if string.find(childName, nameLower) then
                 return name, color
@@ -44,7 +60,7 @@ local function getAltarTypeAndColor(altarObj)
         end
     end
     
-    return "Unknown", Color3.fromRGB(255, 128, 0)
+    return "Unknown", ESPColors.Altar.Unknown
 end
 
 -- Bộ lọc nhận dạng nhạc cụ Cadence
@@ -102,9 +118,9 @@ local function isGiftValid(t)
     local parentNameLower = part.Parent and part.Parent.Name:lower() or ""
     local modelNameLower = targetModel.Name:lower()
     
-    if not (string.find(nameLower, "gift") or string.find(nameLower, "present") or 
-            string.find(parentNameLower, "gift") or string.find(parentNameLower, "present") or
-            string.find(modelNameLower, "gift") or string.find(modelNameLower, "present")) then
+    if not (string.find(nameLower, "gift") or string.find(nameLower, "present") or string.find(nameLower, "tripmine") or
+            string.find(parentNameLower, "gift") or string.find(parentNameLower, "present") or string.find(parentNameLower, "tripmine") or
+            string.find(modelNameLower, "gift") or string.find(modelNameLower, "present") or string.find(modelNameLower, "tripmine")) then
         return false
     end
     
@@ -415,71 +431,61 @@ function Logic.updateESPStyles(controller, gc, hrp)
         end
     end
     
-    -- Đảm bảo các mũi tên tồn tại/hủy phù hợp dựa trên số lượng hợp lệ thực tế
-    if controller.GiftESPEnabled and #validGifts > 0 then
-        getOrCreateArrow(saved, "ArrowGift", Color3.fromRGB(255, 255, 255))
-    else
-        if saved.ArrowGift then
-            pcall(function() saved.ArrowGift:Destroy() end)
-            saved.ArrowGift = nil
-        end
-    end
-    -- Tìm các vị trí gần nhất để render mũi tên trong RenderStepped (O(1))
+    -- Tìm các vị trí và khoảng cách gần nhất để render mũi tên trong RenderStepped (O(1))
     local nearestGiftPos = nil
+    local nearestGiftColor = ESPColors.Gift
+    local shortestGiftDist = math.huge
     if controller.GiftESPEnabled and #validGifts > 0 then
-        local shortestDist = math.huge
-        local giftsWithin10 = 0
-        local tempNearestPos = nil
-        
         for _, t in ipairs(validGifts) do
             local dist = t.distance
-            if dist <= 10 then
-                giftsWithin10 = giftsWithin10 + 1
+            if dist < shortestGiftDist then
+                shortestGiftDist = dist
+                nearestGiftPos = t.part.Position
+                nearestGiftColor = t.color
             end
-            if dist < shortestDist then
-                shortestDist = dist
-                tempNearestPos = t.part.Position
-            end
-        end
-        
-        if giftsWithin10 <= 1 then
-            nearestGiftPos = tempNearestPos
         end
     end
     saved.NearestGiftPos = nearestGiftPos
+    saved.NearestGiftDist = shortestGiftDist
+    saved.NearestGiftColor = nearestGiftColor
 
     local nearestCadencePos = nil
+    local shortestCadenceDist = math.huge
+    local nearestCadenceColor = ESPColors.Cadence
     if controller.CadenceESPEnabled and #validInstruments > 0 then
-        local shortestDist = math.huge
         for _, t in ipairs(validInstruments) do
             local dist = t.distance
-            if dist < shortestDist then
-                shortestDist = dist
+            if dist < shortestCadenceDist then
+                shortestCadenceDist = dist
                 nearestCadencePos = t.part.Position
+                nearestCadenceColor = t.color
             end
         end
     end
     saved.NearestCadencePos = nearestCadencePos
+    saved.NearestCadenceDist = shortestCadenceDist
+    saved.NearestCadenceColor = nearestCadenceColor
 
     local nearestAltarPos = nil
-    local nearestAltarColor = Color3.fromRGB(255, 128, 0)
+    local shortestAltarDist = math.huge
+    local nearestAltarColor = ESPColors.Altar.Unknown
     if controller.AltarESPEnabled and #validAltars > 0 then
-        local shortestDist = math.huge
         for _, t in ipairs(validAltars) do
             local dist = t.distance
-            if dist < shortestDist then
-                shortestDist = dist
+            if dist < shortestAltarDist then
+                shortestAltarDist = dist
                 nearestAltarPos = t.part.Position
                 nearestAltarColor = t.color
             end
         end
     end
     saved.NearestAltarPos = nearestAltarPos
+    saved.NearestAltarDist = shortestAltarDist
     saved.NearestAltarColor = nearestAltarColor
 
     -- Đảm bảo các mũi tên tồn tại/hủy phù hợp dựa trên số lượng hợp lệ thực tế
-    if controller.GiftESPEnabled and #validGifts > 0 then
-        getOrCreateArrow(saved, "ArrowGift", Color3.fromRGB(255, 255, 255))
+    if controller.GiftESPEnabled and nearestGiftPos then
+        getOrCreateArrow(saved, "ArrowGift", nearestGiftColor)
     else
         if saved.ArrowGift then
             pcall(function() saved.ArrowGift:Destroy() end)
@@ -487,8 +493,8 @@ function Logic.updateESPStyles(controller, gc, hrp)
         end
     end
     
-    if controller.CadenceESPEnabled and #validInstruments > 0 then
-        getOrCreateArrow(saved, "ArrowCadence", Color3.fromRGB(255, 0, 0))
+    if controller.CadenceESPEnabled and nearestCadencePos then
+        getOrCreateArrow(saved, "ArrowCadence", nearestCadenceColor)
     else
         if saved.ArrowCadence then
             pcall(function() saved.ArrowCadence:Destroy() end)
@@ -496,7 +502,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
         end
     end
     
-    if controller.AltarESPEnabled and #validAltars > 0 then
+    if controller.AltarESPEnabled and nearestAltarPos then
         getOrCreateArrow(saved, "ArrowAltar", nearestAltarColor)
     else
         if saved.ArrowAltar then
@@ -518,15 +524,26 @@ function Logic.updateRender(controller, gc, hrp)
     end
     
     local nearestGiftPos = saved.NearestGiftPos
+    local nearestGiftColor = saved.NearestGiftColor or ESPColors.Gift
+    local nearestGiftDist = saved.NearestGiftDist or math.huge
     local nearestCadencePos = saved.NearestCadencePos
+    local nearestCadenceColor = saved.NearestCadenceColor or ESPColors.Cadence
+    local nearestCadenceDist = saved.NearestCadenceDist or math.huge
     local nearestAltarPos = saved.NearestAltarPos
-    local nearestAltarColor = saved.NearestAltarColor or Color3.fromRGB(255, 128, 0)
+    local nearestAltarColor = saved.NearestAltarColor or ESPColors.Altar.Unknown
+    local nearestAltarDist = saved.NearestAltarDist or math.huge
 
-    -- 2. Cập nhật hiển thị và hướng xoay cho Mũi tên Hộp quà (Trắng)
+    -- Xác định độ cao đầu (Head) của người chơi
+    local char = hrp.Parent
+    local head = char and char:FindFirstChild("Head")
+    local headY = head and head.Position.Y or (hrp.Position.Y + 1.5)
+
+    -- 2. Cập nhật hiển thị và hướng xoay cho Mũi tên Hộp quà (Trắng / Vàng / Đỏ)
     local arrowGift = saved.ArrowGift
     if arrowGift and arrowGift.Parent then
-        if nearestGiftPos then
+        if nearestGiftPos and nearestGiftDist > 3.5 then
             arrowGift.Transparency = 0
+            arrowGift.Color = nearestGiftColor
             arrowGift.Material = Enum.Material.Neon
             
             -- Tính hướng 2D nằm ngang để tránh mũi tên bị nghiêng lên/xuống đất khi lại gần
@@ -538,19 +555,20 @@ function Logic.updateRender(controller, gc, hrp)
                 flatDir = flatDir.Magnitude > 0.01 and flatDir.Unit or Vector3.new(0, 0, -1)
             end
             
-            -- Đặt vị trí xoay quanh tâm HumanoidRootPart cách 3 studs horizontally, độ cao chân (tầng thấp)
-            local arrowPos = hrp.Position + flatDir * 3 + Vector3.new(0, -1, 0)
+            -- Đặt song song với Head của user, cách 2.5 studs (gần nhất)
+            local arrowPos = Vector3.new(hrp.Position.X + flatDir.X * 2.5, headY, hrp.Position.Z + flatDir.Z * 2.5)
             arrowGift.CFrame = CFrame.lookAt(arrowPos, arrowPos + flatDir)
         else
             arrowGift.Transparency = 1
         end
     end
     
-    -- 3. Cập nhật hiển thị và hướng xoay cho Mũi tên Nhạc cụ (Đỏ)
+    -- 3. Cập nhật hiển thị và hướng xoay cho Mũi tên Nhạc cụ (Hồng)
     local arrowCadence = saved.ArrowCadence
     if arrowCadence and arrowCadence.Parent then
-        if nearestCadencePos then
+        if nearestCadencePos and nearestCadenceDist > 3.5 then
             arrowCadence.Transparency = 0
+            arrowCadence.Color = nearestCadenceColor
             arrowCadence.Material = Enum.Material.Neon
             
             local flatDir = (nearestCadencePos - hrp.Position) * Vector3.new(1, 0, 1)
@@ -561,18 +579,18 @@ function Logic.updateRender(controller, gc, hrp)
                 flatDir = flatDir.Magnitude > 0.01 and flatDir.Unit or Vector3.new(0, 0, -1)
             end
             
-            -- Đặt vị trí xoay quanh tâm HumanoidRootPart cách 3 studs horizontally, độ cao ngang bụng/ngực (tầng trung)
-            local arrowPos = hrp.Position + flatDir * 3 + Vector3.new(0, 0.5, 0)
+            -- Đặt song song với Head của user, cách 3.3 studs (tầng giữa)
+            local arrowPos = Vector3.new(hrp.Position.X + flatDir.X * 3.3, headY, hrp.Position.Z + flatDir.Z * 3.3)
             arrowCadence.CFrame = CFrame.lookAt(arrowPos, arrowPos + flatDir)
         else
             arrowCadence.Transparency = 1
         end
     end
     
-    -- 4. Cập nhật hiển thị và hướng xoay cho Mũi tên Đàn tế (Màu tương ứng)
+    -- 4. Cập nhật hiển thị và hướng xoay cho Mũi tên Đàn tế (Màu tương ứng của Altar)
     local arrowAltar = saved.ArrowAltar
     if arrowAltar and arrowAltar.Parent then
-        if nearestAltarPos then
+        if nearestAltarPos and nearestAltarDist > 3.5 then
             arrowAltar.Transparency = 0
             arrowAltar.Color = nearestAltarColor
             arrowAltar.Material = Enum.Material.Neon
@@ -585,8 +603,8 @@ function Logic.updateRender(controller, gc, hrp)
                 flatDir = flatDir.Magnitude > 0.01 and flatDir.Unit or Vector3.new(0, 0, -1)
             end
             
-            -- Đặt vị trí xoay quanh tâm HumanoidRootPart cách 3 studs horizontally, độ cao trên đầu (tầng cao)
-            local arrowPos = hrp.Position + flatDir * 3 + Vector3.new(0, 2, 0)
+            -- Đặt song song với Head của user, cách 4.1 studs (xa nhất)
+            local arrowPos = Vector3.new(hrp.Position.X + flatDir.X * 4.1, headY, hrp.Position.Z + flatDir.Z * 4.1)
             arrowAltar.CFrame = CFrame.lookAt(arrowPos, arrowPos + flatDir)
         else
             arrowAltar.Transparency = 1

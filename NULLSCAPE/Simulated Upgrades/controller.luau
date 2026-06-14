@@ -97,11 +97,31 @@ end
 local function registerGift(obj)
     if not obj:IsA("BasePart") then return end
     local nameLower = obj.Name:lower()
-    if string.find(nameLower, "gift") or string.find(nameLower, "present") then
+    
+    local isGift = string.find(nameLower, "gift") or string.find(nameLower, "present")
+    local isTripmine = string.find(nameLower, "tripmine")
+    
+    if isGift or isTripmine then
         for _, g in ipairs(Controller.ActiveGifts) do
             if g.part == obj then return end
         end
-        table.insert(Controller.ActiveGifts, {part = obj, color = Color3.fromRGB(255, 255, 255), type = "Gift"})
+        
+        -- Xác định màu sắc và phân loại từ bảng màu dùng chung
+        local color = Logic.ESPColors.Gift
+        local giftType = "Gift"
+        
+        if isTripmine then
+            color = Logic.ESPColors.Tripmine
+            giftType = "Tripmine"
+        elseif string.find(nameLower, "golden") then
+            color = Logic.ESPColors.GoldenGift
+            giftType = "GoldenGift"
+        elseif string.find(nameLower, "passage") then
+            color = Logic.ESPColors.PassageGift
+            giftType = "PassageGift"
+        end
+        
+        table.insert(Controller.ActiveGifts, {part = obj, color = color, type = giftType})
         updateRunningState()
     end
 end
@@ -129,7 +149,7 @@ local function registerInstrument(obj)
         for _, inst in ipairs(Controller.ActiveInstruments) do
             if inst.model == obj or inst.part == targetPart then return end
         end
-        table.insert(Controller.ActiveInstruments, {part = targetPart, model = obj, color = Color3.fromRGB(255, 0, 0), type = "Cadence"})
+        table.insert(Controller.ActiveInstruments, {part = targetPart, model = obj, color = Logic.ESPColors.Cadence, type = "Cadence"})
         updateRunningState()
     end
 end

@@ -46,12 +46,6 @@ function Logic.start(controller, gc)
                     k = r -- Sử dụng lực gốc mạnh hơn khi >= 70% để triệt tiêu nhanh
                 end
                 
-                -- In log chẩn đoán mỗi 2 giây để kiểm tra giá trị thực tế truyền vào
-                if not self._lastPrint or os.clock() - self._lastPrint > 2 then
-                    self._lastPrint = os.clock()
-                    print(string.format("[NULLSCAPE] Hook Active - r: %.3f, k: %.4f, bypassQuickTurn: %s", r, k, tostring(bypassQuickTurn)))
-                end
-                
                 direction = direction:Lerp(self.WantDirection, k)
             end
         end
