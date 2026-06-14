@@ -125,7 +125,6 @@ end
 function Logic.updateESPStyles(controller, gc, hrp)
     local saved = gc.SavedVisuals
     if not saved.ActiveTargets then saved.ActiveTargets = {} end
-    if not saved.CurrentlyHighlighted then saved.CurrentlyHighlighted = {} end
     if not hrp then return end
     
     local gifts = controller.GiftESPEnabled and (controller.ActiveGifts or {}) or {}
@@ -209,69 +208,11 @@ function Logic.updateESPStyles(controller, gc, hrp)
     
     -- Xử lý styles dựa trên ESPStyle
     if controller.ESPStyle == "Highlight" then
-        -- Chia thành 2 nhóm: đang được highlight và ứng viên mới
-        local activeHighlights = {}
-        local candidates = {}
-        
         for _, t in ipairs(eligibleForHighlight) do
-            if saved.CurrentlyHighlighted[t.part] then
-                table.insert(activeHighlights, t)
-            else
-                table.insert(candidates, t)
-            end
-        end
-        
-        -- Sắp xếp cả hai nhóm theo khoảng cách
-        table.sort(activeHighlights, function(a, b) return a.distance < b.distance end)
-        table.sort(candidates, function(a, b) return a.distance < b.distance end)
-        
-        -- Nếu chưa đủ 8 Highlight, lấy từ candidates
-        while #activeHighlights < 8 and #candidates > 0 do
-            local nextCandidate = table.remove(candidates, 1)
-            table.insert(activeHighlights, nextCandidate)
-        end
-        table.sort(activeHighlights, function(a, b) return a.distance < b.distance end)
-        
-        -- Áp dụng hysteresis (trễ) 15%: tráo đổi nếu candidate gần nhất gần hơn 15% so với highlight xa nhất
-        if #activeHighlights == 8 and #candidates > 0 then
-            local swapped = true
-            while swapped and #candidates > 0 do
-                swapped = false
-                local farHighlight = activeHighlights[8]
-                local nearCandidate = candidates[1]
-                
-                if nearCandidate.distance < farHighlight.distance * 0.85 then
-                    -- Tráo đổi
-                    activeHighlights[8] = nearCandidate
-                    candidates[1] = farHighlight
-                    
-                    -- Sắp xếp lại
-                    table.sort(activeHighlights, function(a, b) return a.distance < b.distance end)
-                    table.sort(candidates, function(a, b) return a.distance < b.distance end)
-                    swapped = true
-                end
-            end
-        end
-        
-        -- Cập nhật CurrentlyHighlighted và thiết lập styles
-        local newHighlighted = {}
-        for _, t in ipairs(activeHighlights) do
-            newHighlighted[t.part] = true
-            
             currentTargets[t.part] = {
                 Style = "Highlight",
                 Color = t.color,
                 ParentObject = t.model or t.part
-            }
-        end
-        saved.CurrentlyHighlighted = newHighlighted
-        
-        -- Những cái không được Highlight sẽ chuyển thành Dot
-        for _, t in ipairs(candidates) do
-            currentTargets[t.part] = {
-                Style = "Dot",
-                Color = t.color,
-                ParentObject = t.part
             }
         end
         
@@ -284,9 +225,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
             }
         end
     else
-        -- Xóa CurrentlyHighlighted
-        table.clear(saved.CurrentlyHighlighted)
-        
         -- ESPStyle là Dot hoặc Ping
         local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
         
@@ -367,9 +305,8 @@ function Logic.updateESPStyles(controller, gc, hrp)
                             local sBox = Instance.new("SelectionBox")
                             sBox.Name = "NULLSCAPE_ESP_SelectionBox"
                             sBox.Color3 = current.Color
-                            sBox.LineThickness = 0.04
+                            sBox.LineThickness = 0.05
                             sBox.SurfaceTransparency = 1.0
-                            sBox.AlwaysOnTop = true
                             sBox.Adornee = current.ParentObject
                             sBox.Parent = current.ParentObject
                             newCache.Highlight = sBox
@@ -422,9 +359,8 @@ function Logic.updateESPStyles(controller, gc, hrp)
                         local sBox = Instance.new("SelectionBox")
                         sBox.Name = "NULLSCAPE_ESP_SelectionBox"
                         sBox.Color3 = current.Color
-                        sBox.LineThickness = 0.04
+                        sBox.LineThickness = 0.05
                         sBox.SurfaceTransparency = 1.0
-                        sBox.AlwaysOnTop = true
                         sBox.Adornee = current.ParentObject
                         sBox.Parent = current.ParentObject
                         newCache.Highlight = sBox
