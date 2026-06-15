@@ -23,6 +23,9 @@ Logic.TargetNames = {
 --  LOGIC XỬ LÝ CHUNG (KHÔNG CẦN THAY ĐỔI KHI THÊM THỰC THỂ)
 -- ============================================================
 
+-- Bảng lưu trữ thực thể đã xử lý trong round hiện tại để tránh lặp vô hạn
+local processedEntities = setmetatable({}, { __mode = "k" })
+
 -- Hàm kiểm tra xem tên thực thể có nằm trong danh sách cần xóa TouchInterest không
 function Logic.isTargetEntity(name)
     if not name then return false end
@@ -37,6 +40,7 @@ end
 -- Lấy hàm kiểm tra trạng thái bật/tắt menu tương ứng từ Controller
 function Logic.getImmunityCheck(name, controller)
     if not name then return nil end
+    if not controller then return nil end
     for configName, _ in pairs(Logic.TargetNames) do
         if string.find(name, configName) then
             -- Áp dụng động thuộc tính "[Tên]Immune" từ controller
@@ -47,6 +51,13 @@ function Logic.getImmunityCheck(name, controller)
         end
     end
     return nil
+end
+
+-- Hàm đặt trạng thái InLobby để dọn dẹp danh sách đã xử lý
+function Logic.setInLobbyState(val)
+    if val == false then
+        table.clear(processedEntities)
+    end
 end
 
 -- Thực hiện xóa TouchInterest / TouchTransmitter của thực thể và lưu cache khôi phục
@@ -74,10 +85,19 @@ end
 function Logic.enableImmunity(gc, enemy)
     if not enemy or not enemy:IsA("Model") then return end
     
+    -- Đảm bảo chỉ chạy 1 lần/1 round trên mỗi thực thể để tránh lặp vô hạn gây đứng máy
+    if processedEntities[enemy] then return end
+    processedEntities[enemy] = true
+    
+    local controller = gc.Controller
+    local checkFunc = Logic.getImmunityCheck(enemy.Name, controller)
+    
     -- 1. Đăng ký sự kiện lắng nghe để xóa ngay lập tức nếu TouchInterest được tải xuống trễ hẳn
     local descConn = enemy.DescendantAdded:Connect(function(part)
         if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-            removeTouchFromPart(gc, enemy, part)
+            if checkFunc and checkFunc() then
+                removeTouchFromPart(gc, enemy, part)
+            end
         end
     end)
     gc.registerEntityConnection(enemy, descConn)
@@ -87,7 +107,9 @@ function Logic.enableImmunity(gc, enemy)
         if not enemy or not enemy.Parent then return end
         for _, part in ipairs(enemy:GetDescendants()) do
             if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-                removeTouchFromPart(gc, enemy, part)
+                if checkFunc and checkFunc() then
+                    removeTouchFromPart(gc, enemy, part)
+                end
             end
         end
     end)
@@ -101,6 +123,12 @@ function Logic.disableImmunityForType(gc, entityName)
                 pcall(function()
                     data.touch.Parent = part
                 end)
+                
+                -- Khôi phục xong thì giải phóng khỏi processedEntities để cho phép xử lý lại khi bật toggle
+                local enemy = part.Parent
+                if enemy and enemy:IsA("Model") then
+                    processedEntities[enemy] = nil
+                end
             end
             gc.SavedPartsData[part] = nil
         end
@@ -120,6 +148,7 @@ function Logic.restoreAll(gc)
         end
     end
     table.clear(gc.SavedPartsData)
+    table.clear(processedEntities)
 end
 
 return Logic

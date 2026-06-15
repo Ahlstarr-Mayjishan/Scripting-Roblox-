@@ -29,8 +29,7 @@ local Controller = {
     PermanentConnections = {},
     StartSkinwalkerEvasion = nil
 }
-
-
+GC.Controller = Controller
 
 -- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
 local function isInMatch()
@@ -488,6 +487,11 @@ end
 local function setInLobby(val)
     if inLobby == val then return end
     inLobby = val
+    
+    pcall(function()
+        Logic.setInLobbyState(val)
+    end)
+
     if val then
         disconnectFolderObservations()
         Controller:CleanUp()
@@ -540,7 +544,8 @@ local function initializeICBMHook()
     local function handleRemoteCall(self, ...)
         local args = {...}
         
-        -- Logger gỡ lỗi an toàn (không gọi method nào trên self để tránh đệ quy __namecall)
+        -- Logger gỡ lỗi an toàn (đã tắt theo yêu cầu)
+        --[[
         pcall(function()
             local remoteName = self.Name
             local firstArg = args[1]
@@ -551,6 +556,7 @@ local function initializeICBMHook()
                 end
             end
         end)
+        ]]
 
         -- Kiểm tra nhanh tên remote trước (O(1) lookup)
         if not TargetRemoteNames[self.Name] then
