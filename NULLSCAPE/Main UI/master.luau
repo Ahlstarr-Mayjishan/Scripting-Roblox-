@@ -36,7 +36,8 @@ pcall(function()
             ImmunitySkinwalkerToggle = false,
             SpringerAutoJumpToggle = false,
             SpringerImmunityModeDropdown = "Legit",
-            MomentumReductionSlider = 0,
+            MatrixTetrahedronToggle = false,
+            MomentumReductionSlider = 100, -- Mặc định là 100% giảm quán tính
             AutoCollectGiftsToggle = false,
             AutoCollectRangeSlider = 20,
             TripmineBarrierToggle = false,

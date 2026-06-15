@@ -74,21 +74,23 @@ end
 function Logic.enableImmunity(gc, enemy)
     if not enemy or not enemy:IsA("Model") then return end
     
-    -- 1. Quét toàn bộ những phần tử hiện có
-    for _, part in ipairs(enemy:GetDescendants()) do
-        if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-            removeTouchFromPart(gc, enemy, part)
-        end
-    end
-    
-    -- 2. Đăng ký sự kiện lắng nghe để xóa ngay lập tức nếu TouchInterest được tải xuống trễ
+    -- 1. Đăng ký sự kiện lắng nghe để xóa ngay lập tức nếu TouchInterest được tải xuống trễ hẳn
     local descConn = enemy.DescendantAdded:Connect(function(part)
         if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
             removeTouchFromPart(gc, enemy, part)
         end
     end)
-    
     gc.registerEntityConnection(enemy, descConn)
+    
+    -- 2. Sử dụng task.defer để trì hoãn nhẹ một vi khung hình, đợi Roblox hoàn tất đồng bộ cây phân cấp con
+    task.defer(function()
+        if not enemy or not enemy.Parent then return end
+        for _, part in ipairs(enemy:GetDescendants()) do
+            if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
+                removeTouchFromPart(gc, enemy, part)
+            end
+        end
+    end)
 end
 
 -- Tắt miễn nhiễm (Khôi phục lại TouchInterest cho một loại thực thể)

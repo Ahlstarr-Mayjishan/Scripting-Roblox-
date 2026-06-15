@@ -299,31 +299,49 @@ end
 local function processEntity(enemy)
     if not enemy or not enemy:IsA("Model") or enemy.Name == "Skinwalkers" then return end
 
-    local name = enemy.Name
+    -- Tránh việc đăng ký nhiều lần trùng lặp cho cùng một thực thể
+    if GC.SavedPartsData and GC.SavedPartsData[enemy] then return end
 
-    -- ── Thực thể dùng nguyên lý Xóa TouchInterest (Baby, Bell, Mart,...) ──
-    if Logic.isTargetEntity(name) then
-        local checkFunc = Logic.getImmunityCheck(name, Controller)
-        if checkFunc and checkFunc() then
-            Executor.enableImmunity(GC, enemy)
+    -- Hàm xử lý chính khi kiểm tra tên thực thể
+    local function checkAndApply()
+        if not enemy or not enemy.Parent then return end
+        local name = enemy.Name
+        
+        -- ── Thực thể dùng nguyên lý Xóa TouchInterest (Baby, Bell, Mart,...) ──
+        if Logic.isTargetEntity(name) then
+            local checkFunc = Logic.getImmunityCheck(name, Controller)
+            if checkFunc and checkFunc() then
+                Executor.enableImmunity(GC, enemy)
+            end
+        end
+
+        -- ── Husk / Skinwalker (đổi tên + CanTouch) ─────────────────────────────
+        if ICBMEntitiesTypes.isHuskEntity(name) or
+           (enemy:GetAttribute("OriginalName") and ICBMEntitiesTypes.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
+            if Controller.SkinwalkerImmune then
+                ICBMEntitiesTypes.enableHuskImmunity(GC, enemy)
+            end
         end
     end
 
-    -- ── Husk / Skinwalker (đổi tên + CanTouch) ─────────────────────────────
-    if ICBMEntitiesTypes.isHuskEntity(name) or
-       (enemy:GetAttribute("OriginalName") and ICBMEntitiesTypes.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
-        if Controller.SkinwalkerImmune then
-            ICBMEntitiesTypes.enableHuskImmunity(GC, enemy)
-        end
+    -- Đăng ký sự kiện lắng nghe đổi tên của thực thể (Phòng hờ game đổi tên trễ sau khi spawn)
+    local nameConn = enemy:GetPropertyChangedSignal("Name"):Connect(checkAndApply)
+    GC.registerEntityConnection(enemy, nameConn)
 
-        -- Lắng nghe bộ phận mới được thêm vào
-        local descConn = enemy.DescendantAdded:Connect(function(part)
+    -- Chạy kiểm tra ngay lập tức
+    checkAndApply()
+
+    -- Lắng nghe bộ phận mới được thêm vào cho Husk/Skinwalker
+    local descConn = enemy.DescendantAdded:Connect(function(part)
+        local name = enemy.Name
+        if ICBMEntitiesTypes.isHuskEntity(name) or
+           (enemy:GetAttribute("OriginalName") and ICBMEntitiesTypes.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
             if Controller.SkinwalkerImmune then
                 ICBMEntitiesTypes.onHuskDescendantAdded(GC, enemy, part)
             end
-        end)
-        GC.registerEntityConnection(enemy, descConn)
-    end
+        end
+    end)
+    GC.registerEntityConnection(enemy, descConn)
 
     -- Xử lý vô hiệu hóa shockwave cho Springer (Springer không có TouchInterest, chỉ có ClientEvent và ShockwaveEvent)
     if string.find(enemy.Name, "Springer") then
