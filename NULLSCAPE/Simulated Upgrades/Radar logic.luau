@@ -34,6 +34,17 @@ Logic.ESPColors = ESPColors
 
 -- Nhận diện loại Altar dựa vào tên đối tượng hoặc cha/con của nó
 local function getAltarTypeAndColor(altarObj)
+    local realNameVal = altarObj:FindFirstChild("RealName")
+    local realName = realNameVal and realNameVal:IsA("StringValue") and realNameVal.Value
+    if realName and realName ~= "" then
+        local nameLower = realName:lower()
+        for name, color in pairs(ESPColors.Altar) do
+            if string.find(nameLower, name:lower()) then
+                return name, color
+            end
+        end
+    end
+    
     local objName = altarObj.Name:lower()
     for name, color in pairs(ESPColors.Altar) do
         local nameLower = name:lower()

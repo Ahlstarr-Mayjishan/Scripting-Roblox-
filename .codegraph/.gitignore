@@ -6,6 +6,7 @@
 codegraph.db
 *.db-wal
 *.db-shm
+selene.toml
 # Cache
 cache/
 

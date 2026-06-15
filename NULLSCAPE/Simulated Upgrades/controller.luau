@@ -10,6 +10,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
 local LocalPlayer = Players.LocalPlayer
 
 local Executor = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/executor.luau")
@@ -71,7 +72,6 @@ local startMatchLoops, startRenderStepped, stopRenderStepped
 
 -- Kiểm tra xem có mục tiêu hợp lệ nào được bật hay không
 local function checkActiveState()
-    if inLobby then return false end
     if not Controller.RadarEnabled then return false end
     
     if Controller.GiftESPEnabled and #Controller.ActiveGifts > 0 then
@@ -110,7 +110,7 @@ local function registerGift(obj)
     if not (obj:IsA("BasePart") or obj:IsA("Model")) then return end
     local nameLower = obj.Name:lower()
     
-    local isGift = string.find(nameLower, "gift") or string.find(nameLower, "present")
+    local isGift = string.find(nameLower, "gift") or string.find(nameLower, "present") or obj:HasTag("Gift")
     local isTripmine = string.find(nameLower, "tripmine")
     
     if isGift or isTripmine then
@@ -157,7 +157,7 @@ end
 
 local function registerInstrument(obj)
     if not (obj:IsA("BasePart") or obj:IsA("Model")) then return end
-    if not Logic.isInstrument(obj.Name) then return end
+    if not (Logic.isInstrument(obj.Name) or obj:HasTag("CadenceOrb")) then return end
     
     local targetPart = obj:IsA("Model") and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")) or obj
     if targetPart and targetPart:IsA("BasePart") then
@@ -284,6 +284,28 @@ local function startObservingFolders()
     table.clear(Controller.ActiveInstruments)
     table.clear(Controller.ActiveAltars)
     
+    -- 1. Đăng ký các thực thể hiện có bằng CollectionService (Chuẩn xác theo ref.lua)
+    for _, obj in ipairs(CollectionService:GetTagged("Gift")) do
+        registerGift(obj)
+    end
+    for _, obj in ipairs(CollectionService:GetTagged("CadenceOrb")) do
+        registerInstrument(obj)
+    end
+    for _, obj in ipairs(CollectionService:GetTagged("Altar")) do
+        registerAltar(obj)
+    end
+    
+    -- Lắng nghe các tín hiệu thêm/bớt tag của CollectionService
+    table.insert(folderConnections, CollectionService:GetInstanceAddedSignal("Gift"):Connect(registerGift))
+    table.insert(folderConnections, CollectionService:GetInstanceRemovedSignal("Gift"):Connect(unregisterGift))
+    
+    table.insert(folderConnections, CollectionService:GetInstanceAddedSignal("CadenceOrb"):Connect(registerInstrument))
+    table.insert(folderConnections, CollectionService:GetInstanceRemovedSignal("CadenceOrb"):Connect(unregisterInstrument))
+    
+    table.insert(folderConnections, CollectionService:GetInstanceAddedSignal("Altar"):Connect(registerAltar))
+    table.insert(folderConnections, CollectionService:GetInstanceRemovedSignal("Altar"):Connect(unregisterAltar))
+    
+    -- 2. Fallback: Lắng nghe cấu trúc thư mục Workspace phòng trường hợp game đổi cơ chế
     local function checkAndObserve(child)
         if child.Name == "Item_Pools" then
             observeItemPools(child)
@@ -412,11 +434,7 @@ local function setInLobby(val)
         pcall(function()
             Executor.clearVisuals(GC, false)
         end)
-        disconnectFolderObservations()
         stopRenderStepped()
-        table.clear(Controller.ActiveGifts)
-        table.clear(Controller.ActiveInstruments)
-        table.clear(Controller.ActiveAltars)
     else
         startObservingFolders()
         updateRunningState()
@@ -426,7 +444,6 @@ end
 
 -- Hàm trigger cập nhật ESP tức thì khi thay đổi cấu hình
 local function triggerInstantUpdate()
-    if inLobby then return end
     updateRunningState()
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -558,78 +575,7 @@ function Controller:SetDefuseKitStack(value)
     self.DefuseKitStack = value
 end
 
--- Hàm phát hiện nâng cấp Radar chính thức của game đã mở khóa (Tối ưu hóa tránh đệ quy sâu)
-local function checkRadarUnlocked()
-    local unlocked = false
-    local checkValue = function(val)
-        if not val then return false end
-        if val:IsA("BoolValue") and val.Value == true then
-            return true
-        elseif (val:IsA("NumberValue") or val:IsA("IntValue")) and val.Value >= 1 then
-            return true
-        end
-        return false
-    end
 
-    -- 1. Check trực tiếp trong LocalPlayer
-    for _, name in ipairs({"Radar", "RadarUpgrade", "RadarUnlocked"}) do
-        local child = LocalPlayer:FindFirstChild(name)
-        if checkValue(child) then return true end
-    end
-
-    -- 2. Check trong các thư mục Upgrades/Stats/Passives/Perks của LocalPlayer
-    for _, folderName in ipairs({"Upgrades", "Passives", "Perks", "Stats", "UpgradesFolder"}) do
-        local folder = LocalPlayer:FindFirstChild(folderName)
-        if folder then
-            for _, child in ipairs(folder:GetChildren()) do
-                if string.find(child.Name:lower(), "radar") and checkValue(child) then
-                    return true
-                end
-            end
-        end
-    end
-
-    -- 3. Check trong ReplicatedStorage (chứa Upgrades toàn cục hoặc theo tên người chơi)
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    for _, folderName in ipairs({
-        "Upgrades", 
-        "PlayerUpgrades", 
-        "Upgrades_" .. LocalPlayer.Name, 
-        LocalPlayer.Name .. "_Upgrades"
-    }) do
-        local folder = ReplicatedStorage:FindFirstChild(folderName)
-        if folder then
-            local playerFolder = folder:FindFirstChild(LocalPlayer.Name) or folder
-            for _, child in ipairs(playerFolder:GetChildren()) do
-                if string.find(child.Name:lower(), "radar") and checkValue(child) then
-                    return true
-                end
-            end
-        end
-    end
-
-    -- 4. Fallback: Quét đệ quy nhanh trên LocalPlayer như cũ
-    local function check(parent)
-        if not parent or unlocked then return end
-        local pName = parent.Name
-        if pName == "PlayerGui" or pName == "PlayerScripts" or pName == "Backpack" or pName == "StarterGear" then
-            return
-        end
-        
-        for _, child in ipairs(parent:GetChildren()) do
-            local name = child.Name:lower()
-            if string.find(name, "radar") and checkValue(child) then
-                unlocked = true
-                break
-            end
-            if not unlocked then
-                check(child)
-            end
-        end
-    end
-    pcall(function() check(LocalPlayer) end)
-    return unlocked
-end
 
 -- Hàm dọn dẹp tài nguyên (GC) khi tắt hoặc hủy UI
 function Controller:CleanUp()
@@ -652,31 +598,9 @@ function Controller:CleanUp()
 end
 
 -- Khởi tạo ban đầu khi nạp script
-if not inLobby then
-    startObservingFolders()
-    updateRunningState()
-    startUtilityLoop()
-end
-
--- Vòng lặp phát hiện Radar chính thức của game
-task.spawn(function()
-    while not Controller.Destroyed do
-        task.wait(5.0) -- Kiểm tra 5.0 giây một lần cực kỳ tối ưu
-        if Controller.Destroyed then break end
-        
-        if checkRadarUnlocked() then
-            if getgenv().Rayfield then
-                getgenv().Rayfield:Notify({
-                    Title = "Radar Auto Disabled",
-                    Content = "Official game radar detected. Custom radar disabled to optimize performance!",
-                    Duration = 5
-                })
-            end
-            Controller:CleanUp()
-            break
-        end
-    end
-end)
+startObservingFolders()
+updateRunningState()
+startUtilityLoop()
 
 -- Lắng nghe sự kiện đổi trạng thái game thời gian thực
 task.spawn(function()
@@ -717,17 +641,35 @@ local function hookUpgradeHandler()
                             local args = {...}
                             local isDefuse = false
                             local isTetrahedron = false
+                            local isRadarPlayer = false
+                            local isRadarAltars = false
+                            local isRadarInstruments = false
                             for _, v in ipairs(args) do
-                                if v == "DefuseKit" then
+                                if v == "DefuseKit" or v == "Defuse Kit" then
                                     isDefuse = true
                                 elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
                                     isTetrahedron = true
+                                elseif v == "RadarPlayer" then
+                                    isRadarPlayer = true
+                                elseif v == "RadarAltars" then
+                                    isRadarAltars = true
+                                elseif v == "RadarInstruments" then
+                                    isRadarInstruments = true
                                 end
                             end
                             if isDefuse and Controller.SimulateDefuseKit then
                                 return true
                             end
                             if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+                                return true
+                            end
+                            if isRadarPlayer and Controller.RadarEnabled then
+                                return true
+                            end
+                            if isRadarAltars and Controller.RadarEnabled and Controller.AltarESPEnabled then
+                                return true
+                            end
+                            if isRadarInstruments and Controller.RadarEnabled and Controller.CadenceESPEnabled then
                                 return true
                             end
                             return oldIsUpgradeEnabled(...)
@@ -738,17 +680,35 @@ local function hookUpgradeHandler()
                             local args = {...}
                             local isDefuse = false
                             local isTetrahedron = false
+                            local isRadarPlayer = false
+                            local isRadarAltars = false
+                            local isRadarInstruments = false
                             for _, v in ipairs(args) do
-                                if v == "DefuseKit" then
+                                if v == "DefuseKit" or v == "Defuse Kit" then
                                     isDefuse = true
                                 elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
                                     isTetrahedron = true
+                                elseif v == "RadarPlayer" then
+                                    isRadarPlayer = true
+                                elseif v == "RadarAltars" then
+                                    isRadarAltars = true
+                                elseif v == "RadarInstruments" then
+                                    isRadarInstruments = true
                                 end
                             end
                             if isDefuse and Controller.SimulateDefuseKit then
                                 return true
                             end
                             if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+                                return true
+                            end
+                            if isRadarPlayer and Controller.RadarEnabled then
+                                return true
+                            end
+                            if isRadarAltars and Controller.RadarEnabled and Controller.AltarESPEnabled then
+                                return true
+                            end
+                            if isRadarInstruments and Controller.RadarEnabled and Controller.CadenceESPEnabled then
                                 return true
                             end
                             return oldIsUpgradeEnabled(...)
@@ -763,17 +723,23 @@ local function hookUpgradeHandler()
                             local args = {...}
                             local isDefuse = false
                             local isTetrahedron = false
+                            local isRadar = false
                             for _, v in ipairs(args) do
-                                if v == "DefuseKit" then
+                                if v == "DefuseKit" or v == "Defuse Kit" then
                                     isDefuse = true
                                 elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
                                     isTetrahedron = true
+                                elseif v == "RadarPlayer" or v == "RadarAltars" or v == "RadarInstruments" then
+                                    isRadar = true
                                 end
                             end
                             if isDefuse and Controller.SimulateDefuseKit then
                                 return Controller.DefuseKitStack or 3
                             end
                             if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+                                return 1
+                            end
+                            if isRadar and Controller.RadarEnabled then
                                 return 1
                             end
                             return oldGetUpgradeStack(...)
@@ -784,17 +750,23 @@ local function hookUpgradeHandler()
                             local args = {...}
                             local isDefuse = false
                             local isTetrahedron = false
+                            local isRadar = false
                             for _, v in ipairs(args) do
-                                if v == "DefuseKit" then
+                                if v == "DefuseKit" or v == "Defuse Kit" then
                                     isDefuse = true
                                 elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
                                     isTetrahedron = true
+                                elseif v == "RadarPlayer" or v == "RadarAltars" or v == "RadarInstruments" then
+                                    isRadar = true
                                 end
                             end
                             if isDefuse and Controller.SimulateDefuseKit then
                                 return Controller.DefuseKitStack or 3
                             end
                             if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+                                return 1
+                            end
+                            if isRadar and Controller.RadarEnabled then
                                 return 1
                             end
                             return oldGetUpgradeStack(...)
