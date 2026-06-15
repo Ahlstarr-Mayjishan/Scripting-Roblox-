@@ -49,12 +49,20 @@ end
 
 local inLobby = not isInMatch()       -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
 local hasInRoundValue = false
-local folderConnections = {}
+local folderConnections = {}          -- key: folder -> value: list of connections
+local workspaceConnections = {}       -- list of workspace-level connections
 
--- Ngắt các kết nối quan sát thư mục
+-- Ngắt các kết nối quan sát thư mục và workspace
 local function disconnectFolderObservations()
-    for _, conn in ipairs(folderConnections) do
+    for _, conn in ipairs(workspaceConnections) do
         if conn then pcall(function() conn:Disconnect() end) end
+    end
+    table.clear(workspaceConnections)
+
+    for folder, conns in pairs(folderConnections) do
+        for _, conn in ipairs(conns) do
+            if conn then pcall(function() conn:Disconnect() end) end
+        end
     end
     table.clear(folderConnections)
 end
@@ -300,7 +308,7 @@ local function processEntity(enemy)
     if not enemy or not enemy:IsA("Model") or enemy.Name == "Skinwalkers" then return end
 
     -- Tránh việc đăng ký nhiều lần trùng lặp cho cùng một thực thể
-    if GC.SavedPartsData and GC.SavedPartsData[enemy] then return end
+    if GC.EntityConnections and GC.EntityConnections[enemy] then return end
 
     -- Hàm xử lý chính khi kiểm tra tên thực thể
     local function checkAndApply()
@@ -370,21 +378,52 @@ local function removeEntity(enemy)
     end
 end
 
+-- Hàm dọn dẹp tài nguyên riêng cho một thư mục cụ thể khi nó bị xóa khỏi Workspace
+function Controller:CleanUpFolder(folder)
+    if not folder then return end
+
+    -- 1. Dọn dẹp các thực thể đang tồn tại trong thư mục này
+    for _, child in ipairs(folder:GetChildren()) do
+        removeEntity(child)
+    end
+
+    -- 2. Ngắt kết nối của riêng thư mục này
+    local conns = folderConnections[folder]
+    if conns then
+        for _, conn in ipairs(conns) do
+            if conn then pcall(function() conn:Disconnect() end) end
+        end
+        folderConnections[folder] = nil
+    end
+
+    -- 3. Cập nhật biến tham chiếu EnemiesFolder nếu cần
+    if self.EnemiesFolder == folder then
+        self.EnemiesFolder = nil
+    end
+end
+
 -- Thiết lập quan sát thư mục Enemies trong Workspace
 function Controller:ObserveFolder(folder)
-    self.EnemiesFolder = folder
+    -- Tránh đăng ký nhiều lần cho cùng một thư mục
+    if folderConnections[folder] then return end
+
+    if folder.Name == "Enemies" then
+        self.EnemiesFolder = folder
+    end
+
+    local conns = {}
 
     -- 1. Lắng nghe khi thực thể mới xuất hiện
     local childAddedConn = folder.ChildAdded:Connect(function(child)
         processEntity(child)
     end)
-    table.insert(folderConnections, childAddedConn)
+    table.insert(conns, childAddedConn)
 
     -- 2. Lắng nghe khi thực thể bị xóa khỏi game
     local childRemovedConn = folder.ChildRemoved:Connect(function(child)
         removeEntity(child)
     end)
-    table.insert(folderConnections, childRemovedConn)
+    table.insert(conns, childRemovedConn)
 
     -- 3. Xử lý các thực thể đã có sẵn trong thư mục
     for _, child in ipairs(folder:GetChildren()) do
@@ -394,11 +433,13 @@ function Controller:ObserveFolder(folder)
     -- 4. Cơ chế tự động GC khi thư mục bị xóa/hủy khỏi Workspace
     local destroyingConn = folder.AncestryChanged:Connect(function(_, parent)
         if not parent then
-            -- Thư mục Enemies đã bị xóa hoàn toàn khỏi trò chơi
-            self:CleanUp()
+            -- Thư mục đã bị xóa hoàn toàn khỏi trò chơi
+            self:CleanUpFolder(folder)
         end
     end)
-    table.insert(folderConnections, destroyingConn)
+    table.insert(conns, destroyingConn)
+
+    folderConnections[folder] = conns
 end
 
 -- Quét tìm thư mục Enemies và Skinwalkers trong Workspace và lắng nghe sự thay đổi
@@ -416,7 +457,14 @@ local function startObservingFolders()
     end
 
     local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
-    table.insert(folderConnections, wsConn)
+    table.insert(workspaceConnections, wsConn)
+    
+    local wsRemovedConn = workspace.ChildRemoved:Connect(function(child)
+        if child:IsA("Model") and child.Name ~= "Enemies" and child.Name ~= "Skinwalkers" then
+            removeEntity(child)
+        end
+    end)
+    table.insert(workspaceConnections, wsRemovedConn)
     
     local initialFolder = workspace:FindFirstChild("Enemies")
     if initialFolder and initialFolder:IsA("Folder") then
