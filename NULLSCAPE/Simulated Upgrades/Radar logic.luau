@@ -1,3 +1,4 @@
+--!nocheck
 -- [[
 --  NULLSCAPE - Custom Radar & ESP Logic
 --  Vai trò: Chứa toàn bộ lõi logic định vị quà, nhạc cụ Cadence và đàn tế (Altar), các thuật toán tính toán,
@@ -102,24 +103,70 @@ local function isInstrument(name)
     return false
 end
 
+local function findGameTemplateArrow(key)
+    -- Thử tìm dưới ReplicatedFirst trước (cho GiftArrow)
+    if key == "ArrowGift" then
+        local rf = game:GetService("ReplicatedFirst")
+        local clientModules = rf:FindFirstChild("ClientModules")
+        local giftClient = clientModules and clientModules:FindFirstChild("GiftClient")
+        local giftClientHandler = giftClient and giftClient:FindFirstChild("GiftClientHandler")
+        local assets = giftClientHandler and giftClientHandler:FindFirstChild("Assets")
+        local giftArrow = assets and assets:FindFirstChild("GiftArrow")
+        if giftArrow then
+            return giftArrow
+        end
+    else
+        -- Cho ArrowCadence và ArrowAltar
+        local lp = game:GetService("Players").LocalPlayer
+        local ps = lp and lp:FindFirstChild("PlayerScripts")
+        local arrowHandler = ps and ps:FindFirstChild("ArrowHandler")
+        
+        if arrowHandler then
+            if key == "ArrowCadence" then
+                local cadenceArrow = arrowHandler:FindFirstChild("CadenceArrow")
+                if cadenceArrow then return cadenceArrow end
+                -- Thử tìm trong folder Arrows
+                local arrowsFolder = arrowHandler:FindFirstChild("Arrows")
+                local arrow = arrowsFolder and arrowsFolder:FindFirstChild("CadenceArrow")
+                if arrow then return arrow end
+            elseif key == "ArrowAltar" then
+                -- Tìm Template hoặc các mũi tên Altar có sẵn
+                local template = arrowHandler:FindFirstChild("Template")
+                if template then return template end
+                local arrowsFolder = arrowHandler:FindFirstChild("Arrows")
+                local template2 = arrowsFolder and arrowsFolder:FindFirstChild("Template")
+                if template2 then return template2 end
+            end
+        end
+    end
+    return nil
+end
+
 -- Helper để lấy hoặc tạo mũi tên chỉ hướng (đặc, không trong suốt)
 local function getOrCreateArrow(saved, key, color)
     local arrow = saved[key]
     if not arrow or not arrow.Parent then
-        arrow = Instance.new("Part")
-        arrow.Name = key
+        local template = findGameTemplateArrow(key)
+        if template then
+            arrow = template:Clone()
+            arrow.Name = key
+            arrow.Parent = workspace
+        else
+            arrow = Instance.new("Part")
+            arrow.Name = key
+            
+            local mesh = Instance.new("SpecialMesh")
+            mesh.MeshType = Enum.MeshType.FileMesh
+            mesh.MeshId = "rbxassetid://118015691029311"
+            mesh.Parent = arrow
+            
+            arrow.Material = Enum.Material.Neon
+            arrow.Size = Vector3.new(1.3, 1.3, 1.3)
+        end
         
-        local mesh = Instance.new("SpecialMesh")
-        mesh.MeshType = Enum.MeshType.FileMesh
-        mesh.MeshId = "rbxassetid://118015691029311"
-        mesh.Parent = arrow
-        
-        arrow.Material = Enum.Material.Neon
-        arrow.Size = Vector3.new(1.3, 1.3, 1.3)
         arrow.CanCollide = false
         arrow.Anchored = true
         arrow.Transparency = 0
-        arrow.Parent = workspace
         saved[key] = arrow
     end
     arrow.Color = color
@@ -128,6 +175,17 @@ end
 
 -- Các hàm helper kiểm tra tính hợp lệ thời gian thực (lọc các đối tượng đã bị nhặt/ẩn/đổi tên)
 local function isGiftValid(t)
+    if t.rawObj then
+        if t.rawObj.Collected or t.rawObj.Destroyed then
+            return false
+        end
+        local part = t.rawObj.Model or t.part
+        if not part or not part.Parent or not part:IsDescendantOf(workspace) then
+            return false
+        end
+        return true
+    end
+    
     local part = t.part
     if not part or not part.Parent or not part:IsDescendantOf(workspace) then
         return false
