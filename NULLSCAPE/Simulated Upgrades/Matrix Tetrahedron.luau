@@ -28,10 +28,13 @@ function Logic.start(controller, gc)
     local success, MovementCore = pcall(require, MovementCoreModule)
     if not success or not MovementCore or type(MovementCore) ~= "table" then return end
     
-    if Logic.Hooked then return end
+    -- Tránh hook lồng nhau (chaining hooks) khi chạy lại script bằng cách luôn lấy hàm gốc thực sự từ Roblox
+    if not MovementCore.__original_SetMoveDirection then
+        MovementCore.__original_SetMoveDirection = MovementCore.SetMoveDirection
+    end
+    Logic.OriginalSetMoveDirection = MovementCore.__original_SetMoveDirection
     
-    Logic.OriginalSetMoveDirection = MovementCore.SetMoveDirection
-    if not Logic.OriginalSetMoveDirection then return end
+    if Logic.Hooked then return end
     
     MovementCore.SetMoveDirection = function(self, direction)
         local r = controller.MomentumReduction or 0.1
@@ -42,10 +45,11 @@ function Logic.start(controller, gc)
                     self.doingQuickTurn = false
                 end
                 
-                -- Áp dụng đường cong lũy thừa để độ trơn trượt khác biệt rõ rệt mỗi 10%
-                local k = r
+                -- Áp dụng công thức tính hệ số LERP dựa trên số frame hội tụ để mỗi nấc 10% khác biệt rõ rệt
+                local k = 1
                 if r < 1 then
-                    k = r ^ 2.2
+                    local N = 60 * (1 - r) -- số frame hội tụ (từ 6 đến 54 frame tương ứng 90% đến 10%)
+                    k = 1 - math.pow(0.1, 1 / N)
                 end
                 
                 direction = direction:Lerp(self.WantDirection, k)
@@ -64,8 +68,8 @@ function Logic.stop()
     if not MovementCoreModule then return end
     
     local success, MovementCore = pcall(require, MovementCoreModule)
-    if success and MovementCore and type(MovementCore) == "table" and Logic.OriginalSetMoveDirection then
-        MovementCore.SetMoveDirection = Logic.OriginalSetMoveDirection
+    if success and MovementCore and type(MovementCore) == "table" and MovementCore.__original_SetMoveDirection then
+        MovementCore.SetMoveDirection = MovementCore.__original_SetMoveDirection
     end
     
     Logic.OriginalSetMoveDirection = nil

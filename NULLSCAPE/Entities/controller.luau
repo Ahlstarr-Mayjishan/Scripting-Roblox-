@@ -9,9 +9,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Executor = getgenv().loadModule("NULLSCAPE/Entities/executor.luau")
-local Logic = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest Entities Types.luau")
-local ICBMEntitiesTypes = getgenv().loadModule("NULLSCAPE/Entities/Magnitude Types.luau")
-local SpringerEntitiesTypes = getgenv().loadModule("NULLSCAPE/Entities/Raycast - Magnitude.luau")
+local Logic = getgenv().loadModule("NULLSCAPE/Entities/logic.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 
 local Controller = {
@@ -164,11 +162,11 @@ function Controller:SetImmunity(entityName, value)
         local function applyImmunityToChild(child)
             if not (child:IsA("Model") or child:IsA("BasePart")) then return end
 
-            -- Husk / Skinwalker dùng module Magnitude Types
+            -- Husk / Skinwalker dùng module logic mới
             if entityName == "Skinwalker" then
                 local isHusk = (string.find(child.Name, "Skinwalker") or string.find(child.Name, "Husk")) and child.Name ~= "Skinwalkers"
                 if isHusk then
-                    ICBMEntitiesTypes.enableHuskImmunity(GC, child)
+                    Logic.enableHuskImmunity(GC, child)
                 end
                 return
             end
@@ -204,7 +202,7 @@ function Controller:SetImmunity(entityName, value)
         if entityName == "Baby" or entityName == "Bell" or entityName == "Mart" then
             Executor.disableImmunityForType(GC, entityName)
         elseif entityName == "Skinwalker" then
-            ICBMEntitiesTypes.disableHuskImmunity(GC)
+            Logic.disableHuskImmunity(GC)
         end
         if entityName == "Springer" then
             for part, data in pairs(disabledShockwaves) do
@@ -332,10 +330,10 @@ local function processEntity(enemy)
         end
 
         -- ── Husk / Skinwalker (đổi tên + CanTouch) ─────────────────────────────
-        if ICBMEntitiesTypes.isHuskEntity(name) or
-           (enemy:GetAttribute("OriginalName") and ICBMEntitiesTypes.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
+        if Logic.isHuskEntity(name) or
+           (enemy:GetAttribute("OriginalName") and Logic.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
             if Controller.SkinwalkerImmune then
-                ICBMEntitiesTypes.enableHuskImmunity(GC, enemy)
+                Logic.enableHuskImmunity(GC, enemy)
             end
         end
     end
@@ -350,10 +348,10 @@ local function processEntity(enemy)
     -- Lắng nghe bộ phận mới được thêm vào cho Husk/Skinwalker
     local descConn = enemy.DescendantAdded:Connect(function(part)
         local name = enemy.Name
-        if ICBMEntitiesTypes.isHuskEntity(name) or
-           (enemy:GetAttribute("OriginalName") and ICBMEntitiesTypes.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
+        if Logic.isHuskEntity(name) or
+           (enemy:GetAttribute("OriginalName") and Logic.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
             if Controller.SkinwalkerImmune then
-                ICBMEntitiesTypes.onHuskDescendantAdded(GC, enemy, part)
+                Logic.onHuskDescendantAdded(GC, enemy, part)
             end
         end
     end)
@@ -560,21 +558,9 @@ local function initializeICBMHook()
             return false
         end
         
-        -- 1. Chạy logic chống ICBM
-        local blockICBM = ICBMEntitiesTypes.shouldBlockRemoteCall(self, args, Controller)
-        if blockICBM then
-            return true
-        end
-        
-        -- 2. Chạy logic chống Springer
-        local blockSpringer = SpringerEntitiesTypes.shouldBlockRemoteCall(self, args, Controller)
-        if blockSpringer then
-            return true
-        end
-
-        -- 3. Chạy logic chống Bell / TouchInterest Entities
-        local blockTouchInterest = Logic.shouldBlockRemoteCall(self, args, Controller)
-        if blockTouchInterest then
+        -- Chạy logic chặn RemoteEvent thống nhất từ logic.luau
+        local block = Logic.shouldBlockRemoteCall(self, args, Controller)
+        if block then
             return true
         end
         

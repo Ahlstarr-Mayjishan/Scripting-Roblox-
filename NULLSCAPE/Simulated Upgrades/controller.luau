@@ -386,6 +386,17 @@ local function startUtilityLoop()
                 pcall(function()
                     Executor.updateBarriers(Controller, GC)
                 end)
+                
+                -- Tự động kích hoạt lại Matrix Tetrahedron nếu được bật nhưng chưa hook (phòng hờ load trễ/lobby)
+                if Controller.MatrixTetrahedronEnabled and MatrixTetrahedron and not MatrixTetrahedron.Hooked then
+                    pcall(function()
+                        local reduction = Controller.MomentumReduction or 1.0
+                        MatrixTetrahedron.setReduction(reduction)
+                        if reduction > 0 then
+                            MatrixTetrahedron.start(Controller, GC)
+                        end
+                    end)
+                end
             end
             task.wait(0.1)
         end

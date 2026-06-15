@@ -4,7 +4,7 @@
 --  và gọi dọn dẹp giải phóng tài nguyên vật lý để tối ưu hóa hiệu năng, giảm tải cho Controller.
 -- ]]
 
-local Logic = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest Entities Types.luau")
+local Logic = getgenv().loadModule("NULLSCAPE/Entities/logic.luau")
 local GC = {
     ActiveConnections = {},
     EntityConnections = {},

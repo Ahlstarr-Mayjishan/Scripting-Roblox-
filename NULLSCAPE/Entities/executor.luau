@@ -3,7 +3,7 @@
 --  Vai trò: Chỉ đảm nhiệm việc thực thi sửa đổi trạng thái thực thể bằng cách gọi các tính năng/API từ file logic
 -- ]]
 
-local Logic = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest Entities Types.luau")
+local Logic = getgenv().loadModule("NULLSCAPE/Entities/logic.luau")
 local Executor = {}
 
 -- Thực thi bật miễn nhiễm cho một thực thể
