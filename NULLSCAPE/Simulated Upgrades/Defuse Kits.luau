@@ -26,8 +26,42 @@ local function hookRemote()
                 local isMine = (giftType and string.find(giftType:lower(), "tripmine")) or string.find(giftName, "tripmine")
                 if isMine then
                     if activeController.TripmineBarrierEnabled then
-                        -- Chặn hoàn toàn Remote nhặt/nổ mìn gửi lên server (Bypass 100%)
-                        return
+                        local mode = activeController.TripmineMode or "Delayed"
+                        if mode == "Delayed" then
+                            -- Chặn remote tức thời
+                            task.spawn(function()
+                                local char = LocalPlayer.Character
+                                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                                if hrp then
+                                    local baseDist = activeController.TripmineDetonationDistance or 15
+                                    local jitter = activeController.TripmineDetonationJitter or 2
+                                    local targetDist = baseDist
+                                    if jitter > 0 then
+                                        targetDist = baseDist + math.random(-jitter, jitter)
+                                    end
+                                    
+                                    -- Chờ cho đến khi người chơi cách quả mìn ít nhất targetDist studs
+                                    -- Để phòng hờ đứng yên hoặc lag, giới hạn chờ tối đa 3 giây
+                                    local startTime = os.clock()
+                                    while gift and gift.Parent and (os.clock() - startTime < 3.0) do
+                                        local diff = hrp.Position - gift.Position
+                                        if diff.Magnitude >= targetDist then
+                                            break
+                                        end
+                                        task.wait(0.1) -- 0.1s là khoảng thời gian tối ưu cho máy cấu hình yếu/di động
+                                    end
+                                    
+                                    -- Gửi remote thật lên server khi đã ở khoảng cách an toàn!
+                                    if gift and gift.Parent then
+                                        oldFireServer(self, gift, range)
+                                    end
+                                end
+                            end)
+                            return
+                        else
+                            -- Chế độ Barrier: Chặn hoàn toàn Remote nhặt/nổ mìn gửi lên server (Bypass 100%)
+                            return
+                        end
                     elseif activeController.SimulateDefuseKit then
                         -- Check xem mìn đã được xử lý defuse trước đó chưa
                         if gift:GetAttribute("Defused") then
@@ -94,6 +128,9 @@ function Barrier.update(controller, gc)
     
     local enabled = controller.TripmineBarrierEnabled
     if not enabled then return end
+    
+    -- Chỉ tắt va chạm vật lý mìn khi ở chế độ Barrier (Đi xuyên). Chế độ Delayed (Nổ trễ) giữ nguyên va chạm.
+    if controller.TripmineMode ~= "Barrier" then return end
     
     -- Lấy danh sách quà hiện tại
     local activeGifts = controller.ActiveGifts or {}

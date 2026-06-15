@@ -37,6 +37,9 @@ local Controller = {
     MomentumReduction = 1.0,          -- Lực Momentum Reduction tùy biến (mặc định 100%)
     
     TripmineBarrierEnabled = false,
+    TripmineMode = "Delayed", -- "Delayed" (Nổ trễ an toàn) hoặc "Barrier" (Đi xuyên mìn)
+    TripmineDetonationDistance = 15,
+    TripmineDetonationJitter = 2,
     SimulateDefuseKit = false,
     DefuseKitStack = 3,
     
@@ -728,6 +731,21 @@ end
 -- Bật/tắt rào cản vật lý mìn (Tripmine Barrier)
 function Controller:SetTripmineBarrier(value)
     self.TripmineBarrierEnabled = value
+end
+
+-- Thiết lập chế độ chống mìn (Delayed / Barrier)
+function Controller:SetTripmineMode(value)
+    self.TripmineMode = value or "Delayed"
+end
+
+-- Thiết lập khoảng cách kích nổ mìn cơ sở
+function Controller:SetTripmineDetonationDistance(value)
+    self.TripmineDetonationDistance = value or 15
+end
+
+-- Thiết lập biên độ dao động khoảng cách kích nổ ngẫu nhiên
+function Controller:SetTripmineDetonationJitter(value)
+    self.TripmineDetonationJitter = value or 2
 end
 
 -- Bật/tắt mô phỏng Defuse Kit

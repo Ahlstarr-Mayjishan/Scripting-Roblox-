@@ -145,6 +145,45 @@ return function(Client, Controller)
         end
     })
 
+    Tab:CreateDropdown({
+        Name = "Tripmine Bypass Mode",
+        Options = {"Delayed", "Barrier"},
+        CurrentOption = Controller.TripmineMode == "Barrier" and "Barrier" or "Delayed",
+        MultipleOptions = false,
+        Flag = "TripmineModeDropdown",
+        Callback = function(Option)
+            local selected = Option
+            if typeof(Option) == "table" then
+                selected = Option[1]
+            end
+            Controller:SetTripmineMode(selected)
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "Detonation Distance",
+        Range = {5, 30},
+        CurrentValue = Controller.TripmineDetonationDistance or 15,
+        Increment = 1,
+        ValueName = "Studs",
+        Flag = "TripmineDetonationDistanceSlider",
+        Callback = function(Value)
+            Controller:SetTripmineDetonationDistance(Value)
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "Detonation Jitter",
+        Range = {0, 10},
+        CurrentValue = Controller.TripmineDetonationJitter or 2,
+        Increment = 1,
+        ValueName = "Studs",
+        Flag = "TripmineDetonationJitterSlider",
+        Callback = function(Value)
+            Controller:SetTripmineDetonationJitter(Value)
+        end
+    })
+
     Tab:CreateToggle({
         Name = "Simulate Defuse Kit",
         CurrentValue = Controller.SimulateDefuseKit or false,
