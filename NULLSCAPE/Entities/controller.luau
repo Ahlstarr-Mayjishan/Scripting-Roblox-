@@ -46,6 +46,13 @@ local function isInMatch()
     return false
 end
 
+local function debugPrint(...)
+    local Client = getgenv().Client
+    if Client and Client.DebugLogs then
+        print("[DEBUG NULLSCAPE Controller]", ...)
+    end
+end
+
 local inLobby = not isInMatch()       -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
 local hasInRoundValue = false
 local folderConnections = {}          -- key: folder -> value: list of connections
@@ -129,6 +136,7 @@ end
 
 -- Thiết lập cấu hình miễn nhiễm và kích hoạt dọn dẹp tức thời
 function Controller:SetImmunity(entityName, value)
+    debugPrint("SetImmunity called for:", entityName, "| value:", value)
     if entityName == "Baby" then
         self.BabyImmune = value
     elseif entityName == "Bell" then
@@ -169,7 +177,8 @@ function Controller:SetImmunity(entityName, value)
             end
 
             -- Baby / Bell / Mart dùng module TouchInterest Types
-            local isTarget = child.Name == entityName or string.find(child.Name, entityName)
+            local isTarget = string.find(string.lower(child.Name), string.lower(entityName))
+            debugPrint("applyImmunityToChild check for target:", child.Name, "| isTarget:", isTarget ~= nil)
             if isTarget then
                 Executor.enableImmunity(GC, child)
             end
@@ -313,10 +322,15 @@ local function processEntity(enemy)
     local function checkAndApply()
         if not enemy or not enemy.Parent then return end
         local name = enemy.Name
+        debugPrint("processEntity checkAndApply for:", name)
         
         -- ── Thực thể dùng nguyên lý Xóa TouchInterest (Baby, Bell, Mart,...) ──
         if Logic.isTargetEntity(name) then
             local checkFunc = Logic.getImmunityCheck(name, Controller)
+            debugPrint("checkAndApply TargetEntity:", name, "| checkFunc found:", checkFunc ~= nil)
+            if checkFunc then
+                debugPrint("checkAndApply TargetEntity:", name, "| checkFunc value:", checkFunc())
+            end
             if checkFunc and checkFunc() then
                 Executor.enableImmunity(GC, enemy)
             end
