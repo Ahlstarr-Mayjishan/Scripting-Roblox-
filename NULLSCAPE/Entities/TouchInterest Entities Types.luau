@@ -65,14 +65,17 @@ local function removeTouchFromPart(gc, enemy, part)
     if not part or not part.Parent then return end
     
     local parentPart = part.Parent
-    if parentPart and parentPart:IsA("BasePart") then
-        if gc.SavedPartsData[parentPart] then
-            gc.SavedPartsData[parentPart].touch = part
-        else
+    -- parentPart có thể là Model (ví dụ: Bell, Baby) hoặc BasePart
+    if parentPart and typeof(parentPart) == "Instance" then
+        if not gc.SavedPartsData[parentPart] then
             gc.SavedPartsData[parentPart] = {
-                touch = part,
+                touches = {},
                 enemyName = enemy.Name
             }
+        end
+        -- Tránh lưu lặp lại cùng một TouchInterest
+        if not table.find(gc.SavedPartsData[parentPart].touches, part) then
+            table.insert(gc.SavedPartsData[parentPart].touches, part)
         end
     end
     
@@ -119,13 +122,15 @@ end
 function Logic.disableImmunityForType(gc, entityName)
     for part, data in pairs(gc.SavedPartsData) do
         if data and data.enemyName and string.find(data.enemyName, entityName) then
-            if part and part.Parent and data.touch then
-                pcall(function()
-                    data.touch.Parent = part
-                end)
+            if part and part.Parent and data.touches then
+                for _, touch in ipairs(data.touches) do
+                    pcall(function()
+                        touch.Parent = part
+                    end)
+                end
                 
                 -- Khôi phục xong thì giải phóng khỏi processedEntities để cho phép xử lý lại khi bật toggle
-                local enemy = part.Parent
+                local enemy = part:IsA("Model") and part or part.Parent
                 if enemy and enemy:IsA("Model") then
                     processedEntities[enemy] = nil
                 end
@@ -139,11 +144,13 @@ end
 function Logic.restoreAll(gc)
     if not gc.SavedPartsData then return end
     for part, data in pairs(gc.SavedPartsData) do
-        if data and data.touch then
+        if data and data.touches then
             if part and part.Parent then
-                pcall(function()
-                    data.touch.Parent = part
-                end)
+                for _, touch in ipairs(data.touches) do
+                    pcall(function()
+                        touch.Parent = part
+                    end)
+                end
             end
         end
     end
