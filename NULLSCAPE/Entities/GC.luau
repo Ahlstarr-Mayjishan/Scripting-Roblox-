@@ -4,7 +4,9 @@
 --  và gọi dọn dẹp giải phóng tài nguyên vật lý để tối ưu hóa hiệu năng, giảm tải cho Controller.
 -- ]]
 
-local Logic = getgenv().loadModule("NULLSCAPE/Entities/logic.luau")
+local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
+local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
+
 local GC = {
     ActiveConnections = {},
     EntityConnections = {},
@@ -39,15 +41,17 @@ end
 
 -- Thực hiện dọn dẹp và giải phóng tài nguyên cực hạn (GC)
 function GC.cleanAll()
-    -- 1. Khôi phục các TouchInterest đã bị thay đổi qua Logic module
-    local success, err = pcall(function()
-        Logic.restoreAll(GC)
+    -- 1. Khôi phục các TouchInterest đã bị thay đổi qua TouchInterest module
+    pcall(function()
+        TouchInterest.restoreAll(GC)
     end)
-    if not success then
-        warn("[Entities GC] Lỗi khi khôi phục TouchInterest: " .. tostring(err))
-    end
 
-    -- 2. Ngắt toàn bộ kết nối của từng thực thể riêng biệt
+    -- 2. Khôi phục Husk/Skinwalker qua HuskEvasion module
+    pcall(function()
+        HuskEvasion.disableHuskImmunity(GC)
+    end)
+
+    -- 3. Ngắt toàn bộ kết nối của từng thực thể riêng biệt
     for enemy, connections in pairs(GC.EntityConnections) do
         for _, conn in ipairs(connections) do
             if conn then
@@ -57,7 +61,7 @@ function GC.cleanAll()
     end
     table.clear(GC.EntityConnections)
 
-    -- 3. Ngắt toàn bộ kết nối sự kiện chung
+    -- 4. Ngắt toàn bộ kết nối sự kiện chung
     for _, conn in ipairs(GC.ActiveConnections) do
         if conn then
             pcall(function() conn:Disconnect() end)

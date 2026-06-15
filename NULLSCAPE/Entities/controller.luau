@@ -9,7 +9,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Executor = getgenv().loadModule("NULLSCAPE/Entities/executor.luau")
-local Logic = getgenv().loadModule("NULLSCAPE/Entities/logic.luau")
+local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
+local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
+local RemoteBlocking = getgenv().loadModule("NULLSCAPE/Entities/RemoteBlocking.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 
 local Controller = {
@@ -162,11 +164,11 @@ function Controller:SetImmunity(entityName, value)
         local function applyImmunityToChild(child)
             if not (child:IsA("Model") or child:IsA("BasePart")) then return end
 
-            -- Husk / Skinwalker dùng module logic mới
+            -- Husk / Skinwalker dùng module HuskEvasion mới
             if entityName == "Skinwalker" then
                 local isHusk = (string.find(child.Name, "Skinwalker") or string.find(child.Name, "Husk")) and child.Name ~= "Skinwalkers"
                 if isHusk then
-                    Logic.enableHuskImmunity(GC, child)
+                    HuskEvasion.enableHuskImmunity(GC, child)
                 end
                 return
             end
@@ -202,7 +204,7 @@ function Controller:SetImmunity(entityName, value)
         if entityName == "Baby" or entityName == "Bell" or entityName == "Mart" then
             Executor.disableImmunityForType(GC, entityName)
         elseif entityName == "Skinwalker" then
-            Logic.disableHuskImmunity(GC)
+            HuskEvasion.disableHuskImmunity(GC)
         end
         if entityName == "Springer" then
             for part, data in pairs(disabledShockwaves) do
@@ -318,8 +320,8 @@ local function processEntity(enemy)
         debugPrint("processEntity checkAndApply for:", name)
         
         -- ── Thực thể dùng nguyên lý Xóa TouchInterest (Baby, Bell, Mart,...) ──
-        if Logic.isTargetEntity(name) then
-            local checkFunc = Logic.getImmunityCheck(name, Controller)
+        if TouchInterest.isTargetEntity(name) then
+            local checkFunc = TouchInterest.getImmunityCheck(name, Controller)
             debugPrint("checkAndApply TargetEntity:", name, "| checkFunc found:", checkFunc ~= nil)
             if checkFunc then
                 debugPrint("checkAndApply TargetEntity:", name, "| checkFunc value:", checkFunc())
@@ -330,10 +332,10 @@ local function processEntity(enemy)
         end
 
         -- ── Husk / Skinwalker (đổi tên + CanTouch) ─────────────────────────────
-        if Logic.isHuskEntity(name) or
-           (enemy:GetAttribute("OriginalName") and Logic.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
+        if HuskEvasion.isHuskEntity(name) or
+           (enemy:GetAttribute("OriginalName") and HuskEvasion.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
             if Controller.SkinwalkerImmune then
-                Logic.enableHuskImmunity(GC, enemy)
+                HuskEvasion.enableHuskImmunity(GC, enemy)
             end
         end
     end
@@ -348,10 +350,10 @@ local function processEntity(enemy)
     -- Lắng nghe bộ phận mới được thêm vào cho Husk/Skinwalker
     local descConn = enemy.DescendantAdded:Connect(function(part)
         local name = enemy.Name
-        if Logic.isHuskEntity(name) or
-           (enemy:GetAttribute("OriginalName") and Logic.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
+        if HuskEvasion.isHuskEntity(name) or
+           (enemy:GetAttribute("OriginalName") and HuskEvasion.isHuskEntity(enemy:GetAttribute("OriginalName"))) then
             if Controller.SkinwalkerImmune then
-                Logic.onHuskDescendantAdded(GC, enemy, part)
+                HuskEvasion.onHuskDescendantAdded(GC, enemy, part)
             end
         end
     end)
@@ -484,7 +486,7 @@ local function setInLobby(val)
     inLobby = val
     
     pcall(function()
-        Logic.setInLobbyState(val)
+        TouchInterest.setInLobbyState(val)
     end)
 
     if val then
@@ -558,8 +560,8 @@ local function initializeICBMHook()
             return false
         end
         
-        -- Chạy logic chặn RemoteEvent thống nhất từ logic.luau
-        local block = Logic.shouldBlockRemoteCall(self, args, Controller)
+        -- Chạy logic chặn RemoteEvent thống nhất từ RemoteBlocking.luau
+        local block = RemoteBlocking.shouldBlockRemoteCall(self, args, Controller)
         if block then
             return true
         end
