@@ -103,6 +103,56 @@ local function isInstrument(name)
     return false
 end
 
+local function setArrowTransparency(arrow, transparency)
+    if not arrow then return end
+    if arrow:IsA("BasePart") then
+        arrow.Transparency = transparency
+    else
+        for _, child in ipairs(arrow:GetDescendants()) do
+            if child:IsA("BasePart") then
+                child.Transparency = transparency
+            end
+        end
+    end
+end
+
+local function setArrowColor(arrow, color)
+    if not arrow then return end
+    if arrow:IsA("BasePart") then
+        arrow.Color = color
+    else
+        for _, child in ipairs(arrow:GetDescendants()) do
+            if child:IsA("BasePart") then
+                child.Color = color
+            end
+        end
+    end
+end
+
+local function setArrowCFrame(arrow, cf)
+    if not arrow then return end
+    if arrow:IsA("Model") then
+        arrow:PivotTo(cf)
+    else
+        arrow.CFrame = cf
+    end
+end
+
+local function setArrowPhysics(arrow)
+    if not arrow then return end
+    if arrow:IsA("BasePart") then
+        arrow.CanCollide = false
+        arrow.Anchored = true
+    else
+        for _, child in ipairs(arrow:GetDescendants()) do
+            if child:IsA("BasePart") then
+                child.CanCollide = false
+                child.Anchored = true
+            end
+        end
+    end
+end
+
 local function findGameTemplateArrow(key)
     -- Thử tìm dưới ReplicatedFirst trước (cho GiftArrow)
     if key == "ArrowGift" then
@@ -162,14 +212,14 @@ local function getOrCreateArrow(saved, key, color)
             
             arrow.Material = Enum.Material.Neon
             arrow.Size = Vector3.new(1.3, 1.3, 1.3)
+            arrow.Parent = workspace
         end
         
-        arrow.CanCollide = false
-        arrow.Anchored = true
-        arrow.Transparency = 0
+        setArrowPhysics(arrow)
+        setArrowTransparency(arrow, 0)
         saved[key] = arrow
     end
-    arrow.Color = color
+    setArrowColor(arrow, color)
     return arrow
 end
 
@@ -701,7 +751,9 @@ function Logic.updateRender(controller, gc, hrp)
     if not hrp then
         for _, name in ipairs({"ArrowGift", "ArrowCadence", "ArrowAltar"}) do
             local arrow = saved[name]
-            if arrow then arrow.Transparency = 1 end
+            if arrow then
+                setArrowTransparency(arrow, 1)
+            end
         end
         return
     end
@@ -725,9 +777,8 @@ function Logic.updateRender(controller, gc, hrp)
     local arrowGift = saved.ArrowGift
     if arrowGift and arrowGift.Parent then
         if nearestGiftPos and nearestGiftDist > 3.5 then
-            arrowGift.Transparency = 0
-            arrowGift.Color = nearestGiftColor
-            arrowGift.Material = Enum.Material.Neon
+            setArrowTransparency(arrowGift, 0)
+            setArrowColor(arrowGift, nearestGiftColor)
             
             local flatDir = (nearestGiftPos - hrp.Position) * Vector3.new(1, 0, 1)
             if flatDir.Magnitude > 0.01 then
@@ -748,9 +799,9 @@ function Logic.updateRender(controller, gc, hrp)
             else
                 saved.ArrowGiftCF = targetCF
             end
-            arrowGift.CFrame = saved.ArrowGiftCF
+            setArrowCFrame(arrowGift, saved.ArrowGiftCF)
         else
-            arrowGift.Transparency = 1
+            setArrowTransparency(arrowGift, 1)
             saved.ArrowGiftCF = nil
         end
     end
@@ -759,9 +810,8 @@ function Logic.updateRender(controller, gc, hrp)
     local arrowCadence = saved.ArrowCadence
     if arrowCadence and arrowCadence.Parent then
         if nearestCadencePos and nearestCadenceDist > 3.5 then
-            arrowCadence.Transparency = 0
-            arrowCadence.Color = nearestCadenceColor
-            arrowCadence.Material = Enum.Material.Neon
+            setArrowTransparency(arrowCadence, 0)
+            setArrowColor(arrowCadence, nearestCadenceColor)
             
             local flatDir = (nearestCadencePos - hrp.Position) * Vector3.new(1, 0, 1)
             if flatDir.Magnitude > 0.01 then
@@ -782,9 +832,9 @@ function Logic.updateRender(controller, gc, hrp)
             else
                 saved.ArrowCadenceCF = targetCF
             end
-            arrowCadence.CFrame = saved.ArrowCadenceCF
+            setArrowCFrame(arrowCadence, saved.ArrowCadenceCF)
         else
-            arrowCadence.Transparency = 1
+            setArrowTransparency(arrowCadence, 1)
             saved.ArrowCadenceCF = nil
         end
     end
@@ -793,9 +843,8 @@ function Logic.updateRender(controller, gc, hrp)
     local arrowAltar = saved.ArrowAltar
     if arrowAltar and arrowAltar.Parent then
         if nearestAltarPos and nearestAltarDist > 3.5 then
-            arrowAltar.Transparency = 0
-            arrowAltar.Color = nearestAltarColor
-            arrowAltar.Material = Enum.Material.Neon
+            setArrowTransparency(arrowAltar, 0)
+            setArrowColor(arrowAltar, nearestAltarColor)
             
             local flatDir = (nearestAltarPos - hrp.Position) * Vector3.new(1, 0, 1)
             if flatDir.Magnitude > 0.01 then
@@ -816,9 +865,9 @@ function Logic.updateRender(controller, gc, hrp)
             else
                 saved.ArrowAltarCF = targetCF
             end
-            arrowAltar.CFrame = saved.ArrowAltarCF
+            setArrowCFrame(arrowAltar, saved.ArrowAltarCF)
         else
-            arrowAltar.Transparency = 1
+            setArrowTransparency(arrowAltar, 1)
             saved.ArrowAltarCF = nil
         end
     end

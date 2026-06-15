@@ -114,35 +114,51 @@ end
 local function registerGiftObj(giftObj)
     if not giftObj or giftObj.Collected then return end
     
-    for _, g in ipairs(Controller.ActiveGifts) do
-        if g.id == giftObj.Id then return end
-    end
-    
-    local targetPart = giftObj.Model
-    if not targetPart then return end
-    
-    local color = Logic.ESPColors.Gift
-    local giftType = giftObj.Type or "Gift"
-    
-    if giftObj.Tripmine then
-        color = Logic.ESPColors.Tripmine
-        giftType = "Tripmine"
-    elseif giftObj.Golden then
-        color = Logic.ESPColors.GoldenGift
-        giftType = "GoldenGift"
-    elseif giftType == "PassageGift" then
-        color = Logic.ESPColors.PassageGift
-    end
-    
-    table.insert(Controller.ActiveGifts, {
-        id = giftObj.Id,
-        part = targetPart,
-        model = targetPart,
-        color = color,
-        type = giftType,
-        rawObj = giftObj
-    })
-    updateRunningState()
+    task.spawn(function()
+        -- Chờ tối đa 3 giây cho giftObj.Model được gán
+        local startTime = os.clock()
+        while not giftObj.Model and not giftObj.Collected and (os.clock() - startTime < 3.0) do
+            task.wait(0.05)
+        end
+        
+        local targetPart = giftObj.Model
+        if not targetPart then return end
+        
+        -- Chờ tiếp cho Parent của targetPart không phải là nil
+        startTime = os.clock()
+        while not targetPart.Parent and not giftObj.Collected and (os.clock() - startTime < 3.0) do
+            task.wait(0.05)
+        end
+        
+        if not targetPart.Parent or giftObj.Collected then return end
+        
+        for _, g in ipairs(Controller.ActiveGifts) do
+            if g.id == giftObj.Id then return end
+        end
+        
+        local color = Logic.ESPColors.Gift
+        local giftType = giftObj.Type or "Gift"
+        
+        if giftObj.Tripmine then
+            color = Logic.ESPColors.Tripmine
+            giftType = "Tripmine"
+        elseif giftObj.Golden then
+            color = Logic.ESPColors.GoldenGift
+            giftType = "GoldenGift"
+        elseif giftType == "PassageGift" then
+            color = Logic.ESPColors.PassageGift
+        end
+        
+        table.insert(Controller.ActiveGifts, {
+            id = giftObj.Id,
+            part = targetPart,
+            model = targetPart,
+            color = color,
+            type = giftType,
+            rawObj = giftObj
+        })
+        updateRunningState()
+    end)
 end
 
 local function unregisterGiftById(id)
