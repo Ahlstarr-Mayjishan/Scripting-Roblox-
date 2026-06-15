@@ -103,30 +103,35 @@ function Logic.setInLobbyState(val)
     end
 end
 
--- Thực hiện xóa TouchInterest / TouchTransmitter của thực thể và lưu cache khôi phục
+-- Thực hiện vô hiệu hóa nhận diện chạm (CanTouch = false) trên part chứa TouchInterest và lưu cache khôi phục
 local function removeTouchFromPart(gc, enemy, part)
     if not part or not part.Parent then return end
     
     local parentPart = part.Parent
     debugPrint("removeTouchFromPart called for:", part:GetFullName(), "| Parent:", parentPart and parentPart.Name)
     
-    if parentPart and typeof(parentPart) == "Instance" then
+    if parentPart and typeof(parentPart) == "Instance" and parentPart:IsA("BasePart") then
         if not gc.SavedPartsData[parentPart] then
             gc.SavedPartsData[parentPart] = {
-                touches = {},
-                enemyName = enemy.Name
+                originalCanTouch = parentPart.CanTouch,
+                enemyName = enemy.Name,
+                connections = {}
             }
-        end
-        -- Tránh lưu lặp lại cùng một TouchInterest
-        if not findInTable(gc.SavedPartsData[parentPart].touches, part) then
-            table.insert(gc.SavedPartsData[parentPart].touches, part)
+            
+            -- Vô hiệu hóa CanTouch
+            parentPart.CanTouch = false
+            debugPrint("Disabled CanTouch for:", parentPart:GetFullName())
+            
+            -- Lắng nghe phòng trường hợp game tự bật lại CanTouch
+            local conn = parentPart:GetPropertyChangedSignal("CanTouch"):Connect(function()
+                if parentPart.CanTouch then
+                    parentPart.CanTouch = false
+                end
+            end)
+            table.insert(gc.SavedPartsData[parentPart].connections, conn)
+            gc.registerEntityConnection(enemy, conn)
         end
     end
-    
-    local success, err = pcall(function()
-        part.Parent = nil
-    end)
-    debugPrint("unparent result success:", success, "| err:", err, "| parent after:", part.Parent)
 end
 
 -- Kích hoạt miễn nhiễm cho thực thể
@@ -185,19 +190,22 @@ function Logic.enableImmunity(gc, enemy)
     end
 end
 
--- Tắt miễn nhiễm (Khôi phục lại TouchInterest cho một loại thực thể)
+-- Tắt miễn nhiễm (Khôi phục lại CanTouch cho một loại thực thể)
 function Logic.disableImmunityForType(gc, entityName)
     debugPrint("disableImmunityForType called for:", entityName)
     for part, data in pairs(gc.SavedPartsData) do
         if data and data.enemyName and string.find(string.lower(data.enemyName), string.lower(entityName)) then
-            if part and part.Parent and data.touches then
-                debugPrint("Restoring touches for:", part:GetFullName())
-                for _, touch in ipairs(data.touches) do
-                    pcall(function()
-                        touch.Parent = part
-                    end)
-                    debugPrint("Restored touch:", touch:GetFullName(), "to:", part.Name)
+            if part and part.Parent then
+                debugPrint("Restoring CanTouch for:", part:GetFullName())
+                if data.connections then
+                    for _, conn in ipairs(data.connections) do
+                        if conn then conn:Disconnect() end
+                    end
                 end
+                
+                pcall(function()
+                    part.CanTouch = data.originalCanTouch
+                end)
                 
                 -- Khôi phục xong thì giải phóng khỏi processedEntities để cho phép xử lý lại khi bật toggle
                 local enemy = part
@@ -214,19 +222,22 @@ function Logic.disableImmunityForType(gc, entityName)
     end
 end
 
--- Khôi phục tất cả TouchInterest và làm sạch toàn bộ cache
+-- Khôi phục tất cả CanTouch và làm sạch toàn bộ cache
 function Logic.restoreAll(gc)
     debugPrint("restoreAll called")
     if not gc.SavedPartsData then return end
     for part, data in pairs(gc.SavedPartsData) do
-        if data and data.touches then
+        if data then
             if part and part.Parent then
-                debugPrint("Restoring touches for:", part:GetFullName())
-                for _, touch in ipairs(data.touches) do
-                    pcall(function()
-                        touch.Parent = part
-                    end)
+                debugPrint("Restoring CanTouch for:", part:GetFullName())
+                if data.connections then
+                    for _, conn in ipairs(data.connections) do
+                        if conn then conn:Disconnect() end
+                    end
                 end
+                pcall(function()
+                    part.CanTouch = data.originalCanTouch
+                end)
             end
         end
     end
