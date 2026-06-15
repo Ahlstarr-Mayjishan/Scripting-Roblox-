@@ -34,6 +34,18 @@ Logic.ESPColors = ESPColors
 
 -- Nhận diện loại Altar dựa vào tên đối tượng hoặc cha/con của nó
 local function getAltarTypeAndColor(altarObj)
+    -- Ưu tiên 1: Attribute "Name" theo ref.lua ArrowHandler (AltarAdded dùng GetAttribute("Name"))
+    local attrName = altarObj:GetAttribute("Name")
+    if attrName and attrName ~= "" then
+        local nameLower = attrName:lower()
+        for name, color in pairs(ESPColors.Altar) do
+            if string.find(nameLower, name:lower()) then
+                return name, color
+            end
+        end
+    end
+    
+    -- Ưu tiên 2: StringValue "RealName" (cách cũ từ radar script)
     local realNameVal = altarObj:FindFirstChild("RealName")
     local realName = realNameVal and realNameVal:IsA("StringValue") and realNameVal.Value
     if realName and realName ~= "" then
@@ -45,6 +57,7 @@ local function getAltarTypeAndColor(altarObj)
         end
     end
     
+    -- Ưu tiên 3: Tên object
     local objName = altarObj.Name:lower()
     for name, color in pairs(ESPColors.Altar) do
         local nameLower = name:lower()
@@ -53,6 +66,7 @@ local function getAltarTypeAndColor(altarObj)
         end
     end
     
+    -- Ưu tiên 4: Tên parent
     local parentName = altarObj.Parent and altarObj.Parent.Name:lower() or ""
     for name, color in pairs(ESPColors.Altar) do
         local nameLower = name:lower()
@@ -61,6 +75,7 @@ local function getAltarTypeAndColor(altarObj)
         end
     end
     
+    -- Ưu tiên 5: Tên con
     for _, child in ipairs(altarObj:GetChildren()) do
         local childName = child.Name:lower()
         for name, color in pairs(ESPColors.Altar) do

@@ -69,6 +69,8 @@ local folderConnections = {}
 
 -- Forward references cho việc quản lý các loop
 local startMatchLoops, startRenderStepped, stopRenderStepped
+-- Forward reference cho unregisterInstrument (dùng trong registerInstrument callback)
+local unregisterInstrument
 
 -- Kiểm tra xem có mục tiêu hợp lệ nào được bật hay không
 local function checkActiveState()
@@ -159,6 +161,11 @@ local function registerInstrument(obj)
     if not (obj:IsA("BasePart") or obj:IsA("Model")) then return end
     if not (Logic.isInstrument(obj.Name) or obj:HasTag("CadenceOrb")) then return end
     
+    -- Theo ref.lua: CadenceOrb chỉ hợp lệ khi CanTouch = true (chưa bị nhặt)
+    if obj:IsA("BasePart") and obj:HasTag("CadenceOrb") then
+        if not obj.CanTouch then return end
+    end
+    
     local targetPart = obj:IsA("Model") and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart")) or obj
     if targetPart and targetPart:IsA("BasePart") then
         for _, inst in ipairs(Controller.ActiveInstruments) do
@@ -166,10 +173,25 @@ local function registerInstrument(obj)
         end
         table.insert(Controller.ActiveInstruments, {part = targetPart, model = obj, color = Logic.ESPColors.Cadence, type = "Cadence"})
         updateRunningState()
+        
+        -- Theo ref.lua: lắng nghe CanTouch thay đổi → tự động unregister
+        if obj:IsA("BasePart") and obj:HasTag("CadenceOrb") then
+            local canTouchConn
+            canTouchConn = obj:GetPropertyChangedSignal("CanTouch"):Connect(function()
+                if not obj.CanTouch then
+                    unregisterInstrument(obj)
+                    if canTouchConn then
+                        canTouchConn:Disconnect()
+                        canTouchConn = nil
+                    end
+                end
+            end)
+            table.insert(folderConnections, canTouchConn)
+        end
     end
 end
 
-local function unregisterInstrument(obj)
+unregisterInstrument = function(obj)
     local removed = false
     for i, inst in ipairs(Controller.ActiveInstruments) do
         if inst.model == obj or inst.part == obj then
@@ -184,15 +206,37 @@ local function unregisterInstrument(obj)
 end
 
 local function registerAltar(altarObj)
-    local targetPart = altarObj:IsA("Model") and (altarObj:FindFirstChild("HumanoidRootPart") or altarObj:FindFirstChildWhichIsA("BasePart")) or altarObj
-    if targetPart and targetPart:IsA("BasePart") then
-        for _, a in ipairs(Controller.ActiveAltars) do
-            if a.model == altarObj or a.part == targetPart then return end
-        end
-        local altarName, altarColor = Logic.getAltarTypeAndColor(altarObj)
-        table.insert(Controller.ActiveAltars, {part = targetPart, model = altarObj, color = altarColor, type = "Altar", altarName = altarName})
-        updateRunningState()
+    -- Theo ref.lua: object được tag "Altar" có thể là Model trực tiếp với HitBox bên trong,
+    -- hoặc HitBox nằm ở altarObj.Parent (parent của tagged object)
+    -- Kiểm tra: AltarUsed attribute để bỏ qua altar đã dùng
+    local parentObj = altarObj.Parent
+    if parentObj and parentObj:GetAttribute("AltarUsed") then return end
+    
+    -- Tìm HitBox: ưu tiên trong chính altarObj, sau đó thử ở parent
+    local hitBox = altarObj:FindFirstChild("HitBox") or altarObj:FindFirstChild("Hitbox")
+    if not hitBox and parentObj then
+        hitBox = parentObj:FindFirstChild("HitBox") or parentObj:FindFirstChild("Hitbox")
     end
+    
+    -- Fallback: dùng bất kỳ BasePart nào trong altarObj hoặc chính altarObj
+    local targetPart = hitBox
+    if not targetPart then
+        if altarObj:IsA("BasePart") then
+            targetPart = altarObj
+        elseif altarObj:IsA("Model") then
+            targetPart = altarObj:FindFirstChildWhichIsA("BasePart")
+        end
+    end
+    
+    if not targetPart or not targetPart:IsA("BasePart") then return end
+    
+    for _, a in ipairs(Controller.ActiveAltars) do
+        if a.model == altarObj or a.part == targetPart then return end
+    end
+    
+    local altarName, altarColor = Logic.getAltarTypeAndColor(altarObj)
+    table.insert(Controller.ActiveAltars, {part = targetPart, model = altarObj, color = altarColor, type = "Altar", altarName = altarName})
+    updateRunningState()
 end
 
 local function unregisterAltar(altarObj)
