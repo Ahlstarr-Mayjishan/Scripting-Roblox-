@@ -47,10 +47,7 @@ local function isInMatch()
 end
 
 local function debugPrint(...)
-    local Client = getgenv().Client
-    if Client and Client.DebugLogs then
-        print("[DEBUG NULLSCAPE Controller]", ...)
-    end
+    warn("[DEBUG NULLSCAPE Controller]", ...)
 end
 
 local inLobby = not isInMatch()       -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)

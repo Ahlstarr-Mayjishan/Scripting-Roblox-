@@ -46,12 +46,8 @@ local function findInTable(t, val)
     return nil
 end
 
--- Helper in log có kiểm tra toggle Debug Logs trong master settings
 local function debugPrint(...)
-    local Client = getgenv().Client
-    if Client and Client.DebugLogs then
-        print("[DEBUG NULLSCAPE]", ...)
-    end
+    warn("[DEBUG NULLSCAPE TouchInterest]", ...)
 end
 
 -- Hàm kiểm tra xem tên thực thể có nằm trong danh sách cần xóa TouchInterest không (Không phân biệt hoa thường)
