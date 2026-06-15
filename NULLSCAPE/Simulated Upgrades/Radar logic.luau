@@ -671,7 +671,6 @@ function Logic.updateRender(controller, gc, hrp)
             arrowGift.Color = nearestGiftColor
             arrowGift.Material = Enum.Material.Neon
             
-            -- Tính hướng 2D nằm ngang để tránh mũi tên bị nghiêng lên/xuống đất khi lại gần
             local flatDir = (nearestGiftPos - hrp.Position) * Vector3.new(1, 0, 1)
             if flatDir.Magnitude > 0.01 then
                 flatDir = flatDir.Unit
@@ -680,11 +679,21 @@ function Logic.updateRender(controller, gc, hrp)
                 flatDir = flatDir.Magnitude > 0.01 and flatDir.Unit or Vector3.new(0, 0, -1)
             end
             
-            -- Đặt song song với Head của user, cách 2.5 studs (gần nhất)
-            local arrowPos = Vector3.new(hrp.Position.X + flatDir.X * 2.5, headY, hrp.Position.Z + flatDir.Z * 2.5)
-            arrowGift.CFrame = CFrame.lookAt(arrowPos, arrowPos + flatDir)
+            -- Theo ref.lua dòng 1221: offset = 2 + min(1, dist/9) studs
+            local arrowOffset = 2 + math.min(1, nearestGiftDist / 9)
+            local arrowPos = Vector3.new(hrp.Position.X + flatDir.X * arrowOffset, headY, hrp.Position.Z + flatDir.Z * arrowOffset)
+            
+            -- Lerp xoay mượt mà như game gốc
+            local targetCF = CFrame.lookAt(arrowPos, arrowPos + flatDir)
+            if saved.ArrowGiftCF then
+                saved.ArrowGiftCF = saved.ArrowGiftCF:Lerp(targetCF, 0.15)
+            else
+                saved.ArrowGiftCF = targetCF
+            end
+            arrowGift.CFrame = saved.ArrowGiftCF
         else
             arrowGift.Transparency = 1
+            saved.ArrowGiftCF = nil
         end
     end
     
@@ -704,11 +713,21 @@ function Logic.updateRender(controller, gc, hrp)
                 flatDir = flatDir.Magnitude > 0.01 and flatDir.Unit or Vector3.new(0, 0, -1)
             end
             
-            -- Đặt song song với Head của user, cách 3.3 studs (tầng giữa)
-            local arrowPos = Vector3.new(hrp.Position.X + flatDir.X * 3.3, headY, hrp.Position.Z + flatDir.Z * 3.3)
-            arrowCadence.CFrame = CFrame.lookAt(arrowPos, arrowPos + flatDir)
+            -- Theo ref.lua dòng 1221: offset = 2 + min(1, dist/9) studs
+            local arrowOffset = 2 + math.min(1, nearestCadenceDist / 9)
+            local arrowPos = Vector3.new(hrp.Position.X + flatDir.X * arrowOffset, headY, hrp.Position.Z + flatDir.Z * arrowOffset)
+            
+            -- Lerp xoay mượt mà như game gốc
+            local targetCF = CFrame.lookAt(arrowPos, arrowPos + flatDir)
+            if saved.ArrowCadenceCF then
+                saved.ArrowCadenceCF = saved.ArrowCadenceCF:Lerp(targetCF, 0.15)
+            else
+                saved.ArrowCadenceCF = targetCF
+            end
+            arrowCadence.CFrame = saved.ArrowCadenceCF
         else
             arrowCadence.Transparency = 1
+            saved.ArrowCadenceCF = nil
         end
     end
     
@@ -728,11 +747,21 @@ function Logic.updateRender(controller, gc, hrp)
                 flatDir = flatDir.Magnitude > 0.01 and flatDir.Unit or Vector3.new(0, 0, -1)
             end
             
-            -- Đặt song song với Head của user, cách 4.1 studs (xa nhất)
-            local arrowPos = Vector3.new(hrp.Position.X + flatDir.X * 4.1, headY, hrp.Position.Z + flatDir.Z * 4.1)
-            arrowAltar.CFrame = CFrame.lookAt(arrowPos, arrowPos + flatDir)
+            -- Theo ref.lua dòng 1221: offset = 2 + min(1, dist/9) studs
+            local arrowOffset = 2 + math.min(1, nearestAltarDist / 9)
+            local arrowPos = Vector3.new(hrp.Position.X + flatDir.X * arrowOffset, headY, hrp.Position.Z + flatDir.Z * arrowOffset)
+            
+            -- Lerp xoay mượt mà như game gốc
+            local targetCF = CFrame.lookAt(arrowPos, arrowPos + flatDir)
+            if saved.ArrowAltarCF then
+                saved.ArrowAltarCF = saved.ArrowAltarCF:Lerp(targetCF, 0.15)
+            else
+                saved.ArrowAltarCF = targetCF
+            end
+            arrowAltar.CFrame = saved.ArrowAltarCF
         else
             arrowAltar.Transparency = 1
+            saved.ArrowAltarCF = nil
         end
     end
     

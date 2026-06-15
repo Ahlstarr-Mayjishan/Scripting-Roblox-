@@ -1,0 +1,29 @@
+{
+    "languageMode": "strict",
+    "globals": [
+        "getgenv",
+        "getsenv",
+        "getrenv",
+        "hookfunction",
+        "newcclosure",
+        "clonefunction",
+        "checkcaller",
+        "isreadonly",
+        "make_writeable",
+        "syn",
+        "rconsoleprint",
+        "readfile",
+        "writefile",
+        "appendfile",
+        "isfile",
+        "listfiles",
+        "makefolder",
+        "isfolder",
+        "delfolder",
+        "delfile",
+        "loadfile",
+        "Drawing",
+        "Rayfield",
+        "vector"
+    ]
+}

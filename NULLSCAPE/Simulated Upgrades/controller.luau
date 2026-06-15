@@ -206,19 +206,22 @@ unregisterInstrument = function(obj)
 end
 
 local function registerAltar(altarObj)
-    -- Theo ref.lua: object được tag "Altar" có thể là Model trực tiếp với HitBox bên trong,
-    -- hoặc HitBox nằm ở altarObj.Parent (parent của tagged object)
-    -- Kiểm tra: AltarUsed attribute để bỏ qua altar đã dùng
+    -- Theo ref.lua RadarSlop: v2 = v.Parent, HitBox = v2:FindFirstChild("HitBox")
+    -- Theo ref.lua ArrowHandler: Position = p1:WaitForChild("Hitbox").Position (trong altarObj)
+    -- AltarUsed: attribute trên parent của tagged object
     local parentObj = altarObj.Parent
     if parentObj and parentObj:GetAttribute("AltarUsed") then return end
     
-    -- Tìm HitBox: ưu tiên trong chính altarObj, sau đó thử ở parent
-    local hitBox = altarObj:FindFirstChild("HitBox") or altarObj:FindFirstChild("Hitbox")
+    -- Tìm HitBox/Hitbox: ArrowHandler dùng "Hitbox" (h viết thường) trong chính altarObj
+    -- RadarSlop dùng "HitBox" từ v.Parent (tức room chứa altar)
+    local hitBox = altarObj:FindFirstChild("Hitbox") -- ArrowHandler style (chưa thường)
+        or altarObj:FindFirstChild("HitBox") -- fallback viết hoa
     if not hitBox and parentObj then
-        hitBox = parentObj:FindFirstChild("HitBox") or parentObj:FindFirstChild("Hitbox")
+        hitBox = parentObj:FindFirstChild("HitBox") -- RadarSlop style
+            or parentObj:FindFirstChild("Hitbox")
     end
     
-    -- Fallback: dùng bất kỳ BasePart nào trong altarObj hoặc chính altarObj
+    -- Nếu vẫn không tìm được HitBox, fallback sang bất kỳ BasePart nào
     local targetPart = hitBox
     if not targetPart then
         if altarObj:IsA("BasePart") then
@@ -235,7 +238,20 @@ local function registerAltar(altarObj)
     end
     
     local altarName, altarColor = Logic.getAltarTypeAndColor(altarObj)
-    table.insert(Controller.ActiveAltars, {part = targetPart, model = altarObj, color = altarColor, type = "Altar", altarName = altarName})
+    
+    -- Theo ref.lua ArrowHandler dòng 1315:
+    -- Arrow chỉ hiển khi altar có tag "Voting" (Enabled > 0)
+    -- Script mô phỏng: luôn hiển (ignore voting gate) nhưng đánh dấu voting state
+    local isVoting = altarObj:HasTag("Voting")
+    
+    table.insert(Controller.ActiveAltars, {
+        part = targetPart,
+        model = altarObj,
+        color = altarColor,
+        type = "Altar",
+        altarName = altarName,
+        isVoting = isVoting
+    })
     updateRunningState()
 end
 
@@ -348,6 +364,25 @@ local function startObservingFolders()
     
     table.insert(folderConnections, CollectionService:GetInstanceAddedSignal("Altar"):Connect(registerAltar))
     table.insert(folderConnections, CollectionService:GetInstanceRemovedSignal("Altar"):Connect(unregisterAltar))
+    
+    -- Theo ref.lua dòng 1315: Altar chỉ hiển mũi tên khi có tag "Voting"
+    -- Cập nhật isVoting state khi có Voting tag thêm/xoá
+    table.insert(folderConnections, CollectionService:GetInstanceAddedSignal("Voting"):Connect(function(obj)
+        for _, a in ipairs(Controller.ActiveAltars) do
+            if a.model == obj or a.part == obj then
+                a.isVoting = true
+                break
+            end
+        end
+    end))
+    table.insert(folderConnections, CollectionService:GetInstanceRemovedSignal("Voting"):Connect(function(obj)
+        for _, a in ipairs(Controller.ActiveAltars) do
+            if a.model == obj or a.part == obj then
+                a.isVoting = false
+                break
+            end
+        end
+    end))
     
     -- 2. Fallback: Lắng nghe cấu trúc thư mục Workspace phòng trường hợp game đổi cơ chế
     local function checkAndObserve(child)

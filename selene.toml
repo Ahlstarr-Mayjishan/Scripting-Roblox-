@@ -1,0 +1,11 @@
+std = "roblox"
+
+[globals]
+# Roblox executor APIs (getgenv, hookfunction, etc.)
+getgenv = { any = true }
+hookfunction = { any = true }
+newcclosure = { any = true }
+clonefunction = { any = true }
+checkcaller = { any = true }
+syn = { any = true }
+rconsoleprint = { any = true }
