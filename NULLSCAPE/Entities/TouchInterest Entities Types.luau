@@ -85,6 +85,19 @@ function Logic.setInLobbyState(val)
     if val == false then
         clearTable(processedEntities)
         debugPrint("processedEntities cleared for new round")
+        
+        -- Quét thử toàn bộ workspace sau 5 giây để tìm mọi TouchInterest
+        task.delay(5, function()
+            warn("--- NULLSCAPE: QUÉT TOÀN BỘ TOUCHINTEREST ---")
+            local count = 0
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("TouchTransmitter") or obj.Name == "TouchInterest" then
+                    count = count + 1
+                    warn("   [" .. tostring(count) .. "] " .. obj:GetFullName())
+                end
+            end
+            warn("--- NULLSCAPE: KẾT THÚC QUÉT (Tổng cộng: " .. tostring(count) .. ") ---")
+        end)
     end
 end
 
