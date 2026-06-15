@@ -114,57 +114,53 @@ end
 local function registerGiftObj(giftObj)
     if not giftObj or giftObj.Collected then return end
     
-    task.spawn(function()
-        -- Chờ tối đa 3 giây cho giftObj.Model được gán
-        local startTime = os.clock()
-        while not giftObj.Model and not giftObj.Collected and (os.clock() - startTime < 3.0) do
-            task.wait(0.05)
-        end
-        
-        local targetPart = giftObj.Model
-        if not targetPart then return end
-        
-        -- Chờ tiếp cho Parent của targetPart không phải là nil
-        startTime = os.clock()
-        while not targetPart.Parent and not giftObj.Collected and (os.clock() - startTime < 3.0) do
-            task.wait(0.05)
-        end
-        
-        if not targetPart.Parent or giftObj.Collected then return end
-        
-        for _, g in ipairs(Controller.ActiveGifts) do
-            if g.id == giftObj.Id then return end
-        end
-        
-        local color = Logic.ESPColors.Gift
-        local giftType = giftObj.Type or "Gift"
-        
-        if giftObj.Tripmine then
-            color = Logic.ESPColors.Tripmine
-            giftType = "Tripmine"
-        elseif giftObj.Golden then
-            color = Logic.ESPColors.GoldenGift
-            giftType = "GoldenGift"
-        elseif giftType == "PassageGift" then
-            color = Logic.ESPColors.PassageGift
-        end
-        
-        table.insert(Controller.ActiveGifts, {
-            id = giftObj.Id,
-            part = targetPart,
-            model = targetPart,
-            color = color,
-            type = giftType,
-            rawObj = giftObj
-        })
-        updateRunningState()
-    end)
+    for _, g in ipairs(Controller.ActiveGifts) do
+        if g.id == giftObj.Id then return end
+    end
+    
+    -- Tạo Proxy Part ảo tối giản ngay lập tức để định vị từ xa (Tối ưu hiệu năng cực hạn)
+    local proxyPart = Instance.new("Part")
+    proxyPart.Name = "GiftProxy_" .. tostring(giftObj.Id)
+    proxyPart.Size = Vector3.new(0, 0, 0)
+    proxyPart.Transparency = 1
+    proxyPart.Anchored = true
+    proxyPart.CanCollide = false
+    proxyPart.CastShadow = false
+    proxyPart.Massless = true
+    proxyPart.Position = giftObj.Position or Vector3.new(0, 0, 0)
+    proxyPart.Parent = workspace
+    
+    local color = Logic.ESPColors.Gift
+    local giftType = giftObj.Type or "Gift"
+    
+    if giftObj.Tripmine then
+        color = Logic.ESPColors.Tripmine
+        giftType = "Tripmine"
+    elseif giftObj.Golden then
+        color = Logic.ESPColors.GoldenGift
+        giftType = "GoldenGift"
+    elseif giftType == "PassageGift" then
+        color = Logic.ESPColors.PassageGift
+    end
+    
+    table.insert(Controller.ActiveGifts, {
+        id = giftObj.Id,
+        part = proxyPart,
+        model = proxyPart,
+        color = color,
+        type = giftType,
+        rawObj = giftObj
+    })
+    updateRunningState()
 end
 
 local function unregisterGiftById(id)
     local removed = false
     for i, g in ipairs(Controller.ActiveGifts) do
         if g.id == id then
+            if g.part and g.part.Name:find("GiftProxy_") then
+                pcall(function() g.part:Destroy() end)
+            end
             table.remove(Controller.ActiveGifts, i)
             removed = true
             break
@@ -752,6 +748,14 @@ function Controller:CleanUp()
     disconnectFolderObservations()
     stopRenderStepped()
     
+    if self.ActiveGifts then
+        for _, g in ipairs(self.ActiveGifts) do
+            if g.part and g.part.Name:find("GiftProxy_") then
+                pcall(function() g.part:Destroy() end)
+            end
+        end
+    end
+    
     if MatrixTetrahedron then
         pcall(function() MatrixTetrahedron.stop() end)
     end
@@ -766,25 +770,152 @@ function Controller:CleanUp()
     GC.cleanAll()
 end
 
+local function findPoolFolders()
+    local folders = {}
+    local itemPools = workspace:FindFirstChild("Item_Pools")
+    if itemPools then
+        for _, child in ipairs(itemPools:GetChildren()) do
+            if child:IsA("Folder") and string.find(child.Name:lower(), "shell") then
+                table.insert(folders, child)
+            end
+        end
+    end
+    for _, child in ipairs(workspace:GetChildren()) do
+        if child:IsA("Folder") and string.find(child.Name:lower(), "shell") then
+            table.insert(folders, child)
+        end
+    end
+    return folders
+end
+
+local function scanActiveGiftsFromPools()
+    local activeGifts = {}
+    local folders = findPoolFolders()
+    
+    for _, folder in ipairs(folders) do
+        local folderNameLower = folder.Name:lower()
+        local shellType = "Gift"
+        
+        if string.find(folderNameLower, "tripmine") then
+            shellType = "Tripmine"
+        elseif string.find(folderNameLower, "golden") then
+            shellType = "GoldenGift"
+        elseif string.find(folderNameLower, "passage") then
+            shellType = "PassageGift"
+        end
+        
+        for _, shell in ipairs(folder:GetChildren()) do
+            local weld = shell:FindFirstChildWhichIsA("Weld") or shell:FindFirstChild("Weld")
+            local part1 = weld and weld.Part1
+            
+            if part1 and part1.Parent and part1:IsDescendantOf(workspace) then
+                if part1.Transparency < 0.99 then
+                    local color = Logic.ESPColors.Gift
+                    if shellType == "Tripmine" then
+                        color = Logic.ESPColors.Tripmine
+                    elseif shellType == "GoldenGift" then
+                        color = Logic.ESPColors.GoldenGift
+                    elseif shellType == "PassageGift" then
+                        color = Logic.ESPColors.PassageGift
+                    end
+                    
+                    table.insert(activeGifts, {
+                        id = part1:GetDebugId(),
+                        part = part1,
+                        model = part1,
+                        color = color,
+                        type = shellType,
+                        rawObj = nil
+                    })
+                end
+            end
+        end
+    end
+    
+    return activeGifts
+end
+
+local function startGiftPoolObserver()
+    task.spawn(function()
+        while not Controller.Destroyed do
+            if Controller.RadarEnabled and Controller.GiftESPEnabled then
+                local poolGifts = scanActiveGiftsFromPools()
+                
+                -- Hợp nhất dữ liệu quét pool với ActiveGifts hiện tại (tránh trùng lặp)
+                local newGifts = {}
+                
+                -- Giữ lại các gift từ setupGiftClientHook (nếu có rawObj) mà chưa bị Collected
+                for _, g in ipairs(Controller.ActiveGifts) do
+                    if g.rawObj and not g.rawObj.Collected and not g.rawObj.Destroyed then
+                        table.insert(newGifts, g)
+                    end
+                end
+                
+                -- Thêm các gift quét được từ pool folder vào nếu chưa có
+                for _, pg in ipairs(poolGifts) do
+                    local exists = false
+                    for _, g in ipairs(newGifts) do
+                        if g.part == pg.part or g.id == pg.id then
+                            exists = true
+                            break
+                        end
+                    end
+                    if not exists then
+                        table.insert(newGifts, pg)
+                    end
+                end
+                
+                Controller.ActiveGifts = newGifts
+                updateRunningState()
+            end
+            task.wait(0.2)
+        end
+    end)
+end
+
 local function setupGiftClientHook()
     task.spawn(function()
-        local ClientModules = ReplicatedFirst:WaitForChild("ClientModules", 15)
-        local GiftClient = ClientModules and ClientModules:WaitForChild("GiftClient", 15)
-        local GiftClientHandlerModule = GiftClient and GiftClient:WaitForChild("GiftClientHandler", 15)
+        print("[NULLSCAPE Radar] Bắt đầu tìm kiếm ClientModules...")
+        local ClientModules = ReplicatedFirst:FindFirstChild("ClientModules") or ReplicatedStorage:FindFirstChild("ClientModules")
+        if not ClientModules then
+            pcall(function()
+                ClientModules = ReplicatedFirst:WaitForChild("ClientModules", 5)
+            end)
+            if not ClientModules then
+                pcall(function()
+                    ClientModules = ReplicatedStorage:WaitForChild("ClientModules", 5)
+                end)
+            end
+        end
+        
+        if not ClientModules then
+            warn("[NULLSCAPE Radar] LỖI: Không tìm thấy thư mục ClientModules ở cả ReplicatedFirst và ReplicatedStorage.")
+            return
+        end
+        
+        print("[NULLSCAPE Radar] Đã tìm thấy ClientModules tại: " .. ClientModules:GetFullName())
+        
+        local GiftClient = ClientModules:FindFirstChild("GiftClient") or ClientModules:WaitForChild("GiftClient", 5)
+        local GiftClientHandlerModule = GiftClient and (GiftClient:FindFirstChild("GiftClientHandler") or GiftClient:WaitForChild("GiftClientHandler", 5))
         
         if not GiftClientHandlerModule then
-            warn("[NULLSCAPE] Không tìm thấy GiftClientHandlerModule.")
+            warn("[NULLSCAPE Radar] LỖI: Không tìm thấy module GiftClientHandler.")
             return
         end
         
         local success, GiftClientHandler = pcall(require, GiftClientHandlerModule)
         if success and typeof(GiftClientHandler) == "table" then
+            print("[NULLSCAPE Radar] Hook GiftClientHandler thành công!")
+            
             -- Đăng ký các gift hiện có
+            local existingCount = 0
             if GiftClientHandler.Gifts then
                 for _, giftObj in pairs(GiftClientHandler.Gifts) do
                     pcall(registerGiftObj, giftObj)
+                    existingCount = existingCount + 1
                 end
             end
+            print("[NULLSCAPE Radar] Đã đăng ký " .. tostring(existingCount) .. " Hộp quà hiện có.")
             
             -- Hook hàm new
             local originalNew = GiftClientHandler.new
@@ -796,6 +927,7 @@ local function setupGiftClientHook()
                     end
                     return giftObj
                 end
+                print("[NULLSCAPE Radar] Đã hook hàm GiftClientHandler.new")
             end
             
             -- Hook hàm DestroyGift
@@ -805,9 +937,10 @@ local function setupGiftClientHook()
                     pcall(unregisterGiftById, id)
                     return originalDestroyGift(id, ...)
                 end
+                print("[NULLSCAPE Radar] Đã hook hàm GiftClientHandler.DestroyGift")
             end
         else
-            warn("[NULLSCAPE] Không thể require GiftClientHandler: " .. tostring(GiftClientHandler))
+            warn("[NULLSCAPE Radar] LỖI: Không thể require GiftClientHandler: " .. tostring(GiftClientHandler))
         end
     end)
 end
@@ -815,6 +948,7 @@ end
 -- Khởi tạo ban đầu khi nạp script
 startObservingFolders()
 setupGiftClientHook()
+startGiftPoolObserver()
 updateRunningState()
 startUtilityLoop()
 

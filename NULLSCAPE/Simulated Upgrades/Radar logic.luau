@@ -229,8 +229,8 @@ local function isGiftValid(t)
         if t.rawObj.Collected or t.rawObj.Destroyed then
             return false
         end
-        local part = t.rawObj.Model or t.part
-        if not part or not part.Parent or not part:IsDescendantOf(workspace) then
+        -- Đối với Gift từ game handler, Proxy Part (t.part) phải tồn tại trong workspace
+        if not t.part or not t.part.Parent or not t.part:IsDescendantOf(workspace) then
             return false
         end
         return true
@@ -388,10 +388,11 @@ function Logic.updateESPStyles(controller, gc, hrp)
     local validInstruments = {}
     local validAltars = {}
     
-    -- Lọc các target hợp lệ và cập nhật khoảng cách
+    -- Lọc các target hợp lệ và cập nhật khoảng cách (Dùng Vector3 thuần từ RAM để tối ưu hiệu năng cực hạn)
     for _, t in ipairs(gifts) do
         if isGiftValid(t) then
-            t.distance = (hrp.Position - t.part.Position).Magnitude
+            local pos = (t.rawObj and t.rawObj.Position) or t.part.Position
+            t.distance = (hrp.Position - pos).Magnitude
             table.insert(validGifts, t)
         end
     end
@@ -458,29 +459,49 @@ function Logic.updateESPStyles(controller, gc, hrp)
         end
     end
     
-    -- Phân loại: Quà & Bẫy mìn
+    -- Phân loại: Quà & Bẫy mìn (Đồng bộ động giữa Model thật và Proxy Part ảo)
     for _, t in ipairs(validGifts) do
-        local part = t.part
-        local targetModel = t.model or part
-        local isGolden = (string.find(part.Name:lower(), "golden") ~= nil) or (string.find(targetModel.Name:lower(), "golden") ~= nil) or (part.Parent ~= nil and string.find(part.Parent.Name:lower(), "golden") ~= nil)
+        local actualPart = (t.rawObj and t.rawObj.Model and t.rawObj.Model.Parent and t.rawObj.Model:IsDescendantOf(workspace)) and t.rawObj.Model or t.part
+        local isGolden = t.type == "GoldenGift" or (string.find(actualPart.Name:lower(), "golden") ~= nil)
         
         if isGolden then
-            -- Quà vàng/Mìn vàng luôn vẽ chấm Dot để không chiếm dụng Highlight pool
-            currentTargets[part] = {
-                Style = "Dot",
-                Color = t.color,
-                ParentObject = part
-            }
+            -- Quà vàng/Mìn vàng luôn vẽ chấm Dot để không chiếm dụng Highlight pool (Giới hạn 1200 studs để tối ưu hiệu năng)
+            if t.distance <= 1200 then
+                currentTargets[actualPart] = {
+                    Style = "Dot",
+                    Color = t.color,
+                    ParentObject = actualPart
+                }
+            end
         else
             if controller.ESPStyle == "Highlight" then
-                table.insert(highlightTargets, t)
+                if actualPart == t.part then
+                    -- Nếu Hộp quà ở xa (đang dùng Proxy Part ảo), chỉ vẽ chấm Dot từ xa để tránh rối mắt và lag
+                    if t.distance <= 1200 then
+                        currentTargets[actualPart] = {
+                            Style = "Dot",
+                            Color = t.color,
+                            ParentObject = actualPart
+                        }
+                    end
+                else
+                    -- Nếu lại gần và game đã render Model thật, vẽ Highlight "đúng nghĩa"
+                    table.insert(highlightTargets, {
+                        distance = t.distance,
+                        part = actualPart,
+                        model = actualPart,
+                        color = t.color
+                    })
+                end
             else
                 local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
-                currentTargets[part] = {
-                    Style = style,
-                    Color = t.color,
-                    ParentObject = part
-                }
+                if t.distance <= 1200 then
+                    currentTargets[actualPart] = {
+                        Style = style,
+                        Color = t.color,
+                        ParentObject = actualPart
+                    }
+                end
             end
         end
     end
@@ -672,7 +693,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
                 local dist = t.distance
                 if dist < shortestGiftDist then
                     shortestGiftDist = dist
-                    nearestGiftPos = t.part.Position
+                    nearestGiftPos = (t.rawObj and t.rawObj.Position) or t.part.Position
                     nearestGiftColor = t.color
                 end
             end
