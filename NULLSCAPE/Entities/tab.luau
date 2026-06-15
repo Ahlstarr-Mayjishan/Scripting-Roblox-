@@ -53,7 +53,7 @@ return function(Client, Controller)
 
 
     Tab:CreateDropdown({
-        Name = "Springer Mode",
+        Name = "Immunity Mode",
         Options = {"Legit", "Blatant"},
         CurrentOption = Controller.SpringerImmunityMode or "Legit",
         MultipleOptions = false,

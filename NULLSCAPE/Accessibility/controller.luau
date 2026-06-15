@@ -8,11 +8,9 @@ local Players = game:GetService("Players")
 
 local Executor = getgenv().loadModule("NULLSCAPE/Accessibility/executor.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Accessibility/GC.luau")
-local MovementLogic = getgenv().loadModule("NULLSCAPE/Accessibility/Movement.luau")
 
 local Controller = {
     SpringerAutoJumpEnabled = false,
-    MomentumReduction = 0,
     Destroyed = false,
     
     EnemiesFolder = nil,
@@ -54,10 +52,6 @@ function Controller:CleanUp()
     GC.cleanAll()
     self.EnemiesFolder = nil
     
-    if MovementLogic then
-        pcall(function() MovementLogic.stop() end)
-    end
-    
     if self.Destroyed and self.PermanentConnections then
         for _, conn in ipairs(self.PermanentConnections) do
             if conn then pcall(function() conn:Disconnect() end) end
@@ -77,25 +71,6 @@ function Controller:SetSpringerAutoJump(value)
             Content = (value and "Activated" or "Disabled") .. " Springer Auto Jump",
             Duration = 2
         })
-    end
-end
-
--- Thiết lập hệ số giảm quán tính di chuyển (Momentum Reduction)
-function Controller:SetMomentumReduction(value)
-    local val = tonumber(value) or 0
-    if val > 1 then
-        val = val / 100
-    end
-    val = math.clamp(val, 0, 1)
-    
-    self.MomentumReduction = val
-    if MovementLogic then
-        MovementLogic.setReduction(val)
-        if val > 0 then
-            MovementLogic.start(self, GC)
-        else
-            MovementLogic.stop()
-        end
     end
 end
 

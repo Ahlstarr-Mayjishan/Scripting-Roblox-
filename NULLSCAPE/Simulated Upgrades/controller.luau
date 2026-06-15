@@ -15,6 +15,7 @@ local LocalPlayer = Players.LocalPlayer
 local Executor = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/executor.luau")
 local Logic = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Radar logic.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/GC.luau")
+local MatrixTetrahedron = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Matrix Tetrahedron.luau")
 
 local Controller = {
     RadarEnabled = false,
@@ -28,6 +29,9 @@ local Controller = {
     AutoCollectEnabled = false,
     AutoCollectRange = 20,
     AutoCollectMode = "Legit",
+    
+    MatrixTetrahedronEnabled = false, -- Mô phỏng Matrix Tetrahedron di chuyển instant acceleration
+    MomentumReduction = 1.0,          -- Lực Momentum Reduction tùy biến (mặc định 100%)
     
     TripmineBarrierEnabled = false,
     SimulateDefuseKit = false,
@@ -287,11 +291,21 @@ local function startObservingFolders()
             observeEnemies(child)
         elseif child.Name == "CurrentRooms" then
             observeCurrentRooms(child)
+        else
+            -- Đề phòng Gift hoặc nhạc cụ spawn trực tiếp ngoài workspace
+            registerGift(child)
+            registerInstrument(child)
         end
     end
     
     local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
     table.insert(folderConnections, wsConn)
+    
+    local wsRemovedConn = workspace.ChildRemoved:Connect(function(child)
+        unregisterGift(child)
+        unregisterInstrument(child)
+    end)
+    table.insert(folderConnections, wsRemovedConn)
     
     local itemPools = workspace:FindFirstChild("Item_Pools")
     if itemPools then observeItemPools(itemPools) end
@@ -465,6 +479,49 @@ function Controller:SetAutoCollectEnabled(value)
     self.AutoCollectEnabled = value
 end
 
+-- Bật/tắt mô phỏng nâng cấp Matrix Tetrahedron
+function Controller:SetMatrixTetrahedron(value)
+    self.MatrixTetrahedronEnabled = value
+    if MatrixTetrahedron then
+        if value then
+            local reduction = self.MomentumReduction or 1.0
+            MatrixTetrahedron.setReduction(reduction)
+            if reduction > 0 then
+                MatrixTetrahedron.start(self, GC)
+            end
+        else
+            MatrixTetrahedron.stop()
+        end
+    end
+    
+    if getgenv().Rayfield then
+        getgenv().Rayfield:Notify({
+            Title = "Simulated Upgrades",
+            Content = (value and "Activated" or "Disabled") .. " Matrix Tetrahedron Simulation",
+            Duration = 2
+        })
+    end
+end
+
+-- Tùy biến lực Momentum Reduction của Matrix Tetrahedron
+function Controller:SetMomentumReduction(value)
+    local val = tonumber(value) or 1.0
+    if val > 1 then
+        val = val / 100
+    end
+    val = math.clamp(val, 0, 1)
+    
+    self.MomentumReduction = val
+    if MatrixTetrahedron then
+        MatrixTetrahedron.setReduction(val)
+        if self.MatrixTetrahedronEnabled and val > 0 then
+            MatrixTetrahedron.start(self, GC)
+        elseif val == 0 then
+            MatrixTetrahedron.stop()
+        end
+    end
+end
+
 -- Điều chỉnh khoảng cách Auto Collect
 function Controller:SetAutoCollectRange(value)
     self.AutoCollectRange = value
@@ -569,6 +626,10 @@ function Controller:CleanUp()
     disconnectFolderObservations()
     stopRenderStepped()
     
+    if MatrixTetrahedron then
+        pcall(function() MatrixTetrahedron.stop() end)
+    end
+    
     if self.PermanentConnections then
         for _, conn in ipairs(self.PermanentConnections) do
             if conn then pcall(function() conn:Disconnect() end) end
@@ -644,13 +705,18 @@ local function hookUpgradeHandler()
                         oldIsUpgradeEnabled = hookfunction(UpgradeHandler.IsUpgradeEnabled, function(...)
                             local args = {...}
                             local isDefuse = false
+                            local isTetrahedron = false
                             for _, v in ipairs(args) do
                                 if v == "DefuseKit" then
                                     isDefuse = true
-                                    break
+                                elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
+                                    isTetrahedron = true
                                 end
                             end
                             if isDefuse and Controller.SimulateDefuseKit then
+                                return true
+                            end
+                            if isTetrahedron and Controller.MatrixTetrahedronEnabled then
                                 return true
                             end
                             return oldIsUpgradeEnabled(...)
@@ -660,13 +726,18 @@ local function hookUpgradeHandler()
                         UpgradeHandler.IsUpgradeEnabled = function(...)
                             local args = {...}
                             local isDefuse = false
+                            local isTetrahedron = false
                             for _, v in ipairs(args) do
                                 if v == "DefuseKit" then
                                     isDefuse = true
-                                    break
+                                elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
+                                    isTetrahedron = true
                                 end
                             end
                             if isDefuse and Controller.SimulateDefuseKit then
+                                return true
+                            end
+                            if isTetrahedron and Controller.MatrixTetrahedronEnabled then
                                 return true
                             end
                             return oldIsUpgradeEnabled(...)
@@ -680,14 +751,19 @@ local function hookUpgradeHandler()
                         oldGetUpgradeStack = hookfunction(UpgradeHandler.GetUpgradeStack, function(...)
                             local args = {...}
                             local isDefuse = false
+                            local isTetrahedron = false
                             for _, v in ipairs(args) do
                                 if v == "DefuseKit" then
                                     isDefuse = true
-                                    break
+                                elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
+                                    isTetrahedron = true
                                 end
                             end
                             if isDefuse and Controller.SimulateDefuseKit then
                                 return Controller.DefuseKitStack or 3
+                            end
+                            if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+                                return 1
                             end
                             return oldGetUpgradeStack(...)
                         end)
@@ -696,14 +772,19 @@ local function hookUpgradeHandler()
                         UpgradeHandler.GetUpgradeStack = function(...)
                             local args = {...}
                             local isDefuse = false
+                            local isTetrahedron = false
                             for _, v in ipairs(args) do
                                 if v == "DefuseKit" then
                                     isDefuse = true
-                                    break
+                                elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
+                                    isTetrahedron = true
                                 end
                             end
                             if isDefuse and Controller.SimulateDefuseKit then
                                 return Controller.DefuseKitStack or 3
+                            end
+                            if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+                                return 1
                             end
                             return oldGetUpgradeStack(...)
                         end

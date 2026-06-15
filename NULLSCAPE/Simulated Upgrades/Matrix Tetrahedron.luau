@@ -1,17 +1,20 @@
 -- [[
---  NULLSCAPE - Movement Control Logic (Friction Hook Edition)
---  Vai trò: Hook phương thức SetMoveDirection của MovementCore để giảm/triệt tiêu momentum mượt mà.
+--  NULLSCAPE - Matrix Tetrahedron Simulation
+--  Vai trò: Giả lập nâng cấp di chuyển Matrix Tetrahedron (Level 15, Cost 2500).
+--  Chức năng:
+--    - Làm cho gia tốc di chuyển trở nên tức thì (instant acceleration), loại bỏ trơn trượt (slippery).
+--    - Triệt tiêu gần như hoàn toàn quán tính của Ice Tiles (sàn băng).
+--    - Hook phương thức SetMoveDirection của MovementCore để ghi đè hướng di chuyển mong muốn ngay lập tức.
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logic = {
-    MomentumReduction = 0,
+    MomentumReduction = 1.0, -- Mặc định là 1.0 (Instant Acceleration) cho Matrix Tetrahedron
     OriginalSetMoveDirection = nil,
     Hooked = false
 }
 
--- Tìm kiếm MovementCore động để tránh lỗi nếu ReplicatedStorage chưa tải xong
 local function getMovementCore()
     local movement = ReplicatedStorage:FindFirstChild("Movement")
     if not movement then return nil end
@@ -37,13 +40,12 @@ function Logic.start(controller, gc)
             if bypassQuickTurn or not self.doingQuickTurn then
                 local k = r
                 if r < 1 then
-                    -- Áp dụng đường cong lũy thừa để các mức nhỏ (như 10%, 20%) mượt mà và tự nhiên hơn
                     k = (r ^ 2) * 0.4
                 end
                 
                 if bypassQuickTurn then
                     self.doingQuickTurn = false
-                    k = r -- Sử dụng lực gốc mạnh hơn khi >= 70% để triệt tiêu nhanh
+                    k = r
                 end
                 
                 direction = direction:Lerp(self.WantDirection, k)
@@ -71,7 +73,7 @@ function Logic.stop()
 end
 
 function Logic.setReduction(value)
-    Logic.MomentumReduction = tonumber(value) or 0
+    Logic.MomentumReduction = tonumber(value) or 1.0
 end
 
 return Logic

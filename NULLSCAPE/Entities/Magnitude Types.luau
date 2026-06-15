@@ -34,14 +34,35 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         return false
     end
 
-    local firstArg = args[1]
-    if typeof(firstArg) ~= "string" then
-        return false
+    -- Quét toàn bộ đối số để tìm từ khóa hành động
+    local hasKill = false
+    local hasCombust = false
+    local hasDamageOrDebuff = false
+
+    for _, arg in ipairs(args) do
+        if typeof(arg) == "string" then
+            local lowerArg = string.lower(arg)
+            if lowerArg == "kill" then
+                hasKill = true
+            elseif lowerArg == "combust" then
+                hasCombust = true
+            elseif string.find(lowerArg, "damage") or string.find(lowerArg, "debuff") or string.find(lowerArg, "burn") or string.find(lowerArg, "fire") or string.find(lowerArg, "hit") then
+                hasDamageOrDebuff = true
+            end
+        end
     end
 
-    -- ICBM sử dụng tham số "Kill" hoặc "Combust" để báo tử client-side
-    if firstArg ~= "Kill" and firstArg ~= "Combust" then
-        return false
+    -- Phân loại theo Immunity Mode (thông qua SpringerImmunityMode làm biến lưu trữ chung)
+    local isBlatant = (controller.SpringerImmunityMode == "Blatant")
+    if isBlatant then
+        if not hasKill and not hasCombust and not hasDamageOrDebuff then
+            return false
+        end
+    else
+        -- Legit mode: Chỉ chặn cái chết
+        if not hasKill and not hasCombust then
+            return false
+        end
     end
 
     -- Xác định xem cuộc gọi này có thực sự liên quan đến ICBM hay không

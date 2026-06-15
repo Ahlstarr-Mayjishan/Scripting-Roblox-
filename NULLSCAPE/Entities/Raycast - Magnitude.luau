@@ -29,18 +29,29 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         return false
     end
 
-    local firstArg = args[1]
-    if typeof(firstArg) ~= "string" then
-        return false
+    -- Quét toàn bộ đối số để tìm chuỗi hành động hành vi
+    local hasKill = false
+    local hasDemonKill = false
+    local hasDebuff = false
+
+    for _, arg in ipairs(args) do
+        if typeof(arg) == "string" then
+            if arg == "Kill" then
+                hasKill = true
+            elseif arg == "DemonKill" then
+                hasDemonKill = true
+            elseif arg == "Debuff" then
+                hasDebuff = true
+            end
+        end
     end
 
-    -- Springer sử dụng "Kill" / "DemonKill" cho ClientEvent, và "Debuff" cho ShockwaveEvent
     if remoteName == "ClientEvent" then
-        if firstArg ~= "Kill" and firstArg ~= "DemonKill" then
+        if not hasKill and not hasDemonKill then
             return false
         end
     elseif remoteName == "ShockwaveEvent" then
-        if firstArg ~= "Debuff" then
+        if not hasDebuff then
             return false
         end
         

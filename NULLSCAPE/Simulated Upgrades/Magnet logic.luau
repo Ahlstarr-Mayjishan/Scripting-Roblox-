@@ -1,11 +1,10 @@
 -- [[
 --  NULLSCAPE - Gift Magnet Bypass / Auto-Collect Logic
---  Vai trò: Chuyên phụ trách việc tự động quét quà trong phạm vi cấu hình,
---  hỗ trợ chế độ "Legit" (nhặt từng cái cách nhau khoảng trễ) và "Blatant" (nhặt đồng thời cực nhanh).
+--  Vai trò: Tự động thu thập quà trong phạm vi cấu hình mà không gây sụt giảm FPS.
+--  Tối ưu hóa: Loại bỏ hoàn toàn việc quét GetDescendants() liên tục, chỉ sử dụng dữ liệu từ ActiveGifts.
 -- ]]
 
 local Magnet = {}
-local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
@@ -35,59 +34,41 @@ function Magnet.update(controller, hrp)
         
     if not GiftCollected then return end
     
-    local gifts = {}
-    
-    -- 1. Thêm từ ActiveGifts của controller
-    if controller.ActiveGifts then
-        for _, g in ipairs(controller.ActiveGifts) do
-            if g.part and g.type ~= "Tripmine" and g.type ~= "GoldenTripmine" then
-                if not table.find(gifts, g.part) then
-                    table.insert(gifts, g.part)
-                end
-            end
-        end
-    end
-    
-    -- 2. Thêm từ CollectionService (Dự phòng)
-    local tagged = CollectionService:GetTagged("Gift")
-    for _, g in ipairs(tagged) do
-        if not table.find(gifts, g) then
-            table.insert(gifts, g)
-        end
-    end
-    
-    -- 3. Quét trực tiếp từ workspace.Item_Pools (Dự phòng)
-    local itemPools = workspace:FindFirstChild("Item_Pools")
-    if itemPools then
-        for _, desc in ipairs(itemPools:GetDescendants()) do
-            if desc:IsA("BasePart") then
-                local nameLower = desc.Name:lower()
-                if (string.find(nameLower, "gift") or string.find(nameLower, "present")) and not string.find(nameLower, "tripmine") then
-                    if not table.find(gifts, desc) then
-                        table.insert(gifts, desc)
-                    end
-                end
-            end
-        end
-    end
-    
     local hrpPos = hrp.Position
     local validGifts = {}
     
-    for _, gift in ipairs(gifts) do
-        if gift:IsDescendantOf(workspace) then
-            local isCollected = (gift:GetAttribute("Collected") == true) or (gift:GetAttribute("ClientCollected") == true)
-            if not isCollected then
-                -- Tuyệt đối bỏ qua Tripmine (bẫy mìn nổ)
-                local giftType = gift:GetAttribute("GiftType")
-                local giftName = gift.Name:lower()
-                local isMine = (giftType and string.find(giftType:lower(), "tripmine")) or string.find(giftName, "tripmine")
-                if not isMine then
-                    local startPos = gift:GetAttribute("StartPosition") or gift.Position
-                    local distance = (hrpPos - startPos).Magnitude
-                    
-                    if distance <= range then
-                        table.insert(validGifts, {part = gift, dist = distance})
+    -- Chỉ duyệt qua danh sách ActiveGifts đã được controller cập nhật thời gian thực bằng Event
+    if controller.ActiveGifts then
+        for _, g in ipairs(controller.ActiveGifts) do
+            local part = g.part
+            local model = g.model
+            
+            -- Xác định đối tượng chính để tương tác (thường là Model hoặc Part gốc được Server quản lý)
+            local mainObject = model or part
+            
+            if mainObject and mainObject:IsDescendantOf(workspace) and g.type ~= "Tripmine" and g.type ~= "GoldenTripmine" then
+                -- Kiểm tra xem quà đã được thu thập hay chưa (dùng cả Attribute trên Model hoặc Part)
+                local isCollected = (mainObject:GetAttribute("Collected") == true) 
+                    or (mainObject:GetAttribute("ClientCollected") == true)
+                    or (part and part:GetAttribute("Collected") == true)
+                    or (part and part:GetAttribute("ClientCollected") == true)
+                
+                if not isCollected then
+                    -- Lấy vị trí bắt đầu
+                    local startPos = mainObject:GetAttribute("StartPosition") 
+                        or (part and part:GetAttribute("StartPosition"))
+                        or (part and part.Position) 
+                        or mainObject.Position
+                        
+                    if startPos then
+                        local distance = (hrpPos - startPos).Magnitude
+                        if distance <= range then
+                            table.insert(validGifts, {
+                                mainObj = mainObject, 
+                                partObj = part,
+                                dist = distance
+                            })
+                        end
                     end
                 end
             end
@@ -100,8 +81,13 @@ function Magnet.update(controller, hrp)
         -- Sắp xếp theo khoảng cách và chỉ nhặt 1 hộp quà gần nhất
         table.sort(validGifts, function(a, b) return a.dist < b.dist end)
         
-        local target = validGifts[1].part
+        local target = validGifts[1].mainObj
+        local part = validGifts[1].partObj
+        
         target:SetAttribute("ClientCollected", true)
+        if part then
+            part:SetAttribute("ClientCollected", true)
+        end
         
         pcall(function()
             GiftCollected:FireServer(target, range)
@@ -117,8 +103,13 @@ function Magnet.update(controller, hrp)
     else
         -- Chế độ Blatant: Nhặt toàn bộ quà trong phạm vi cùng một lúc
         for _, item in ipairs(validGifts) do
-            local target = item.part
+            local target = item.mainObj
+            local part = item.partObj
+            
             target:SetAttribute("ClientCollected", true)
+            if part then
+                part:SetAttribute("ClientCollected", true)
+            end
             
             pcall(function()
                 GiftCollected:FireServer(target, range)
