@@ -11,6 +11,7 @@ local GC = getgenv().loadModule("NULLSCAPE/Accessibility/GC.luau")
 
 local Controller = {
     SpringerAutoJumpEnabled = false,
+    InfiniteAirJumpEnabled = false,
     Destroyed = false,
     
     EnemiesFolder = nil,
@@ -69,6 +70,30 @@ function Controller:SetSpringerAutoJump(value)
         getgenv().Rayfield:Notify({
             Title = "Accessibility Config",
             Content = (value and "Activated" or "Disabled") .. " Springer Auto Jump",
+            Duration = 2
+        })
+    end
+end
+
+function Controller:SetInfiniteAirJump(value)
+    if value and not Executor.initializeInfiniteAirJump() then
+        self.InfiniteAirJumpEnabled = false
+        if getgenv().Rayfield then
+            getgenv().Rayfield:Notify({
+                Title = "Accessibility Config",
+                Content = "DoubleJump module is not available yet",
+                Duration = 3
+            })
+        end
+        return
+    end
+
+    self.InfiniteAirJumpEnabled = value
+
+    if getgenv().Rayfield then
+        getgenv().Rayfield:Notify({
+            Title = "Accessibility Config",
+            Content = (value and "Activated" or "Disabled") .. " Infinite Air Jump",
             Duration = 2
         })
     end

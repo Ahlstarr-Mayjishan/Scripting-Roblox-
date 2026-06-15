@@ -1,747 +1,459 @@
--- Script Path: game:GetService("Workspace").Enemies.Operator.Operator_AI
--- Took 1.01s to decompile.
+-- Script Path: game:GetService("ReplicatedStorage").Movement.DoubleJump
+-- Took 0.45s to decompile.
 -- Executor: Potassium (v2.2.4)
 
 -- https://lua.expert/
-local GreaterCurseHandler = require(game.ReplicatedFirst.ClientModules.GreaterCurseHandler)
+local t = {}
 
-require(game.ReplicatedFirst.ClientModules.CurseHandler)
+t.__index = t
 
-local StatusEffectHandler = require(game.ReplicatedFirst.ClientModules.StatusEffectHandler)
-local SettingsHandler = require(game.ReplicatedFirst.ClientModules.Core.PlayerData.SettingsHandler)
-local LocalPlayer = game.Players.LocalPlayer
-local OperatorGUI = LocalPlayer.PlayerGui.OperatorGUI
-local Character = LocalPlayer.Character
-local v1 = nil
-local v2 = 0
-local v3 = 0
-local v4 = 0
-local v5 = false
-
-tick()
-
-local v6 = Random.new()
-local v7 = false
-local v8 = false
-local v9 = false
-local v10 = 0
-local v11 = false
-local v12 = 1
-local v13 = 0
-local v14 = Vector2.new(0.2, 0.5)
-local zero = Vector2.zero
-local v15 = 0
-local isValue = game.ReplicatedStorage.Difficulty.Value == 3
-local BobEffect = OperatorGUI:WaitForChild("BobEffect")
-local Sprite = BobEffect:WaitForChild("Sprite")
-local tbl = {
-	OperatorMessedUp = "rbxassetid://140571750770387",
-	OperatorActive = "rbxassetid://122843005116254",
-	OperatorNeutral = "rbxassetid://113707297395522",
-	OperatorPeaceful = "rbxassetid://104632187819937",
-	VBOperatorMessedUp = "rbxassetid://131865525179721",
-	VBOperatorActive = "rbxassetid://126683265421685",
-	VBOperatorNeutral = "rbxassetid://82814174247605",
+local t2 = { "Highrise", "MedalStatus", "DoubleJump", "PocketBell", "Wicked", "Spirit" }
+local t3 = {
+	Highrise = 35,
+	MedalStatus = 35,
+	DoubleJump = 35,
+	PocketBell = 35,
+	Wicked = 35,
+	Spirit = 35,
 }
-local v16 = 0
+local Movement = game.ReplicatedStorage.Movement
+local v1 = workspace:GetAttribute("Null")
 
-for k, v in pairs(OperatorGUI:QueryDescendants("Sound")) do
-	local v17 = v:Clone()
+function t.new(p1, p2, p3) --[[ new | Line: 28 | Upvalues: Movement (copy), t (copy) ]]
+	local t2 = {
+		Movement = p1,
+		Animator = p2,
+		Status = p1.Status,
+		Character = p1.Character,
+		RootPart = p1.RootPart,
+		Humanoid = p1.Humanoid,
+		AvailableJumps = {},
+		Tweens = {},
+		SizeTweens = {},
+		BarsEnabled = false,
+		RealWingsEnabled = false,
+		LastRefreshCount = 0,
+		centered = false,
+		ParticleAttachment = Instance.new("Attachment"),
+	}
 
-	v17.Volume = 0
-	v17.Name = ""
-	v17.Parent = OperatorGUI
-	v17.Looped = true
-	v17:Play()
+	t2.ParticleAttachment.Position = Vector3.new(0, -2.5, 0)
+	t2.ParticleAttachment.Parent = t2.RootPart
+	t2.UI = Movement.Instances.DoubleJumpUI:Clone()
+	t2.Template = t2.UI.Jumps.Template
+	t2.Template.Parent = nil
+	t2.UI.Parent = game.Players.LocalPlayer.PlayerGui
+
+	return setmetatable(t2, t)
 end
-
-for k, v in pairs(tbl) do
-	local v18 = Sprite:Clone()
-
-	v18.Image = v
-	v18.ImageTransparency = 0.999
-	v18.Visible = true
-	v18.Parent = OperatorGUI
-end
-
-local v19 = "Operator"
-
-function SetSprite(p1) --[[ SetSprite | Line: 72 | Upvalues: tbl (copy), v19 (ref), Sprite (ref) ]]
-	local v1 = tbl[v19 .. p1]
-
+function t.Initialise(p1) --[[ Initialise | Line: 61 | Upvalues: v1 (copy), t2 (copy) ]]
 	if v1 then
-		Sprite.Image = v1
-	else
-		warn("no sprite for", v19 .. p1)
-	end
-end
-LocalPlayer.Dead.Changed:Connect(function(p1) --[[ Line: 89 | Upvalues: OperatorGUI (ref), Sprite (ref) ]]
-	if not p1 then
-		return
-	end
-
-	OperatorGUI.Enabled = false
-	Sprite.Visible = false
-
-	for k, v in pairs(OperatorGUI:QueryDescendants("Sound:not([$Skip])")) do
-		v:Stop()
-		v.Volume = 0
-	end
-end)
-Character.Destroying:Connect(function() --[[ Line: 100 | Upvalues: OperatorGUI (ref), Sprite (ref) ]]
-	OperatorGUI.Enabled = false
-	Sprite.Visible = false
-
-	for k, v in pairs(OperatorGUI:QueryDescendants("Sound:not([$Skip])")) do
-		v:Stop()
-		v.Volume = 0
-	end
-end)
-Sprite.Visible = false
-LocalPlayer.CharacterAdded:Connect(
-	function() --[[ Line: 124 | Upvalues: OperatorGUI (ref), LocalPlayer (copy), Character (ref), BobEffect (ref), Sprite (ref), v7 (ref), v5 (ref) ]]
-		OperatorGUI = LocalPlayer.PlayerGui:WaitForChild("OperatorGUI")
-		Character = LocalPlayer.Character
-		OperatorGUI.Enabled = true
-		BobEffect = OperatorGUI:WaitForChild("BobEffect")
-		Sprite = BobEffect:WaitForChild("Sprite")
-		v7 = false
-		v5 = false
-	end
-)
-
-local function kill() --[[ kill | Line: 140 | Upvalues: v11 (ref), LocalPlayer (copy), v3 (ref), v1 (ref), Character (ref), GreaterCurseHandler (copy), Sprite (ref), OperatorGUI (ref), v5 (ref) ]]
-	v11 = false
-
-	if
-		LocalPlayer.Dead.Value or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
-	then
-		return
-	end
-
-	if LocalPlayer:FindFirstChild("IFRAMES") ~= nil or v3 ~= 1 then
-		v3 = 0
-		v1 = nil
-		Sprite.Visible = false
-
-		return
-	end
-
-	v1 = nil
-	v3 = 0
-
-	local _ = Character.Humanoid:GetAttribute("PlayerMoveDirection") or Vector3.new(0, 0, 0)
-
-	Character.Humanoid:GetAttribute("UsingAbility")
-	Character.Humanoid:GetAttribute("Sliding")
-
-	local v2 = Vector3.new(0, 1, 0) * math.random(18, 24)
-
-	if GreaterCurseHandler.IsCurseEnabled("VBOperator") then
-		Sprite.ImageColor3 = Color3.new(255 / 255, 255 / 255, 255 / 255)
-		OperatorGUI.VBKill:Play()
-	else
-		OperatorGUI.Kill:Play()
-	end
-
-	SetSprite("MessedUp")
-	v5 = game.ReplicatedStorage.Events.DiedFunc:InvokeServer("Operator", v2, game.ReplicatedStorage.Level.Value)
-	Sprite.Visible = false
-end
-
-local function isStationary() --[[ isStationary | Line: 177 | Upvalues: LocalPlayer (copy), Character (ref), StatusEffectHandler (copy) ]]
-	if
-		LocalPlayer.Dead.Value or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
-	then
-		return true
-	end
-
-	if not Character:FindFirstChild("Humanoid") then
-		return true
-	end
-
-	if StatusEffectHandler.HasStatus("Fire") then
-		return true
-	end
-
-	local v2 = Character.Humanoid:GetAttribute("PlayerMoveDirection") or Vector3.new(0, 0, 0)
-	local v3 = Character.Humanoid:GetAttribute("UsingAbility")
-
-	return if v2.Magnitude <= 0.1 then not v3 and not Character.Humanoid:GetAttribute("Sliding") else false
-end
-
-local function checkOperatorKill(p1, p2) --[[ checkOperatorKill | Line: 194 | Upvalues: v3 (ref), v1 (ref), OperatorGUI (ref), Sprite (ref), LocalPlayer (copy), v2 (ref), v4 (ref), kill (copy) ]]
-	local function Survived() --[[ Survived | Line: 195 | Upvalues: v3 (ref), v1 (ref), OperatorGUI (ref), Sprite (ref) ]]
-		v3 = 0
-		v1 = nil
-		OperatorGUI:WaitForChild("Tick"):Stop()
-		SetSprite("Peaceful")
-		OperatorGUI.End.Volume = 1
-		OperatorGUI.End:Play()
-		game:GetService("TweenService")
-			:Create(Sprite, TweenInfo.new(2), {
-				ImageTransparency = 1,
-			})
-			:Play()
-		Sprite.Rotation = Random.new():NextNumber(-1, 1) * 15
-		game:GetService("TweenService")
-			:Create(Sprite, TweenInfo.new(1, Enum.EasingStyle.Quart), {
-				Rotation = 0,
-			})
-			:Play()
-		task.wait(2)
-		Sprite.Visible = false
-		OperatorGUI.End:Stop()
-	end
-
-	if v1 == nil or v3 ~= 0 then
-		if v3 ~= 1 then
-			return
-		end
-
-		if
-			LocalPlayer.Dead.Value
-			or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
-		then
-			return
-		end
-
-		if p2 then
-			v2 = v2 + p1
-
-			if v2 > 0.1 then
-				Survived()
+		game.ReplicatedStorage.UpgradeFolder.Upgrades.ChildAdded:Connect(
+			function(p12) --[[ Line: 64 | Upvalues: t2 (ref), p1 (copy) ]]
+				if table.find(t2, p12.Name) ~= nil then
+					p12.Changed:Connect(function() --[[ Line: 67 | Upvalues: p1 (ref) ]]
+						p1:Refresh()
+					end)
+					p1:Refresh()
+				end
 			end
-		else
-			if not (tick() - v4 > 0.15) then
-				return
-			end
-
-			kill()
-		end
-	else
-		if
-			LocalPlayer.Dead.Value
-			or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
-		then
-			return
-		end
-
-		local v32 = tick() - v1
-
-		if v2 > 0.15 then
-			Survived()
-		elseif v32 > 3 then
-			v2 = 0
-			v3 = 1
-			Sprite.Rotation = 0
-			SetSprite("Active")
-			v4 = tick()
-		end
-
-		if not (v32 > 0.55) then
-			return
-		end
-
-		v2 = if p2 then v2 + p1 else 0
-	end
-end
-
-local function checkLitanyKill(p1, p2) --[[ checkLitanyKill | Line: 258 | Upvalues: v8 (ref), v10 (ref), v9 (ref) ]]
-	if v8 then
-		if p2 then
-			v10 = v10 + p1
-		end
-
-		if v10 > 0.05 then
-			v9 = true
-		end
-	else
-		v10 = 0
-		v9 = false
-	end
-end
-
-local function renderStepped(p1) --[[ renderStepped | Line: 274 | Upvalues: v16 (ref), LocalPlayer (copy), OperatorGUI (ref), v7 (ref), isStationary (copy), GreaterCurseHandler (copy), BobEffect (ref), v8 (ref), v10 (ref), v9 (ref), checkOperatorKill (copy) ]]
-	v16 = v16 + p1
-
-	if
-		LocalPlayer.Dead.Value or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
-	then
-		return
-	end
-
-	if OperatorGUI and OperatorGUI.Parent then
-		local v2 = isStationary()
-
-		if GreaterCurseHandler.IsCurseEnabled("VBOperator") then
-			BobEffect.Position = UDim2.fromScale(0, math.sin(v16 * 3) / 200)
-
-			if not v8 then
-				v10 = 0
-				v9 = false
-
-				return
-			end
-
-			if v2 then
-				v10 = v10 + p1
-			end
-
-			if v10 > 0.05 then
-				v9 = true
-			end
-		else
-			BobEffect.Position = UDim2.fromScale(0, math.sin(v16 * 3) / 75)
-			checkOperatorKill(p1, v2)
-		end
-	else
-		if v7 then
-			return
-		end
-
-		v7 = true
-	end
-end
-
-game:GetService("RunService").RenderStepped:Connect(renderStepped)
-
-local function f20() --[[ Line: 310 | Upvalues: v1 (ref), v2 (ref), Sprite (ref), SettingsHandler (copy), OperatorGUI (ref), LocalPlayer (copy), v5 (ref), v3 (ref) ]]
-	v1 = nil
-	v2 = 0
-	Sprite.ImageTransparency = 0.2
-	Sprite.Visible = true
-
-	if SettingsHandler.Get({ "Misc", "CenteredEnemies" }) then
-		Sprite.ImageTransparency = 0.45
-		Sprite.Position = UDim2.fromScale(0.35, -1)
-	else
-		Sprite.Position = UDim2.fromScale(0.2, -1)
-	end
-
-	game:GetService("TweenService")
-		:Create(Sprite, TweenInfo.new(0.6, Enum.EasingStyle.Quart), {
-			Position = UDim2.fromScale(Sprite.Position.X.Scale, 0.55),
-		})
-		:Play()
-	OperatorGUI:WaitForChild("Start").Volume = 1
-	OperatorGUI:WaitForChild("Start"):Play()
-	SetSprite("Peaceful")
-	v1 = tick()
-	v2 = 0
-	task.wait(0.6)
-
-	if v2 >= 0.15 then
-		return
-	end
-
-	if
-		LocalPlayer.Dead.Value or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
-	then
-		return
-	end
-
-	SetSprite("Neutral")
-	OperatorGUI:WaitForChild("Tick"):Play()
-	OperatorGUI.Tick.Volume = 1
-
-	local v22 = 2.5
-
-	while task.wait(0.25) and (OperatorGUI and (OperatorGUI.Parent and (Sprite.Visible and not v5))) do
-		if
-			LocalPlayer.Dead.Value
-			or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
-		then
-			break
-		end
-
-		v22 = -v22
-
-		if v1 then
-			game.TweenService
-				:Create(Sprite, TweenInfo.new(0.25, Enum.EasingStyle.Elastic), {
-					Rotation = v22,
-				})
-				:Play()
-		end
-	end
-end
-
-local v21 = 5
-local v22 = 0
-local v23 = false
-
-local function f24() --[[ Line: 381 | Upvalues: v22 (ref), v21 (ref), v11 (ref), v13 (ref), zero (ref), v14 (ref), v23 (ref), Sprite (ref), v15 (ref), v12 (ref), v8 (ref) ]]
-	local v1 = time()
-
-	task.wait()
-	v22 = tick()
-
-	local v2 = v21
-
-	while v11 do
-		local v3 = time() - v1
-		local v4 = time()
-		local v5 = workspace.CurrentCamera.ViewportSize.Y / 785
-		local v6 = math.noise(time() * 15 + 5384) * v13 * 2 + zero.X
-		local v7 = math.noise(time() * 15 + 1813) * v13 * 2 + zero.Y
-		local v82 = math.noise(time() * 15 + 591) * v13
-		local v9 = UDim2.new(v14.X, v6, v14.Y, v7)
-		local v112 = math.min((tick() - v22) / 0.25, 1)
-		local v142 = math.lerp(
-			v2,
-			v21,
-			(game:GetService("TweenService"):GetValue(v112, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out))
 		)
+		p1.Character:GetAttributeChangedSignal("Highrise"):Connect(function(p12) --[[ Line: 76 | Upvalues: p1 (copy) ]]
+			local v1 = p1.Humanoid:GetState()
 
-		if tick() - v22 >= 0.25 and v23 then
-			v22 = tick()
-			v2 = v21
-			v21 = -v21
-		end
-
-		Sprite.Position = v9
-		Sprite.Rotation = v15 + v82 + v142
-		v15 = v15 + math.noise(time() * 3 + 5713) * 0.14 * (v3 * 60)
-		zero = zero
-			+ Vector2.new(math.noise(time() * 3 + 493.1) * 0.8 * v5, math.noise(time() * 3 + 89314) * 0.5 * v5)
-				* (v3 * 60)
-
-		if v12 == 1 then
-			v12 = 2
-		elseif v12 == 2 then
-			v12 = 1
-		end
-
-		v1 = v4
-
-		if not v8 then
-			v13 = v13 - v3 * 24
-		end
-
-		v13 = math.max(v13, 0)
-		task.wait()
-	end
-end
-
-local function f25() --[[ Line: 444 | Upvalues: GreaterCurseHandler (copy), v19 (ref), Sprite (ref), SettingsHandler (copy), v14 (ref), v15 (ref), v13 (ref), v23 (ref), v1 (ref), v2 (ref), zero (ref), v12 (ref), OperatorGUI (ref), v11 (ref), f24 (copy), isStationary (copy), LocalPlayer (copy), v8 (ref), v9 (ref), v3 (ref), kill (copy), v6 (copy) ]]
-	if GreaterCurseHandler.IsCurseEnabled("VBOperator") then
-		v19 = "VBOperator"
-		Sprite.UIAspectRatioConstraint.AspectRatio = 1
-		Sprite.Size = UDim2.fromScale(0.345, 0.497)
-	end
-
-	Sprite.Visible = true
-	Sprite.ImageTransparency = 0.2
-	SetSprite("Neutral")
-	Sprite.ImageColor3 = Color3.new(255 / 255, 255 / 255, 255 / 255)
-
-	if SettingsHandler.Get({ "Misc", "CenteredEnemies" }) then
-		Sprite.ImageTransparency = 0.35
-		v14 = Vector2.new(0.35, 0.5)
-	else
-		v14 = Vector2.new(0.2, 0.5)
-	end
-
-	v15 = 0
-	v13 = 0
-	v23 = true
-	v1 = nil
-	v2 = 0
-	Sprite.Position = UDim2.fromScale(0.2, -1)
-
-	local v16 = 0
-
-	local function Animate(p1, p2) --[[ Animate | Line: 480 | Upvalues: v13 (ref), zero (ref), v14 (ref), Sprite (ref), v15 (ref), v12 (ref) ]]
-		local v2 = math.lerp(
-			-1,
-			0.5,
-			(game:GetService("TweenService"):GetValue(p1, Enum.EasingStyle.Quart, Enum.EasingDirection.Out))
-		)
-		local v3 = workspace.CurrentCamera.ViewportSize.Y / 785
-		local v4 = math.noise(time() * 15 + 5384) * v13 * 2 + zero.X
-		local v5 = math.noise(time() * 15 + 1813) * v13 * 2 + zero.Y
-		local v6 = math.noise(time() * 15 + 591) * v13
-
-		Sprite.Position = UDim2.new(v14.X, v4, v2, v5)
-		Sprite.Rotation = v15 + v6
-		v15 = v15 + math.noise(time() * 3 + 5713) * 0.14 * (p2 * 60) * p1
-
-		local v7 = math.noise(time() * 3 + 493.1) * 0.8 * v3
-
-		zero = zero + Vector2.new(v7, math.noise(time() * 3 + 89314) * 0.5 * v3) * (p2 * 60) * p1
-
-		local v9
-
-		if v12 == 1 then
-			v12 = 2
-		elseif v12 == 2 then
-			v12 = 1
-		end
-
-		v9 = v13
-		v13 = math.max(v9, 0)
-	end
-
-	OperatorGUI.VBStart:Play()
-	task.spawn(
-		function() --[[ Line: 516 | Upvalues: v11 (ref), Animate (copy), v16 (ref), f24 (ref), OperatorGUI (ref) ]]
-			v11 = true
-			Animate(0, 0)
-
-			repeat
-				local v1 = task.wait()
-
-				v16 = v16 + v1
-				Animate(v16 / 0.6, v1)
-			until v16 / 0.6 >= 1
-
-			Animate(1, 0)
-			task.spawn(f24)
-			OperatorGUI:WaitForChild("VBTick"):Play()
-			OperatorGUI.VBTick.Volume = 1
-		end
-	)
-	task.wait(0.6)
-
-	local v22 = time()
-	local sum = 1.5
-
-	while true do
-		task.wait()
-
-		if sum <= time() - v22 and not isStationary() then
-			sum = sum + 0.5
-		end
-
-		if
-			isStationary() and sum <= time() - v22
-			or time() - v22 >= 3
-			or (
-				LocalPlayer.Dead.Value
-				or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
-			)
-		then
-			local v32, v4, v5, v62, v7, v82, v92, v10, v112, v122, v132
-
-			v32 = LocalPlayer.Dead.Value
-				or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
-
-			if v32 then
+			if v1 ~= Enum.HumanoidStateType.Running and v1 ~= Enum.HumanoidStateType.Landed then
 				return
 			end
 
-			v4 = false
+			p1:Refresh()
+		end)
+	end
 
-			for i = 1, 3 do
-				v5 = LocalPlayer.Dead.Value
-					or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
+	p1:Refresh()
+end
+function t.UsedDoubleJump(p1) --[[ UsedDoubleJump | Line: 88 | Upvalues: Movement (copy) ]]
+	if not p1.Movement.SFX.legacy then
+		p1.Movement.SFX:DoubleJump()
+	end
 
-				if v5 then
-					break
-				end
+	local v1 = Movement.Instances.DoubleJumpParticle:Clone()
 
-				task.wait(2)
-				v62 = LocalPlayer.Dead.Value
-					or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
+	v1.Speed = NumberRange.new(4)
+	v1.Parent = p1.ParticleAttachment
+	v1:Emit(1)
 
-				if v62 then
-					break
-				end
+	local v2 = Movement.Instances.DoubleJumpParticle:Clone()
 
-				v8 = true
-				v13 = 2
-				SetSprite("Active")
-				OperatorGUI.VBAlert.Volume = 1.5
-				OperatorGUI.VBAlert:Play()
-				v7 = time()
+	v2.EmissionDirection = Enum.NormalId.Top
+	v2.Speed = NumberRange.new(7)
+	v2.Lifetime = NumberRange.new(0.1)
+	v2.Parent = p1.ParticleAttachment
+	v2:Emit(1)
+	game.Debris:AddItem(v1, v1.Lifetime.Max + 0.1)
+	game.Debris:AddItem(v2, v2.Lifetime.Max + 0.1)
+end
+function t.UsedPocketBell(p1) --[[ UsedPocketBell | Line: 109 | Upvalues: Movement (copy) ]]
+	if p1.Movement.SFX.legacy then
+		Movement.Instances.BellSound:Play()
+	else
+		p1.Movement.SFX:PocketBell()
+	end
 
-				repeat
-					task.wait()
-				until time() - v7 >= 0.5 or v9
+	_G.RingBell(0.4)
 
-				v82 = LocalPlayer.Dead.Value
-					or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
+	local v1 = Movement.Instances.PocketBellParticle:Clone()
 
-				if v82 then
-					break
-				end
+	v1.Parent = p1.ParticleAttachment
+	v1:Emit(math.random(18, 24))
+	game.Debris:AddItem(v1, v1.Lifetime.Max + 0.1)
+end
+function t.UsedMedalStatus(p1) --[[ UsedMedalStatus | Line: 125 ]]
+	if p1.Character:FindFirstChild("Medal") then
+		p1.Character.Medal.Impulse:Fire()
+	end
 
-				OperatorGUI.VBAlert:Stop()
-				SetSprite("Neutral")
-				v13 = 10
-				v8 = false
+	p1:UsedDoubleJump()
+end
+function t.UsedHighrise(p1) --[[ UsedHighrise | Line: 132 ]]
+	p1:UsedDoubleJump()
+end
+function t.SetUIPosition(p1, p2) --[[ SetUIPosition | Line: 136 ]]
+	if not (p1.UI and p1.UI.Parent) then
+		return
+	end
 
-				if isStationary() or v9 then
-					OperatorGUI.VBEnd.Volume = 1
-					OperatorGUI.VBEnd:Play()
-					v92 = 0.5 - (time() - v7)
+	if p2 then
+		p1.UI.Jumps.Position = UDim2.fromScale(0.5, 0.375)
+	else
+		p1.UI.Jumps.Position = UDim2.fromScale(0.5, 0.8)
+	end
 
-					if i ~= 3 then
-						task.wait(0.25 + v92)
-					end
+	p1.centered = p2
 
-					v10 = LocalPlayer.Dead.Value
-						or (if LocalPlayer.Character == nil then true else LocalPlayer.Character.Parent == nil)
+	if p1.Movement.Humanoid:GetState() ~= Enum.HumanoidStateType.Running then
+		return
+	end
 
-					if v10 then
-						break
-					end
+	p1:Refresh()
+end
+function t.TryDoubleJump(p1) --[[ TryDoubleJump | Line: 154 | Upvalues: t2 (copy), t3 (copy) ]]
+	if p1.Movement.Status.HasStatus("Concussion") then
+		return
+	end
 
-					if SettingsHandler.Get({ "Misc", "CenteredEnemies" }) then
-						v112 = v6:NextNumber(0.325, 0.375)
-						v122 = v112
-					else
-						v132 = v6:NextNumber(0.19, 0.24)
-						v122 = v132
-					end
+	if p1.Movement.grappling then
+		return
+	end
 
-					v14 = Vector2.new(v122, v6:NextNumber(0.5, 0.6))
-					v15 = math.random(-10, 10)
+	if p1.Movement.diving then
+		return
+	end
 
-					if i ~= 3 then
-						task.wait(0.25)
-					end
-				else
-					v3 = 1
-					kill()
-					v4 = true
+	if p1.Movement.sliding then
+		return
+	end
 
-					break
-				end
+	if p1.Movement.charging and not p1.Movement:HasUpgrade("NinjaBelt") then
+		return
+	end
+
+	if p1.Movement.diveBonked then
+		return
+	end
+
+	local JumpPower = p1.Humanoid.JumpPower
+
+	for v1, v2 in t2 do
+		if p1.AvailableJumps[v2] and p1.AvailableJumps[v2] > 0 then
+			local v3 = p1.AvailableJumps[v2]
+			local AvailableJumps = p1.AvailableJumps
+
+			AvailableJumps[v2] = AvailableJumps[v2] - 1
+			p1.Movement.isDoubleJumping = true
+			p1.Humanoid.JumpPower = t3[v2]
+			p1.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			task.wait()
+			p1.Humanoid.JumpPower = JumpPower
+
+			if p1.Movement.ActiveSpecial and p1.Movement.ActiveSpecial.OnDoubleJump then
+				p1.Movement.ActiveSpecial:OnDoubleJump()
 			end
 
-			v23 = false
-			OperatorGUI.VBEnd:Stop()
+			if p1.Movement.chargePound then
+				p1.chargePound = false
+				p1.Humanoid:SetAttribute("UsingAbility", false)
+			end
+
+			local v4 = p1.UI.Jumps:FindFirstChild(v2 .. v3)
 
 			if v4 then
-				OperatorGUI.VBAlert:Stop()
-				OperatorGUI.VBTick:Stop()
-				game:GetService("TweenService")
-					:Create(Sprite, TweenInfo.new(1), {
-						ImageTransparency = 1,
-					})
-					:Play()
-				task.wait(2)
-				Sprite.Visible = false
-				v11 = false
-				task.delay(2, function() --[[ Line: 636 | Upvalues: OperatorGUI (ref) ]]
-					OperatorGUI.End:Stop()
-				end)
+				if p1.SizeTweens[v4] then
+					p1.SizeTweens[v4]:Cancel()
+					p1.SizeTweens[v4]:Destroy()
+					p1.SizeTweens[v4] = nil
+				end
+
+				v4.Bar.Size = UDim2.fromScale(0, 1)
+			end
+
+			if not p1.charging then
+				p1.Animator:PlayAnimation("DoubleJump")
+			end
+
+			p1.Movement.usedDoubleJumpInAir = true
+
+			if p1["Used" .. v2] then
+				p1["Used" .. v2](p1)
 
 				return
 			end
 
-			OperatorGUI.VBSurvive:Play()
-			OperatorGUI.VBAlert:Stop()
-			OperatorGUI.VBTick:Stop()
-			game:GetService("TweenService")
-				:Create(Sprite, TweenInfo.new(1), {
-					ImageTransparency = 1,
-				})
-				:Play()
-			task.wait(2)
-			Sprite.Visible = false
-			v11 = false
-			task.delay(2, function() --[[ Line: 636 | Upvalues: OperatorGUI (ref) ]]
-				OperatorGUI.End:Stop()
-			end)
-
-			return
+			break
 		end
 	end
 end
+function t.OnStateChanged(p1, p2, p3) --[[ OnStateChanged | Line: 231 ]]
+	if p3 == Enum.HumanoidStateType.Landed then
+		p1:Refresh()
+	end
 
-local v26 = if isValue then 35 else 50
+	if p3 == Enum.HumanoidStateType.Freefall and not p1.BarsEnabled then
+		p1.BarsEnabled = true
 
-if shared.Trailer then
-	v26 = 3
-end
+		for v1, v2 in p1.Tweens do
+			v2:Pause()
+			v2:Destroy()
+		end
 
-OperatorGUI:WaitForChild("Tick"):Play()
-OperatorGUI.Tick.Volume = 0.00001
-OperatorGUI:WaitForChild("VBTick"):Play()
-OperatorGUI.VBTick.Volume = 0.00001
-OperatorGUI:WaitForChild("VBAlert"):Play()
-OperatorGUI.VBAlert.Volume = 0.00001
-OperatorGUI:WaitForChild("End"):Play()
-OperatorGUI.End.Volume = 0.00001
+		if p1.UI and p1.UI:FindFirstChild("Jumps") then
+			local v3 = if p1.centered then 0.25 else 0
 
-while true do
-	shared.OperatorActive = false
-	shared.OperatorWishSpawn = false
+			for v4, v5 in p1.UI.Jumps:GetChildren() do
+				if v5:IsA("Frame") then
+					local v6 = game.TweenService:Create(v5.Outline.UIStroke, TweenInfo.new(0.1), {
+						Transparency = v3,
+					})
+					local v7 = game.TweenService:Create(v5.Bar, TweenInfo.new(0.1), {
+						BackgroundTransparency = v3,
+					})
+
+					table.insert(p1.Tweens, v6)
+					table.insert(p1.Tweens, v7)
+					v6:Play()
+					v7:Play()
+				end
+			end
+		end
+	end
+
+	if p3 == Enum.HumanoidStateType.Freefall and (not p1.RealWingsEnabled and p1.Movement:HasUpgrade("RealWings")) then
+		p1.RealWingsEnabled = true
+
+		local v8 = game.TweenService:Create(p1.UI.RealWings.Outline.UIStroke, TweenInfo.new(0.1), {
+			Transparency = 0,
+		})
+		local v9 = game.TweenService:Create(p1.UI.RealWings.Bar, TweenInfo.new(0.1), {
+			BackgroundTransparency = 0,
+		})
+
+		v8:Play()
+		v9:Play()
+	end
 
 	if
-		v5
-		or (
-			LocalPlayer.Dead.Value
-			or (
-				if LocalPlayer.Character == nil then true elseif LocalPlayer.Character.Parent == nil then true else false
-			)
+		not (
+			(if p3 == Enum.HumanoidStateType.Running then true else p3 == Enum.HumanoidStateType.Landed)
+			and p1.BarsEnabled
 		)
 	then
-		task.wait()
-	else
-		if GreaterCurseHandler.IsCurseEnabled("VBOperator") then
-			v19 = "VBOperator"
-			Sprite.UIAspectRatioConstraint.AspectRatio = 1
-			Sprite.Size = UDim2.fromScale(0.345, 0.497)
+		return
+	end
+
+	p1.BarsEnabled = false
+
+	for v11, v12 in p1.Tweens do
+		v12:Pause()
+		v12:Destroy()
+	end
+
+	if not (p1.UI and p1.UI:FindFirstChild("Jumps")) then
+		return
+	end
+
+	for v13, v14 in p1.UI.Jumps:GetChildren() do
+		if v14:IsA("Frame") then
+			local v15 = 0.25 + p1.LastRefreshCount * 0.03
+			local v16 = game.TweenService:Create(
+				v14.Outline.UIStroke,
+				TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.In, 0, false, v15),
+				{
+					Transparency = 1,
+				}
+			)
+			local v17 = game.TweenService:Create(
+				v14.Bar,
+				TweenInfo.new(0.2, Enum.EasingStyle.Sine, Enum.EasingDirection.In, 0, false, v15),
+				{
+					BackgroundTransparency = 1,
+				}
+			)
+
+			table.insert(p1.Tweens, v16)
+			table.insert(p1.Tweens, v17)
+			v16:Play()
+			v17:Play()
 		end
-
-		task.wait(math.random(v26 / 1.5, v26))
-
-		if not StatusEffectHandler.HasStatus("Fire") then
-			if shared.VoidbreakerWishSpawn or (shared.KolonaWishSpawn or shared.OperatorWishSpawn) then
-				repeat
-					task.wait()
-				until not (shared.VoidbreakerWishSpawn or (shared.KolonaWishSpawn or shared.OperatorWishSpawn))
-			end
-
-			shared.OperatorWishSpawn = true
-
-			if _G.VoidbreakerActive == true then
-				repeat
-					task.wait(0.5)
-				until not _G.VoidbreakerActive
-
-				task.wait(4)
-			end
-
-			if shared.KolonaActive then
-				repeat
-					task.wait(0.5)
-				until not shared.KolonaActive
-
-				task.wait(4)
-			end
-
-			if
-				LocalPlayer.Dead.Value
-				or (
-					if LocalPlayer.Character == nil
-						then true
-						elseif LocalPlayer.Character.Parent == nil then true
-						else false
-				)
-			then
-				task.wait()
-			else
-				shared.OperatorWishSpawn = false
-				shared.OperatorActive = true
-
-				local _ = tick()
-
-				if GreaterCurseHandler.IsCurseEnabled("VBOperator") then
-					f25()
-				else
-					f20()
-				end
-
-				shared.OperatorActive = false
-				task.wait(1)
-			end
-		end
-
-		continue
 	end
 end
+function t.Refresh(p1, p2, p3) --[[ Refresh | Line: 328 | Upvalues: t2 (copy) ]]
+	p1.AvailableJumps = {}
+	p1.Character:SetAttribute("Jumps", 3)
+
+	if p1.Movement.ClassID == "class/Wicked" then
+		return
+	end
+
+	if p1.Status.HasStatus("Medal") then
+		p1.AvailableJumps.MedalStatus = 1
+	end
+
+	if p1.Character:GetAttribute("Highrise") then
+		p1.AvailableJumps.Highrise = 1
+	else
+		p1.AvailableJumps.Highrise = nil
+	end
+
+	if p2 then
+		for v1, v2 in p2 do
+			p1.AvailableJumps[v1] = v2
+		end
+	end
+
+	local count = 0
+	local count2 = 0
+
+	if not (p1.UI and p1.UI.Parent) then
+		return
+	end
+
+	for i = #t2, 1, -1 do
+		local v3 = t2[i]
+		local v4, v5 = p1.Movement:HasUpgrade(v3)
+
+		if p1.AvailableJumps[v3] then
+			v5 = p1.AvailableJumps[v3]
+			v4 = true
+		end
+
+		if v4 then
+			if p1.Movement.ClassID == "class/Wanted" then
+				v5 = v5 * 2
+			end
+
+			for j = 1, v5 do
+				count = count + 1
+
+				local v6 = p1.UI.Jumps:FindFirstChild(v3 .. j)
+
+				if not v6 then
+					local v7 = p1.Template:Clone()
+
+					v7.Name = v3 .. j
+					v7:SetAttribute("JustCreated", true)
+					v7.Parent = p1.UI.Jumps
+
+					if not p1.BarsEnabled then
+						v7.Bar.BackgroundTransparency = 1
+						v7.Outline.UIStroke.Transparency = 1
+					end
+
+					v6 = v7
+				end
+
+				v6.LayoutOrder = count
+
+				if v6.Bar.Size == UDim2.fromScale(1, 1) then
+					count2 = count2 + 1
+				end
+			end
+
+			if not p3 then
+				p1.AvailableJumps[v3] = v5
+			end
+
+			continue
+		end
+
+		if p1.AvailableJumps[v3] == nil or p1.AvailableJumps[v3] <= 0 then
+			for v8, v9 in p1.UI.Jumps:GetChildren() do
+				if string.find(v9.Name, v3) then
+					v9:Destroy()
+				end
+			end
+		end
+	end
+
+	local count3 = 0
+
+	for k = #t2, 1, -1 do
+		local v10 = t2[k]
+		local v11, v12 = p1.Movement:HasUpgrade(v10)
+
+		if p1.AvailableJumps[v10] then
+			v12 = p1.AvailableJumps[v10]
+			v11 = true
+		end
+
+		if v11 then
+			for n = 1, v12 do
+				local v13 = p1.UI.Jumps:FindFirstChild(v10 .. n)
+
+				if v13 then
+					v13.LayoutOrder = count3
+					count3 = count3 + 1
+				end
+			end
+		end
+	end
+
+	for v14, v15 in p1.UI.Jumps:GetChildren() do
+		if v15:IsA("Frame") and (v15.Bar.Size ~= UDim2.fromScale(1, 1) or v15:GetAttribute("JustCreated")) then
+			v15:SetAttribute("JustCreated", nil)
+
+			local v16 = (v15.LayoutOrder - count2 - 1) * 0.03
+			local v17 = game.TweenService:Create(
+				v15.Bar,
+				TweenInfo.new(0.07, Enum.EasingStyle.Quint, Enum.EasingDirection.Out, 0, false, v16),
+				{
+					Size = UDim2.fromScale(1, 1),
+				}
+			)
+
+			p1.SizeTweens[v15] = v17
+			v17:Play()
+			task.delay(v16, function() --[[ Line: 452 | Upvalues: p1 (copy), v15 (copy) ]]
+				if p1.SizeTweens[v15] then
+					p1.Movement.SFX:PlaySound("Jump_Double_Recharge")
+					v15.Size = UDim2.fromScale(1, 0.6)
+					game.TweenService
+						:Create(v15, TweenInfo.new(1, Enum.EasingStyle.Elastic), {
+							Size = UDim2.fromScale(1, 1),
+						})
+						:Play()
+				end
+			end)
+		end
+	end
+
+	p1.LastRefreshCount = count - count2
+
+	if count > 1 then
+		p1.UI.Jumps.Size = UDim2.fromScale((if p1.centered then 0.13 else 0.2) + (count - 1) * 0.04, 0.01)
+	else
+		p1.UI.Jumps.Size = UDim2.fromScale(if p1.centered then 0.13 else 0.2, 0.01)
+	end
+
+	p1.Character:SetAttribute("Jumps", count + 3)
+end
+
+return t

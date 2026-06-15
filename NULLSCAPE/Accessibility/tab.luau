@@ -11,4 +11,14 @@ return function(Client, Controller)
             Controller:SetSpringerAutoJump(Value)
         end
     })
+
+    Tab:CreateToggle({
+        Name = "Infinite Air Jump",
+        Info = "Refills the native DoubleJump charge, preserving the game's animation and SFX.",
+        CurrentValue = Controller.InfiniteAirJumpEnabled,
+        Flag = "InfiniteAirJumpToggle",
+        Callback = function(Value)
+            Controller:SetInfiniteAirJump(Value)
+        end
+    })
 end
