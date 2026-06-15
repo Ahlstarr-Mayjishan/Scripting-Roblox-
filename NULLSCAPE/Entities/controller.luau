@@ -165,7 +165,7 @@ function Controller:SetImmunity(entityName, value)
     -- Áp dụng thay đổi tức thời cho thực thể đã tồn tại trong workspace
     if value then
         local function applyImmunityToChild(child)
-            if not child:IsA("Model") then return end
+            if not (child:IsA("Model") or child:IsA("BasePart")) then return end
 
             -- Husk / Skinwalker dùng module Magnitude Types
             if entityName == "Skinwalker" then
@@ -311,7 +311,7 @@ end
 
 -- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
 local function processEntity(enemy)
-    if not enemy or not enemy:IsA("Model") or enemy.Name == "Skinwalkers" then return end
+    if not enemy or not (enemy:IsA("Model") or enemy:IsA("BasePart")) or enemy.Name == "Skinwalkers" then return end
 
     -- Tránh việc đăng ký nhiều lần trùng lặp cho cùng một thực thể
     if GC.EntityConnections and GC.EntityConnections[enemy] then return end
@@ -572,6 +572,12 @@ local function initializeICBMHook()
         -- 2. Chạy logic chống Springer
         local blockSpringer = SpringerEntitiesTypes.shouldBlockRemoteCall(self, args, Controller)
         if blockSpringer then
+            return true
+        end
+
+        -- 3. Chạy logic chống Bell / TouchInterest Entities
+        local blockTouchInterest = Logic.shouldBlockRemoteCall(self, args, Controller)
+        if blockTouchInterest then
             return true
         end
         

@@ -121,7 +121,7 @@ end
 -- Kích hoạt miễn nhiễm cho thực thể
 function Logic.enableImmunity(gc, enemy)
     debugPrint("enableImmunity called for:", enemy and enemy:GetFullName())
-    if not enemy or not enemy:IsA("Model") then return end
+    if not enemy or not (enemy:IsA("Model") or enemy:IsA("BasePart")) then return end
     
     -- Đảm bảo chỉ chạy 1 lần/1 round trên mỗi thực thể để tránh lặp vô hạn gây đứng máy
     if processedEntities[enemy] then 
@@ -187,8 +187,11 @@ function Logic.disableImmunityForType(gc, entityName)
                 end
                 
                 -- Khôi phục xong thì giải phóng khỏi processedEntities để cho phép xử lý lại khi bật toggle
-                local enemy = part:IsA("Model") and part or part.Parent
-                if enemy and enemy:IsA("Model") then
+                local enemy = part
+                if part.Parent and part.Parent.Name ~= "Enemies" and part.Parent.Name ~= "Skinwalkers" then
+                    enemy = part.Parent
+                end
+                if enemy then
                     processedEntities[enemy] = nil
                     debugPrint("Cleared processedEntities for restored enemy:", enemy.Name)
                 end
@@ -217,6 +220,55 @@ function Logic.restoreAll(gc)
     clearTable(gc.SavedPartsData)
     clearTable(processedEntities)
     debugPrint("All caches cleared in restoreAll")
+end
+
+-- Chặn các cuộc gọi RemoteEvent gây debuff từ thực thể TouchInterest (như Bell)
+function Logic.shouldBlockRemoteCall(remote, args, controller)
+    if not controller then
+        return false
+    end
+
+    if typeof(remote) ~= "Instance" or remote.ClassName ~= "RemoteEvent" then
+        return false
+    end
+
+    local remoteName = remote.Name
+    if remoteName ~= "ClientEvent" then
+        return false
+    end
+
+    -- 1. Kiểm tra thực thể Bell
+    if controller.BellImmune then
+        local hasDebuff = false
+        for _, arg in ipairs(args) do
+            if typeof(arg) == "string" and string.lower(arg) == "debuff" then
+                hasDebuff = true
+                break
+            end
+        end
+
+        if hasDebuff then
+            -- Duyệt ngược lên để tìm xem remote có thuộc Model Bell không
+            local current = remote.Parent
+            local depth = 0
+            while current and current ~= workspace and current ~= game and depth < 50 do
+                depth = depth + 1
+                local nameSuccess, name = pcall(function() return current.Name end)
+                if nameSuccess and name and string.find(string.lower(name), "bell") then
+                    debugPrint("[HOOK] Blocked Bell ClientEvent(Debuff)")
+                    return true
+                end
+                local parentSuccess, parent = pcall(function() return current.Parent end)
+                if parentSuccess then
+                    current = parent
+                else
+                    break
+                end
+            end
+        end
+    end
+
+    return false
 end
 
 return Logic
