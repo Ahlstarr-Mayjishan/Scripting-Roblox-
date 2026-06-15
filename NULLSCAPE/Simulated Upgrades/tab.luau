@@ -181,9 +181,9 @@ return function(Client, Controller)
     Tab:CreateSlider({
         Name = "Momentum Reduction",
         Info = "Higher values make control easier. Values >= 70% remove the braking/turn animation.",
-        Range = {0, 100},
+        Range = {10, 100},
         Increment = 10,
-        CurrentValue = math.clamp((Controller.MomentumReduction or 1.0) * 100, 0, 100),
+        CurrentValue = math.clamp((Controller.MomentumReduction or 1.0) * 100, 10, 100),
         Flag = "MomentumReductionSlider",
         Suffix = "%",
         Callback = function(Value)

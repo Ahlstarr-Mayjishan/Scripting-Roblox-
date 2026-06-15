@@ -34,12 +34,22 @@ function Logic.start(controller, gc)
     if not Logic.OriginalSetMoveDirection then return end
     
     MovementCore.SetMoveDirection = function(self, direction)
-        local r = Logic.MomentumReduction
+        local r = controller.MomentumReduction or 0.1
         if r > 0 and self.WantDirection and typeof(self.WantDirection) == "Vector3" and typeof(direction) == "Vector3" then
-            if r >= 0.7 then
-                self.doingQuickTurn = false
+            local bypassQuickTurn = (r >= 0.7)
+            if bypassQuickTurn or not self.doingQuickTurn then
+                if bypassQuickTurn then
+                    self.doingQuickTurn = false
+                end
+                
+                -- Áp dụng đường cong lũy thừa để độ trơn trượt khác biệt rõ rệt mỗi 10%
+                local k = r
+                if r < 1 then
+                    k = r ^ 2.2
+                end
+                
+                direction = direction:Lerp(self.WantDirection, k)
             end
-            direction = direction:Lerp(self.WantDirection, r)
         end
         return Logic.OriginalSetMoveDirection(self, direction)
     end
