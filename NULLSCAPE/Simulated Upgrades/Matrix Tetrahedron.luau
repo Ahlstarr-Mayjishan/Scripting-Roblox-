@@ -36,20 +36,10 @@ function Logic.start(controller, gc)
     MovementCore.SetMoveDirection = function(self, direction)
         local r = Logic.MomentumReduction
         if r > 0 and self.WantDirection and typeof(self.WantDirection) == "Vector3" and typeof(direction) == "Vector3" then
-            local bypassQuickTurn = (r >= 0.7)
-            if bypassQuickTurn or not self.doingQuickTurn then
-                local k = r
-                if r < 1 then
-                    k = (r ^ 2) * 0.4
-                end
-                
-                if bypassQuickTurn then
-                    self.doingQuickTurn = false
-                    k = r
-                end
-                
-                direction = direction:Lerp(self.WantDirection, k)
+            if r >= 0.7 then
+                self.doingQuickTurn = false
             end
+            direction = direction:Lerp(self.WantDirection, r)
         end
         return Logic.OriginalSetMoveDirection(self, direction)
     end
