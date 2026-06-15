@@ -301,34 +301,12 @@ local function processEntity(enemy)
 
     local name = enemy.Name
 
-    -- ── Baby / Bell / Mart (xóa TouchInterest) ──────────────────────────────
+    -- ── Thực thể dùng nguyên lý Xóa TouchInterest (Baby, Bell, Mart,...) ──
     if Logic.isTargetEntity(name) then
         local checkFunc = Logic.getImmunityCheck(name, Controller)
         if checkFunc and checkFunc() then
             Executor.enableImmunity(GC, enemy)
         end
-
-        -- Lắng nghe bộ phận mới được thêm vào (tránh sót hitbox khi replicate)
-        local descConn = enemy.DescendantAdded:Connect(function(part)
-            local cf = Logic.getImmunityCheck(enemy.Name, Controller)
-            if cf and cf() then
-                if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-                    local parentPart = part.Parent
-                    if parentPart and parentPart:IsA("BasePart") then
-                        if GC.SavedPartsData[parentPart] then
-                            GC.SavedPartsData[parentPart].touch = part
-                        else
-                            GC.SavedPartsData[parentPart] = {
-                                touch     = part,
-                                enemyName = enemy.Name
-                            }
-                        end
-                        pcall(function() part.Parent = nil end)
-                    end
-                end
-            end
-        end)
-        GC.registerEntityConnection(enemy, descConn)
     end
 
     -- ── Husk / Skinwalker (đổi tên + CanTouch) ─────────────────────────────

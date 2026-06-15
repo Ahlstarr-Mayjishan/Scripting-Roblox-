@@ -1,5 +1,5 @@
 -- [[
---  Raycast - Magnitude Entities Types & Anti Logic
+--  Raycast Entities Types & Anti Logic
 --  Vai trò: Kiểm tra và chặn các cuộc gọi RemoteEvent gây sát thương từ Springer.
 -- ]]
 
