@@ -44,6 +44,11 @@ getgenv()._NULLSCAPE_Globals.handleGiftCollectedCall = function(self, gift, rang
         local giftName = gift.Name:lower()
         local isMine = (giftType and string.find(giftType:lower(), "tripmine")) or string.find(giftName, "tripmine")
         if isMine then
+            -- Nếu mìn đã được kích nổ chủ động hoặc tháo gỡ thành công từ trước, chặn cuộc gọi từ game
+            if gift:GetAttribute("Detonated") or gift:GetAttribute("Defused") then
+                return true
+            end
+
             if activeController.TripmineBarrierEnabled then
                 local mode = activeController.TripmineMode or "Delayed"
                 if mode == "Delayed" then
@@ -148,35 +153,149 @@ function Barrier.update(controller, gc)
     local enabled = controller.TripmineBarrierEnabled
     if not enabled then return end
     
-    -- Chỉ tắt va chạm vật lý mìn khi ở chế độ Barrier (Đi xuyên)
-    if controller.TripmineMode ~= "Barrier" then return end
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
     
-    -- Lấy danh sách quà hiện tại
     local activeGifts = controller.ActiveGifts or {}
+    local hrpPos = hrp.Position
+    local mode = controller.TripmineMode or "Delayed"
     
-    -- Quét và gỡ bỏ thuộc tính va chạm vật lý của mìn (chỉ chạy khi bật Bypass)
-    for _, g in ipairs(activeGifts) do
-        local part = g.part
-        if part and part.Parent and part:IsDescendantOf(workspace) then
+    if mode == "Delayed" then
+        -- Chế độ Delayed: Chủ động kích nổ mìn từ xa khi người chơi lại gần khoảng cách an toàn
+        local ReplicatedStorage = game:GetService("ReplicatedStorage")
+        local GiftCollected = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("GiftCollected")
+        if not GiftCollected then return end
+        
+        local baseDist = controller.TripmineDetonationDistance or 15
+        local jitter = controller.TripmineDetonationJitter or 2
+        
+        for _, g in ipairs(activeGifts) do
             if g.type == "Tripmine" or g.type == "GoldenTripmine" then
-                -- Vô hiệu hóa va chạm và cảm ứng của Part chính
-                if part:IsA("BasePart") then
-                    if part.CanCollide ~= false then
-                        pcall(function() part.CanCollide = false end)
-                    end
-                    if part.CanTouch ~= false then
-                        pcall(function() part.CanTouch = false end)
+                -- Giải quyết realPart và realModel từ đối tượng rawObj nếu có
+                local realPart = g.part
+                local realModel = g.model
+                if g.rawObj and g.rawObj.Model then
+                    realModel = g.rawObj.Model
+                    if realModel:IsA("Model") then
+                        realPart = realModel.PrimaryPart or realModel:FindFirstChild("HumanoidRootPart") or realModel:FindFirstChildWhichIsA("BasePart") or realModel
+                    else
+                        realPart = realModel
                     end
                 end
                 
-                -- Vô hiệu hóa va chạm của toàn bộ các bộ phận con của mìn (nếu là Model)
-                for _, child in ipairs(part:GetDescendants()) do
-                    if child:IsA("BasePart") then
-                        if child.CanCollide ~= false then
-                            pcall(function() child.CanCollide = false end)
+                if realPart and realPart.Parent and realPart:IsDescendantOf(workspace) then
+                    local isDetonated = realPart:GetAttribute("Detonated")
+                    local isDefused = realPart:GetAttribute("Defused")
+                    
+                    if not isDetonated and not isDefused then
+                        local pos = realPart:IsA("BasePart") and realPart.Position or (g.part and g.part:IsA("BasePart") and g.part.Position)
+                        if pos then
+                            local dist = (hrpPos - pos).Magnitude
+                            
+                            local targetDist: number = baseDist
+                            if jitter > 0 then
+                                local detDist = realPart:GetAttribute("DetonationDist")
+                                if typeof(detDist) == "number" then
+                                    targetDist = detDist
+                                else
+                                    local randomDist = baseDist + math.random(-jitter, jitter)
+                                    realPart:SetAttribute("DetonationDist", randomDist)
+                                    targetDist = randomDist
+                                end
+                            end
+                            
+                            -- Kích nổ từ xa khi ở trong khoảng cách an toàn nhưng phải lớn hơn 4.5 studs để tránh nổ sát người
+                            if dist <= targetDist and dist > 4.5 then
+                                realPart:SetAttribute("Detonated", true)
+                                
+                                -- Ẩn locally để tránh hiển thị ESP và giảm tải đồ họa trên client
+                                pcall(function()
+                                    if realPart:IsA("BasePart") then
+                                        realPart.Transparency = 1
+                                        realPart.CanCollide = false
+                                        realPart.CanTouch = false
+                                    end
+                                    if realModel then
+                                        if realModel:IsA("BasePart") then
+                                            realModel.Transparency = 1
+                                            realModel.CanCollide = false
+                                            realModel.CanTouch = false
+                                        end
+                                        for _, child in ipairs(realModel:GetDescendants()) do
+                                            if child:IsA("BasePart") then
+                                                child.Transparency = 1
+                                                child.CanCollide = false
+                                                child.CanTouch = false
+                                            elseif child:IsA("Texture") or child:IsA("Decal") then
+                                                child.Enabled = false
+                                            end
+                                        end
+                                    end
+                                    -- Ẩn cả proxyPart ảo nếu có để ESP ngừng vẽ
+                                    if g.part and g.part ~= realPart and g.part:IsA("BasePart") then
+                                        g.part.Transparency = 1
+                                    end
+                                end)
+                                
+                                task.spawn(function()
+                                    local orig = getgenv()._NULLSCAPE_Globals.OriginalGiftCollectedFireServer
+                                    if orig then
+                                        pcall(orig, GiftCollected, realPart, 30)
+                                    end
+                                end)
+                            end
                         end
-                        if child.CanTouch ~= false then
-                            pcall(function() child.CanTouch = false end)
+                    end
+                end
+            end
+        end
+    elseif mode == "Barrier" then
+        -- Chỉ tắt va chạm vật lý mìn khi ở chế độ Barrier (Đi xuyên)
+        for _, g in ipairs(activeGifts) do
+            if g.type == "Tripmine" or g.type == "GoldenTripmine" then
+                -- Giải quyết realPart và realModel từ đối tượng rawObj nếu có
+                local realPart = g.part
+                local realModel = g.model
+                if g.rawObj and g.rawObj.Model then
+                    realModel = g.rawObj.Model
+                    if realModel:IsA("Model") then
+                        realPart = realModel.PrimaryPart or realModel:FindFirstChild("HumanoidRootPart") or realModel:FindFirstChildWhichIsA("BasePart") or realModel
+                    else
+                        realPart = realModel
+                    end
+                end
+                
+                if realPart and realPart.Parent and realPart:IsDescendantOf(workspace) then
+                    -- Vô hiệu hóa va chạm và cảm ứng của Part chính
+                    if realPart:IsA("BasePart") then
+                        if realPart.CanCollide ~= false then
+                            pcall(function() realPart.CanCollide = false end)
+                        end
+                        if realPart.CanTouch ~= false then
+                            pcall(function() realPart.CanTouch = false end)
+                        end
+                    end
+                    
+                    -- Vô hiệu hóa va chạm của toàn bộ các bộ phận con của mìn (nếu là Model)
+                    if realModel then
+                        if realModel:IsA("BasePart") then
+                            if realModel.CanCollide ~= false then
+                                pcall(function() realModel.CanCollide = false end)
+                            end
+                            if realModel.CanTouch ~= false then
+                                pcall(function() realModel.CanTouch = false end)
+                            end
+                        end
+                        for _, child in ipairs(realModel:GetDescendants()) do
+                            if child:IsA("BasePart") then
+                                if child.CanCollide ~= false then
+                                    pcall(function() child.CanCollide = false end)
+                                end
+                                if child.CanTouch ~= false then
+                                    pcall(function() child.CanTouch = false end)
+                                end
+                            end
                         end
                     end
                 end

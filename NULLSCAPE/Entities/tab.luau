@@ -22,6 +22,15 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateToggle({
+		Name = "Flesh",
+		CurrentValue = Controller.FleshImmune,
+		Flag = "ImmunityFleshToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Flesh", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
 		Name = "Mart",
 		CurrentValue = Controller.MartImmune,
 		Flag = "ImmunityMartToggle",
@@ -38,6 +47,15 @@ return function(Client, Controller)
 		Flag = "ImmunityICBMToggle",
 		Callback = function(Value)
 			Controller:SetImmunity("ICBM", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Operator",
+		CurrentValue = Controller.OperatorImmune,
+		Flag = "ImmunityOperatorToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Operator", Value)
 		end,
 	})
 

@@ -18,8 +18,10 @@ local Controller = {
     -- Trạng thái bật/tắt miễn nhiễm cho từng thực thể
     BabyImmune = false,
     BellImmune = false,
+    FleshImmune = false,
     MartImmune = false,
     ICBMImmune = false,
+    OperatorImmune = false,
     SpringerImmune = false,
     SkinwalkerImmune = false,
     SpringerImmunityMode = "Legit",
@@ -138,10 +140,14 @@ function Controller:SetImmunity(entityName, value)
         self.BabyImmune = value
     elseif entityName == "Bell" then
         self.BellImmune = value
+    elseif entityName == "Flesh" then
+        self.FleshImmune = value
     elseif entityName == "Mart" then
         self.MartImmune = value
     elseif entityName == "ICBM" then
         self.ICBMImmune = value
+    elseif entityName == "Operator" then
+        self.OperatorImmune = value
     elseif entityName == "Skinwalker" then
         self.SkinwalkerImmune = value
         if value then
@@ -201,7 +207,7 @@ function Controller:SetImmunity(entityName, value)
             end
         end
     else
-        if entityName == "Baby" or entityName == "Bell" or entityName == "Mart" then
+        if entityName == "Baby" or entityName == "Bell" or entityName == "Flesh" or entityName == "Mart" then
             Executor.disableImmunityForType(GC, entityName)
         elseif entityName == "Skinwalker" then
             HuskEvasion.disableHuskImmunity(GC)
@@ -506,7 +512,8 @@ local function initializeICBMHook()
     -- Xây dựng bảng tra cứu nhanh O(1) tên các RemoteEvent cần chặn
     local TargetRemoteNames = {
         ["ClientEvent"] = true,
-        ["ShockwaveEvent"] = true
+        ["ShockwaveEvent"] = true,
+        ["DiedFunc"] = true
     }
 
     local function handleRemoteCall(self, ...)

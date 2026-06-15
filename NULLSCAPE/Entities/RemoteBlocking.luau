@@ -47,7 +47,20 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         return false
     end
 
-    if typeof(remote) ~= "Instance" or remote.ClassName ~= "RemoteEvent" then
+    if typeof(remote) ~= "Instance" then
+        return false
+    end
+
+    -- Operator is entirely client-driven and reports its kill through this shared RemoteFunction.
+    -- Match both the remote and cause exactly so unrelated deaths still reach the server.
+    if controller.OperatorImmune == true
+        and remote.ClassName == "RemoteFunction"
+        and remote.Name == "DiedFunc"
+        and args[1] == "Operator" then
+        return true
+    end
+
+    if remote.ClassName ~= "RemoteEvent" then
         return false
     end
 

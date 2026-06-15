@@ -11,6 +11,7 @@ local Logic = {}
 Logic.Config = {
     ["Baby"] = "BabyImmune",
     ["Bell"] = "BellImmune",
+    ["Flesh"] = "FleshImmune",
     ["Mart"] = "MartImmune",
     -- Thêm thực thể TouchInterest mới tại đây, ví dụ:
     -- ["Demon"] = "DemonImmune",
