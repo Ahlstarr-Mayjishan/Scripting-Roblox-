@@ -356,7 +356,7 @@ startRenderStepped = function()
             stopRenderStepped()
             return
         end
-        if inLobby or not checkActiveState() then
+        if not checkActiveState() then
             stopRenderStepped()
             return
         end
@@ -375,7 +375,7 @@ startMatchLoops = function()
     matchLoopsActive = true
     
     task.spawn(function()
-        while not Controller.Destroyed and not inLobby and checkActiveState() do
+        while not Controller.Destroyed and checkActiveState() do
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if hrp then
@@ -398,7 +398,7 @@ local function startUtilityLoop()
     if utilityLoopActive then return end
     utilityLoopActive = true
     task.spawn(function()
-        while not Controller.Destroyed and not inLobby do
+        while not Controller.Destroyed do
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if hrp then

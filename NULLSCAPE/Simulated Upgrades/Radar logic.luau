@@ -118,6 +118,15 @@ local function isGiftValid(t)
         return false
     end
     local targetModel = t.model or part
+    
+    -- Nếu được tag là Gift thì luôn hợp lệ
+    if part:HasTag("Gift") or targetModel:HasTag("Gift") then
+        if part.Transparency >= 0.99 then
+            return false
+        end
+        return true
+    end
+    
     local nameLower = part.Name:lower()
     local parentNameLower = part.Parent and part.Parent.Name:lower() or ""
     local modelNameLower = targetModel.Name:lower()
@@ -141,6 +150,15 @@ local function isInstrumentValid(t)
         return false
     end
     local model = t.model or part
+    
+    -- Nếu được tag là CadenceOrb thì luôn hợp lệ
+    if part:HasTag("CadenceOrb") or model:HasTag("CadenceOrb") then
+        if part.Transparency >= 0.99 then
+            return false
+        end
+        return true
+    end
+    
     if not isInstrument(model.Name) and not isInstrument(part.Name) then
         return false
     end
