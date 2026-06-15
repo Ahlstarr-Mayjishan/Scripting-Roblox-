@@ -137,8 +137,12 @@ function Logic.enableImmunity(gc, enemy)
             -- Sử dụng task.defer để trì hoãn nhẹ một vi khung hình, đợi Roblox hoàn tất đồng bộ cây phân cấp con
             task.defer(function()
                 if not enemy or not enemy.Parent then return end
-                debugPrint("Deferred scan for:", enemy.Name, "| Descendants count:", #enemy:GetDescendants())
-                for _, part in ipairs(enemy:GetDescendants()) do
+                local descendants = enemy:GetDescendants()
+                debugPrint("Deferred scan for:", enemy.Name, "| Descendants count:", #descendants)
+                for _, part in ipairs(descendants) do
+                    pcall(function()
+                        debugPrint("   - Descendant name:", part.Name, "| Class:", part.ClassName)
+                    end)
                     if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
                         debugPrint("Found TouchInterest in deferred scan:", part:GetFullName())
                         removeTouchFromPart(gc, enemy, part)
