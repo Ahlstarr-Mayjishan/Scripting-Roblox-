@@ -123,13 +123,6 @@ function Logic.enableImmunity(gc, enemy)
     debugPrint("enableImmunity called for:", enemy and enemy:GetFullName())
     if not enemy or not (enemy:IsA("Model") or enemy:IsA("BasePart")) then return end
     
-    -- Đảm bảo chỉ chạy 1 lần/1 round trên mỗi thực thể để tránh lặp vô hạn gây đứng máy
-    if processedEntities[enemy] then 
-        debugPrint("Entity already processed this round, skipping:", enemy.Name)
-        return 
-    end
-    processedEntities[enemy] = true
-    
     -- Lấy controller bằng cơ chế gc hoặc fallback getgenv() toàn cục chống bất đồng bộ bản sao
     local controller = gc.Controller or (getgenv().Client and getgenv().Client.Modules and getgenv().Client.Modules.EntitiesController)
     debugPrint("Controller resolved:", controller ~= nil)
@@ -140,36 +133,41 @@ function Logic.enableImmunity(gc, enemy)
         debugPrint("checkFunc value:", checkFunc())
     end
     
-    -- 1. Đăng ký sự kiện lắng nghe để xóa ngay lập tức nếu TouchInterest được tải xuống trễ hẳn
-    local descConn = enemy.DescendantAdded:Connect(function(part)
-        debugPrint("DescendantAdded in:", enemy.Name, "| Part:", part.Name, "| ClassName:", part.ClassName)
-        if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-            if checkFunc and checkFunc() then
-                debugPrint("Removing TouchInterest from DescendantAdded:", part:GetFullName())
-                removeTouchFromPart(gc, enemy, part)
-            else
-                debugPrint("Toggle is OFF or checkFunc nil, skipping DescendantAdded TouchInterest removal")
-            end
+    -- 1. Nếu toggle đang bật và thực thể chưa được xử lý xóa TouchInterest trong round này
+    if checkFunc and checkFunc() then
+        if not processedEntities[enemy] then
+            processedEntities[enemy] = true
+            
+            -- Sử dụng task.defer để trì hoãn nhẹ một vi khung hình, đợi Roblox hoàn tất đồng bộ cây phân cấp con
+            task.defer(function()
+                if not enemy or not enemy.Parent then return end
+                debugPrint("Deferred scan for:", enemy.Name, "| Descendants count:", #enemy:GetDescendants())
+                for _, part in ipairs(enemy:GetDescendants()) do
+                    if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
+                        debugPrint("Found TouchInterest in deferred scan:", part:GetFullName())
+                        removeTouchFromPart(gc, enemy, part)
+                    end
+                end
+            end)
         end
-    end)
-    gc.registerEntityConnection(enemy, descConn)
+    end
     
-    -- 2. Sử dụng task.defer để trì hoãn nhẹ một vi khung hình, đợi Roblox hoàn tất đồng bộ cây phân cấp con
-    task.defer(function()
-        if not enemy or not enemy.Parent then return end
-        debugPrint("Deferred scan for:", enemy.Name, "| Descendants count:", #enemy:GetDescendants())
-        for _, part in ipairs(enemy:GetDescendants()) do
+    -- 2. Đăng ký sự kiện lắng nghe DescendantAdded nếu chưa có kết nối nào cho thực thể này
+    local hasConnections = (gc.EntityConnections and gc.EntityConnections[enemy] and #gc.EntityConnections[enemy] > 0)
+    if not hasConnections then
+        local descConn = enemy.DescendantAdded:Connect(function(part)
+            debugPrint("DescendantAdded in:", enemy.Name, "| Part:", part.Name, "| ClassName:", part.ClassName)
             if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
-                debugPrint("Found TouchInterest in deferred scan:", part:GetFullName())
                 if checkFunc and checkFunc() then
-                    debugPrint("Removing TouchInterest from deferred scan:", part:GetFullName())
+                    debugPrint("Removing TouchInterest from DescendantAdded:", part:GetFullName())
                     removeTouchFromPart(gc, enemy, part)
                 else
-                    debugPrint("Toggle is OFF or checkFunc nil, skipping deferred scan TouchInterest removal")
+                    debugPrint("Toggle is OFF or checkFunc nil, skipping DescendantAdded TouchInterest removal")
                 end
             end
-        end
-    end)
+        end)
+        gc.registerEntityConnection(enemy, descConn)
+    end
 end
 
 -- Tắt miễn nhiễm (Khôi phục lại TouchInterest cho một loại thực thể)
