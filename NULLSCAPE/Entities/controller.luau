@@ -203,11 +203,6 @@ function Controller:SetImmunity(entityName, value)
                 applyImmunityToChild(child)
             end
         end
-        for _, child in ipairs(workspace:GetChildren()) do
-            if child.Name ~= "Enemies" and child.Name ~= "Skinwalkers" then
-                applyImmunityToChild(child)
-            end
-        end
     else
         if entityName == "Baby" or entityName == "Bell" or entityName == "Mart" then
             Executor.disableImmunityForType(GC, entityName)
@@ -300,8 +295,11 @@ function Controller:StartSkinwalkerEvasion()
                         checkAndEvade(enemy)
                     end
                 end
-                for _, child in ipairs(workspace:GetChildren()) do
-                    checkAndEvade(child)
+                local skinwalkersFolder = workspace:FindFirstChild("Skinwalkers")
+                if skinwalkersFolder then
+                    for _, enemy in ipairs(skinwalkersFolder:GetChildren()) do
+                        checkAndEvade(enemy)
+                    end
                 end
             end
         end
@@ -417,8 +415,12 @@ end
 
 -- Thiết lập quan sát thư mục Enemies trong Workspace
 function Controller:ObserveFolder(folder)
+    debugPrint("ObserveFolder called for:", folder:GetFullName())
     -- Tránh đăng ký nhiều lần cho cùng một thư mục
-    if folderConnections[folder] then return end
+    if folderConnections[folder] then 
+        debugPrint("Folder already observed, skipping:", folder.Name)
+        return 
+    end
 
     if folder.Name == "Enemies" then
         self.EnemiesFolder = folder
@@ -428,6 +430,7 @@ function Controller:ObserveFolder(folder)
 
     -- 1. Lắng nghe khi thực thể mới xuất hiện
     local childAddedConn = folder.ChildAdded:Connect(function(child)
+        debugPrint("ObserveFolder: ChildAdded in:", folder.Name, "| Child Name:", child.Name)
         processEntity(child)
     end)
     table.insert(conns, childAddedConn)
@@ -439,7 +442,9 @@ function Controller:ObserveFolder(folder)
     table.insert(conns, childRemovedConn)
 
     -- 3. Xử lý các thực thể đã có sẵn trong thư mục
+    debugPrint("ObserveFolder: Existing children in:", folder.Name, "| count:", #folder:GetChildren())
     for _, child in ipairs(folder:GetChildren()) do
+        debugPrint("ObserveFolder: Processing existing child:", child.Name)
         processEntity(child)
     end
 
@@ -457,42 +462,23 @@ end
 
 -- Quét tìm thư mục Enemies và Skinwalkers trong Workspace và lắng nghe sự thay đổi
 local function startObservingFolders()
+    debugPrint("startObservingFolders called")
     disconnectFolderObservations()
     
     local function checkAndObserve(child)
         if Controller.Destroyed then return end
         if (child.Name == "Enemies" or child.Name == "Skinwalkers") and child:IsA("Folder") then
             Controller:ObserveFolder(child)
-        else
-            -- Đề phòng thực thể spawn trực tiếp ở workspace
-            processEntity(child)
         end
     end
 
     local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
     table.insert(workspaceConnections, wsConn)
     
-    local wsRemovedConn = workspace.ChildRemoved:Connect(function(child)
-        if child:IsA("Model") and child.Name ~= "Enemies" and child.Name ~= "Skinwalkers" then
-            removeEntity(child)
-        end
-    end)
-    table.insert(workspaceConnections, wsRemovedConn)
-    
-    local initialFolder = workspace:FindFirstChild("Enemies")
-    if initialFolder and initialFolder:IsA("Folder") then
-        Controller:ObserveFolder(initialFolder)
-    end
-    
-    local skinwalkersFolder = workspace:FindFirstChild("Skinwalkers")
-    if skinwalkersFolder and skinwalkersFolder:IsA("Folder") then
-        Controller:ObserveFolder(skinwalkersFolder)
-    end
-
-    -- Xử lý các con có sẵn ở workspace
+    -- Xử lý các folder có sẵn
     for _, child in ipairs(workspace:GetChildren()) do
-        if child.Name ~= "Enemies" and child.Name ~= "Skinwalkers" then
-            processEntity(child)
+        if (child.Name == "Enemies" or child.Name == "Skinwalkers") and child:IsA("Folder") then
+            Controller:ObserveFolder(child)
         end
     end
 end
