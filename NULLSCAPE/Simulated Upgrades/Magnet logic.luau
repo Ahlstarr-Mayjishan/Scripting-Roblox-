@@ -1,16 +1,18 @@
 -- [[
 --  NULLSCAPE - Gift Magnet Bypass / Auto-Collect Logic
 --  Vai trò: Tự động thu thập quà trong phạm vi cấu hình mà không gây sụt giảm FPS.
---  Tối ưu hóa: Sử dụng CollectionService để định vị các phần quà nhanh chóng và hiệu quả.
+--  Tối ưu hóa: Gọi trực tiếp hàm :Collect gốc của game để đồng bộ hoá 100%, bypass anticheat và có đầy đủ combo/sound.
 -- ]]
 
 local Magnet = {}
-local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 local lastCollectTime = 0
 local COLLECT_DELAY = 0.35 -- Khoảng trễ nhặt giữa các hộp quà ở chế độ Legit (giây)
+
+local comboCount = 0
+local lastCollectTick = 0
 
 function Magnet.update(controller, hrp)
     if not controller.AutoCollectEnabled then return end
@@ -28,42 +30,26 @@ function Magnet.update(controller, hrp)
     if not char then return end
     
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local GiftCollected = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("GiftCollected")
     local CollectedGiftEvent = ReplicatedStorage:FindFirstChild("Movement") 
         and ReplicatedStorage.Movement:FindFirstChild("Events") 
         and ReplicatedStorage.Movement.Events:FindFirstChild("CollectedGift")
         
-    if not GiftCollected then return end
-    
-    local gifts = CollectionService:GetTagged("Gift")
+    local activeGifts = controller.ActiveGifts or {}
     local hrpPos = hrp.Position
     local validGifts = {}
     
-    for _, gift in ipairs(gifts) do
-        if gift:IsDescendantOf(workspace) then
-            -- Kiểm tra xem quà đã được thu thập hay chưa
-            local isCollected = (gift:GetAttribute("Collected") == true) or (gift:GetAttribute("ClientCollected") == true)
-            if not isCollected then
-                -- Bỏ qua Tripmine
-                local giftType = gift:GetAttribute("GiftType")
-                local giftName = gift.Name:lower()
-                local isMine = (giftType and string.find(giftType:lower(), "tripmine")) or string.find(giftName, "tripmine")
-                if not isMine then
-                    -- Lấy vị trí bắt đầu
-                    local startPos = gift:GetAttribute("StartPosition") 
-                        or (gift:IsA("BasePart") and gift.Position)
-                        or (gift:IsA("Model") and gift.PrimaryPart and gift.PrimaryPart.Position)
-                        or (gift:IsA("Model") and gift:GetPivot().Position)
-                    
-                    if startPos then
-                        local distance = (hrpPos - startPos).Magnitude
-                        if distance <= range then
-                            table.insert(validGifts, {
-                                part = gift,
-                                dist = distance
-                            })
-                        end
-                    end
+    for _, g in ipairs(activeGifts) do
+        local rawObj = g.rawObj
+        -- Chỉ nhặt quà chưa được thu thập/chưa bị hủy, và bỏ qua mìn (Tripmine)
+        if rawObj and not rawObj.Collected and not rawObj.Destroyed and g.type ~= "Tripmine" then
+            local pos = rawObj.Position
+            if pos then
+                local distance = (hrpPos - pos).Magnitude
+                if distance <= range then
+                    table.insert(validGifts, {
+                        gift = g,
+                        dist = distance
+                    })
                 end
             end
         end
@@ -75,11 +61,19 @@ function Magnet.update(controller, hrp)
         -- Sắp xếp theo khoảng cách và chỉ nhặt 1 hộp quà gần nhất
         table.sort(validGifts, function(a, b) return a.dist < b.dist end)
         
-        local target = validGifts[1].part
-        target:SetAttribute("ClientCollected", true)
+        local target = validGifts[1].gift
+        local rawObj = target.rawObj
+        
+        -- Tính combo nhặt quà tương thích hoàn hảo với game gốc
+        local now = tick()
+        if math.min(1.2, math.pow(1.1, comboCount) * 0.8) <= now - lastCollectTick then
+            comboCount = 0
+        end
+        comboCount = comboCount + 1
+        lastCollectTick = now
         
         pcall(function()
-            GiftCollected:FireServer(target, range)
+            rawObj:Collect(false, true, comboCount)
         end)
         
         if CollectedGiftEvent then
@@ -92,11 +86,17 @@ function Magnet.update(controller, hrp)
     else
         -- Chế độ Blatant: Nhặt toàn bộ quà trong phạm vi cùng một lúc
         for _, item in ipairs(validGifts) do
-            local target = item.part
-            target:SetAttribute("ClientCollected", true)
+            local rawObj = item.gift.rawObj
+            
+            local now = tick()
+            if math.min(1.2, math.pow(1.1, comboCount) * 0.8) <= now - lastCollectTick then
+                comboCount = 0
+            end
+            comboCount = comboCount + 1
+            lastCollectTick = now
             
             pcall(function()
-                GiftCollected:FireServer(target, range)
+                rawObj:Collect(false, true, comboCount)
             end)
             
             if CollectedGiftEvent then
