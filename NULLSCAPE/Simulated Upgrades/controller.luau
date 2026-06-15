@@ -1025,17 +1025,21 @@ local function setupGiftClientHook()
             print("[NULLSCAPE Radar] Đã đăng ký " .. tostring(existingCount) .. " Hộp quà hiện có.")
             
             -- Hook hàm new
+            -- Hook hàm new
             if not getgenv()._NULLSCAPE_Globals.GiftClientNewHooked then
                 local originalNew = GiftClientHandler.new
                 getgenv()._NULLSCAPE_Globals.OriginalGiftClientNew = originalNew
                 
                 GiftClientHandler.new = function(...)
-                    local cb = getgenv()._NULLSCAPE_Globals.onGiftCreated
-                    if cb then
-                        pcall(cb, ...)
-                    end
                     local orig = getgenv()._NULLSCAPE_Globals.OriginalGiftClientNew
-                    return orig(...)
+                    local giftObj = orig(...)
+                    if giftObj then
+                        local cb = getgenv()._NULLSCAPE_Globals.onGiftCreated
+                        if cb then
+                            pcall(cb, giftObj)
+                        end
+                    end
+                    return giftObj
                 end
                 getgenv()._NULLSCAPE_Globals.GiftClientNewHooked = true
                 print("[NULLSCAPE Radar] Đã hook hàm GiftClientHandler.new")
