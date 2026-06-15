@@ -20,6 +20,7 @@ Logic.TargetNames = {
 
 -- Bảng lưu trữ thực thể đã xử lý trong round hiện tại để tránh lặp vô hạn
 local processedEntities = setmetatable({}, { __mode = "k" })
+local descendantConnections = setmetatable({}, { __mode = "k" })
 
 -- Các hàm helper tương thích ngược cho các executor cũ/mobile
 local function clearTable(t)
@@ -84,7 +85,8 @@ function Logic.setInLobbyState(val)
     debugPrint("setInLobbyState called with:", val)
     if val == false then
         clearTable(processedEntities)
-        debugPrint("processedEntities cleared for new round")
+        clearTable(descendantConnections)
+        debugPrint("processedEntities and descendantConnections cleared for new round")
         
         -- Quét thử toàn bộ workspace sau 5 giây để tìm mọi TouchInterest
         task.delay(5, function()
@@ -166,8 +168,7 @@ function Logic.enableImmunity(gc, enemy)
     end
     
     -- 2. Đăng ký sự kiện lắng nghe DescendantAdded nếu chưa có kết nối nào cho thực thể này
-    local hasConnections = (gc.EntityConnections and gc.EntityConnections[enemy] and #gc.EntityConnections[enemy] > 0)
-    if not hasConnections then
+    if not descendantConnections[enemy] then
         local descConn = enemy.DescendantAdded:Connect(function(part)
             debugPrint("DescendantAdded in:", enemy.Name, "| Part:", part.Name, "| ClassName:", part.ClassName)
             if part:IsA("TouchTransmitter") or part.Name == "TouchInterest" then
@@ -179,6 +180,7 @@ function Logic.enableImmunity(gc, enemy)
                 end
             end
         end)
+        descendantConnections[enemy] = descConn
         gc.registerEntityConnection(enemy, descConn)
     end
 end
@@ -230,6 +232,7 @@ function Logic.restoreAll(gc)
     end
     clearTable(gc.SavedPartsData)
     clearTable(processedEntities)
+    clearTable(descendantConnections)
     debugPrint("All caches cleared in restoreAll")
 end
 
