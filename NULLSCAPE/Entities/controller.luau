@@ -262,6 +262,10 @@ function Controller:StartSkinwalkerEvasion()
     if skinwalkerThread then return end
     skinwalkerThread = task.spawn(function()
         while self.SkinwalkerImmune and not self.Destroyed do
+            if getgenv()._NULLSCAPE_Globals.activeEntitiesController ~= Controller then
+                Controller:CleanUp()
+                break
+            end
             task.wait(0.01) -- Chạy cực nhanh để dịch chuyển tránh chạm
             local LocalPlayer = game:GetService("Players").LocalPlayer
             local char = LocalPlayer and LocalPlayer.Character
@@ -497,6 +501,132 @@ local function setInLobby(val)
     end
 end
 
+-- Hook để chặn RemoteEvent báo tử của thực thể Client-side (như ICBM và Springer) một cách an toàn
+local function initializeICBMHook()
+    -- Xây dựng bảng tra cứu nhanh O(1) tên các RemoteEvent cần chặn
+    local TargetRemoteNames = {
+        ["ClientEvent"] = true,
+        ["ShockwaveEvent"] = true
+    }
+
+    local function handleRemoteCall(self, ...)
+        local args = {...}
+        
+        -- Lấy activeController hiện tại từ globals
+        local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+        if not activeCtrl then
+            return false
+        end
+
+        -- Kiểm tra nhanh tên remote trước (O(1) lookup)
+        if not TargetRemoteNames[self.Name] then
+            return false
+        end
+        
+        -- Chạy logic chặn RemoteEvent thống nhất từ RemoteBlocking.luau
+        local block = RemoteBlocking.shouldBlockRemoteCall(self, args, activeCtrl)
+        if block then
+            return true
+        end
+        
+        return false
+    end
+
+    -- Đăng ký dispatcher toàn cục
+    getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall = handleRemoteCall
+
+    -- 1. Hook __namecall (Phương pháp chuẩn và mạnh nhất cho các cuộc gọi dạng Remote:FireServer(...) hoặc Remote:InvokeServer(...))
+    local namecallSuccess = false
+    if typeof(hookmetamethod) == "function" then
+        if not getgenv()._NULLSCAPE_Globals.NamecallHooked then
+            pcall(function()
+                local oldNamecall
+                oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+                    local method = getnamecallmethod()
+                    local isRemote = false
+                    local isRemoteFunction = false
+                    
+                    if method == "FireServer" or method == "InvokeServer" then
+                        pcall(function()
+                            if typeof(self) == "Instance" then
+                                if self.ClassName == "RemoteEvent" then
+                                    isRemote = true
+                                elseif self.ClassName == "RemoteFunction" then
+                                    isRemote = true
+                                    isRemoteFunction = true
+                                end
+                            end
+                        end)
+                    end
+                    
+                    if isRemote then
+                        local dispatcher = getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall
+                        if dispatcher then
+                            local success, shouldBlock = pcall(dispatcher, self, ...)
+                            if success and shouldBlock then
+                                if isRemoteFunction then
+                                    return nil -- Chặn đứng InvokeServer và trả về nil
+                                end
+                                return -- Chặn đứng FireServer
+                            end
+                        end
+                    end
+                    return oldNamecall(self, ...)
+                end)
+                getgenv()._NULLSCAPE_Globals.NamecallHooked = true
+                namecallSuccess = true
+            end)
+        else
+            namecallSuccess = true
+        end
+    end
+
+    -- 2. Hook FireServer/InvokeServer prototype (Dự phòng)
+    local prototypeSuccess = false
+    if typeof(hookfunction) == "function" then
+        if not getgenv()._NULLSCAPE_Globals.PrototypeHooked then
+            pcall(function()
+                local remoteProto = Instance.new("RemoteEvent")
+                local oldFireServer
+                oldFireServer = hookfunction(remoteProto.FireServer, function(self, ...)
+                    local dispatcher = getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall
+                    if dispatcher then
+                        local success, shouldBlock = pcall(dispatcher, self, ...)
+                        if success and shouldBlock then
+                            return -- Chặn đứng cuộc gọi
+                        end
+                    end
+                    return oldFireServer(self, ...)
+                end)
+                
+                local funcProto = Instance.new("RemoteFunction")
+                local oldInvokeServer
+                oldInvokeServer = hookfunction(funcProto.InvokeServer, function(self, ...)
+                    local dispatcher = getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall
+                    if dispatcher then
+                        local success, shouldBlock = pcall(dispatcher, self, ...)
+                        if success and shouldBlock then
+                            return nil -- Chặn đứng cuộc gọi và trả về nil
+                        end
+                    end
+                    return oldInvokeServer(self, ...)
+                end)
+                getgenv()._NULLSCAPE_Globals.PrototypeHooked = true
+                prototypeSuccess = true
+            end)
+        else
+            prototypeSuccess = true
+        end
+    end
+    
+    if not namecallSuccess and not prototypeSuccess then
+        warn("Failed to initialize any ClientSideHit hook. Exploits might not be supported.")
+    end
+end
+
+-- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
+getgenv()._NULLSCAPE_Globals.activeEntitiesController = Controller
+
 -- Khởi tạo ban đầu khi nạp script
 if not inLobby then
     startObservingFolders()
@@ -511,6 +641,10 @@ task.spawn(function()
         
         local conn = inRoundVal.Changed:Connect(function(val)
             if Controller.Destroyed then return end
+            if getgenv()._NULLSCAPE_Globals.activeEntitiesController ~= Controller then
+                Controller:CleanUp()
+                return
+            end
             setInLobby(not val)
         end)
         table.insert(Controller.PermanentConnections, conn)
@@ -522,128 +656,13 @@ task.spawn(function()
     while not Controller.Destroyed and not hasInRoundValue do
         task.wait(3.0)
         if Controller.Destroyed or hasInRoundValue then break end
+        if getgenv()._NULLSCAPE_Globals.activeEntitiesController ~= Controller then
+            Controller:CleanUp()
+            break
+        end
         setInLobby(not isInMatch())
     end
 end)
-
--- Hook để chặn RemoteEvent báo tử của thực thể Client-side (như ICBM và Springer) một cách an toàn
-local hookInitialized = false
-local function initializeICBMHook()
-    if hookInitialized then return end
-    hookInitialized = true
-    
-    -- Xây dựng bảng tra cứu nhanh O(1) tên các RemoteEvent cần chặn
-    local TargetRemoteNames = {
-        ["ClientEvent"] = true,
-        ["ShockwaveEvent"] = true
-    }
-
-    local function handleRemoteCall(self, ...)
-        local args = {...}
-        
-        -- Logger gỡ lỗi an toàn (đã tắt theo yêu cầu)
-        --[[
-        pcall(function()
-            local remoteName = self.Name
-            local firstArg = args[1]
-            if string.find(remoteName, "Client") or string.find(remoteName, "Kill") or string.find(remoteName, "Damage") or string.find(remoteName, "Hit") or (typeof(firstArg) == "string" and (string.find(firstArg, "Kill") or string.find(firstArg, "Demon") or string.find(firstArg, "Combust"))) then
-                print(string.format("[DEBUG Remote] Remote Fired: %s | Arg1: %s", tostring(remoteName), tostring(firstArg)))
-                for i = 2, #args do
-                    print(string.format("   Arg [%d]: %s (%s)", i, tostring(args[i]), typeof(args[i])))
-                end
-            end
-        end)
-        ]]
-
-        -- Kiểm tra nhanh tên remote trước (O(1) lookup)
-        if not TargetRemoteNames[self.Name] then
-            return false
-        end
-        
-        -- Chạy logic chặn RemoteEvent thống nhất từ RemoteBlocking.luau
-        local block = RemoteBlocking.shouldBlockRemoteCall(self, args, Controller)
-        if block then
-            return true
-        end
-        
-        return false
-    end
-
-    -- 1. Hook __namecall (Phương pháp chuẩn và mạnh nhất cho các cuộc gọi dạng Remote:FireServer(...) hoặc Remote:InvokeServer(...))
-    local namecallSuccess = false
-    if typeof(hookmetamethod) == "function" then
-        pcall(function()
-            local oldNamecall
-            oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-                local method = getnamecallmethod()
-                local isRemote = false
-                local isRemoteFunction = false
-                
-                if method == "FireServer" or method == "InvokeServer" then
-                    pcall(function()
-                        if typeof(self) == "Instance" then
-                            if self.ClassName == "RemoteEvent" then
-                                isRemote = true
-                            elseif self.ClassName == "RemoteFunction" then
-                                isRemote = true
-                                isRemoteFunction = true
-                            end
-                        end
-                    end)
-                end
-                
-                if isRemote then
-                    local success, shouldBlock = pcall(handleRemoteCall, self, ...)
-                    if not success then
-                        warn("[NULLSCAPE Hook Error] handleRemoteCall failed: " .. tostring(shouldBlock))
-                    elseif shouldBlock then
-                        if isRemoteFunction then
-                            return nil -- Chặn đứng InvokeServer và trả về nil
-                        end
-                        return -- Chặn đứng FireServer
-                    end
-                end
-                return oldNamecall(self, ...)
-            end)
-            namecallSuccess = true
-        end)
-    end
-
-    -- 2. Hook FireServer/InvokeServer prototype (Dự phòng)
-    local prototypeSuccess = false
-    if typeof(hookfunction) == "function" then
-        pcall(function()
-            local remoteProto = Instance.new("RemoteEvent")
-            local oldFireServer
-            oldFireServer = hookfunction(remoteProto.FireServer, function(self, ...)
-                local success, shouldBlock = pcall(handleRemoteCall, self, ...)
-                if not success then
-                    warn("[NULLSCAPE Hook Error] FireServer hook failed: " .. tostring(shouldBlock))
-                elseif shouldBlock then
-                    return -- Chặn đứng cuộc gọi
-                end
-                return oldFireServer(self, ...)
-            end)
-            
-            local funcProto = Instance.new("RemoteFunction")
-            local oldInvokeServer
-            oldInvokeServer = hookfunction(funcProto.InvokeServer, function(self, ...)
-                local success, shouldBlock = pcall(handleRemoteCall, self, ...)
-                if not success then
-                    warn("[NULLSCAPE Hook Error] InvokeServer hook failed: " .. tostring(shouldBlock))
-                elseif shouldBlock then
-                    return nil -- Chặn đứng cuộc gọi và trả về nil
-                end
-                return oldInvokeServer(self, ...)
-            end)
-            prototypeSuccess = true
-        end)
-    end
-    
-    if not namecallSuccess and not prototypeSuccess then
-        warn("Failed to initialize any ClientSideHit hook. Exploits might not be supported.")
-    end
-end
 
 task.spawn(initializeICBMHook)
 

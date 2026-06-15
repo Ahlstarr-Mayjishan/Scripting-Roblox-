@@ -4,6 +4,37 @@
 --  Đây là file điều khiển chính (Master loader). Các tính năng sẽ được thêm dưới dạng module.
 -- ]]
 
+-- Tự động dọn dẹp phiên chạy cũ trước khi chạy phiên mới
+if getgenv().Client then
+    pcall(function()
+        local oldClient = getgenv().Client
+        oldClient.Destroyed = true
+        
+        if oldClient.Modules then
+            for _, module in pairs(oldClient.Modules) do
+                if typeof(module) == "table" then
+                    module.Destroyed = true
+                    if typeof(module.CleanUp) == "function" then
+                        pcall(function() module:CleanUp() end)
+                    end
+                end
+            end
+        end
+        
+        if oldClient.ActiveConnections then
+            for _, conn in pairs(oldClient.ActiveConnections) do
+                if conn then pcall(function() conn:Disconnect() end) end
+            end
+        end
+        
+        if getgenv().Rayfield then
+            pcall(function() getgenv().Rayfield:Destroy() end)
+        end
+    end)
+end
+
+getgenv()._NULLSCAPE_Globals = getgenv()._NULLSCAPE_Globals or {}
+
 -- Đối tượng quản lý chung của Client
 local Client = {
     Window = nil,
@@ -92,6 +123,7 @@ local fpsConnection = RunService.RenderStepped:Connect(function()
         lastTime = now
     end
 end)
+table.insert(Client.ActiveConnections, fpsConnection)
 
 task.spawn(function()
     while task.wait(2) do

@@ -522,6 +522,11 @@ startRenderStepped = function()
             stopRenderStepped()
             return
         end
+        if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+            Controller:CleanUp()
+            stopRenderStepped()
+            return
+        end
         if not checkActiveState() then
             stopRenderStepped()
             return
@@ -542,6 +547,10 @@ startMatchLoops = function()
     
     task.spawn(function()
         while not Controller.Destroyed and checkActiveState() do
+            if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+                Controller:CleanUp()
+                break
+            end
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if hrp then
@@ -565,6 +574,10 @@ local function startUtilityLoop()
     utilityLoopActive = true
     task.spawn(function()
         while not Controller.Destroyed do
+            if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+                Controller:CleanUp()
+                break
+            end
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if hrp then
@@ -856,6 +869,10 @@ end
 local function startGiftPoolObserver()
     task.spawn(function()
         while not Controller.Destroyed do
+            if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+                Controller:CleanUp()
+                break
+            end
             if Controller.RadarEnabled and Controller.GiftESPEnabled then
                 local poolGifts = scanActiveGiftsFromPools()
                 
@@ -889,6 +906,78 @@ local function startGiftPoolObserver()
             task.wait(0.2)
         end
     end)
+end
+
+-- Đăng ký các dispatcher cho các hooks
+getgenv()._NULLSCAPE_Globals.onGiftCreated = function(giftObj)
+    pcall(registerGiftObj, giftObj)
+end
+getgenv()._NULLSCAPE_Globals.onGiftDestroyed = function(id)
+    pcall(unregisterGiftById, id)
+end
+
+getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
+    local args = {...}
+    local isDefuse = false
+    local isTetrahedron = false
+    local isRadarPlayer = false
+    local isRadarAltars = false
+    local isRadarInstruments = false
+    for _, v in ipairs(args) do
+        if v == "DefuseKit" or v == "Defuse Kit" then
+            isDefuse = true
+        elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
+            isTetrahedron = true
+        elseif v == "RadarPlayer" then
+            isRadarPlayer = true
+        elseif v == "RadarAltars" then
+            isRadarAltars = true
+        elseif v == "RadarInstruments" then
+            isRadarInstruments = true
+        end
+    end
+    if isDefuse and Controller.SimulateDefuseKit then
+        return true, true
+    end
+    if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+        return true, true
+    end
+    if isRadarPlayer and Controller.RadarEnabled then
+        return true, true
+    end
+    if isRadarAltars and Controller.RadarEnabled and Controller.AltarESPEnabled then
+        return true, true
+    end
+    if isRadarInstruments and Controller.RadarEnabled and Controller.CadenceESPEnabled then
+        return true, true
+    end
+    return false
+end
+
+getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
+    local args = {...}
+    local isDefuse = false
+    local isTetrahedron = false
+    local isRadar = false
+    for _, v in ipairs(args) do
+        if v == "DefuseKit" or v == "Defuse Kit" then
+            isDefuse = true
+        elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
+            isTetrahedron = true
+        elseif v == "RadarPlayer" or v == "RadarAltars" or v == "RadarInstruments" then
+            isRadar = true
+        end
+    end
+    if isDefuse and Controller.SimulateDefuseKit then
+        return true, Controller.DefuseKitStack or 3
+    end
+    if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+        return true, 1
+    end
+    if isRadar and Controller.RadarEnabled then
+        return true, 1
+    end
+    return false
 end
 
 local function setupGiftClientHook()
@@ -936,25 +1025,36 @@ local function setupGiftClientHook()
             print("[NULLSCAPE Radar] Đã đăng ký " .. tostring(existingCount) .. " Hộp quà hiện có.")
             
             -- Hook hàm new
-            local originalNew = GiftClientHandler.new
-            if originalNew then
+            if not getgenv()._NULLSCAPE_Globals.GiftClientNewHooked then
+                local originalNew = GiftClientHandler.new
+                getgenv()._NULLSCAPE_Globals.OriginalGiftClientNew = originalNew
+                
                 GiftClientHandler.new = function(...)
-                    local giftObj = originalNew(...)
-                    if giftObj then
-                        pcall(registerGiftObj, giftObj)
+                    local cb = getgenv()._NULLSCAPE_Globals.onGiftCreated
+                    if cb then
+                        pcall(cb, ...)
                     end
-                    return giftObj
+                    local orig = getgenv()._NULLSCAPE_Globals.OriginalGiftClientNew
+                    return orig(...)
                 end
+                getgenv()._NULLSCAPE_Globals.GiftClientNewHooked = true
                 print("[NULLSCAPE Radar] Đã hook hàm GiftClientHandler.new")
             end
             
             -- Hook hàm DestroyGift
-            local originalDestroyGift = GiftClientHandler.DestroyGift
-            if originalDestroyGift then
+            if not getgenv()._NULLSCAPE_Globals.GiftClientDestroyHooked then
+                local originalDestroyGift = GiftClientHandler.DestroyGift
+                getgenv()._NULLSCAPE_Globals.OriginalGiftClientDestroy = originalDestroyGift
+                
                 GiftClientHandler.DestroyGift = function(id, ...)
-                    pcall(unregisterGiftById, id)
-                    return originalDestroyGift(id, ...)
+                    local cb = getgenv()._NULLSCAPE_Globals.onGiftDestroyed
+                    if cb then
+                        pcall(cb, id)
+                    end
+                    local orig = getgenv()._NULLSCAPE_Globals.OriginalGiftClientDestroy
+                    return orig(id, ...)
                 end
+                getgenv()._NULLSCAPE_Globals.GiftClientDestroyHooked = true
                 print("[NULLSCAPE Radar] Đã hook hàm GiftClientHandler.DestroyGift")
             end
         else
@@ -962,6 +1062,9 @@ local function setupGiftClientHook()
         end
     end)
 end
+
+-- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
+getgenv()._NULLSCAPE_Globals.activeUpgradeController = Controller
 
 -- Khởi tạo ban đầu khi nạp script
 startObservingFolders()
@@ -979,6 +1082,10 @@ task.spawn(function()
         
         local conn = inRoundVal.Changed:Connect(function(val)
             if Controller.Destroyed then return end
+            if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+                Controller:CleanUp()
+                return
+            end
             setInLobby(not val)
         end)
         table.insert(Controller.PermanentConnections, conn)
@@ -990,6 +1097,10 @@ task.spawn(function()
     while not Controller.Destroyed and not hasInRoundValue do
         task.wait(3.0)
         if Controller.Destroyed or hasInRoundValue then break end
+        if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+            Controller:CleanUp()
+            break
+        end
         setInLobby(not isInMatch())
     end
 end)
@@ -1003,140 +1114,72 @@ local function hookUpgradeHandler()
             if success and typeof(UpgradeHandler) == "table" then
                 if UpgradeHandler.IsUpgradeEnabled then
                     if typeof(hookfunction) == "function" then
-                        local oldIsUpgradeEnabled
-                        oldIsUpgradeEnabled = hookfunction(UpgradeHandler.IsUpgradeEnabled, function(...)
-                            local args = {...}
-                            local isDefuse = false
-                            local isTetrahedron = false
-                            local isRadarPlayer = false
-                            local isRadarAltars = false
-                            local isRadarInstruments = false
-                            for _, v in ipairs(args) do
-                                if v == "DefuseKit" or v == "Defuse Kit" then
-                                    isDefuse = true
-                                elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
-                                    isTetrahedron = true
-                                elseif v == "RadarPlayer" then
-                                    isRadarPlayer = true
-                                elseif v == "RadarAltars" then
-                                    isRadarAltars = true
-                                elseif v == "RadarInstruments" then
-                                    isRadarInstruments = true
+                        if not getgenv()._NULLSCAPE_Globals.IsUpgradeEnabledHooked then
+                            local oldIsUpgradeEnabled
+                            oldIsUpgradeEnabled = hookfunction(UpgradeHandler.IsUpgradeEnabled, function(...)
+                                local cb = getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck
+                                if cb then
+                                    local override, result = cb(...)
+                                    if override then
+                                        return result
+                                    end
                                 end
-                            end
-                            if isDefuse and Controller.SimulateDefuseKit then
-                                return true
-                            end
-                            if isTetrahedron and Controller.MatrixTetrahedronEnabled then
-                                return true
-                            end
-                            if isRadarPlayer and Controller.RadarEnabled then
-                                return true
-                            end
-                            if isRadarAltars and Controller.RadarEnabled and Controller.AltarESPEnabled then
-                                return true
-                            end
-                            if isRadarInstruments and Controller.RadarEnabled and Controller.CadenceESPEnabled then
-                                return true
-                            end
-                            return oldIsUpgradeEnabled(...)
-                        end)
+                                return oldIsUpgradeEnabled(...)
+                            end)
+                            getgenv()._NULLSCAPE_Globals.OriginalIsUpgradeEnabled = oldIsUpgradeEnabled
+                            getgenv()._NULLSCAPE_Globals.IsUpgradeEnabledHooked = true
+                        end
                     else
-                        local oldIsUpgradeEnabled = UpgradeHandler.IsUpgradeEnabled
-                        UpgradeHandler.IsUpgradeEnabled = function(...)
-                            local args = {...}
-                            local isDefuse = false
-                            local isTetrahedron = false
-                            local isRadarPlayer = false
-                            local isRadarAltars = false
-                            local isRadarInstruments = false
-                            for _, v in ipairs(args) do
-                                if v == "DefuseKit" or v == "Defuse Kit" then
-                                    isDefuse = true
-                                elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
-                                    isTetrahedron = true
-                                elseif v == "RadarPlayer" then
-                                    isRadarPlayer = true
-                                elseif v == "RadarAltars" then
-                                    isRadarAltars = true
-                                elseif v == "RadarInstruments" then
-                                    isRadarInstruments = true
+                        if not getgenv()._NULLSCAPE_Globals.IsUpgradeEnabledHooked then
+                            local oldIsUpgradeEnabled = UpgradeHandler.IsUpgradeEnabled
+                            getgenv()._NULLSCAPE_Globals.OriginalIsUpgradeEnabled = oldIsUpgradeEnabled
+                            UpgradeHandler.IsUpgradeEnabled = function(...)
+                                local cb = getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck
+                                if cb then
+                                    local override, result = cb(...)
+                                    if override then
+                                        return result
+                                    end
                                 end
+                                return getgenv()._NULLSCAPE_Globals.OriginalIsUpgradeEnabled(...)
                             end
-                            if isDefuse and Controller.SimulateDefuseKit then
-                                return true
-                            end
-                            if isTetrahedron and Controller.MatrixTetrahedronEnabled then
-                                return true
-                            end
-                            if isRadarPlayer and Controller.RadarEnabled then
-                                return true
-                            end
-                            if isRadarAltars and Controller.RadarEnabled and Controller.AltarESPEnabled then
-                                return true
-                            end
-                            if isRadarInstruments and Controller.RadarEnabled and Controller.CadenceESPEnabled then
-                                return true
-                            end
-                            return oldIsUpgradeEnabled(...)
+                            getgenv()._NULLSCAPE_Globals.IsUpgradeEnabledHooked = true
                         end
                     end
                 end
                 
                 if UpgradeHandler.GetUpgradeStack then
                     if typeof(hookfunction) == "function" then
-                        local oldGetUpgradeStack
-                        oldGetUpgradeStack = hookfunction(UpgradeHandler.GetUpgradeStack, function(...)
-                            local args = {...}
-                            local isDefuse = false
-                            local isTetrahedron = false
-                            local isRadar = false
-                            for _, v in ipairs(args) do
-                                if v == "DefuseKit" or v == "Defuse Kit" then
-                                    isDefuse = true
-                                elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
-                                    isTetrahedron = true
-                                elseif v == "RadarPlayer" or v == "RadarAltars" or v == "RadarInstruments" then
-                                    isRadar = true
+                        if not getgenv()._NULLSCAPE_Globals.GetUpgradeStackHooked then
+                            local oldGetUpgradeStack
+                            oldGetUpgradeStack = hookfunction(UpgradeHandler.GetUpgradeStack, function(...)
+                                local cb = getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck
+                                if cb then
+                                    local override, result = cb(...)
+                                    if override then
+                                        return result
+                                    end
                                 end
-                            end
-                            if isDefuse and Controller.SimulateDefuseKit then
-                                return Controller.DefuseKitStack or 3
-                            end
-                            if isTetrahedron and Controller.MatrixTetrahedronEnabled then
-                                return 1
-                            end
-                            if isRadar and Controller.RadarEnabled then
-                                return 1
-                            end
-                            return oldGetUpgradeStack(...)
-                        end)
+                                return oldGetUpgradeStack(...)
+                            end)
+                            getgenv()._NULLSCAPE_Globals.OriginalGetUpgradeStack = oldGetUpgradeStack
+                            getgenv()._NULLSCAPE_Globals.GetUpgradeStackHooked = true
+                        end
                     else
-                        local oldGetUpgradeStack = UpgradeHandler.GetUpgradeStack
-                        UpgradeHandler.GetUpgradeStack = function(...)
-                            local args = {...}
-                            local isDefuse = false
-                            local isTetrahedron = false
-                            local isRadar = false
-                            for _, v in ipairs(args) do
-                                if v == "DefuseKit" or v == "Defuse Kit" then
-                                    isDefuse = true
-                                elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
-                                    isTetrahedron = true
-                                elseif v == "RadarPlayer" or v == "RadarAltars" or v == "RadarInstruments" then
-                                    isRadar = true
+                        if not getgenv()._NULLSCAPE_Globals.GetUpgradeStackHooked then
+                            local oldGetUpgradeStack = UpgradeHandler.GetUpgradeStack
+                            getgenv()._NULLSCAPE_Globals.OriginalGetUpgradeStack = oldGetUpgradeStack
+                            UpgradeHandler.GetUpgradeStack = function(...)
+                                local cb = getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck
+                                if cb then
+                                    local override, result = cb(...)
+                                    if override then
+                                        return result
+                                    end
                                 end
+                                return getgenv()._NULLSCAPE_Globals.OriginalGetUpgradeStack(...)
                             end
-                            if isDefuse and Controller.SimulateDefuseKit then
-                                return Controller.DefuseKitStack or 3
-                            end
-                            if isTetrahedron and Controller.MatrixTetrahedronEnabled then
-                                return 1
-                            end
-                            if isRadar and Controller.RadarEnabled then
-                                return 1
-                            end
-                            return oldGetUpgradeStack(...)
+                            getgenv()._NULLSCAPE_Globals.GetUpgradeStackHooked = true
                         end
                     end
                 end

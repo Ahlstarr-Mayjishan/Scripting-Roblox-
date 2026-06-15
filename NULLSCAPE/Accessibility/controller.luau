@@ -139,6 +139,10 @@ local function startObservingFolders()
     
     local function checkAndObserve(child)
         if Controller.Destroyed then return end
+        if getgenv()._NULLSCAPE_Globals.activeAccessibilityController ~= Controller then
+            Controller:CleanUp()
+            return
+        end
         if child.Name == "Enemies" and child:IsA("Folder") then
             Controller:ObserveFolder(child)
         end
@@ -183,6 +187,9 @@ local function setInLobby(val)
     end
 end
 
+-- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
+getgenv()._NULLSCAPE_Globals.activeAccessibilityController = Controller
+
 -- Khởi tạo ban đầu khi nạp script
 if not inLobby then
     Controller:updateSpringerAutoJumpState()
@@ -192,10 +199,18 @@ end
 task.spawn(function()
     local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
     if inRoundVal and inRoundVal:IsA("BoolValue") then
+        if getgenv()._NULLSCAPE_Globals.activeAccessibilityController ~= Controller then
+            Controller:CleanUp()
+            return
+        end
         setInLobby(not inRoundVal.Value)
         
         local conn = inRoundVal.Changed:Connect(function(val)
             if Controller.Destroyed then return end
+            if getgenv()._NULLSCAPE_Globals.activeAccessibilityController ~= Controller then
+                Controller:CleanUp()
+                return
+            end
             setInLobby(not val)
         end)
         table.insert(Controller.PermanentConnections, conn)

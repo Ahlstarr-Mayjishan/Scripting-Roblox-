@@ -120,17 +120,102 @@ local function setArrowTransparency(arrow, transparency)
 	end
 end
 
+local function findTemplate(key)
+	local Players = game:GetService("Players")
+	local LocalPlayer = Players.LocalPlayer
+	local ReplicatedFirst = game:GetService("ReplicatedFirst")
+
+	if key == "ArrowGift" then
+		-- 1. Thử tìm trong ReplicatedFirst
+		local giftClient = ReplicatedFirst:FindFirstChild("ClientModules")
+			and ReplicatedFirst.ClientModules:FindFirstChild("GiftClient")
+		local giftClientHandler = giftClient and giftClient:FindFirstChild("GiftClientHandler")
+		local assets = giftClientHandler and giftClientHandler:FindFirstChild("Assets")
+		local template = assets and assets:FindFirstChild("GiftArrow")
+		if template then return template end
+
+		-- 2. Thử tìm trong workspace
+		template = workspace:FindFirstChild("GiftArrow")
+		if template then return template end
+	elseif key == "ArrowCadence" then
+		-- 1. Thử tìm trong PlayerScripts
+		local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
+		local arrowHandler = playerScripts and playerScripts:FindFirstChild("ArrowHandler")
+		local arrowsFolder = arrowHandler and arrowHandler:FindFirstChild("Arrows")
+		local template = arrowsFolder and arrowsFolder:FindFirstChild("CadenceArrow")
+		if template then return template end
+
+		-- 2. Thử tìm trong workspace.Arrows
+		local wArrows = workspace:FindFirstChild("Arrows")
+		template = wArrows and wArrows:FindFirstChild("CadenceArrow")
+		if template then return template end
+	elseif key == "ArrowAltar" then
+		-- 1. Thử tìm trong PlayerScripts
+		local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
+		local arrowHandler = playerScripts and playerScripts:FindFirstChild("ArrowHandler")
+		local template = arrowHandler and arrowHandler:FindFirstChild("Template")
+		if template then return template end
+
+		-- 2. Thử tìm trong workspace.Arrows
+		local wArrows = workspace:FindFirstChild("Arrows")
+		template = wArrows and (wArrows:FindFirstChild("Template") or wArrows:FindFirstChildWhichIsA("BasePart") or wArrows:FindFirstChildWhichIsA("Model"))
+		if template then return template end
+	end
+	return nil
+end
+
 local function setArrowColor(arrow, color)
 	if not arrow then
 		return
 	end
+
+	-- Đảm bảo màu sắc, vật liệu Neon và kích thước nhỏ gọn
 	if arrow:IsA("BasePart") then
-		arrow.Color = color
-	else
-		for _, child in ipairs(arrow:GetDescendants()) do
-			if child:IsA("BasePart") then
+		if arrow.Color ~= color then
+			arrow.Color = color
+		end
+		if arrow.Material ~= Enum.Material.Neon then
+			arrow.Material = Enum.Material.Neon
+		end
+		if arrow:IsA("MeshPart") and arrow.TextureID ~= "" then
+			arrow.TextureID = ""
+		end
+
+		-- Giới hạn kích thước tối đa của Part để không bị quá to
+		local maxDim = math.max(arrow.Size.X, arrow.Size.Y, arrow.Size.Z)
+		if maxDim > 1.5 then
+			arrow.Size = arrow.Size * (1.2 / maxDim)
+		end
+	end
+
+	for _, child in ipairs(arrow:GetDescendants()) do
+		if child:IsA("BasePart") then
+			if child.Color ~= color then
 				child.Color = color
 			end
+			if child.Material ~= Enum.Material.Neon then
+				child.Material = Enum.Material.Neon
+			end
+			if child:IsA("MeshPart") and child.TextureID ~= "" then
+				child.TextureID = ""
+			end
+			local maxDim = math.max(child.Size.X, child.Size.Y, child.Size.Z)
+			if maxDim > 1.5 then
+				child.Size = child.Size * (1.2 / maxDim)
+			end
+		elseif child:IsA("SpecialMesh") then
+			if child.TextureId ~= "" then
+				child.TextureId = ""
+			end
+			-- Giới hạn scale hiển thị của SpecialMesh để không bị to quá đà
+			local maxScale = math.max(child.Scale.X, child.Scale.Y, child.Scale.Z)
+			if maxScale > 1.5 or child.MeshId == "rbxassetid://118015691029311" then
+				if child.Scale.X ~= 0.18 or child.Scale.Y ~= 0.18 or child.Scale.Z ~= 0.18 then
+					child.Scale = Vector3.new(0.18, 0.18, 0.18)
+				end
+			end
+		elseif child:IsA("Decal") or child:IsA("Texture") then
+			child:Destroy()
 		end
 	end
 end
@@ -167,18 +252,27 @@ end
 local function getOrCreateArrow(saved, key, color)
 	local arrow = saved[key]
 	if not arrow or not arrow.Parent then
-		arrow = Instance.new("Part")
-		arrow.Name = key
+		local template = findTemplate(key)
 
-		local mesh = Instance.new("SpecialMesh")
-		mesh.MeshType = Enum.MeshType.FileMesh
-		mesh.MeshId = "rbxassetid://118015691029311"
-		mesh.Scale = Vector3.new(3, 3, 3) -- To hơn
-		mesh.Parent = arrow
+		if template then
+			arrow = template:Clone()
+			arrow.Name = "NULLSCAPE_" .. key
+			arrow.Parent = workspace
+		else
+			-- Fallback tạo thủ công nếu không tìm thấy mẫu của game
+			arrow = Instance.new("Part")
+			arrow.Name = "NULLSCAPE_" .. key
 
-		arrow.Material = Enum.Material.Neon
-		arrow.Size = Vector3.new(3, 3, 3) -- To hơn
-		arrow.Parent = workspace
+			local mesh = Instance.new("SpecialMesh")
+			mesh.MeshType = Enum.MeshType.FileMesh
+			mesh.MeshId = "rbxassetid://118015691029311"
+			mesh.Scale = Vector3.new(0.18, 0.18, 0.18) -- Kích thước nhỏ gọn vừa vặn
+			mesh.Parent = arrow
+
+			arrow.Material = Enum.Material.Neon
+			arrow.Size = Vector3.new(1, 1, 1)
+			arrow.Parent = workspace
+		end
 
 		setArrowPhysics(arrow)
 		setArrowTransparency(arrow, 0)
