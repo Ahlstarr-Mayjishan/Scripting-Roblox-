@@ -26,6 +26,31 @@ Logic.TargetNames = {
 -- Bảng lưu trữ thực thể đã xử lý trong round hiện tại để tránh lặp vô hạn
 local processedEntities = setmetatable({}, { __mode = "k" })
 
+-- Các hàm helper tương thích ngược cho các executor cũ/mobile
+local function clearTable(t)
+    if not t then return end
+    if table.clear then
+        table.clear(t)
+    else
+        for k in pairs(t) do
+            t[k] = nil
+        end
+    end
+end
+
+local function findInTable(t, val)
+    if not t then return nil end
+    if table.find then
+        return table.find(t, val)
+    end
+    for i, v in ipairs(t) do
+        if v == val then
+            return i
+        end
+    end
+    return nil
+end
+
 -- Hàm kiểm tra xem tên thực thể có nằm trong danh sách cần xóa TouchInterest không
 function Logic.isTargetEntity(name)
     if not name then return false end
@@ -56,7 +81,7 @@ end
 -- Hàm đặt trạng thái InLobby để dọn dẹp danh sách đã xử lý
 function Logic.setInLobbyState(val)
     if val == false then
-        table.clear(processedEntities)
+        clearTable(processedEntities)
     end
 end
 
@@ -74,7 +99,7 @@ local function removeTouchFromPart(gc, enemy, part)
             }
         end
         -- Tránh lưu lặp lại cùng một TouchInterest
-        if not table.find(gc.SavedPartsData[parentPart].touches, part) then
+        if not findInTable(gc.SavedPartsData[parentPart].touches, part) then
             table.insert(gc.SavedPartsData[parentPart].touches, part)
         end
     end
@@ -92,7 +117,8 @@ function Logic.enableImmunity(gc, enemy)
     if processedEntities[enemy] then return end
     processedEntities[enemy] = true
     
-    local controller = gc.Controller
+    -- Lấy controller bằng cơ chế gc hoặc fallback getgenv() toàn cục chống bất đồng bộ bản sao
+    local controller = gc.Controller or (getgenv().Client and getgenv().Client.Modules and getgenv().Client.Modules.EntitiesController)
     local checkFunc = Logic.getImmunityCheck(enemy.Name, controller)
     
     -- 1. Đăng ký sự kiện lắng nghe để xóa ngay lập tức nếu TouchInterest được tải xuống trễ hẳn
@@ -154,8 +180,8 @@ function Logic.restoreAll(gc)
             end
         end
     end
-    table.clear(gc.SavedPartsData)
-    table.clear(processedEntities)
+    clearTable(gc.SavedPartsData)
+    clearTable(processedEntities)
 end
 
 return Logic

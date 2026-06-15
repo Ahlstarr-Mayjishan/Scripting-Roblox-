@@ -215,13 +215,23 @@ SettingsTab:CreateButton({
     end
 })
 
+local moduleCache = {}
 local function loadModule(path)
-    if isfile and readfile and isfile(path) then
-        return loadstring(readfile(path))()
+    if moduleCache[path] then
+        return moduleCache[path]
     end
-    local githubRawUrl = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
-    local url = (githubRawUrl .. path):gsub(" ", "%%20")
-    return loadstring(game:HttpGet(url))()
+    
+    local result
+    if isfile and readfile and isfile(path) then
+        result = loadstring(readfile(path))()
+    else
+        local githubRawUrl = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
+        local url = (githubRawUrl .. path):gsub(" ", "%%20")
+        result = loadstring(game:HttpGet(url))()
+    end
+    
+    moduleCache[path] = result
+    return result
 end
 getgenv().loadModule = loadModule
 
