@@ -22,8 +22,15 @@ local function getMovementModule(name)
 end
 
 local function getQuickTurnMaxDuration(reduction)
-    -- Below 60%, keep the brake animation but shorten it as the slider rises.
-    return math.clamp(0.28 - reduction * 0.32, 0.06, 0.25)
+    -- Below 60%, keep the brake animation. 10% leaves 90% duration, 50% leaves 50%.
+    local baseDuration = 0.28
+    local durationScale = math.clamp(1 - reduction, 0.5, 0.9)
+    return baseDuration * durationScale
+end
+
+local function getQuickTurnSpeed(reduction)
+    local durationScale = math.clamp(1 - reduction, 0.5, 0.9)
+    return 1 / durationScale
 end
 
 local function getDirectionBlend(reduction)
@@ -38,7 +45,25 @@ local function getDirectionBlend(reduction)
     return math.clamp(math.max(naturalBlend, antiZigzagBlend), 0.035, 1)
 end
 
+local function setQuickTurnAnimationSpeed(movement, speed)
+    local animator = movement and movement.Animator
+    local animations = animator and animator.Animations
+    local quickTurn = animations and (animations.QuickTurn or animations["QuickTurn"])
+    if not quickTurn then
+        return
+    end
+
+    pcall(function()
+        if quickTurn.AdjustSpeed then
+            quickTurn:AdjustSpeed(speed)
+        elseif quickTurn.PlaybackSpeed ~= nil then
+            quickTurn.PlaybackSpeed = speed
+        end
+    end)
+end
+
 local function stopQuickTurn(movement)
+    setQuickTurnAnimationSpeed(movement, 1)
     movement.doingQuickTurn = false
 
     if movement.FloorParticles and movement.FloorParticles:FindFirstChild("QuickTurn") then
@@ -110,6 +135,8 @@ local function hookHumanoidMovement(controller)
             stopQuickTurn(movement)
             Logic.QuickTurnState[movement] = nil
         elseif controller.MatrixTetrahedronEnabled and r > 0 and movement.doingQuickTurn then
+            setQuickTurnAnimationSpeed(movement, getQuickTurnSpeed(r))
+
             local now = os.clock()
             local state = Logic.QuickTurnState[movement]
             if not state then

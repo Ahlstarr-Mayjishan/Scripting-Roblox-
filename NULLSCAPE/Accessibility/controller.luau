@@ -98,6 +98,15 @@ function Controller:SetInfiniteAirJump(value)
 
 	self.InfiniteAirJumpEnabled = value
 
+	if getgenv().Rayfield then
+		getgenv().Rayfield:Notify({
+			Title = "Accessibility Config",
+			Content = (value and "Activated" or "Disabled") .. " Infinite Air Jump",
+			Duration = 2,
+		})
+	end
+end
+
 local function handleSpringerShockwave(enemy, child)
 	if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
 		Executor.setupAutoJump(enemy, child, Controller, GC)

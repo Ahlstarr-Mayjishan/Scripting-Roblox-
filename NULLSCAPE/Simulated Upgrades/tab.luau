@@ -216,7 +216,7 @@ return function(Client, Controller)
 
     Tab:CreateSlider({
         Name = "Momentum Reduction",
-        Info = "Values >= 60% bypass QuickTurn braking animation. Lower values keep it, but shorten it.",
+        Info = "Brake animation speed: 10% -> 1.11x, 50% -> 2x, >=60% bypass.",
         Range = {10, 100},
         Increment = 10,
         CurrentValue = math.clamp((Controller.MomentumReduction or 1.0) * 100, 10, 100),
@@ -248,6 +248,16 @@ return function(Client, Controller)
         Suffix = "x",
         Callback = function(Value)
             Controller:SetGraceWingsAirControlMultiplier(Value)
+        end
+    })
+
+    Tab:CreateToggle({
+        Name = "Strong Air Control",
+        Info = "Extra direct horizontal steering while falling. Keep off for closer GraceWings simulation.",
+        CurrentValue = Controller.GraceWingsStrongAirControl or false,
+        Flag = "GraceWingsStrongAirControlToggle",
+        Callback = function(Value)
+            Controller:SetGraceWingsStrongAirControl(Value)
         end
     })
 

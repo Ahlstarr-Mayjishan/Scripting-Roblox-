@@ -41,6 +41,7 @@ local Controller = {
 
 	GraceWingsEnabled = false,
 	GraceWingsAirControlMultiplier = 1.1,
+	GraceWingsStrongAirControl = false,
 	AdvancedGravityCoilEnabled = false,
 	AdvancedGravityCoilJumpPower = 28,
 	BetterJumpPadEnabled = false,
@@ -850,6 +851,13 @@ function Controller:SetGraceWingsAirControlMultiplier(value)
 		if self.GraceWingsEnabled then
 			GraceWings.start(self, GC)
 		end
+	end
+end
+
+function Controller:SetGraceWingsStrongAirControl(value)
+	self.GraceWingsStrongAirControl = value == true
+	if self.GraceWingsEnabled and GraceWings then
+		GraceWings.start(self, GC)
 	end
 end
 
