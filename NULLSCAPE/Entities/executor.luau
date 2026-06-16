@@ -1,24 +1,36 @@
 -- [[
 --  NULLSCAPE - Entities Executor & Cleaner
---  Vai trò: Thực thi sửa đổi trạng thái thực thể bằng cách gọi các tính năng từ TouchInterest logic
+--  Dispatches entity immunity logic without replacing the existing cores.
 -- ]]
 
 local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
+local SpecialImmunity = getgenv().loadModule("NULLSCAPE/Entities/SpecialImmunity.luau")
 local Executor = {}
 
--- Thực thi bật miễn nhiễm cho một thực thể
 function Executor.enableImmunity(gc, enemy)
-    TouchInterest.enableImmunity(gc, enemy)
+	TouchInterest.enableImmunity(gc, enemy)
 end
 
--- Thực thi tắt miễn nhiễm cho một loại thực thể
 function Executor.disableImmunityForType(gc, entityName)
-    TouchInterest.disableImmunityForType(gc, entityName)
+	TouchInterest.disableImmunityForType(gc, entityName)
+	SpecialImmunity.disableForType(entityName)
 end
 
--- Thực thi khôi phục toàn bộ TouchInterest và giải phóng bộ nhớ
 function Executor.restoreAll(gc)
-    TouchInterest.restoreAll(gc)
+	TouchInterest.restoreAll(gc)
+	SpecialImmunity.disable()
+end
+
+function Executor.enableSpecialImmunity()
+	return SpecialImmunity.enable()
+end
+
+function Executor.disableSpecialImmunityForType(entityName)
+	SpecialImmunity.disableForType(entityName)
+end
+
+function Executor.disableSpecialImmunity()
+	SpecialImmunity.disable()
 end
 
 return Executor

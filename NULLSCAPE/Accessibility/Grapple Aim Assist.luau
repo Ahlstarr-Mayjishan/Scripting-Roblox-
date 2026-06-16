@@ -10,6 +10,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Logic = {
     Connections = {},
+    InputConnections = {},
     Candidates = {},
     CandidateCursor = 1,
     Random = Random.new(),
@@ -22,6 +23,8 @@ local Logic = {
     NoCollisionMoveCastParams = nil,
     JumpPadStates = {},
     LastJumpPadUsesBypassEnabled = false,
+    AdaptInputHeld = false,
+    LastAdaptInputPressed = 0,
 }
 
 local VALID_TARGETS = {
@@ -112,6 +115,19 @@ end
 local function isJumpPadUsesBypassEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleJumpPadUsesBypassEnabled == true
+end
+
+local function getAdaptInputKeyCode()
+    local controller = getController()
+    local keyName = tostring(controller and controller.GrappleAdaptInputKey or "T")
+    return Enum.KeyCode[keyName] or Enum.KeyCode.T
+end
+
+local function isTextBoxFocused()
+    local success, focused = pcall(function()
+        return UserInputService:GetFocusedTextBox()
+    end)
+    return success and focused ~= nil
 end
 
 local function getAirControlMultiplier()
@@ -211,6 +227,41 @@ local function clearConnections()
         end
     end
     table.clear(Logic.Connections)
+end
+
+local function clearInputConnections()
+    for _, connection in ipairs(Logic.InputConnections) do
+        if connection then
+            pcall(function()
+                connection:Disconnect()
+            end)
+        end
+    end
+    table.clear(Logic.InputConnections)
+    Logic.AdaptInputHeld = false
+end
+
+local function watchAdaptInput()
+    if #Logic.InputConnections > 0 then
+        return
+    end
+
+    table.insert(Logic.InputConnections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed or isTextBoxFocused() or input.KeyCode ~= getAdaptInputKeyCode() then
+            return
+        end
+
+        Logic.AdaptInputHeld = true
+        Logic.LastAdaptInputPressed = time()
+    end))
+
+    table.insert(Logic.InputConnections, UserInputService.InputEnded:Connect(function(input)
+        if input.KeyCode ~= getAdaptInputKeyCode() then
+            return
+        end
+
+        Logic.AdaptInputHeld = false
+    end))
 end
 
 local function rebuildCandidateCache()
@@ -1194,6 +1245,7 @@ function Logic.enable()
     local globals = getGlobals()
     if globals.GrappleAimAssistHooked then
         ensureDiveBonkHook(globals)
+        watchAdaptInput()
         watchCandidateFolder()
         return true
     end
@@ -1311,6 +1363,7 @@ function Logic.enable()
     end
 
     globals.GrappleAimAssistHooked = true
+    watchAdaptInput()
     watchCandidateFolder()
     return true
 end
@@ -1358,6 +1411,8 @@ function Logic.disable()
         end)
         Logic.FallbackHitbox = nil
     end
+    Logic.NoCollisionMoveCastParams = nil
+    clearInputConnections()
     clearConnections()
     table.clear(Logic.Candidates)
 end
@@ -1376,6 +1431,14 @@ function Logic.getRangeOptions()
         table.insert(options, option)
     end
     return options
+end
+
+function Logic.isAdaptInputHeld()
+    return Logic.AdaptInputHeld == true
+end
+
+function Logic.getLastAdaptInputPressed()
+    return Logic.LastAdaptInputPressed
 end
 
 return Logic

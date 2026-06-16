@@ -12,6 +12,9 @@ local GC = getgenv().loadModule("NULLSCAPE/Accessibility/GC.luau")
 local Controller = {
 	SpringerAutoJumpEnabled = false,
 	InfiniteAirJumpEnabled = false,
+	RailAssistSuiteEnabled = false,
+	RailAutoEnabled = false,
+	RailSpeedMultiplier = 1.1,
 	GrapplerStaminaMode = "Off",
 	GrappleAssistSuiteEnabled = false,
 	GrappleAimAssistEnabled = false,
@@ -26,6 +29,7 @@ local Controller = {
 	GrappleMomentumGuardEnabled = false,
 	GrappleAirControlMultiplier = 1.1,
 	GrappleJumpPadUsesBypassEnabled = false,
+	GrappleAdaptInputKey = "T",
 	Destroyed = false,
 
 	EnemiesFolder = nil,
@@ -70,6 +74,7 @@ function Controller:CleanUp()
 	disconnectFolderObservations()
 	local globals = getgenv()._NULLSCAPE_Globals
 	if self.Destroyed or (globals and globals.activeAccessibilityController ~= self) then
+		Executor.disableRailAssist()
 		Executor.disableGrappleAimAssist()
 	end
 	GC.cleanAll()
@@ -123,6 +128,46 @@ function Controller:SetInfiniteAirJump(value)
 			Duration = 2,
 		})
 	end
+end
+
+function Controller:RefreshRailAssistHook()
+	if self.RailAssistSuiteEnabled then
+		if not Executor.enableRailAssist() then
+			return false
+		end
+	else
+		Executor.disableRailAssist()
+	end
+
+	return true
+end
+
+function Controller:SetRailAssistSuite(value)
+	self.RailAssistSuiteEnabled = value == true
+
+	if not self:RefreshRailAssistHook() then
+		self.RailAssistSuiteEnabled = false
+		if getgenv().Rayfield then
+			getgenv().Rayfield:Notify({
+				Title = "Accessibility Config",
+				Content = "MovementCore module is not available yet",
+				Duration = 3,
+			})
+		end
+		return
+	end
+end
+
+function Controller:SetRailAuto(value)
+	self.RailAutoEnabled = value == true
+
+	if self.RailAssistSuiteEnabled and not self:RefreshRailAssistHook() then
+		self.RailAutoEnabled = false
+	end
+end
+
+function Controller:SetRailSpeedMultiplier(value)
+	self.RailSpeedMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
 end
 
 function Controller:SetGrapplerStaminaMode(mode)
@@ -300,6 +345,14 @@ end
 
 function Controller:SetGrappleAirControlMultiplier(value)
 	self.GrappleAirControlMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
+end
+
+function Controller:SetGrappleAdaptInputKey(key)
+	local rawKey = tostring(key or "")
+	local keyName = rawKey:match("%.([^%.]+)$") or rawKey
+	if keyName ~= "" and keyName ~= "true" and keyName ~= "false" then
+		self.GrappleAdaptInputKey = keyName
+	end
 end
 
 function Controller:SetGrappleSmartReelMode(mode)

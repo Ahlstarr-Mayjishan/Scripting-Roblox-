@@ -28,6 +28,50 @@ Logic.Config = {
         Remotes = { "ClientEvent" },
         Keywords = { "debuff" },
         LegitKeywords = { "debuff" }
+    },
+    ["Kolona"] = {
+        ControllerFlag = "KolonaImmune",
+        Remotes = { "DiedFunc" },
+        Keywords = { "Kolona" },
+        LegitKeywords = { "Kolona" }
+    },
+    ["Oblivion"] = {
+        ControllerFlag = "OblivionImmune",
+        Remotes = { "DiedFunc", "OblivionEvent" },
+        Keywords = { "Oblivion" },
+        LegitKeywords = { "Oblivion" },
+        BlockEmptyCalls = true
+    },
+    ["ShadowBaby"] = {
+        ControllerFlag = "ShadowBabyImmune",
+        Remotes = { "Died" },
+        Keywords = { "ShadowBaby" },
+        LegitKeywords = { "ShadowBaby" }
+    },
+    ["Quartz"] = {
+        ControllerFlag = "QuartzImmune",
+        Remotes = { "ClientEvent" },
+        Keywords = { "Kill", "Combust" },
+        LegitKeywords = { "Kill", "Combust" }
+    },
+    ["Sigil"] = {
+        ControllerFlag = "SigilImmune",
+        Remotes = { "ClientEvent" },
+        Keywords = { "Kill", "Combust" },
+        LegitKeywords = { "Kill", "Combust" }
+    },
+    ["Slicer"] = {
+        ControllerFlag = "SlicerImmune",
+        Remotes = { "ClientEvent" },
+        Keywords = {},
+        LegitKeywords = {},
+        BlockEmptyCalls = true
+    },
+    ["Voidbreaker"] = {
+        ControllerFlag = "VoidbreakerImmune",
+        Remotes = { "Died" },
+        Keywords = { "Voidbreaker" },
+        LegitKeywords = { "Voidbreaker" }
     }
     -- Thêm cấu hình chặn Remote cho thực thể mới tại đây
 }
@@ -60,7 +104,7 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         return true
     end
 
-    if remote.ClassName ~= "RemoteEvent" then
+    if remote.ClassName ~= "RemoteEvent" and remote.ClassName ~= "RemoteFunction" then
         return false
     end
 
@@ -134,17 +178,21 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
                 local isBlatant = (controller.SpringerImmunityMode == "Blatant")
                 local keywordsList = isBlatant and config.Keywords or config.LegitKeywords
 
-                for _, arg in ipairs(args) do
-                    if typeof(arg) == "string" then
-                        local lowerArg = string.lower(arg)
-                        for _, kw in ipairs(keywordsList) do
-                            if string.lower(kw) == lowerArg or string.find(lowerArg, string.lower(kw)) then
-                                hasKeyword = true
-                                break
+                if config.BlockEmptyCalls and #args == 0 then
+                    hasKeyword = true
+                else
+                    for _, arg in ipairs(args) do
+                        if typeof(arg) == "string" then
+                            local lowerArg = string.lower(arg)
+                            for _, kw in ipairs(keywordsList) do
+                                if string.lower(kw) == lowerArg or string.find(lowerArg, string.lower(kw)) then
+                                    hasKeyword = true
+                                    break
+                                end
                             end
                         end
+                        if hasKeyword then break end
                     end
-                    if hasKeyword then break end
                 end
 
                 if hasKeyword then

@@ -22,6 +22,41 @@ return function(Client, Controller)
         end
     })
 
+    Tab:CreateSection("Rail Assist")
+
+    Tab:CreateToggle({
+        Name = "Rail Assist Suite",
+        Info = "Master switch for rail entry helpers and speed scaling.",
+        CurrentValue = Controller.RailAssistSuiteEnabled or false,
+        Flag = "RailAssistSuiteToggle",
+        Callback = function(Value)
+            Controller:SetRailAssistSuite(Value)
+        end
+    })
+
+    Tab:CreateToggle({
+        Name = "Auto Rail",
+        Info = "Automatically snaps you onto nearby _RailPart segments within activation range.",
+        CurrentValue = Controller.RailAutoEnabled or false,
+        Flag = "RailAutoToggle",
+        Callback = function(Value)
+            Controller:SetRailAuto(Value)
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "Rail Entry Speed",
+        Info = "Multiplies your horizontal speed right when FollowRail starts.",
+        Range = {1.1, 5},
+        Increment = 0.1,
+        Suffix = "x",
+        CurrentValue = Controller.RailSpeedMultiplier or 1.1,
+        Flag = "RailSpeedMultiplierSlider",
+        Callback = function(Value)
+            Controller:SetRailSpeedMultiplier(Value)
+        end
+    })
+
     Tab:CreateSection("Grapple Assist")
 
     Tab:CreateToggle({
@@ -33,6 +68,19 @@ return function(Client, Controller)
             Controller:SetGrappleAssistSuite(Value)
         end
     })
+
+    if Tab.CreateKeybind then
+        Tab:CreateKeybind({
+            Name = "Grapple Adapt Input",
+            Info = "Dedicated Grapple assist input. Default is T, so p2 stays free for NinjaBelt/SharkTail.",
+            CurrentKeybind = Controller.GrappleAdaptInputKey or "T",
+            HoldToInteract = true,
+            Flag = "GrappleAdaptInputKeybind",
+            Callback = function(Keybind)
+                Controller:SetGrappleAdaptInputKey(Keybind)
+            end
+        })
+    end
 
     Tab:CreateDropdown({
         Name = "Grappler Stamina",

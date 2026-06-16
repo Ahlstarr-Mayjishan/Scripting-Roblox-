@@ -6,6 +6,7 @@
 
 local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
 local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
+local SpecialImmunity = getgenv().loadModule("NULLSCAPE/Entities/SpecialImmunity.luau")
 
 local GC = {
     ActiveConnections = {},
@@ -52,6 +53,10 @@ function GC.cleanAll()
     end)
 
     -- 3. Ngắt toàn bộ kết nối của từng thực thể riêng biệt
+    pcall(function()
+        SpecialImmunity.disable()
+    end)
+
     for enemy, connections in pairs(GC.EntityConnections) do
         for _, conn in ipairs(connections) do
             if conn then

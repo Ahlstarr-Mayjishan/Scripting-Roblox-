@@ -24,6 +24,13 @@ local Controller = {
 	OperatorImmune = false,
 	SpringerImmune = false,
 	SkinwalkerImmune = false,
+	KolonaImmune = false,
+	OblivionImmune = false,
+	ShadowBabyImmune = false,
+	QuartzImmune = false,
+	SigilImmune = false,
+	SlicerImmune = false,
+	VoidbreakerImmune = false,
 	SpringerImmunityMode = "Legit",
 	Destroyed = false,
 
@@ -100,6 +107,29 @@ function Controller:CleanUp()
 end
 
 local disabledShockwaves = {}
+
+local SPECIAL_IMMUNITY_FLAGS = {
+	Kolona = "KolonaImmune",
+	Oblivion = "OblivionImmune",
+	ShadowBaby = "ShadowBabyImmune",
+	Quartz = "QuartzImmune",
+	Sigil = "SigilImmune",
+	Slicer = "SlicerImmune",
+	Voidbreaker = "VoidbreakerImmune",
+}
+
+local function isSpecialImmunityEntity(entityName)
+	return SPECIAL_IMMUNITY_FLAGS[entityName] ~= nil
+end
+
+local function isAnySpecialImmunityEnabled()
+	for _, flag in pairs(SPECIAL_IMMUNITY_FLAGS) do
+		if Controller[flag] == true then
+			return true
+		end
+	end
+	return false
+end
 
 local function restoreShockwave(part)
 	local data = disabledShockwaves[part]
@@ -189,6 +219,11 @@ function Controller:SetImmunity(entityName, value)
 				accessibilityController:updateSpringerAutoJumpState()
 			end)
 		end
+	elseif isSpecialImmunityEntity(entityName) then
+		self[SPECIAL_IMMUNITY_FLAGS[entityName]] = value == true
+		if value then
+			Executor.enableSpecialImmunity()
+		end
 	end
 
 	-- Áp dụng thay đổi tức thời cho thực thể đã tồn tại trong workspace
@@ -226,6 +261,10 @@ function Controller:SetImmunity(entityName, value)
 					end
 				end
 			end
+
+			if isSpecialImmunityEntity(entityName) then
+				Executor.enableSpecialImmunity()
+			end
 		end
 
 		if self.EnemiesFolder then
@@ -248,6 +287,14 @@ function Controller:SetImmunity(entityName, value)
 		if entityName == "Springer" then
 			for part, data in pairs(disabledShockwaves) do
 				restoreShockwave(part)
+			end
+		end
+		if isSpecialImmunityEntity(entityName) then
+			Executor.disableSpecialImmunityForType(entityName)
+			if isAnySpecialImmunityEnabled() then
+				Executor.enableSpecialImmunity()
+			else
+				Executor.disableSpecialImmunity()
 			end
 		end
 	end
@@ -569,6 +616,8 @@ local function initializeICBMHook()
 		["ClientEvent"] = true,
 		["ShockwaveEvent"] = true,
 		["DiedFunc"] = true,
+		["Died"] = true,
+		["OblivionEvent"] = true,
 	}
 
 	local function handleRemoteCall(self, ...)

@@ -7,6 +7,7 @@ local SpringerLogic = getgenv().loadModule("NULLSCAPE/Accessibility/Auto jump - 
 local InfiniteAirJump = getgenv().loadModule("NULLSCAPE/Accessibility/Infinite Air Jump.luau")
 local GrapplerInfiniteStamina = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Infinite Stamina.luau")
 local GrappleAimAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Grapple Aim Assist.luau")
+local RailAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Rail Assist.luau")
 local Executor = {}
 
 -- Thực thi gán tự động nhảy cho Springer
@@ -28,6 +29,14 @@ end
 
 function Executor.disableGrappleAimAssist()
     GrappleAimAssist.disable()
+end
+
+function Executor.enableRailAssist()
+    return RailAssist.enable()
+end
+
+function Executor.disableRailAssist()
+    RailAssist.disable()
 end
 
 return Executor

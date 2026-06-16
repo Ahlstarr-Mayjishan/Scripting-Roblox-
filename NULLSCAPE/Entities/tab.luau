@@ -68,6 +68,71 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateSection("Entities - Special Immunity")
+
+	Tab:CreateToggle({
+		Name = "Kolona",
+		CurrentValue = Controller.KolonaImmune,
+		Flag = "ImmunityKolonaToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Kolona", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Oblivion",
+		CurrentValue = Controller.OblivionImmune,
+		Flag = "ImmunityOblivionToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Oblivion", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "ShadowBaby",
+		CurrentValue = Controller.ShadowBabyImmune,
+		Flag = "ImmunityShadowBabyToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("ShadowBaby", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Quartz",
+		CurrentValue = Controller.QuartzImmune,
+		Flag = "ImmunityQuartzToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Quartz", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Sigil",
+		CurrentValue = Controller.SigilImmune,
+		Flag = "ImmunitySigilToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Sigil", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Slicer",
+		CurrentValue = Controller.SlicerImmune,
+		Flag = "ImmunitySlicerToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Slicer", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Voidbreaker",
+		CurrentValue = Controller.VoidbreakerImmune,
+		Flag = "ImmunityVoidbreakerToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Voidbreaker", Value)
+		end,
+	})
+
 	Tab:CreateSection("Entities - Mimics")
 
 	Tab:CreateToggle({
