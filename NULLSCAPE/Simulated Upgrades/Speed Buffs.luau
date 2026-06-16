@@ -11,7 +11,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local BUFF_VALUES = {
-    ["Swiftness Ring (+10%)"] = 0.10,
+    ["Swiftness Ring I (+10%)"] = 0.10,
+    ["Swiftness Ring II (+10%)"] = 0.10,
+    ["Swiftness Ring III (+10%)"] = 0.10,
     ["Adrenaline (+20%)"] = 0.20,
     ["Sport Shoes (+40%)"] = 0.40,
 }
@@ -113,7 +115,9 @@ end
 
 function Logic.getOptions()
     return {
-        "Swiftness Ring (+10%)",
+        "Swiftness Ring I (+10%)",
+        "Swiftness Ring II (+10%)",
+        "Swiftness Ring III (+10%)",
         "Adrenaline (+20%)",
         "Sport Shoes (+40%)",
     }

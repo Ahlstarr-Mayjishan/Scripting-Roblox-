@@ -310,7 +310,9 @@ return function(Client, Controller)
     })
 
     local SpeedBuffOptions = {
-        "Swiftness Ring (+10%)",
+        "Swiftness Ring I (+10%)",
+        "Swiftness Ring II (+10%)",
+        "Swiftness Ring III (+10%)",
         "Adrenaline (+20%)",
         "Sport Shoes (+40%)",
     }

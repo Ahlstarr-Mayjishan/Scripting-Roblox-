@@ -20,7 +20,9 @@ local Controller = {
 	BellImmune = false,
 	FleshImmune = false,
 	MartImmune = false,
+	TelefraggerImmune = false,
 	ICBMImmune = false,
+	GuardianImmune = false,
 	OperatorImmune = false,
 	SpringerImmune = false,
 	SkinwalkerImmune = false,
@@ -200,8 +202,12 @@ function Controller:SetImmunity(entityName, value)
 		self.FleshImmune = value
 	elseif entityName == "Mart" then
 		self.MartImmune = value
+	elseif entityName == "Telefragger" or entityName == "Tele" then
+		self.TelefraggerImmune = value
 	elseif entityName == "ICBM" then
 		self.ICBMImmune = value
+	elseif entityName == "Guardian" then
+		self.GuardianImmune = value
 	elseif entityName == "Operator" then
 		self.OperatorImmune = value
 	elseif entityName == "Skinwalker" then
@@ -279,7 +285,19 @@ function Controller:SetImmunity(entityName, value)
 			end
 		end
 	else
-		if entityName == "Baby" or entityName == "Bell" or entityName == "Flesh" or entityName == "Mart" then
+		if entityName == "Guardian" then
+			Executor.disableImmunityForType(GC, "Guardian")
+			Executor.disableImmunityForType(GC, "ShadowGuardian")
+		elseif
+			entityName == "Baby"
+			or entityName == "Bell"
+			or entityName == "Flesh"
+			or entityName == "Mart"
+			or entityName == "Telefragger"
+			or entityName == "Tele"
+			or entityName == "ShadowGuardian"
+			or entityName == "Sigil"
+		then
 			Executor.disableImmunityForType(GC, entityName)
 		elseif entityName == "Skinwalker" then
 			HuskEvasion.disableHuskImmunity(GC)

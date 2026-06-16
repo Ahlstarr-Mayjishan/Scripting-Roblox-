@@ -13,6 +13,10 @@ Logic.Config = {
     ["Bell"] = "BellImmune",
     ["Flesh"] = "FleshImmune",
     ["Mart"] = "MartImmune",
+    ["Telefragger"] = "TelefraggerImmune",
+    ["Guardian"] = "GuardianImmune",
+    ["ShadowGuardian"] = "GuardianImmune",
+    ["Sigil"] = "SigilImmune",
     -- Thêm thực thể TouchInterest mới tại đây, ví dụ:
     -- ["Demon"] = "DemonImmune",
 }

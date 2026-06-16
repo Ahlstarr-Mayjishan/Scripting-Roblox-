@@ -17,6 +17,18 @@ Logic.Config = {
         Keywords = { "kill", "combust", "damage", "debuff", "burn", "fire", "hit" },
         LegitKeywords = { "kill", "combust" }
     },
+    ["Guardian"] = {
+        ControllerFlag = "GuardianImmune",
+        Remotes = { "ClientEvent" },
+        Keywords = { "Kill" },
+        LegitKeywords = { "Kill" }
+    },
+    ["ShadowGuardian"] = {
+        ControllerFlag = "GuardianImmune",
+        Remotes = { "ClientEvent" },
+        Keywords = { "Kill" },
+        LegitKeywords = { "Kill" }
+    },
     ["Springer"] = {
         ControllerFlag = "SpringerImmune",
         Remotes = { "ClientEvent", "ShockwaveEvent" },

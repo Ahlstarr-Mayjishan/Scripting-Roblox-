@@ -39,6 +39,15 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateToggle({
+		Name = "Telefragger",
+		CurrentValue = Controller.TelefraggerImmune,
+		Flag = "ImmunityTelefraggerToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Telefragger", Value)
+		end,
+	})
+
 	Tab:CreateSection("Entities - Client Side")
 
 	Tab:CreateToggle({
@@ -47,6 +56,15 @@ return function(Client, Controller)
 		Flag = "ImmunityICBMToggle",
 		Callback = function(Value)
 			Controller:SetImmunity("ICBM", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Guardian",
+		CurrentValue = Controller.GuardianImmune,
+		Flag = "ImmunityGuardianToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Guardian", Value)
 		end,
 	})
 
