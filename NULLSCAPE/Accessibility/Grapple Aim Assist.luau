@@ -25,6 +25,8 @@ local Logic = {
     LastJumpPadUsesBypassEnabled = false,
     AdaptInputHeld = false,
     LastAdaptInputPressed = 0,
+    AdaptRecastToken = 0,
+    LastKnownGrapple = nil,
 }
 
 local VALID_TARGETS = {
@@ -257,6 +259,62 @@ local function clearInputConnections()
     end
     table.clear(Logic.InputConnections)
     Logic.AdaptInputHeld = false
+    Logic.AdaptRecastToken = Logic.AdaptRecastToken + 1
+end
+
+local function getTrackedGrapple()
+    local grapple = Logic.CurrentGrappleStep or Logic.LastKnownGrapple
+    if typeof(grapple) ~= "table" then
+        return nil
+    end
+
+    local movement = grapple.Movement
+    if not movement then
+        return nil
+    end
+
+    if movement.ActiveSpecial ~= grapple then
+        return nil
+    end
+
+    return grapple
+end
+
+local function fireSpecialAction(grapple, state)
+    local movement = grapple and grapple.Movement
+    if not (movement and typeof(movement.SpecialAction) == "function") then
+        return false
+    end
+
+    local success = pcall(function()
+        movement:SpecialAction(state)
+    end)
+
+    return success
+end
+
+local function queueAdaptRecast(grapple)
+    local token = Logic.AdaptRecastToken + 1
+    Logic.AdaptRecastToken = token
+
+    task.defer(function()
+        if Logic.AdaptRecastToken ~= token then
+            return
+        end
+        if not (Logic.AdaptInputHeld and isSuiteEnabled()) then
+            return
+        end
+
+        local activeGrapple = grapple
+        if not (activeGrapple and activeGrapple.Movement and activeGrapple.Movement.ActiveSpecial == activeGrapple) then
+            activeGrapple = getTrackedGrapple()
+        end
+        if not activeGrapple then
+            return
+        end
+
+        fireSpecialAction(activeGrapple, Enum.UserInputState.Begin)
+    end)
 end
 
 local function watchAdaptInput()
@@ -271,6 +329,20 @@ local function watchAdaptInput()
 
         Logic.AdaptInputHeld = true
         Logic.LastAdaptInputPressed = time()
+
+        local grapple = getTrackedGrapple()
+        if not grapple then
+            return
+        end
+
+        local movement = grapple.Movement
+        if movement and (movement.grappling == true or grapple.jumpPadReel == true) then
+            fireSpecialAction(grapple, Enum.UserInputState.End)
+            queueAdaptRecast(grapple)
+            return
+        end
+
+        fireSpecialAction(grapple, Enum.UserInputState.Begin)
     end))
 
     table.insert(Logic.InputConnections, UserInputService.InputEnded:Connect(function(input)
@@ -279,6 +351,14 @@ local function watchAdaptInput()
         end
 
         Logic.AdaptInputHeld = false
+        Logic.AdaptRecastToken = Logic.AdaptRecastToken + 1
+
+        local grapple = getTrackedGrapple()
+        if not grapple then
+            return
+        end
+
+        fireSpecialAction(grapple, Enum.UserInputState.End)
     end))
 end
 
@@ -1324,6 +1404,7 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalStart = originalStart
 
         grappleModule.Start = function(self, result, ...)
+            Logic.LastKnownGrapple = self
             refillStamina(self)
             maintainJumpPadUsesBypass()
             local jumpPadTarget = result and result.Instance
@@ -1381,6 +1462,7 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalStep = originalStep
 
         grappleModule.Step = function(self, dt, ...)
+            Logic.LastKnownGrapple = self
             refillStamina(self)
             maintainJumpPadUsesBypass()
             maintainBellBypass(self)
@@ -1424,6 +1506,7 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalEnd = originalEnd
 
         grappleModule.End = function(self, ...)
+            Logic.LastKnownGrapple = self
             markGrappleBonkGrace(self, 0.45)
             local endResult = originalEnd(self, ...)
             scheduleBellBypassRelease(0.5)
@@ -1472,6 +1555,7 @@ function Logic.disable()
     globals.GrappleAimAssistOriginalDiveBonk = nil
     globals.GrappleAimAssistHooked = false
     Logic.CurrentGrappleStep = nil
+    Logic.LastKnownGrapple = nil
     Logic.LastGrappleMovement = nil
     Logic.SuppressBonkUntil = 0
     Logic.BellBypassToken = Logic.BellBypassToken + 1
