@@ -201,7 +201,7 @@ local function setArrowColor(arrow, color)
 		-- Giới hạn kích thước tối đa của Part để không bị quá to
 		local maxDim = math.max(arrow.Size.X, arrow.Size.Y, arrow.Size.Z)
 		if maxDim > 1.5 then
-			arrow.Size = arrow.Size * (1.2 / maxDim)
+			arrow.Size = arrow.Size * (1.5 / maxDim)
 		end
 	end
 
@@ -283,7 +283,7 @@ local function getOrCreateArrow(saved, key, color)
 			local mesh = Instance.new("SpecialMesh")
 			mesh.MeshType = Enum.MeshType.FileMesh
 			mesh.MeshId = "rbxassetid://118015691029311"
-			mesh.Scale = Vector3.new(1, 1, 1) -- Kích thước nhỏ gọn vừa vặn
+			mesh.Scale = Vector3.new(2, 2, 2) -- Kích thước nhỏ gọn vừa vặn
 			mesh.Parent = arrow
 
 			arrow.Material = Enum.Material.Neon

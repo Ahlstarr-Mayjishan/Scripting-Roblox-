@@ -1,6 +1,7 @@
+--!nocheck
 -- [[
 --  NULLSCAPE - Simulated Upgrades & Radar UI Tab
---  Đóng vai trò tạo tab "Mô phỏng Upgrades & Radar" trên giao diện Rayfield
+--  Dong vai tro tao tab "Mo phong Upgrades & Radar" tren giao dien Rayfield
 -- ]]
 
 return function(Client, Controller)
@@ -29,7 +30,6 @@ return function(Client, Controller)
             if typeof(SelectedOptions) ~= "table" then
                 SelectedOptions = {}
             end
-            -- Thiết lập các trạng thái tương ứng trong Controller
             local giftSelected = table.find(SelectedOptions, "Gift") ~= nil
             local cadenceSelected = table.find(SelectedOptions, "Cadence") ~= nil
             local altarSelected = table.find(SelectedOptions, "Altar") ~= nil
@@ -38,7 +38,6 @@ return function(Client, Controller)
             Controller:SetCadenceESP(cadenceSelected)
             Controller:SetAltarESP(altarSelected)
             
-            -- Đồng bộ hóa hiển thị giao diện Rayfield khi load config bị lỗi text "none"
             if not isSettingESP and ESPSelection then
                 isSettingESP = true
                 pcall(function()
@@ -84,7 +83,6 @@ return function(Client, Controller)
             end
             Controller:SetAltarFilter(SelectedOptions)
             
-            -- Đồng bộ hóa hiển thị giao diện Rayfield khi load config bị lỗi text "none"
             if not isSettingAltar and AltarFilter then
                 isSettingAltar = true
                 pcall(function()
@@ -134,7 +132,6 @@ return function(Client, Controller)
     })
 
     Tab:CreateSection("Defuse Kits")
-
 
     Tab:CreateToggle({
         Name = "Tripmine Immunity (Bypass)",
@@ -219,7 +216,7 @@ return function(Client, Controller)
 
     Tab:CreateSlider({
         Name = "Momentum Reduction",
-        Info = "Higher values make control easier. Values >= 70% remove the braking/turn animation.",
+        Info = "Values >= 60% bypass QuickTurn braking animation. Lower values keep it, but shorten it.",
         Range = {10, 100},
         Increment = 10,
         CurrentValue = math.clamp((Controller.MomentumReduction or 1.0) * 100, 10, 100),
@@ -227,6 +224,30 @@ return function(Client, Controller)
         Suffix = "%",
         Callback = function(Value)
             Controller:SetMomentumReduction(Value / 100)
+        end
+    })
+
+    Tab:CreateSection("Grace Wings")
+
+    Tab:CreateToggle({
+        Name = "Simulate Grace Wings",
+        Info = "Boosts air-control while airborne.",
+        CurrentValue = Controller.GraceWingsEnabled or false,
+        Flag = "GraceWingsToggle",
+        Callback = function(Value)
+            Controller:SetGraceWings(Value)
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "Air Control Multiplier",
+        Range = {1.1, 5},
+        Increment = 0.1,
+        CurrentValue = Controller.GraceWingsAirControlMultiplier or 1.1,
+        Flag = "GraceWingsAirControlSlider",
+        Suffix = "x",
+        Callback = function(Value)
+            Controller:SetGraceWingsAirControlMultiplier(Value)
         end
     })
 end

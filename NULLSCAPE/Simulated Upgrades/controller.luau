@@ -19,6 +19,7 @@ local Executor = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/executor.lua
 local Logic = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Radar logic.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/GC.luau")
 local MatrixTetrahedron = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Matrix Tetrahedron.luau")
+local GraceWings = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Grace Wings.luau")
 
 local Controller = {
     RadarEnabled = false,
@@ -36,6 +37,9 @@ local Controller = {
     MatrixTetrahedronEnabled = false, -- Mô phỏng Matrix Tetrahedron di chuyển instant acceleration
     MomentumReduction = 1.0,          -- Lực Momentum Reduction tùy biến (mặc định 100%)
     
+    GraceWingsEnabled = false,
+    GraceWingsAirControlMultiplier = 1.1,
+
     TripmineBarrierEnabled = false,
     TripmineMode = "Delayed", -- "Delayed" (Nổ trễ an toàn) hoặc "Barrier" (Đi xuyên mìn)
     TripmineDetonationDistance = 15,
@@ -593,6 +597,12 @@ local function startUtilityLoop()
                         end
                     end)
                 end
+                if Controller.GraceWingsEnabled and GraceWings and not GraceWings.Hooked then
+                    pcall(function()
+                        GraceWings.setMultiplier(Controller.GraceWingsAirControlMultiplier or 1.1)
+                        GraceWings.start(Controller, GC)
+                    end)
+                end
             end
             task.wait(0.1)
         end
@@ -727,6 +737,29 @@ function Controller:SetMomentumReduction(value)
 end
 
 -- Điều chỉnh khoảng cách Auto Collect
+function Controller:SetGraceWings(value)
+    self.GraceWingsEnabled = value
+    if GraceWings then
+        if value then
+            GraceWings.setMultiplier(self.GraceWingsAirControlMultiplier or 1.1)
+            GraceWings.start(self, GC)
+        else
+            GraceWings.stop()
+        end
+    end
+end
+
+function Controller:SetGraceWingsAirControlMultiplier(value)
+    local val = math.clamp(tonumber(value) or 1.1, 1.1, 5)
+    self.GraceWingsAirControlMultiplier = val
+    if GraceWings then
+        GraceWings.setMultiplier(val)
+        if self.GraceWingsEnabled then
+            GraceWings.start(self, GC)
+        end
+    end
+end
+
 function Controller:SetAutoCollectRange(value)
     self.AutoCollectRange = value
 end
@@ -776,6 +809,9 @@ function Controller:CleanUp()
     
     if MatrixTetrahedron then
         pcall(function() MatrixTetrahedron.stop() end)
+    end
+    if GraceWings then
+        pcall(function() GraceWings.stop() end)
     end
     
     if self.PermanentConnections then
@@ -907,6 +943,7 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
     local args = {...}
     local isDefuse = false
     local isTetrahedron = false
+    local isGraceWings = false
     local isRadarPlayer = false
     local isRadarAltars = false
     local isRadarInstruments = false
@@ -915,6 +952,8 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
             isDefuse = true
         elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
             isTetrahedron = true
+        elseif v == "GraceWings" or v == "Grace Wings" then
+            isGraceWings = true
         elseif v == "RadarPlayer" then
             isRadarPlayer = true
         elseif v == "RadarAltars" then
@@ -926,7 +965,10 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
     if isDefuse and Controller.SimulateDefuseKit then
         return true, true
     end
-    if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+    if isTetrahedron and Controller.MatrixTetrahedronEnabled and (Controller.MomentumReduction or 0) >= 0.6 then
+        return true, true
+    end
+    if isGraceWings and Controller.GraceWingsEnabled then
         return true, true
     end
     if isRadarPlayer and Controller.RadarEnabled then
@@ -945,12 +987,15 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
     local args = {...}
     local isDefuse = false
     local isTetrahedron = false
+    local isGraceWings = false
     local isRadar = false
     for _, v in ipairs(args) do
         if v == "DefuseKit" or v == "Defuse Kit" then
             isDefuse = true
         elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
             isTetrahedron = true
+        elseif v == "GraceWings" or v == "Grace Wings" then
+            isGraceWings = true
         elseif v == "RadarPlayer" or v == "RadarAltars" or v == "RadarInstruments" then
             isRadar = true
         end
@@ -958,7 +1003,10 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
     if isDefuse and Controller.SimulateDefuseKit then
         return true, Controller.DefuseKitStack or 3
     end
-    if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+    if isTetrahedron and Controller.MatrixTetrahedronEnabled and (Controller.MomentumReduction or 0) >= 0.6 then
+        return true, 1
+    end
+    if isGraceWings and Controller.GraceWingsEnabled then
         return true, 1
     end
     if isRadar and Controller.RadarEnabled then
