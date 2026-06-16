@@ -132,34 +132,51 @@ local function findTemplate(key)
 		local giftClientHandler = giftClient and giftClient:FindFirstChild("GiftClientHandler")
 		local assets = giftClientHandler and giftClientHandler:FindFirstChild("Assets")
 		local template = assets and assets:FindFirstChild("GiftArrow")
-		if template then return template end
+		if template then
+			return template
+		end
 
 		-- 2. Thử tìm trong workspace
 		template = workspace:FindFirstChild("GiftArrow")
-		if template then return template end
+		if template then
+			return template
+		end
 	elseif key == "ArrowCadence" then
 		-- 1. Thử tìm trong PlayerScripts
 		local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
 		local arrowHandler = playerScripts and playerScripts:FindFirstChild("ArrowHandler")
 		local arrowsFolder = arrowHandler and arrowHandler:FindFirstChild("Arrows")
 		local template = arrowsFolder and arrowsFolder:FindFirstChild("CadenceArrow")
-		if template then return template end
+		if template then
+			return template
+		end
 
 		-- 2. Thử tìm trong workspace.Arrows
 		local wArrows = workspace:FindFirstChild("Arrows")
 		template = wArrows and wArrows:FindFirstChild("CadenceArrow")
-		if template then return template end
+		if template then
+			return template
+		end
 	elseif key == "ArrowAltar" then
 		-- 1. Thử tìm trong PlayerScripts
 		local playerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
 		local arrowHandler = playerScripts and playerScripts:FindFirstChild("ArrowHandler")
 		local template = arrowHandler and arrowHandler:FindFirstChild("Template")
-		if template then return template end
+		if template then
+			return template
+		end
 
 		-- 2. Thử tìm trong workspace.Arrows
 		local wArrows = workspace:FindFirstChild("Arrows")
-		template = wArrows and (wArrows:FindFirstChild("Template") or wArrows:FindFirstChildWhichIsA("BasePart") or wArrows:FindFirstChildWhichIsA("Model"))
-		if template then return template end
+		template = wArrows
+			and (
+				wArrows:FindFirstChild("Template")
+				or wArrows:FindFirstChildWhichIsA("BasePart")
+				or wArrows:FindFirstChildWhichIsA("Model")
+			)
+		if template then
+			return template
+		end
 	end
 	return nil
 end
@@ -266,7 +283,7 @@ local function getOrCreateArrow(saved, key, color)
 			local mesh = Instance.new("SpecialMesh")
 			mesh.MeshType = Enum.MeshType.FileMesh
 			mesh.MeshId = "rbxassetid://118015691029311"
-			mesh.Scale = Vector3.new(0.18, 0.18, 0.18) -- Kích thước nhỏ gọn vừa vặn
+			mesh.Scale = Vector3.new(1, 1, 1) -- Kích thước nhỏ gọn vừa vặn
 			mesh.Parent = arrow
 
 			arrow.Material = Enum.Material.Neon
