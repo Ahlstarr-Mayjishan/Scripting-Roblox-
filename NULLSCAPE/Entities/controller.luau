@@ -208,6 +208,11 @@ function Controller:SetImmunity(entityName, value)
 		self.ICBMImmune = value
 	elseif entityName == "Guardian" then
 		self.GuardianImmune = value
+		if value then
+			Executor.enableSpecialImmunity()
+		else
+			Executor.disableSpecialImmunityForType("Guardian")
+		end
 	elseif entityName == "Operator" then
 		self.OperatorImmune = value
 	elseif entityName == "Skinwalker" then
@@ -653,6 +658,10 @@ local function initializeICBMHook()
 		end
 
 		-- Chạy logic chặn RemoteEvent thống nhất từ RemoteBlocking.luau
+		if activeCtrl.GuardianImmune == true and self.Name == "Died" and args[1] == "Guardian" then
+			return true
+		end
+
 		local block = RemoteBlocking.shouldBlockRemoteCall(self, args, activeCtrl)
 		if block then
 			return true

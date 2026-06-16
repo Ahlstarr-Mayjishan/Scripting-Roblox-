@@ -10,6 +10,7 @@ local Workspace = game:GetService("Workspace")
 local Logic = {
     Connections = {},
     SavedVoidbreakerHitbox = nil,
+    SavedGuardianHitbox = nil,
 }
 
 local SPECIAL_FLAGS = {
@@ -29,6 +30,10 @@ end
 
 local function isEnabled(name)
     local controller = getController()
+    if name == "Guardian" then
+        return controller and controller.GuardianImmune == true
+    end
+
     local flag = SPECIAL_FLAGS[name]
     return controller and flag and controller[flag] == true
 end
@@ -37,6 +42,10 @@ local function anySpecialEnabled()
     local controller = getController()
     if not controller then
         return false
+    end
+
+    if controller.GuardianImmune == true then
+        return true
     end
 
     for _, flag in pairs(SPECIAL_FLAGS) do
@@ -107,6 +116,38 @@ local function applyVoidbreakerHitboxBypass()
     end
 end
 
+local function saveGuardianHitbox(part)
+    if Logic.SavedGuardianHitbox and Logic.SavedGuardianHitbox.Part == part then
+        return
+    end
+
+    Logic.SavedGuardianHitbox = {
+        Part = part,
+        CanQuery = part.CanQuery,
+    }
+end
+
+local function applyGuardianProjectileBypass()
+    if not isEnabled("Guardian") then
+        return
+    end
+
+    local player = game:GetService("Players").LocalPlayer
+    local character = player and player.Character
+    local hitbox = character and character:FindFirstChild("Hitbox")
+    if not (hitbox and hitbox:IsA("BasePart")) then
+        return
+    end
+
+    saveGuardianHitbox(hitbox)
+
+    if hitbox.CanQuery then
+        pcall(function()
+            hitbox.CanQuery = false
+        end)
+    end
+end
+
 function Logic.enable()
     if Logic.Enabled then
         return true
@@ -116,6 +157,7 @@ function Logic.enable()
     table.insert(Logic.Connections, RunService.RenderStepped:Connect(function()
         if anySpecialEnabled() then
             applyVoidbreakerHitboxBypass()
+            applyGuardianProjectileBypass()
         end
     end))
 
@@ -145,6 +187,22 @@ function Logic.restoreVoidbreakerHitbox()
     Logic.SavedVoidbreakerHitbox = nil
 end
 
+function Logic.restoreGuardianHitbox()
+    local saved = Logic.SavedGuardianHitbox
+    if not saved then
+        return
+    end
+
+    local part = saved.Part
+    if part and part.Parent then
+        pcall(function()
+            part.CanQuery = saved.CanQuery
+        end)
+    end
+
+    Logic.SavedGuardianHitbox = nil
+end
+
 function Logic.disable()
     for _, connection in ipairs(Logic.Connections) do
         if connection then
@@ -156,11 +214,14 @@ function Logic.disable()
     table.clear(Logic.Connections)
     Logic.Enabled = false
     Logic.restoreVoidbreakerHitbox()
+    Logic.restoreGuardianHitbox()
 end
 
 function Logic.disableForType(entityName)
     if entityName == "Voidbreaker" then
         Logic.restoreVoidbreakerHitbox()
+    elseif entityName == "Guardian" then
+        Logic.restoreGuardianHitbox()
     end
 end
 
