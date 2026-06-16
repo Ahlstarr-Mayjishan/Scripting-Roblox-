@@ -116,6 +116,13 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         return true
     end
 
+    if controller.KolonaImmune == true
+        and remote.ClassName == "RemoteFunction"
+        and remote.Name == "DiedFunc"
+        and args[1] == "Kolona" then
+        return true
+    end
+
     if remote.ClassName ~= "RemoteEvent" and remote.ClassName ~= "RemoteFunction" then
         return false
     end

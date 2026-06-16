@@ -661,6 +661,9 @@ local function initializeICBMHook()
 		if activeCtrl.GuardianImmune == true and self.Name == "Died" and args[1] == "Guardian" then
 			return true
 		end
+		if activeCtrl.KolonaImmune == true and self.Name == "DiedFunc" and args[1] == "Kolona" then
+			return true
+		end
 
 		local block = RemoteBlocking.shouldBlockRemoteCall(self, args, activeCtrl)
 		if block then
