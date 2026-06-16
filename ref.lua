@@ -1,1400 +1,1103 @@
--- Script Path: game:GetService("Workspace").Noriko_Ellen.RadarSlop
--- Took 0.49s to decompile.
--- Executor: Potassium (v2.2.4)
-
--- https://lua.expert/
-local CollectionService = game:GetService("CollectionService")
-local UpgradeHandler = require(game.ReplicatedFirst.ClientModules.UpgradeHandler)
-local HumanoidRootPart = script.Parent:WaitForChild("HumanoidRootPart")
-local Humanoid = script.Parent:WaitForChild("Humanoid")
-local AltarColors = require(game.ReplicatedStorage.Altars.AltarColors)
-local v1 = Random.new()
-
-local function f2() --[[ Line: 13 | Upvalues: HumanoidRootPart (copy), v1 (copy) ]]
-    for v12, v2 in game.Players:GetPlayers() do
-        if v2 ~= game.Players.LocalPlayer then
-            local Character = v2.Character
-
-            if Character and Character.Parent then
-                local HumanoidRootPart2 = Character:FindFirstChild("HumanoidRootPart")
-
-                if HumanoidRootPart2 then
-                    local Magnitude = (HumanoidRootPart2.Position - HumanoidRootPart.Position).Magnitude
-
-                    if not (Magnitude > 1024) then
-                        task.delay(Magnitude / 1024, function() --[[ Line: 27 | Upvalues: Character (copy), v1 (ref) ]]
-                            local Highlight = Instance.new("Highlight")
-
-                            Highlight.FillTransparency = 1
-
-                            if Character.Humanoid:GetState() == Enum.HumanoidStateType.Dead then
-                                Highlight.OutlineColor = Color3.new(255/255, 0/255, 0/255)
-                            end
-
-                            Highlight.Parent = Character
-                            game.TweenService:Create(Highlight, TweenInfo.new(8, Enum.EasingStyle.Linear), {
-                                OutlineTransparency = 1
-                            }):Play()
-                            game.Debris:AddItem(Highlight, 8.1)
-                            game.SoundService.SFXFolder.Radar_Player.PlaybackSpeed = v1:NextNumber(0.9, 1.1)
-                            game.SoundService.SFXFolder.Radar_Player:Play()
-                        end)
-                    end
-                end
-            end
-        end
-    end
-end
-
-local function f3() --[[ Line: 47 | Upvalues: CollectionService (copy), HumanoidRootPart (copy), AltarColors (copy), v1 (copy) ]]
-    for k, v in pairs(CollectionService:GetTagged("Altar")) do
-        local v12 = v:FindFirstChild("RealName") and v.RealName.Value or ""
-        local v2 = v.Parent
-        local HitBox = v2:FindFirstChild("HitBox")
-
-        if HitBox and (v2:FindFirstChild("Altar") and not v2:GetAttribute("AltarUsed")) then
-            local Magnitude = (v2.HitBox.Position - HumanoidRootPart.Position).Magnitude
-
-            if not (Magnitude > 1024) then
-                task.delay(Magnitude / 2048, function() --[[ Line: 58 | Upvalues: HitBox (copy), AltarColors (ref), v12 (copy), v1 (ref) ]]
-                    if not HitBox or HitBox.Parent == nil then
-                        return
-                    end
-
-                    local v13 = script:WaitForChild("AltarPing"):Clone()
-
-                    v13.Parent = HitBox
-                    v13.Tweened.ImageColor3 = AltarColors[v12] or Color3.new(0/255, 0/255, 0/255)
-                    v13.ImageLabel.ImageColor3 = AltarColors[v12] or Color3.new(0/255, 0/255, 0/255)
-                    v13.Enabled = true
-                    game.TweenService:Create(v13.Tweened, TweenInfo.new(1), {
-                        ImageTransparency = 1,
-                        Size = UDim2.fromScale(12, 12)
-                    }):Play()
-                    game.TweenService:Create(v13.ImageLabel, TweenInfo.new(10), {
-                        ImageTransparency = 1,
-                        Size = UDim2.fromScale(0, 0)
-                    }):Play()
-                    game.TweenService:Create(v13.Outline, TweenInfo.new(10), {
-                        ImageTransparency = 1,
-                        Size = UDim2.fromScale(0, 0)
-                    }):Play()
-                    game.Debris:AddItem(v13, 10.1)
-                    game.SoundService.SFXFolder.Radar_Altar.PlaybackSpeed = v1:NextNumber(0.97, 1.03)
-                    game.SoundService.SFXFolder.Radar_Altar:Play()
-                end)
-            end
-        end
-    end
-end
-
-local function f4() --[[ Line: 79 | Upvalues: CollectionService (copy), HumanoidRootPart (copy), v1 (copy) ]]
-    for k, v in pairs(CollectionService:GetTagged("CadenceOrb")) do
-        if v.CanTouch then
-            local Magnitude = (v.Position - HumanoidRootPart.Position).Magnitude
-
-            if not (Magnitude > 1024) then
-                task.delay(Magnitude / 2048, function() --[[ Line: 89 | Upvalues: v (copy), v1 (ref) ]]
-                    local v12 = script:WaitForChild("CadencePing"):Clone()
-
-                    v12.Parent = v
-                    v12.Enabled = true
-                    game.TweenService:Create(v12.Tweened, TweenInfo.new(1), {
-                        ImageTransparency = 1,
-                        Size = UDim2.fromScale(12, 12)
-                    }):Play()
-                    game.TweenService:Create(v12.ImageLabel, TweenInfo.new(10), {
-                        ImageTransparency = 1,
-                        Size = UDim2.fromScale(0, 0)
-                    }):Play()
-                    game.Debris:AddItem(v12, 10.1)
-                    game.SoundService.SFXFolder.Radar_Instruments.PlaybackSpeed = v1:NextNumber(1.95, 2.05)
-                    game.SoundService.SFXFolder.Radar_Instruments:Play()
-                end)
-            end
-        end
-    end
-end
-
-while task.wait(12) and Humanoid:GetState() ~= Enum.HumanoidStateType.Dead do
-    if UpgradeHandler.IsUpgradeEnabled("RadarPlayer") then
-        task.spawn(f2)
-    end
-
-    if UpgradeHandler.IsUpgradeEnabled("RadarAltars") then
-        task.spawn(f3)
-    end
-
-    if UpgradeHandler.IsUpgradeEnabled("RadarInstruments") then
-        task.spawn(f4)
-    end
-end
-
--- Script Path: game:GetService("ReplicatedFirst").ClientModules.GiftClient.GiftClientHandler
--- Took 1.07s to decompile.
+-- Script Path: game:GetService("ReplicatedStorage").Movement.Specials.Grapple
+-- Took 1.02s to decompile.
 -- Executor: Potassium (v2.2.4)
 
 -- https://lua.expert/
 local t = {}
-local Debris = game:GetService("Debris")
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local ReplicatedFirst = game:GetService("ReplicatedFirst")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local CurrentCamera = workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
-local GiftClient = ReplicatedFirst.ClientModules.GiftClient
-local UpgradeHandler = require(ReplicatedFirst.ClientModules.UpgradeHandler)
-local SettingsHandler = require(ReplicatedFirst.ClientModules.Core.PlayerData.SettingsHandler)
-local InventoryHandler = require(ReplicatedFirst.ClientModules.Core.PlayerData.InventoryHandler)
-local StatusEffectHandler = require(ReplicatedFirst.ClientModules.StatusEffectHandler)
 
-require(ReplicatedStorage.GiftShared.GiftEnums)
+t.__index = t
 
-local GiftCounters = game.ReplicatedStorage.GiftCounters
-local GiftValue = game.ReplicatedStorage.GiftValue
+local v1 = script.Parent.Parent
+local Events = v1.Events
+local ReplicatedStorage = game.ReplicatedStorage
+local v2 = workspace:GetAttribute("Null")
+local MobileHandler = require(ReplicatedStorage.Mobile.MobileHandler)
+local v3, v4
 
-t.Assets = script.Assets
-t.Util = require(GiftClient.ClientUtil)
-t.Octree = require(ReplicatedStorage.Module.Octree).new()
-t.GiftClasses = {}
-t.GiftCleanup = {}
-t.Gifts = {}
-t.RenderQueue = {}
-t.RenderHandler = require(GiftClient.RenderQueue)
-t.GiftsByType = {}
-t.GiftCount = {}
-t.GiftValue = GiftValue.Value
-t.FAR_AWAY = Vector3.new(-100000000000000000000000000000000, -100000000000000000000000000000000, -100000000000000000000000000000000)
-t.MAX_FRAME_MILLISECONDS = 0.004
-
-local GiftHighlight = t.Assets.GiftHighlight
-local TripmineHighlight = t.Assets.TripmineHighlight
-
-function t.new(p1, p2, p3, p4, p5) --[[ new | Line: 52 | Upvalues: t (copy) ]]
-    local v1 = t.GiftClasses[p3]
-
-    if not v1 then
-        warn(p3, "doesnt exist")
-
-        return
-    end
-
-    if t.Gifts[p2] then
-        warn(p3, p2, "already exists what")
-    end
-
-    debug.profilebegin("Create" .. p3)
-    debug.profilebegin("Read")
-
-    local v2 = if p5 then p5 else v1:ReadParams(p1)
-
-    debug.profileend()
-    debug.profilebegin("NewObject")
-
-    local v3 = v1.new(p1, p2, p4, v2)
-
-    debug.profileend()
-    debug.profilebegin("Set")
-    t.Gifts[p2] = v3
-    t.GiftsByType[p3][p2] = true
-
-    local v4 = t.GiftCount[p3]
-
-    v4.Current = v4.Current + 1
-    debug.profileend()
-    debug.profileend()
-
-    return v3
-end
-function t.DestroyGift(p1, p2) --[[ DestroyGift | Line: 77 | Upvalues: t (copy) ]]
-    local v1 = t.Gifts[p1]
-
-    if not v1 or v1.Destroyed then
-        return
-    end
-
-    v1.Destroyed = true
-    t.Gifts[p1] = nil
-    t.GiftsByType[v1.Type][p1] = nil
-
-    local v2 = t.GiftCount[v1.Type]
-
-    v2.Current = v2.Current - 1
-
-    if not v1.onDestroy then
-        return
-    end
-
-    v1:onDestroy(p2)
-end
-function t.Collapse() --[[ Collapse | Line: 92 | Upvalues: t (copy) ]]
-    local v1 = os.clock()
-    local count = 0
-
-    for k in pairs(t.GiftsByType.Gift) do
-        count = count + 1
-
-        local v2 = t.Gifts[k]
-
-        v2:Destroy()
-        t.new(nil, k, "GoldenGift", false, {
-            Position = v2.Position,
-            Size = v2.Size,
-            Value = v2.Value
-        })
-
-        if os.clock() - v1 >= t.MAX_FRAME_MILLISECONDS or count % 50 == 0 then
-            task.wait()
-            v1 = os.clock()
-        end
-    end
-end
-function t.ClearAllGifts() --[[ ClearAllGifts | Line: 115 | Upvalues: t (copy), ReplicatedStorage (copy) ]]
-    local v1 = os.clock()
-    local count = 0
-
-    for k, v in pairs(t.Gifts) do
-        count = count + 1
-        v:Destroy(true)
-
-        if os.clock() - v1 >= t.MAX_FRAME_MILLISECONDS or count % 50 == 0 then
-            task.wait()
-            v1 = os.clock()
-        end
-    end
-
-    for k, v in pairs(t.GiftCleanup) do
-        table.clear(v)
-    end
-
-    table.clear(t.GiftCleanup)
-
-    for k in pairs(t.GiftCount) do
-        t.GiftCount[k] = {
-            Current = 0,
-            Collected = 0
-        }
-    end
-
-    t.Octree = require(ReplicatedStorage.Module.Octree).new()
-end
-function t.AddCollection(p1) --[[ AddCollection | Line: 144 | Upvalues: t (copy) ]]
-    if p1.AddedCollection then
-        return
-    end
-
-    p1.AddedCollection = true
-
-    local v1 = t.GiftCount[p1.Type]
-
-    v1.Collected = v1.Collected + 1
-end
-function t.RemoveCollection(p1) --[[ RemoveCollection | Line: 151 | Upvalues: t (copy) ]]
-    if not p1.AddedCollection then
-        return
-    end
-
-    p1.AddedCollection = false
-
-    local v1 = t.GiftCount[p1.Type]
-
-    v1.Collected = v1.Collected - 1
-end
-function t.ReplicationEnd() --[[ ReplicationEnd | Line: 158 | Upvalues: t (copy) ]]
-    if t.PoolManager.GetTotalPoolItems("Gift") - t.PoolManager.GetTotalPoolItems("GoldenGift") <= 0 then
-        return
-    end
-
-    local v1 = os.clock()
-
-    repeat
-        local v2 = t.PoolManager.GetTotalPoolItems("Gift") - t.PoolManager.GetTotalPoolItems("GoldenGift")
-
-        t.PoolManager.AddToPool("GoldenGift", 1)
-
-        if os.clock() - v1 >= 0.1 then
-            task.wait()
-            v1 = os.clock()
-        end
-    until v2 <= 0
+if v2 then
+	v3 = 4.5
+	v4 = 50
+else
+	v3 = (1 / 0)
+	v4 = 1
 end
 
-local v1 = 0
-local v2 = 1
-local v3 = 1
-local v4 = 0
-local v5 = 1
-local v6 = 1
-local v7 = 0
-local v8 = false
-local v9 = nil
-local InRound = ReplicatedStorage:WaitForChild("InRound")
-local Dead = LocalPlayer:WaitForChild("Dead")
-local v10 = 0
-local v11 = 0
-local identity = CFrame.identity
-local GiftArrow = t.Assets.GiftArrow
-local v12 = ReplicatedStorage:FindFirstChild("Movement") and ReplicatedStorage.Movement.Events.CollectedGift or Instance.new("BindableEvent")
-local MovementGiftMagnet = game.ReplicatedStorage.Events.MovementGiftMagnet
-local t2 = {}
-local RangeVisualiser = t.Assets.RangeVisualiser
-local v13 = nil
-local v14 = nil
+function t.new(p1, p2) --[[ new | Line: 44 | Upvalues: t (copy) ]]
+	local t2 = {
+		Movement = p1,
+		Animator = p2,
+		UI = nil,
+		SFX = p1.SFX,
+		Status = p1.Status,
+		Character = p1.Character,
+		RootPart = p1.RootPart,
+		Humanoid = p1.Humanoid,
+		specialHeld = false,
+		cameraOffset = CFrame.new(),
+		grapplerCrosshair = nil,
+		grappleCancelled = false,
+		reelStart = -100,
+		memoryUpdate = -1000,
+		memoryPosition = Vector3.new(0, 0, 0),
+		macro = false,
+		macroChecks = 0,
+		lastKeyPress = time(),
+		grapplePart = nil,
+		grappleOffset = nil,
+		jumpPadReel = false,
+		grappleReel = false,
+		reelCooldown = false,
+		rope = nil,
+		ropeAttachment = nil,
+		hook = nil,
+		hookAttachment = nil,
+		Charges = 3,
+		Time = 5,
+		TimeClamp = 5,
+		usedGrappleTime = 10,
+		TimeDrained = false,
+		JumpPadCombo = 0,
+		giftsCollected = 0,
+		grappleDestroyedConnection = nil,
+		collectedConnection = nil,
+		allowSharkTail = false,
+		sharkTailDisable = false,
+		yVelBelowMin = false,
+		lastGrappleRelease = -1000,
+		lastReelStart = -1,
+		grappleParams = RaycastParams.new(),
+	}
 
-GiftArrow.Parent = workspace
-function GiftMagnetStackChanged() --[[ GiftMagnetStackChanged | Line: 219 | Upvalues: InventoryHandler (copy), v1 (ref), UpgradeHandler (copy), v2 (ref), v4 (ref) ]]
-    local v12 = InventoryHandler.GetEquipped("Class")
+	t2.grappleParams.FilterDescendantsInstances = p1.moveCastParams.FilterDescendantsInstances
+	t2.grappleParams.RespectCanCollide = false
+	t2.grappleParams.CollisionGroup = "Grappler"
+	t2.grappleParams.FilterType = Enum.RaycastFilterType.Exclude
+	t2.barOutlineGradient = nil
 
-    v1 = if v12 == "class/Wicked" then 0 elseif v12 == "class/Charger" then 0.75 * UpgradeHandler.GetUpgradeStack("GiftMagnet") else UpgradeHandler.GetUpgradeStack("GiftMagnet") / 2 or 0
-
-    if not game.ReplicatedStorage.Solo.Value then
-        v1 = v1 * v2
-        v1 = v1 + v4
-
-        return
-    end
-
-    v1 = v1 + 0.5
-    v1 = v1 * v2
-    v1 = v1 + v4
+	return setmetatable(t2, t)
 end
-function MovementEvent(p1) --[[ MovementEvent | Line: 244 | Upvalues: v2 (ref), v3 (ref), v4 (ref), v5 (ref), v6 (ref), v7 (ref), v8 (ref), v9 (ref) ]]
-    if p1.Reset ~= nil then
-        v2 = 1
-        v3 = 1
-        v4 = 0
-        v5 = 1
-        v6 = 1
-        v7 = 0
-        v8 = false
-    end
+function t.Cast(p1, p2) --[[ Cast | Line: 108 ]]
+	p1.grappleParams.FilterDescendantsInstances = p1.Movement.moveCastParams.FilterDescendantsInstances
 
-    if p1.Multiplier ~= nil then
-        v2 = p1.Multiplier
-    end
+	if not (time() - p1.memoryUpdate > 0.25 or p2) then
+		local Position = p1.RootPart.Position
 
-    if p1.Add ~= nil then
-        v4 = p1.Add
-    end
+		return workspace:Raycast(Position, CFrame.lookAt(Position, p1.memoryPosition).LookVector * 90, p1.grappleParams)
+	end
 
-    if p1.ActualMultiplier ~= nil then
-        v3 = p1.ActualMultiplier
-    end
+	local v3
 
-    if p1.Squish ~= nil then
-        v5 = p1.Squish
-    end
+	if
+		if game.UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+			then true
+			elseif p1.Movement.preferredInput == Enum.PreferredInput.KeyboardAndMouse then false
+			else true
+	then
+		local CurrentCamera = workspace.CurrentCamera
+		local _ = Vector3.new(0, 0, 0)
+			+ CurrentCamera.CFrame.RightVector * p1.cameraOffset.X
+			+ CurrentCamera.CFrame.UpVector * p1.cameraOffset.Y
+		local v6 = workspace:Raycast(
+			(CurrentCamera.CFrame * p1.cameraOffset).Position
+				+ CurrentCamera.CFrame.LookVector
+					* (CurrentCamera.CFrame.Position - (p1.RootPart.Position + p1.Humanoid.CameraOffset)).magnitude,
+			CurrentCamera.CFrame.LookVector * 90,
+			p1.grappleParams
+		)
 
-    if p1.GlobalDivide ~= nil then
-        v6 = p1.GlobalDivide
-    end
+		if v6 == nil then
+			return
+		end
 
-    if p1.Disable ~= nil then
-        v8 = p1.Disable
-    end
+		v3 = v6.Position
+	else
+		local UnitRay = game.Players.LocalPlayer:GetMouse().UnitRay
+		local v7 = workspace:Raycast(UnitRay.Origin, UnitRay.Direction.Unit * 2048, p1.grappleParams)
 
-    if p1.SpiritAdd then
-        v7 = p1.SpiritAdd
-    end
+		if v7 == nil then
+			return nil, UnitRay.Direction.Unit
+		end
 
-    if p1.Target ~= nil then
-        v9 = p1.Target
-    end
+		v3 = v7.Position
+	end
 
-    GiftMagnetStackChanged()
+	local Position = p1.RootPart.Position
+
+	return workspace:Raycast(Position, CFrame.lookAt(Position, v3).LookVector * 90, p1.grappleParams)
 end
+function t.Initialise(p1) --[[ Initialise | Line: 161 | Upvalues: ReplicatedStorage (copy), v1 (copy), MobileHandler (copy), v2 (copy) ]]
+	p1.grapplerCrosshair = ReplicatedStorage.Movement.Instances.GrapplerCrosshair:Clone()
+	p1.grapplerCrosshair.Parent = workspace
+	p1.ropeAttachment = Instance.new("Attachment")
+	p1.ropeAttachment.Name = "GrappleRopeAttachment"
+	p1.ropeAttachment.Parent = workspace.Terrain
+	p1.rope = Instance.new("RopeConstraint")
+	p1.rope.Enabled = false
+	p1.rope.Attachment0 = p1.ropeAttachment
+	p1.rope.Attachment1 = p1.RootPart:WaitForChild("RootAttachment", 5)
+	p1.rope.Parent = p1.RootPart
+	p1.collectedConnection = v1.Events.CollectedGift.Event:Connect(function() --[[ Line: 175 | Upvalues: p1 (copy) ]]
+		p1:OnGiftCollected()
+	end)
 
-local function UpdateArrow(p1, p2) --[[ UpdateArrow | Line: 284 | Upvalues: UpgradeHandler (copy), GiftCounters (copy), t (copy), GiftArrow (copy), identity (ref), t2 (copy) ]]
-    local v1 = UpgradeHandler.IsUpgradeEnabled("HighlightGifts")
-    local v2 = UpgradeHandler.IsUpgradeEnabled("HighlightTripmines")
-    local v3
+	if p1.rope.Attachment1 == nil then
+		if not p1.grapplerCrosshair then
+			return
+		end
 
-    if v1 then
-        v3 = v1
-    else
-        local v4 = GiftCounters.Gift:GetAttribute("MaxGifts") or 0
+		p1.grapplerCrosshair:Destroy()
+		p1.grapplerCrosshair = nil
+	else
+		MobileHandler.SetButtonVisibility("SpecialAlt", p1.Movement:HasUpgrade("NinjaBelt"))
+		p1.UI = v1.Instances.BarUI:Clone()
+		p1.UI.Parent = game.Players.LocalPlayer.PlayerGui
+		p1.UI.Frame.Visible = true
+		p1.UI.Frame.Under.Visible = v2
+		p1.barOutlineGradient = Instance.new("UIGradient")
+		p1.barOutlineGradient.Parent = p1.UI.Frame.Outline.UIStroke
+		p1.usedGrappleTime = 10
+		p1.hookAttachment = Instance.new("Attachment")
+		p1.hookAttachment.Parent = p1.Character:WaitForChild("Right Arm")
+		p1.hookAttachment.Position = Vector3.new(0, -1, 0)
+		p1.hook = ReplicatedStorage.Movement.Instances.GrappleHook:Clone()
+		p1.hook.Beam.Attachment0 = p1.hookAttachment
+		p1.grapplerCrosshair.Parent = nil
+		v1.Events.GrappleReplicator.OnClientEvent:Connect(function(p12) --[[ Line: 228 | Upvalues: p1 (copy) ]]
+			p1:OnClientEvent(p12)
+		end)
 
-        v3 = v4 - t.GiftCount.Gift.Collected <= v4 * 0.2
-    end
+		if v2 then
+			if p1.Movement:HasUpgrade("TheOrb") then
+				p1.usedGrappleTime = p1.usedGrappleTime + 2
+			end
 
-    local t3 = {}
+			game.ReplicatedStorage.UpgradeFolder.Upgrades.ChildAdded:Connect(
+				function(p12) --[[ Line: 238 | Upvalues: p1 (copy) ]]
+					if p1.Humanoid:GetState() == Enum.HumanoidStateType.Running then
+						p1.usedGrappleTime = 11.5
+					end
 
-    if not v3 then
-        t.RenderHandler.SetCFrame(GiftArrow, CFrame.new(0, 1e32, 0))
+					if p1.Humanoid:GetState() ~= Enum.HumanoidStateType.Landed then
+						return
+					end
 
-        return
-    end
+					p1.usedGrappleTime = 11.5
+				end
+			)
 
-    local v5 = nil
-    local v6 = (1 / 0)
+			if p1.Humanoid:GetState() == Enum.HumanoidStateType.Running then
+				p1.usedGrappleTime = 11.5
+			end
 
-    if p1 then
-        debug.profilebegin("GiftArrow")
-        debug.profilebegin("RadiusSearch")
+			if p1.Humanoid:GetState() == Enum.HumanoidStateType.Landed then
+				p1.usedGrappleTime = 11.5
+			end
+		end
 
-        local v7, _ = t.Octree:RadiusSearch(p1, 96)
+		p1.Time = p1.usedGrappleTime
+		p1.TimeClamp = p1.usedGrappleTime
 
-        debug.profileend()
+		if not v2 then
+			return
+		end
 
-        if v1 then
-            debug.profilebegin("GiftEsp")
-
-            for i = 1, #v7 do
-                local v8 = t.Gifts[v7[i]]
-
-                if not v8.Golden and (not v8.Tripmine or v2) then
-                    t3[v8.Id] = v8
-                end
-            end
-
-            debug.profileend()
-        end
-
-        debug.profilebegin("FindClosest")
-
-        if t.GiftCount.Gift.Current > 0 then
-            for j = 1, 6 do
-                if v5 then
-                    break
-                end
-
-                debug.profilebegin("RadiusSearch" .. j)
-
-                local v11, v12 = t.Octree:RadiusSearch(p1, j * 112 + 96, 0)
-
-                debug.profileend()
-
-                for k = 1, #v11 do
-                    local v13 = v12[k]
-
-                    if not (v13 > 589824 or v6 < v13) then
-                        local v15 = t.Gifts[v11[k]]
-
-                        if not (v15.Tripmine or v15.Golden) then
-                            v6 = v13
-                            v5 = v15
-                        end
-                    end
-                end
-            end
-        end
-
-        debug.profileend()
-    end
-
-    if v5 then
-        t3[v5.Id] = v5
-
-        if p2 then
-            identity = identity:Lerp(CFrame.lookAt(p2.Position, v5.RenderCFrame.Position) - p2.Position, 0.1)
-            t.RenderHandler.SetCFrame(GiftArrow, identity * CFrame.new(0, 0, -2 - math.min(1, v6 / 9)) + p2.Position)
-        end
-    else
-        t.RenderHandler.SetCFrame(GiftArrow, CFrame.new(0, 1e32, 0))
-    end
-
-    debug.profileend()
-    debug.profilebegin("SetupHighlights")
-
-    for v16, v17 in t2 do
-        if not t3[v16] then
-            t2[v16] = nil
-            v17.Model.Anchored = true
-
-            if v17.Gift.Size ~= 1 then
-                v17.Model.Size = v17.Gift.DefaultSize
-            end
-
-            t.PoolManager.ReturnItemToPool(v17.Type .. "Shell", v17.Model)
-        end
-    end
-
-    for v18, v19 in t3 do
-        if not t2[v18] then
-            local v20 = t.PoolManager.GetItemFromPool(v19.Type .. "Shell")
-
-            v20.Weld.Part1 = v19.Model
-            v20.Anchored = false
-            v19.Highlight = v20
-
-            if v19.Size ~= 1 then
-                v20.Size = v19.DefaultSize * v19.Size
-            end
-
-            t2[v18] = {
-                Type = v19.Type,
-                Model = v20,
-                Gift = v19
-            }
-        end
-    end
+		ReplicatedStorage.Events.MovementGiftMagnet:Fire({
+			Reset = "heeelp",
+		})
+	end
 end
+function t.OnClientEvent(p1, p2) --[[ OnClientEvent | Line: 277 ]]
+	if not p2 then
+		return
+	end
 
-function UpdateGifts(p1) --[[ UpdateGifts | Line: 434 | Upvalues: LocalPlayer (copy), v14 (ref), v9 (ref), CurrentCamera (copy), InRound (copy), Dead (copy), v1 (ref), v7 (ref), StatusEffectHandler (copy), v3 (ref), v6 (ref), v5 (ref), t (copy), v10 (ref), v11 (ref), v12 (copy), UpdateArrow (copy) ]]
-    os.clock()
-
-    local Character = LocalPlayer.Character
-
-    v14 = if Character then Character:FindFirstChild("HumanoidRootPart") else Character
-
-    local v2 = if Character then Character:FindFirstChild("Head") else Character
-
-    if v14 then
-        v9 = v14.Position
-    end
-
-    local SavedQualityLevel = UserSettings().GameSettings.SavedQualityLevel.Value
-
-    if SavedQualityLevel == 0 then
-        SavedQualityLevel = 5
-    end
-
-    local v32 = math.sqrt(SavedQualityLevel / 10) * 256
-    local v4 = CurrentCamera.CFrame
-    local Position = v4.Position
-    local LookVector = v4.LookVector
-    local v52 = InRound.Value and v9 and not Dead.Value
-    local v62 = if LocalPlayer:FindFirstChild("TRIP_IFRAMES") == nil then false else true
-    local sum = v1 + (_G.PICKUP_BONUS or 0) + v7
-
-    if StatusEffectHandler.HasStatus("Panic") then
-        sum = sum + 2
-    end
-
-    local SpiritStatue = workspace:FindFirstChild("SpiritStatue")
-
-    if SpiritStatue and v9 then
-        sum = sum + math.min((v9 - SpiritStatue.HumanoidRootPart.Position).Magnitude / 48, 2.5)
-    end
-
-    v7 = math.max(v7 - p1 * 6, 0)
-
-    local v92 = (3 + sum) * v3
-
-    UpdateThatOneSetting(v92 / v6)
-    debug.profilebegin("SelectGifts")
-
-    if v52 then
-        debug.profilebegin("CollectGifts")
-        debug.profilebegin("RadiusSearch")
-
-        local v112 = t.Octree:RadiusSearch(v9, 2 + v92 / (0.8 / v5 * v6))
-
-        debug.profileend()
-
-        local v132 = v9 * Vector3.new(1, 0.8 / v5, 1)
-
-        for v142, v15 in v112 do
-            local v16 = t.Gifts[v15]
-
-            if not v16.Collected then
-                local Type = v16.Type
-                local TimeOffset = v16.TimeOffset
-                local Tripmine = v16.Tripmine
-                local Magnitude = (v132 - v16.Position * Vector3.new(1, 0.8 / v5, 1)).Magnitude
-
-                if Magnitude <= math.clamp((if Tripmine then if v62 then -1 else 2.25 else v92 / v6) * v16.Size, 0, 32) then
-                    local v19 = tick()
-
-                    if math.min(1.2, math.pow(1.1, v11) * 0.8) <= v19 - v10 then
-                        v11 = 0
-                    end
-
-                    if not Tripmine then
-                        v11 = v11 + 1
-                        v10 = v19
-                    end
-
-                    v16:Collect(false, true, v11)
-                    v12:Fire()
-                end
-            end
-        end
-
-        debug.profileend()
-    end
-
-    debug.profilebegin("RadiusSearch")
-
-    local v23, v24 = t.Octree:RadiusSearch(Position, 256)
-
-    debug.profileend()
-    debug.profilebegin("GetVisibleGifts")
-
-    local t2 = {}
-
-    for v25, v26 in v23 do
-        local v27 = t.Gifts[v26]
-
-        if not v27.ForceRender and vector.dot(LookVector, v27.Position - Position) >= 0 then
-            table.insert(t2, { v27, v24[v25] })
-        end
-    end
-
-    debug.profileend()
-    debug.profileend()
-    debug.profilebegin("SortGifts")
-    table.sort(t2, function(p1, p2) --[[ Line: 577 ]]
-        return p1[2] < p2[2]
-    end)
-    debug.profileend()
-    debug.profilebegin("RenderGifts")
-
-    local v29 = time()
-
-    local function RenderGift(p1, p2) --[[ RenderGift | Line: 587 | Upvalues: v29 (copy), v9 (ref), sum (ref), v3 (ref), v6 (ref), t (ref) ]]
-        local Type = p1.Type
-        local Position = p1.Position
-        local sum2 = v29
-        local v1 = math.sin(sum2) / 2
-        local v2
-
-        if v9 and not p1.Tripmine then
-            local v32 = Position + Vector3.new(0, v1, 0)
-            local v62 = 1 / ((v9 - Position).Magnitude / math.clamp(((3 + sum) * v3 - 1.5) / v6 * p1.Size, 0, 32)) ^ 3
-
-            sum2, v2 = sum2 + v62 * 10, v32:Lerp(v9, (math.min(v62, 1)))
-        else
-            v2 = Position
-        end
-
-        local v8 = sum2 + p1.TimeOffset
-        local v92 = CFrame.Angles(math.rad(v8 * 60), math.rad(v8 * 45), (math.rad(v8 * 30))) + v2
-
-        t.RenderHandler.SetCFrame(p1.Model, v92)
-        p1.RenderCFrame = v92
-    end
-
-    for v30, v31 in t2 do
-        if v32 <= v30 then
-            break
-        end
-
-        RenderGift(v31[1])
-    end
-
-    debug.profilebegin("ForceRender")
-
-    for k in pairs(t.RenderQueue) do
-        local v322 = t.Gifts[k]
-
-        if v322 and not v322.Collected then
-            v322.ForceRender = nil
-            RenderGift(v322)
-        end
-    end
-
-    table.clear(t.RenderQueue)
-    debug.profileend()
-    debug.profileend()
-    UpdateArrow(v9, v2)
+	p2:Destroy()
 end
+function t.UpgradeChanged(p1, p2, p3) --[[ UpgradeChanged | Line: 283 | Upvalues: MobileHandler (copy) ]]
+	if p2 ~= "NinjaBelt" then
+		return
+	end
 
-local IdolBeam = t.Assets.IdolBeam
-local IdolSound = t.Assets.IdolSound
-
-function t.IdolEffect(p1, p2, p3) --[[ IdolEffect | Line: 674 | Upvalues: LocalPlayer (copy), IdolBeam (copy), SettingsHandler (copy), TweenService (copy), Debris (copy), v12 (copy), t (copy), IdolSound (copy) ]]
-    local v1 = if p1 then p1.RenderCFrame and p1.RenderCFrame.Position or p1.Position else Vector3.new(0, 0, 0)
-    local Attachment = Instance.new("Attachment")
-
-    Attachment.WorldPosition = v1
-    Attachment.Parent = workspace.Terrain
-
-    local v3 = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    local v4 = if p3 == LocalPlayer then true else false
-    local count = 0
-
-    for v5, v6 in p2 do
-        local Attachment2 = Instance.new("Attachment")
-
-        Attachment2.WorldPosition = v6.RenderCFrame and v6.RenderCFrame.Position or v6.Position
-        Attachment2.Parent = workspace.Terrain
-
-        local v8 = IdolBeam:Clone()
-
-        v8.Attachment0 = Attachment
-        v8.Attachment1 = Attachment2
-
-        if v6.Golden or SettingsHandler.Get({ "Graphics", "Colorblind" }) then
-            v8.Color = ColorSequence.new(Color3.fromRGB(255, 191, 0))
-        else
-            v8.Color = ColorSequence.new(Color3.fromRGB(170, 0, 255))
-        end
-
-        v8.Parent = Attachment
-        TweenService:Create(v8, v3, {
-            Brightness = 0
-        }):Play()
-        Debris:AddItem(Attachment2, 1)
-
-        if v4 then
-            v12:Fire()
-
-            if v6.Golden and not v6.Collected then
-                t.UIHandler.AddToStack((v6:GetValue()))
-                count = count + 1
-            end
-        end
-    end
-
-    local v10
-
-    if count >= 3 then
-        t.UIHandler.AddToStack(0, math.clamp(count / 15 + 1, 1, 1.5), (math.clamp(count / 3 + 3, 3, 7)))
-    end
-
-    Debris:AddItem(Attachment, 1)
-    v10 = IdolSound:Clone()
-    v10.Parent = Attachment
-    v10.Ended:Once(function() --[[ Line: 734 | Upvalues: v10 (copy) ]]
-        v10:Destroy()
-    end)
-    v10:Play()
+	MobileHandler.SetButtonVisibility("SpecialAlt", p3 > 0)
 end
+function t.SharkTail(p1) --[[ SharkTail | Line: 289 ]]
+	p1.allowSharkTail = false
+	p1.sharkTailDisable = true
+	p1.UI.Frame.Bar.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+	p1.UI.Frame.Outline.UIStroke.Color = p1.UI.Frame.Bar.BackgroundColor3
 
-local v15 = nil
-local v16 = nil
-local v17 = nil
+	local Velocity = p1.RootPart.Velocity
 
-function RecheckParticles() --[[ RecheckParticles | Line: 745 | Upvalues: t (copy), SettingsHandler (copy), TripmineHighlight (copy) ]]
-    for k, v in pairs(t.Gifts) do
-        v:UpdateModel()
-    end
-
-    if SettingsHandler.Get({ "Graphics", "Colorblind" }) then
-        TripmineHighlight.OutlineColor = Color3.fromRGB(255, 183, 0)
-    else
-        TripmineHighlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-    end
+	p1.Humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+	p1.RootPart.Velocity =
+		Vector3.new(Velocity.X * 0.3, (Velocity * Vector3.new(1, 0, 1)).Magnitude ^ 0.95 * 1.3, Velocity.Z * 0.3)
 end
-function SettingsChanged() --[[ SettingsChanged | Line: 756 | Upvalues: SettingsHandler (copy), v15 (ref), v16 (ref), v17 (ref) ]]
-    local v1 = SettingsHandler.Get({ "Graphics", "GiftParticles" })
-    local v2 = SettingsHandler.Get({ "Graphics", "GiftRadarBillboard" })
-    local v3 = SettingsHandler.Get({ "Graphics", "Colorblind" })
-    local v4 = v15 ~= v1
-    local v5 = if v16 == v2 then false else true
+function t.Reset(p1) --[[ Reset | Line: 306 | Upvalues: v2 (copy), ReplicatedStorage (copy), MobileHandler (copy), Events (copy) ]]
+	if p1.grappleDestroyedConnection then
+		p1.grappleDestroyedConnection:Disconnect()
+	end
 
-    if not (if v4 then v4 elseif v5 then v5 elseif v17 == v3 then false else true) then
-        return
-    end
+	if p1.collectedConnection then
+		p1.collectedConnection:Disconnect()
+	end
 
-    v15 = v1
-    v16 = v2
-    v17 = v3
-    RecheckParticles()
+	if v2 then
+		ReplicatedStorage.Events.MovementGiftMagnet:Fire({
+			Reset = "Bonk puzzle",
+		})
+	end
+
+	MobileHandler.SetButtonVisibility("SpecialAlt", false)
+	p1.usedGrappleTime = 10
+	p1.Animator.specialOffset = Vector3.new(0, 0, 0)
+	p1.jumpPadReel = false
+	p1.grappleReel = false
+	p1.reelCooldown = false
+	p1.Humanoid.PlatformStand = false
+	p1.Movement.grappling = false
+	p1.Movement.grapplePoint = nil
+	p1.Movement.grapplePart = nil
+	p1.Movement.grappleSpeed = 0
+	p1.Movement.grappleJumpCancel = false
+	p1.Movement.faceGrapplePoint = false
+	p1.Animator:StopAnimation("GrappleStart")
+	p1.Animator:StopAnimation("GrappleThrow")
+	p1.Animator:StopAnimation("GrappleLoop")
+
+	if p1.grapplerCrosshair then
+		p1.grapplerCrosshair:Destroy()
+		p1.grapplerCrosshair = nil
+	end
+
+	if p1.ropeAttachment then
+		p1.ropeAttachment:Destroy()
+		p1.ropeAttachment = nil
+	end
+
+	if p1.rope then
+		p1.rope:Destroy()
+		p1.rope = nil
+	end
+
+	if p1.hook then
+		p1.hook:Destroy()
+		p1.hook = nil
+	end
+
+	if p1.hookAttachment then
+		p1.hookAttachment:Destroy()
+		p1.hookAttachment = nil
+	end
+
+	if not p1.UI then
+		Events.GrappleReplicator:FireServer("DestroyHook")
+
+		return
+	end
+
+	p1.UI:Destroy()
+	p1.UI = nil
+	p1.barOutlineGradient = nil
+	Events.GrappleReplicator:FireServer("DestroyHook")
 end
-function GiftHighlightStackChanged() --[[ GiftHighlightStackChanged | Line: 779 ]]
-    RecheckParticles()
+function t.OnGiftCollected(p1) --[[ OnGiftCollected | Line: 373 ]]
+	p1.Time = math.clamp(p1.Time + 0.5, 0, p1.TimeClamp)
 end
-function UpdateThatOneSetting(p1) --[[ UpdateThatOneSetting | Line: 783 | Upvalues: v14 (ref), SettingsHandler (copy), v13 (ref), RangeVisualiser (copy) ]]
-    if not v14 then
-        return
-    end
-
-    if SettingsHandler.Get({ "Misc", "ShowGiftCollection" }) then
-        local RangeVisualiser2 = v14:FindFirstChild("RangeVisualiser")
-
-        if not RangeVisualiser2 then
-            local v1 = RangeVisualiser:Clone()
-
-            v1.Parent = v14
-            v13 = v1
-            RangeVisualiser2 = v1
-        end
-
-        RangeVisualiser2.Emitter.Size = NumberSequence.new(p1 / 2)
-    else
-        if not v13 then
-            return
-        end
-
-        v13:Destroy()
-        v13 = nil
-    end
+function t.OnRootAnchored(p1) --[[ OnRootAnchored | Line: 377 ]]
+	p1.Time = p1.TimeClamp
 end
-function t.Init() --[[ Init | Line: 806 | Upvalues: t (copy), GiftClient (copy), GiftHighlight (copy), TripmineHighlight (copy), RunService (copy), UpgradeHandler (copy), MovementGiftMagnet (copy), SettingsHandler (copy), GiftValue (copy) ]]
-    t.PoolManager = require(GiftClient.GiftPoolManager)
-    t.GiftBase = require(script.ClientGiftBase)
-    t.ReplicationClient = require(GiftClient.ReplicationClient)
+function t.End(p1, p2) --[[ End | Line: 400 | Upvalues: v2 (copy), ReplicatedStorage (copy), Events (copy) ]]
+	if p1.grappleDestroyedConnection then
+		p1.grappleDestroyedConnection:Disconnect()
+	end
 
-    local tbl = {}
+	if v2 then
+		task.delay(
+			if p1.Movement:HasUpgrade("MiniatureHourglass") then 0.25 else 0.5,
+			function() --[[ Line: 411 | Upvalues: p1 (copy), ReplicatedStorage (ref) ]]
+				if not p1.Movement.grappling then
+					ReplicatedStorage.Events.MovementGiftMagnet:Fire({
+						Reset = "Solve my puzzle",
+					})
+				end
+			end
+		)
+	end
 
-    for k, v in pairs(script.Gifts:QueryDescendants("> ModuleScript")) do
-        table.insert(tbl, { v.Name:gsub("Client", ""), v, v:GetAttribute("Priority") or 0 })
-    end
+	if p1.grappleReel then
+		p1.reelCooldown = true
 
-    table.sort(tbl, function(p1, p2) --[[ Line: 818 ]]
-        return p1[3] > p2[3]
-    end)
+		local v22 = 3
 
-    for k, v in pairs(tbl) do
-        local v1, v2 = unpack(v)
+		if p1.Movement:HasUpgrade("SharkTail") then
+			v22 = v22 * 0.75
+		end
 
-        t.GiftClasses[v1] = require(v2)
-        t.GiftsByType[v1] = {}
-        t.GiftCount[v1] = {
-            Current = 0,
-            Collected = 0
-        }
-    end
+		if p1.Movement:HasUpgrade("SharkTail") and not p1.sharkTailDisable then
+			p1.allowSharkTail = true
+			p1.UI.Frame.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 130)
+			task.delay(0.25, function() --[[ Line: 428 | Upvalues: p1 (copy) ]]
+				if p1.allowSharkTail then
+					p1.allowSharkTail = false
+					p1.UI.Frame.Bar.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+					p1.UI.Frame.Outline.UIStroke.Color = p1.UI.Frame.Bar.BackgroundColor3
+				end
+			end)
+		else
+			p1.UI.Frame.Bar.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+		end
 
-    GiftHighlight.Parent = t.PoolManager.CreatePool("GiftShell", t.Assets.GiftShell, 100, true, true).Folder
-    TripmineHighlight.Parent = t.PoolManager.CreatePool("TripmineShell", t.Assets.TripmineShell, 100, true, true).Folder
-    GiftMagnetStackChanged()
-    RunService:BindToRenderStep("UpdateGifts", Enum.RenderPriority.Character.Value + 1, UpdateGifts)
-    UpgradeHandler.GetUpgradeChangedSignal("GiftMagnet"):Connect(GiftMagnetStackChanged)
-    MovementGiftMagnet.Event:Connect(MovementEvent)
-    SettingsHandler.OnSettingsChanged:Connect(SettingsChanged)
-    UpgradeHandler.GetUpgradeChangedSignal("HighlightGifts"):Connect(GiftHighlightStackChanged)
-    GiftValue.Changed:Connect(function(p1) --[[ Line: 840 | Upvalues: t (ref) ]]
-        t.GiftValue = p1
-    end)
-    t.GiftValue = GiftValue.Value
-    SettingsChanged()
-    t.UIHandler = require(script.GiftUIHandler)
+		p1.UI.Frame.Outline.UIStroke.Color = p1.UI.Frame.Bar.BackgroundColor3
+		task.delay(v22, function() --[[ Line: 440 | Upvalues: p1 (copy) ]]
+			if not p1.UI then
+				return
+			end
+
+			p1.reelCooldown = false
+
+			if not p1.sharkTailDisable then
+				p1.UI.Frame.Bar.BackgroundColor3 = Color3.new(255 / 255, 255 / 255, 255 / 255)
+				p1.UI.Frame.Outline.UIStroke.Color = p1.UI.Frame.Bar.BackgroundColor3
+			end
+		end)
+	end
+
+	p1.jumpPadReel = false
+	p1.grappleReel = false
+	p1.SFX:StopSound("GrapplerReel")
+	p1.grapplePart = nil
+	p1.grappleOffset = nil
+	p1.Movement.grappling = false
+	p1.grappleCancelled = p2 ~= false
+
+	if p2 then
+		p1.Humanoid:ChangeState(Enum.HumanoidStateType.Landed)
+	else
+		p1.lastGrappleRelease = time()
+	end
+
+	if p1.hook and p1.hook.Parent then
+		p1.hook.Timer:Stop()
+		p1.rope.Enabled = false
+		p1.hook.Anchored = true
+
+		if p1.hook:FindFirstChildOfClass("Weld") then
+			p1.hook:FindFirstChildOfClass("Weld"):Destroy()
+		end
+
+		p1.hook.Transparency = 1
+		p1.hook.Beam.Enabled = false
+	end
+
+	Events.GrappleReplicator:FireServer("DestroyHook")
+	p1.Movement.grappleJumpCancel = true
+	p1.Movement.grappleSpeed = (p1.RootPart.Velocity * Vector3.new(1, 0, 1)).Magnitude
+		/ (2.5 + p1.Movement.grappleSpeed / 40)
+	p1.Animator:StopAnimation("GrappleStart")
+	p1.Animator:StopAnimation("GrappleThrow")
+	p1.Animator:StopAnimation("GrappleLoop")
+
+	local Y = p1.RootPart.Velocity.Y
+
+	p1.Humanoid.PlatformStand = false
+
+	if Y > 15 and p1.yVelBelowMin then
+		p1.Movement.grappleJumping = true
+		p1.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+
+		local v5 = 1 - math.clamp(Y / 300, 0.2, 1)
+		local RootPart = p1.RootPart
+
+		RootPart.Velocity = RootPart.Velocity + Vector3.new(0, 1, 0) * Y / 2 * v5
+		p1.Movement.jumpPadAirControl = true
+		p1.Movement:FlipFlop()
+	else
+		p1.Humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+	end
+
+	local Unit = (p1.RootPart.Velocity * Vector3.new(1, 0, 1)).Unit
+
+	if Unit ~= Unit then
+		Unit = Vector3.new(0, 0, 0)
+	end
+
+	p1.Movement:SetMoveDirection(Unit)
+
+	if p1.RootPart.Velocity.Magnitude < 20 then
+		p1.SFX:PlaySound("GrapplerRelease1")
+	elseif p1.RootPart.Velocity.Magnitude < 40 then
+		p1.SFX:PlaySound("GrapplerRelease2")
+	else
+		p1.SFX:PlaySound("GrapplerRelease3")
+	end
+
+	p1.yVelBelowMin = false
+	p1.Movement.grapplePoint = nil
+	p1.Humanoid:SetAttribute("UsingAbility", false)
+end
+function t.Start(p1, p2) --[[ Start | Line: 536 | Upvalues: Events (copy), v2 (copy) ]]
+	if p1.Humanoid:GetState() == Enum.HumanoidStateType.Running and p2.Instance.Name ~= "JumpPad" then
+		return
+	end
+
+	if p1.Charges == 0 then
+		return
+	end
+
+	local isName = p2.Instance.Name == "JumpPad"
+
+	if p2.Instance.Name == "JumpPad" then
+		if p2.Instance:GetAttribute("Uses") then
+			p2.Instance:SetAttribute("Uses", 2)
+			p2.Instance.CanQuery = false
+			p2.Instance.Color = Color3.fromRGB(152, 24, 24)
+
+			for v1, v22 in p2.Instance:GetChildren() do
+				if v22:IsA("Texture") then
+					v22.Color3 = Color3.fromRGB(255, 255, 255)
+					v22:SetAttribute("Speed", 0.2)
+				end
+			end
+		else
+			p2.Instance:SetAttribute("Uses", 1)
+			p2.Instance.Color = Color3.fromRGB(255, 44, 206)
+
+			for v3, v4 in p2.Instance:GetChildren() do
+				if v4:IsA("Texture") then
+					v4.Color3 = Color3.fromRGB(191, 0, 255)
+					v4:SetAttribute("Speed", 2)
+				end
+			end
+		end
+	end
+
+	p1.Humanoid.PlatformStand = true
+	p1.reelStart = time()
+	p1.grapplePart = p2.Instance
+	p1.grappleOffset = p2.Instance.CFrame:ToObjectSpace(CFrame.new(p2.Position))
+	p1.ropeAttachment.WorldPosition = (p1.grapplePart.CFrame * p1.grappleOffset).Position
+	p1.rope.Length = p2.Distance
+	p1.rope.Enabled = true
+	p1.hook.Timer.SoundGroup = game.SoundService.Master.SFX
+	p1.hook.Timer:Play()
+	p1.Movement.usedGrappleInAir = true
+	p1.hook.Parent = workspace
+	p1.hook.Transparency = 0
+	p1.hook.Beam.Enabled = true
+	p1.hook.Anchored = true
+	p1.hook.CFrame = CFrame.lookAt(p1.hookAttachment.WorldPosition, p2.Position)
+		* CFrame.Angles(-1.5707963267948966, 0, 0)
+	p1.yVelBelowMin = false
+	p1.hook.Beam.CurveSize0 = 5
+	p1.hook.Beam.CurveSize1 = 5
+	Events.GrappleReplicator:FireServer("CreateHook", {
+		HookCFrame = CFrame.lookAlong(p2.Position, p1.hook.CFrame.LookVector),
+	})
+
+	local v5 = p2.Instance.Name
+
+	if
+		if v5 == "JumpPad" or (v5 == "GrapplePoint" or v5 == "Bell")
+			then true
+			elseif v5 == "TriaOrb" then true
+			else false
+	then
+		p1.jumpPadReel = true
+		p1.SFX:PlaySound("GrapplerReel")
+		p1.Movement.faceGrapplePoint = false
+	else
+		p1.Movement.faceGrapplePoint = true
+		p1.jumpPadReel = false
+		p1.Animator:PlayAnimation("GrappleThrow")
+	end
+
+	p1.grappleReel = false
+	p1.Animator:StopAnimation("GrappleStart")
+	p1.Animator:PlayAnimation("GrappleLoop")
+	p1.SFX:PlaySound("GrapplerThrow")
+	p1.Animator:TimeAnimation("GrappleLoop", 0.5)
+	p1.Animator:SpeedAnimation("GrappleLoop", 0)
+
+	local Magnitude = (p1.RootPart.Position - p2.Position).Magnitude
+	local v8 = game.TweenService:Create(p1.hook, TweenInfo.new(Magnitude / 90 * 0.2, Enum.EasingStyle.Linear), {
+		CFrame = CFrame.lookAlong(p2.Position - p1.hook.CFrame.UpVector, p1.hook.CFrame.LookVector),
+	})
+	local v9 = game.TweenService:Create(p1.hook.Beam, TweenInfo.new(1, Enum.EasingStyle.Elastic), {
+		CurveSize0 = 0,
+	})
+	local v10 = game.TweenService:Create(p1.hook.Beam, TweenInfo.new(1, Enum.EasingStyle.Elastic), {
+		CurveSize1 = 0,
+	})
+	local v11 = math.random(1, 2)
+
+	v8:Play()
+
+	if v11 == 1 then
+		v9:Play()
+		task.delay(0.1, function() --[[ Line: 658 | Upvalues: v10 (copy) ]]
+			v10:Play()
+		end)
+	else
+		v10:Play()
+		task.delay(0.1, function() --[[ Line: 663 | Upvalues: v9 (copy) ]]
+			v9:Play()
+		end)
+	end
+
+	local v12 = p2.Instance.CFrame
+
+	task.delay(Magnitude / 90 * 0.2, function() --[[ Line: 670 | Upvalues: p1 (copy), v12 (copy), p2 (copy) ]]
+		if not p1.Movement.grappling then
+			return
+		end
+
+		p1.hook.Anchored = false
+
+		local Weld = Instance.new("Weld")
+
+		Weld.C0 = v12:Inverse() * p1.hook.CFrame
+		Weld.Part0 = p2.Instance
+		Weld.Part1 = p1.hook
+		Weld.Parent = p1.hook
+	end)
+	p1.hook.Attachment.Lines.Enabled = true
+	p1.hook.Smoke.Enabled = true
+	v8.Completed:Once(function() --[[ Line: 684 | Upvalues: p1 (copy), v5 (copy), v8 (copy) ]]
+		p1.SFX:StopSound("GrapplerThrow")
+
+		if not (p1.hook and p1.hook.Parent) then
+			return
+		end
+
+		if v5 == "GrapplePoint" then
+			p1.hook.PointHook.SoundGroup = game.SoundService.Master.SFX
+			p1.hook.PointHook:Play()
+		elseif p1.Charges <= 0 then
+			p1.hook.Warn.SoundGroup = game.SoundService.Master.SFX
+			p1.hook.Warn:Play()
+		else
+			p1.hook.Land.SoundGroup = game.SoundService.Master.SFX
+			p1.hook.Land:Play()
+		end
+
+		p1.hook.Attachment.Hook:Emit(1)
+		p1.hook.Attachment.Lines.Enabled = false
+		p1.hook.Smoke.Enabled = false
+		v8:Destroy()
+	end)
+	v9.Completed:Once(function() --[[ Line: 704 | Upvalues: v9 (copy) ]]
+		v9:Destroy()
+	end)
+	v10.Completed:Once(function() --[[ Line: 707 | Upvalues: v10 (copy) ]]
+		v10:Destroy()
+	end)
+	task.delay(0.0834, function() --[[ Line: 711 | Upvalues: p1 (copy) ]]
+		p1.Movement.faceGrapplePoint = false
+	end)
+	p1.Movement.grappling = true
+	p1.Movement.grapplePoint = p2.Position
+	p1.Movement.grapplePart = p2.Instance
+
+	if v2 and not p2.Instance:IsDescendantOf(workspace.DestroyFolder) then
+		p1.grappleDestroyedConnection = p2.Instance.AncestryChanged:Once(
+			function() --[[ Line: 720 | Upvalues: p2 (copy), p1 (copy) ]]
+				repeat
+					task.wait()
+				until p2.Instance.Anchored == false or p1.Movement.grappling == false
+
+				if not p1.Movement.grappling then
+					return
+				end
+
+				p1:End()
+			end
+		)
+	else
+		task.spawn(function() --[[ Line: 727 | Upvalues: p2 (copy), p1 (copy) ]]
+			repeat
+				task.wait()
+			until p2.Instance.Anchored == false or p1.Movement.grappling == false
+
+			if not p1.Movement.grappling then
+				return
+			end
+
+			p1:End()
+		end)
+	end
+
+	p1.Humanoid:SetAttribute("UsingAbility", true)
+end
+function t.SpecialAction(p1, p2) --[[ SpecialAction | Line: 746 | Upvalues: v2 (copy), ReplicatedStorage (copy) ]]
+	if p1.Time == 0 then
+		return
+	end
+
+	if p2 ~= Enum.UserInputState.Begin then
+		local isEnd = p2 == Enum.UserInputState.End
+	end
+
+	if p2 == Enum.UserInputState.Begin then
+		if p1.Movement.diveBonked then
+			return
+		end
+
+		if p1.Status.HasStatus("Flesh") then
+			return
+		end
+
+		if p1.Status.HasStatus("Medal") then
+			return
+		end
+
+		if p1.Movement.rail then
+			return
+		end
+
+		if p1.Movement.triaHold then
+			return
+		end
+
+		if p1.Movement.Anchored then
+			return
+		end
+
+		if p1.allowSharkTail and not p1.sharkTailDisable then
+			p1:SharkTail()
+
+			return
+		end
+
+		if p1.Movement.grappling then
+			if p1.jumpPadReel then
+				return
+			end
+
+			if p1.Movement:HasUpgrade("NinjaBelt") and not p1.sharkTailDisable then
+				if p1.reelCooldown then
+					return
+				end
+
+				p1.jumpPadReel = true
+				p1.reelStart = time()
+				p1.SFX:PlaySound("GrapplerReel")
+				p1.grappleReel = true
+
+				if v2 then
+					ReplicatedStorage.Events.MovementGiftMagnet:Fire({
+						Add = 1.75,
+					})
+				end
+			else
+				p1:End()
+			end
+		else
+			p1.specialHeld = true
+			p1.grapplerCrosshair.Parent = workspace
+			p1.grappleCancelled = false
+
+			if p1.Humanoid:GetState() ~= Enum.HumanoidStateType.Running then
+				p1.Animator:PlayAnimation("GrappleStart")
+			end
+
+			p1.Animator:StopAnimation("GrappleThrow")
+			p1.Animator:StopAnimation("GrappleLoop")
+		end
+	else
+		if p2 ~= Enum.UserInputState.End then
+			return
+		end
+
+		p1.specialHeld = false
+		p1.grapplerCrosshair.Parent = nil
+		p1.Animator:StopAnimation("GrappleStart")
+
+		if p1.Movement.diveBonked then
+			return
+		end
+
+		if p1.grappleCancelled then
+			p1.grappleCancelled = false
+
+			return
+		end
+
+		if p1.Movement.grappling then
+			p1:End()
+		else
+			if p1.Status.HasStatus("Flesh") then
+				return
+			end
+
+			if p1.Status.HasStatus("Medal") then
+				return
+			end
+
+			if p1.Movement.rail then
+				return
+			end
+
+			if p1.Movement.triaHold then
+				return
+			end
+
+			if p1.Movement.Anchored then
+				return
+			end
+
+			local v1 = p1:Cast()
+
+			if not v1 then
+				return
+			end
+
+			if not (p1.macroChecks >= 7) then
+				p1:Start(v1)
+			end
+		end
+	end
+end
+function t.AltSpecialAction(p1, p2) --[[ AltSpecialAction | Line: 840 | Upvalues: v2 (copy), ReplicatedStorage (copy) ]]
+	if not p1.Movement.grappling then
+		return
+	end
+
+	if p1.Time == 0 then
+		return
+	end
+
+	if p2 == Enum.UserInputState.Begin then
+		if not p1.Movement:HasUpgrade("NinjaBelt") or (p1.jumpPadReel or p1.reelCooldown) then
+			return
+		end
+
+		p1.jumpPadReel = true
+		p1.reelStart = time()
+		p1.SFX:PlaySound("GrapplerReel")
+		p1.grappleReel = true
+
+		if v2 then
+			ReplicatedStorage.Events.MovementGiftMagnet:Fire({
+				Add = 1.75,
+			})
+		end
+	else
+		if p2 ~= Enum.UserInputState.End or not p1.grappleReel then
+			return
+		end
+
+		p1:End()
+	end
+end
+function t.RefreshStaminaUI(p1) --[[ RefreshStaminaUI | Line: 865 ]]
+end
+function t.OnStateChanged(p1, p2, p3) --[[ OnStateChanged | Line: 879 ]]
+	if p3 == Enum.HumanoidStateType.Running or p3 == Enum.HumanoidStateType.Landed then
+		p1.lastGrappleRelease = -1000
+		p1.JumpPadCombo = 0
+
+		local Movement = p1.Movement
+
+		Movement.grappleSpeed = Movement.grappleSpeed - 4
+
+		if p1.sharkTailDisable then
+			p1.sharkTailDisable = false
+		end
+
+		if p1.reelCooldown then
+			p1.UI.Frame.Bar.BackgroundColor3 = Color3.new(0.5, 0.5, 0.5)
+		else
+			p1.UI.Frame.Bar.BackgroundColor3 = Color3.new(255 / 255, 255 / 255, 255 / 255)
+		end
+
+		p1.UI.Frame.Outline.UIStroke.Color = p1.UI.Frame.Bar.BackgroundColor3
+		p1.allowSharkTail = false
+		p1.Animator:StopAnimation("GrappleStart")
+	else
+		if not p1.specialHeld then
+			return
+		end
+
+		p1.Animator:PlayAnimation("GrappleStart")
+	end
+end
+function t.Step(p1, p2) --[[ Step | Line: 931 | Upvalues: v2 (copy), v3 (ref), v4 (ref) ]]
+	local Time = p1.Time
+
+	if p1.specialHeld and not p1.Movement.grappling then
+		local CurrentCamera = workspace.CurrentCamera
+		local v1 = if game.UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+			then true
+			elseif p1.Movement.preferredInput == Enum.PreferredInput.KeyboardAndMouse then false
+			else true
+		local v22 = CurrentCamera.CFrame.LookVector * Vector3.new(1, 0, 1)
+
+		if v1 then
+			p1.cameraOffset = p1.cameraOffset:Lerp(CFrame.new(2, 0.5, 0), p2 * 6)
+		else
+			p1.cameraOffset = p1.cameraOffset:Lerp(CFrame.new(), p2 * 6)
+		end
+
+		local v32, v42 = p1:Cast(true)
+
+		if v32 then
+			p1.memoryPosition = v32.Position
+			p1.memoryUpdate = time()
+
+			if p1.grapplerCrosshair then
+				p1.grapplerCrosshair.Position = v32.Position
+				p1.grapplerCrosshair.Size = p1.grapplerCrosshair.Size:Lerp(Vector3.new(0.3, 0.3, 0.3), p2 * 7)
+			end
+
+			if not v1 then
+				v22 = (v32.Position - p1.RootPart.Position) * Vector3.new(1, 0, 1)
+			end
+		else
+			if p1.grapplerCrosshair then
+				if time() - p1.memoryUpdate < 0.25 then
+					p1.grapplerCrosshair.Position = p1.memoryPosition
+				else
+					p1.memoryUpdate = -1000
+
+					if v1 then
+						p1.grapplerCrosshair.Position = CurrentCamera.CFrame.Position
+							+ CurrentCamera.CFrame.LookVector * 2048
+					end
+				end
+
+				p1.grapplerCrosshair.Size = p1.grapplerCrosshair.Size:Lerp(Vector3.new(0, 0, 0), p2 * 7)
+			end
+
+			if v42 then
+				v22 = v42 * Vector3.new(1, 0, 1)
+			end
+		end
+
+		if p1.grapplerCrosshair then
+			local Frame = p1.grapplerCrosshair.BillboardGui.Frame
+
+			if v32 or time() - p1.memoryUpdate < 0.25 then
+				Frame.BackgroundColor3 = Color3.new(255 / 255, 255 / 255, 255 / 255)
+			else
+				Frame.BackgroundColor3 = Color3.new(255 / 255, 0 / 255, 0 / 255)
+			end
+		end
+
+		if v22.Magnitude > 0.01 then
+			p1.RootPart.CFrame = p1.RootPart.CFrame:Lerp(CFrame.lookAlong(p1.RootPart.Position, v22), p2 * 20)
+		end
+	else
+		p1.memoryUpdate = -1000
+
+		if p1.grapplerCrosshair then
+			p1.grapplerCrosshair.Size = Vector3.new(0, 0, 0)
+		end
+
+		p1.cameraOffset = p1.cameraOffset:Lerp(CFrame.new(), p2 * 6)
+	end
+
+	local CurrentCamera = workspace.CurrentCamera
+
+	CurrentCamera.CFrame = CurrentCamera.CFrame * p1.cameraOffset
+
+	local v6 = 1
+
+	if v2 then
+		local Gift = game.ReplicatedStorage.GiftCounters.Gift
+		local v7 = Gift:GetAttribute("MaxGifts") or 1
+		local v8 = v7 - Gift.Value
+
+		if not game.ReplicatedStorage.InRound.Value then
+			v7 = 1
+			v8 = 0
+		end
+
+		if v7 == 0 and v8 == 0 then
+			v7 = 1
+			v8 = 0
+		end
+
+		if v7 then
+			v6 = math.clamp(v8 / v7 / 1 + 1, 1, 2)
+		end
+
+		p1.UI.Frame.Under.Text = string.format("%.2f", v6) .. "x regen"
+		p1.UI.Frame.Under.Visible = game.ReplicatedStorage.InRound.Value
+	end
+
+	if p1.Movement.grappling then
+		if p1.grapplePart and p1.grapplePart.Parent then
+			if p1.grapplePart.Name == "Bell" and not p1.grapplePart.CanTouch then
+				p1:End()
+
+				return
+			end
+
+			p1.ropeAttachment.WorldPosition = (p1.grapplePart.CFrame * p1.grappleOffset).Position
+			p1.Movement.grapplePoint = p1.ropeAttachment.WorldPosition
+
+			if workspace:Raycast(p1.RootPart.Position, Vector3.new(0, -2.9, 0), p1.grappleParams) then
+				p1:End(true)
+
+				return
+			end
+
+			if p1.jumpPadReel then
+				local Unit = (-p1.RootPart.Position + p1.Movement.grapplePoint).Unit
+
+				if Unit ~= Unit then
+					Unit = Vector3.new(0, 0, 0)
+				end
+
+				local v10 = p1.Humanoid.WalkSpeed * 2 * ((time() - p1.reelStart) * 0.5 + 1)
+
+				p1.Movement:SetMoveDirection(Unit * Vector3.new(1, 0, 1))
+				p1.RootPart.Velocity = Unit * v10
+				p1.SFX:SetSpeed("GrapplerReel", (math.clamp(p1.RootPart.Velocity.Magnitude / 24, 0.5, 3)))
+
+				if (p1.RootPart.Position - p1.Movement.grapplePoint).Magnitude < 3 then
+					p1:End(true)
+
+					return
+				end
+
+				if
+					Unit:Dot((-(p1.RootPart.Position + p1.RootPart.Velocity * p2 * 2) + p1.Movement.grapplePoint).Unit)
+					< 0
+				then
+					print("dot product ungrapple. very interesting")
+					p1:End(true)
+
+					return
+				end
+			end
+
+			local v13 = math.map(
+				math.clamp((p1.RootPart.Position - p1.Movement.grapplePoint).Magnitude, 24, 90),
+				24,
+				90,
+				1,
+				0.85
+			)
+			local sum = if p1.jumpPadReel and not p1.grappleReel then v3 / 1.5 else v3
+			local v14 = v13
+
+			if p1.Movement:HasUpgrade("TheOrb") then
+				sum = sum + 3
+			end
+
+			if game.ReplicatedStorage.InRound.Value then
+				p1.Time = p1.Time - p2 / sum * p1.usedGrappleTime * v14
+			end
+
+			if p1.Time <= 0 then
+				p1.SFX:PlaySound("Deplete")
+				p1:End(true)
+				p1.TimeDrained = true
+				task.delay(0.25, function() --[[ Line: 1119 | Upvalues: p1 (copy) ]]
+					p1.TimeDrained = false
+				end)
+				p1.hook.Warn:Play()
+
+				return
+			end
+
+			p1.hook.Timer.Volume = (1 - p1.Time / p1.usedGrappleTime) ^ 2 * 0.5
+
+			if p1.RootPart.Velocity.Y < 15 then
+				p1.yVelBelowMin = true
+			end
+
+			local Unit = (p1.RootPart.Velocity * Vector3.new(1, 0, 1)).Unit
+
+			if Unit ~= Unit then
+				Unit = Vector3.new(0, 0, 0)
+			end
+
+			local v15 = if p1.Movement:HasUpgrade("GraceWings") then 1.5 else 1
+			local RootPart = p1.RootPart
+
+			RootPart.Velocity = RootPart.Velocity
+				+ p1.Movement.PlayerMoveDirection * 12 * v15 * p2 * p1.Movement.movementSpeedMulti
+			p1.RootPart.RotVelocity = Vector3.new(0, 0, 0)
+
+			if p1.Movement.faceGrapplePoint then
+				p1.Animator:FaceDirection((-p1.RootPart.Position + p1.Movement.grapplePoint) * Vector3.new(1, 0, 1))
+			elseif Unit ~= Vector3.new(0, 0, 0) then
+				p1.Animator:FaceDirection(Unit)
+			end
+
+			p1.Movement:SetMoveDirection(Unit)
+		else
+			p1:End()
+
+			return
+		end
+	elseif not p1.TimeDrained then
+		local v17 = 1
+
+		if p1.Movement:HasUpgrade("MiniatureHourglass") then
+			v17 = v17 * 1.3
+		end
+
+		local v18 = v17 * v6
+
+		if p1.Humanoid:GetState() == Enum.HumanoidStateType.Running then
+			p1.Time = p1.Time + p2 / 60 * p1.usedGrappleTime * v18
+			p1.TimeClamp = math.clamp(p1.TimeClamp, 0, p1.usedGrappleTime)
+		else
+			p1.Time = p1.Time + p2 / v4 * p1.usedGrappleTime * v18
+		end
+	end
+
+	if p1.Movement.grappling or time() - p1.lastGrappleRelease < 1.5 then
+		local v20 = if p1.Movement:HasUpgrade("Helmet") then 1000000 else 110
+
+		if
+			v20 < p1.RootPart.Velocity.Magnitude
+			or p1.jumpPadReel
+				and not (if time() - p1.reelStart < 0.2 then p1.Movement:HasUpgrade("Helmet") else false)
+		then
+			local v22 = p1.RootPart.Velocity.Unit * 2
+
+			if (p1.RootPart.Velocity * p2 * 2).Magnitude > 2 then
+				v22 = p1.RootPart.Velocity * p2 * 2
+			end
+
+			local v23 = workspace:Shapecast(p1.Movement.Hitbox, v22, p1.Movement.moveCastParams)
+
+			if v23 then
+				if v23.Normal.Y < 0.7 then
+					p1.Movement:DiveBonk(v23)
+				end
+
+				p1:End(true)
+
+				return
+			end
+		end
+	end
+
+	if p1.TimeClamp > 0 then
+		p1.Time = math.clamp(p1.Time, 0, p1.TimeClamp)
+
+		if p1.Time == p1.TimeClamp and p1.Time ~= Time then
+			p1.SFX:PlaySound("Recharge")
+		end
+	else
+		p1.Time = 0
+	end
+
+	if p1.UI then
+		math.clamp(p1.Time / p1.usedGrappleTime, 0, 1)
+		p1.UI.Frame.Bar.Size = UDim2.fromScale(p1.Time / p1.usedGrappleTime, 1)
+	end
+
+	if p1.Humanoid:GetState() == Enum.HumanoidStateType.Running then
+		p1.Movement.grappleSpeed = math.max(0, p1.Movement.grappleSpeed - p2 * 120)
+	else
+		p1.Movement.grappleSpeed = math.max(0, p1.Movement.grappleSpeed - p2 * 5)
+	end
 end
 
 return t
-
--- Script Path: game:GetService("ReplicatedStorage").SharedModules.Core.Index.UpgradeIndex.RadarPlayer
--- Took 0.69s to decompile.
--- Executor: Potassium (v2.2.4)
-
--- https://lua.expert/
-return {
-    Name = "Radar Module: Players",
-    Description = {
-        Default = "<font color=\"#00FF0D\">Highlights</font> other players every <b>12</b> seconds."
-    },
-    LongDescription = "I\'m the long description, allow me to tell you the fabled tales of this upgrade..",
-    Icon = "rbxassetid://133283711647680",
-    MaxStack = 1,
-    Price = 150,
-    Prerequisites = {
-        Class = nil,
-        Difficulty = 0,
-        PlayerCount = 2,
-        Stage = 0,
-        Enemies = {},
-        Upgrades = { "HighlightGifts" },
-        Curses = {}
-    }
-}
-
--- Script Path: game:GetService("ReplicatedStorage").SharedModules.Core.Index.UpgradeIndex.RadarInstruments
--- Took 0.42s to decompile.
--- Executor: Potassium (v2.2.4)
-
--- https://lua.expert/
-return {
-    Name = "Radar Module: Instruments",
-    Description = {
-        Default = "<font color=\"#00FF0D\">Marks</font> the location of <b>Cadence\'s</b> instruments every <b>12</b> seconds. Gives an arrow which <font color=\"#00FF0D\">points</font> towards the nearest instrument."
-    },
-    LongDescription = "I\'m the long description, allow me to tell you the fabled tales of this upgrade..",
-    Icon = "rbxassetid://109743690264439",
-    MaxStack = 1,
-    Price = 1000,
-    Prerequisites = {
-        Class = nil,
-        Difficulty = 0,
-        PlayerCount = 0,
-        Stage = 0,
-        Enemies = { "Cadence" },
-        Upgrades = { "HighlightGifts" },
-        Curses = {}
-    }
-}
-
--- Script Path: game:GetService("ReplicatedStorage").SharedModules.Core.Index.UpgradeIndex.RadarAltars
--- Took 0.37s to decompile.
--- Executor: Potassium (v2.2.4)
-
--- https://lua.expert/
-return {
-    Name = "Radar Module: Altars",
-    Description = {
-        Default = "<font color=\"#00FF0D\">Marks</font> the location of all unused <font color=\"#FF9D00\">altars</font> every <b>12</b> seconds."
-    },
-    LongDescription = "I\'m the long description, allow me to tell you the fabled tales of this upgrade..",
-    Icon = "rbxassetid://82208376362052",
-    MaxStack = 1,
-    Price = 300,
-    Prerequisites = {
-        Class = nil,
-        Difficulty = 0,
-        PlayerCount = 0,
-        Stage = 0,
-        Enemies = {},
-        Upgrades = { "HighlightGifts" },
-        Curses = {}
-    }
-}
-
--- Script Path: game:GetService("StarterPlayer").StarterCharacterScripts.RadarSlop
--- Took 0.55s to decompile.
--- Executor: Potassium (v2.2.4)
-
--- https://lua.expert/
-local CollectionService = game:GetService("CollectionService")
-local UpgradeHandler = require(game.ReplicatedFirst.ClientModules.UpgradeHandler)
-local HumanoidRootPart = script.Parent:WaitForChild("HumanoidRootPart")
-local Humanoid = script.Parent:WaitForChild("Humanoid")
-local AltarColors = require(game.ReplicatedStorage.Altars.AltarColors)
-local v1 = Random.new()
-
-local function f2() --[[ Line: 13 | Upvalues: HumanoidRootPart (copy), v1 (copy) ]]
-    for v12, v2 in game.Players:GetPlayers() do
-        if v2 ~= game.Players.LocalPlayer then
-            local Character = v2.Character
-
-            if Character and Character.Parent then
-                local HumanoidRootPart2 = Character:FindFirstChild("HumanoidRootPart")
-
-                if HumanoidRootPart2 then
-                    local Magnitude = (HumanoidRootPart2.Position - HumanoidRootPart.Position).Magnitude
-
-                    if not (Magnitude > 1024) then
-                        task.delay(Magnitude / 1024, function() --[[ Line: 27 | Upvalues: Character (copy), v1 (ref) ]]
-                            local Highlight = Instance.new("Highlight")
-
-                            Highlight.FillTransparency = 1
-
-                            if Character.Humanoid:GetState() == Enum.HumanoidStateType.Dead then
-                                Highlight.OutlineColor = Color3.new(255/255, 0/255, 0/255)
-                            end
-
-                            Highlight.Parent = Character
-                            game.TweenService:Create(Highlight, TweenInfo.new(8, Enum.EasingStyle.Linear), {
-                                OutlineTransparency = 1
-                            }):Play()
-                            game.Debris:AddItem(Highlight, 8.1)
-                            game.SoundService.SFXFolder.Radar_Player.PlaybackSpeed = v1:NextNumber(0.9, 1.1)
-                            game.SoundService.SFXFolder.Radar_Player:Play()
-                        end)
-                    end
-                end
-            end
-        end
-    end
-end
-
-local function f3() --[[ Line: 47 | Upvalues: CollectionService (copy), HumanoidRootPart (copy), AltarColors (copy), v1 (copy) ]]
-    for k, v in pairs(CollectionService:GetTagged("Altar")) do
-        local v12 = v:FindFirstChild("RealName") and v.RealName.Value or ""
-        local v2 = v.Parent
-        local HitBox = v2:FindFirstChild("HitBox")
-
-        if HitBox and (v2:FindFirstChild("Altar") and not v2:GetAttribute("AltarUsed")) then
-            local Magnitude = (v2.HitBox.Position - HumanoidRootPart.Position).Magnitude
-
-            if not (Magnitude > 1024) then
-                task.delay(Magnitude / 2048, function() --[[ Line: 58 | Upvalues: HitBox (copy), AltarColors (ref), v12 (copy), v1 (ref) ]]
-                    if not HitBox or HitBox.Parent == nil then
-                        return
-                    end
-
-                    local v13 = script:WaitForChild("AltarPing"):Clone()
-
-                    v13.Parent = HitBox
-                    v13.Tweened.ImageColor3 = AltarColors[v12] or Color3.new(0/255, 0/255, 0/255)
-                    v13.ImageLabel.ImageColor3 = AltarColors[v12] or Color3.new(0/255, 0/255, 0/255)
-                    v13.Enabled = true
-                    game.TweenService:Create(v13.Tweened, TweenInfo.new(1), {
-                        ImageTransparency = 1,
-                        Size = UDim2.fromScale(12, 12)
-                    }):Play()
-                    game.TweenService:Create(v13.ImageLabel, TweenInfo.new(10), {
-                        ImageTransparency = 1,
-                        Size = UDim2.fromScale(0, 0)
-                    }):Play()
-                    game.TweenService:Create(v13.Outline, TweenInfo.new(10), {
-                        ImageTransparency = 1,
-                        Size = UDim2.fromScale(0, 0)
-                    }):Play()
-                    game.Debris:AddItem(v13, 10.1)
-                    game.SoundService.SFXFolder.Radar_Altar.PlaybackSpeed = v1:NextNumber(0.97, 1.03)
-                    game.SoundService.SFXFolder.Radar_Altar:Play()
-                end)
-            end
-        end
-    end
-end
-
-local function f4() --[[ Line: 79 | Upvalues: CollectionService (copy), HumanoidRootPart (copy), v1 (copy) ]]
-    for k, v in pairs(CollectionService:GetTagged("CadenceOrb")) do
-        if v.CanTouch then
-            local Magnitude = (v.Position - HumanoidRootPart.Position).Magnitude
-
-            if not (Magnitude > 1024) then
-                task.delay(Magnitude / 2048, function() --[[ Line: 89 | Upvalues: v (copy), v1 (ref) ]]
-                    local v12 = script:WaitForChild("CadencePing"):Clone()
-
-                    v12.Parent = v
-                    v12.Enabled = true
-                    game.TweenService:Create(v12.Tweened, TweenInfo.new(1), {
-                        ImageTransparency = 1,
-                        Size = UDim2.fromScale(12, 12)
-                    }):Play()
-                    game.TweenService:Create(v12.ImageLabel, TweenInfo.new(10), {
-                        ImageTransparency = 1,
-                        Size = UDim2.fromScale(0, 0)
-                    }):Play()
-                    game.Debris:AddItem(v12, 10.1)
-                    game.SoundService.SFXFolder.Radar_Instruments.PlaybackSpeed = v1:NextNumber(1.95, 2.05)
-                    game.SoundService.SFXFolder.Radar_Instruments:Play()
-                end)
-            end
-        end
-    end
-end
-
-while task.wait(12) and Humanoid:GetState() ~= Enum.HumanoidStateType.Dead do
-    if UpgradeHandler.IsUpgradeEnabled("RadarPlayer") then
-        task.spawn(f2)
-    end
-
-    if UpgradeHandler.IsUpgradeEnabled("RadarAltars") then
-        task.spawn(f3)
-    end
-
-    if UpgradeHandler.IsUpgradeEnabled("RadarInstruments") then
-        task.spawn(f4)
-    end
-end
-
--- Script Path: game:GetService("Players").Noriko_Ellen.PlayerScripts.ArrowHandler
--- Took 0.55s to decompile.
--- Executor: Potassium (v2.2.4)
-
--- https://lua.expert/
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local CollectionService = game:GetService("CollectionService")
-local UpgradeHandler = require(game.ReplicatedFirst.ClientModules.UpgradeHandler)
-local AltarColors = require(game.ReplicatedStorage.Altars.AltarColors)
-local Enemies = workspace.Enemies
-local Arrows = Instance.new("Folder")
-
-Arrows.Name = "Arrows"
-Arrows.Parent = workspace
-
-local LocalPlayer = Players.LocalPlayer
-local t = {}
-local t2 = {}
-local v1 = nil
-local v2 = nil
-local v3 = Vector3.new(0, 0, 0)
-
-for v4, v5 in script.Arrows:GetChildren() do
-    t[v5.Name] = v5
-end
-
-for k, v in pairs(AltarColors) do
-    if not t[k] then
-        local v6 = script.Template:Clone()
-
-        v6.Name = k
-        v6.CFrame = CFrame.new(Vector3.new(0, 1000000, 0))
-        v6.Color = v
-        t[k] = v6
-    end
-end
-
-local t3 = {}
-local v7 = 0
-local v8 = false
-local v9 = false
-local CadenceArrow = t.CadenceArrow
-
-CadenceArrow.CFrame = CFrame.new(Vector3.new(0, 1000000, 0))
-CadenceArrow.Parent = Arrows
-function CreateArrow(p1, p2) --[[ CreateArrow | Line: 52 | Upvalues: t (copy), Arrows (copy) ]]
-    local v1 = t[p2]
-
-    if v1 then
-        local t2 = {
-            Target = nil,
-            Model = v1:Clone(),
-            Rotation = CFrame.identity
-        }
-
-        t2.Model.Parent = Arrows
-
-        return t2
-    end
-end
-function DestroyArrow(p1) --[[ DestroyArrow | Line: 68 ]]
-    if not p1.Model then
-        return
-    end
-
-    p1.Model:Destroy()
-end
-function EnemyAdded(p1) --[[ EnemyAdded | Line: 75 | Upvalues: t (copy), t2 (copy) ]]
-    local v1 = p1.Name
-
-    if not t[v1] then
-        return
-    end
-
-    t2[p1] = {
-        UseEnemyPosition = true,
-        Arrows = {}
-    }
-    table.insert(t2[p1].Arrows, CreateArrow(p1, v1))
-end
-function EnemyRemoved(p1) --[[ EnemyRemoved | Line: 88 | Upvalues: t2 (copy) ]]
-    local v1 = t2[p1]
-
-    if not v1 then
-        return
-    end
-
-    for k, v in pairs(v1.Arrows) do
-        DestroyArrow(v)
-    end
-
-    t2[p1] = nil
-end
-function CharacterAdded(p1) --[[ CharacterAdded | Line: 99 | Upvalues: v1 (ref), v2 (ref) ]]
-    v1 = p1
-    v2 = p1:WaitForChild("Head", 9)
-end
-function GetClosestInstrument() --[[ GetClosestInstrument | Line: 104 | Upvalues: t3 (copy), v3 (ref) ]]
-    local v1 = 99999999
-    local v2 = nil
-
-    for v32, v4 in t3 do
-        local Position = v4.Position
-        local Magnitude = (Position - v3).Magnitude
-
-        if Magnitude < v1 then
-            v1 = Magnitude
-            v2 = Position
-        end
-    end
-
-    return v2
-end
-function Render() --[[ Render | Line: 119 | Upvalues: v3 (ref), v2 (ref), v8 (ref), t2 (copy) ]]
-    v3 = if v2 then v2.Position or Vector3.new(0, 1000000, 0) else Vector3.new(0, 1000000, 0)
-
-    if v8 and v3 then
-        debug.profilebegin("InstrumentArrow")
-
-        local v22 = GetClosestInstrument()
-
-        if v22 then
-            t2.CadenceArrow.Arrows[1].Target = v22
-        end
-
-        debug.profileend()
-    end
-
-    debug.profilebegin("BossArrows")
-
-    for v32, v4 in t2 do
-        local v5 = if v4.UseEnemyPosition then v32.Position or Vector3.new(0, 0, 0) else Vector3.new(0, 0, 0)
-
-        for v6, v7 in v4.Arrows do
-            if not v4.UseEnemyPosition then
-                v5 = v7.Target
-            end
-
-            if v7.Enabled then
-                if v7.Enabled == 0 and v7.Visible then
-                    v7.Visible = false
-                    v7.Model.Transparency = 1
-                elseif v7.Enabled > 0 and not v7.Visible then
-                    v7.Visible = true
-                    v7.Model.Transparency = 0
-                end
-            end
-
-            if v7.Visible == nil or v7.Visible == true then
-                local v82 = CFrame.lookAt(v3, v5) - v3
-
-                v7.Rotation = v7.Rotation:Lerp(v82, 0.1)
-                v7.Model.CFrame = v7.Rotation * CFrame.new(0, 0, -2 - math.min(1, (v3 - v5).Magnitude / 9)) + v3
-            end
-        end
-    end
-
-    debug.profileend()
-end
-function StartCadenceArrow(p1) --[[ StartCadenceArrow | Line: 169 | Upvalues: v8 (ref), v7 (ref), t2 (copy), v3 (ref), CadenceArrow (copy) ]]
-    if not v8 and v7 ~= 0 then
-        v8 = true
-        t2.CadenceArrow = {
-            UseEnemyPosition = false,
-            Arrows = {
-                {
-                    Target = p1,
-                    Rotation = CFrame.lookAt(v3, p1) - v3,
-                    Model = CadenceArrow
-                }
-            }
-        }
-    end
-end
-function StopCadenceArrow() --[[ StopCadenceArrow | Line: 185 | Upvalues: v8 (ref), t2 (copy), CadenceArrow (copy) ]]
-    if v8 then
-        v8 = false
-        t2.CadenceArrow = nil
-        CadenceArrow.CFrame = CFrame.new(Vector3.new(0, 1000000, 0))
-    end
-end
-function OrbAdded(p1) --[[ OrbAdded | Line: 194 | Upvalues: t3 (copy), v7 (ref), v9 (ref) ]]
-    if t3[p1] then
-        return
-    end
-
-    v7 = v7 + 1
-    t3[p1] = p1
-
-    if v9 and v7 == 1 then
-        StartCadenceArrow(t3[p1].Position)
-    end
-
-    p1:GetPropertyChangedSignal("CanTouch"):Connect(function() --[[ Line: 204 | Upvalues: p1 (copy) ]]
-        OrbRemoved(p1)
-    end)
-end
-function OrbRemoved(p1) --[[ OrbRemoved | Line: 209 | Upvalues: t3 (copy), v7 (ref), v9 (ref) ]]
-    if not t3[p1] then
-        return
-    end
-
-    v7 = v7 - 1
-    t3[p1] = nil
-
-    if not v9 or v7 ~= 0 then
-        return
-    end
-
-    StopCadenceArrow()
-end
-
-local function AltarAdded(p1) --[[ AltarAdded | Line: 220 | Upvalues: t2 (copy), t (copy), Arrows (copy), v3 (ref) ]]
-    local v1 = p1:GetAttribute("Name") or ""
-    local Position = p1:WaitForChild("Hitbox").Position
-    local v2 = t2[v1]
-
-    if not v2 then
-        local t3 = {
-            UseEnemyPosition = false,
-            Count = 0,
-            Arrows = {}
-        }
-
-        t2[v1] = t3
-        v2 = t3
-    end
-
-    local v32 = t[v1]
-
-    if not v32 then
-        return
-    end
-
-    local v4 = v32:Clone()
-
-    v4.Parent = Arrows
-    v2.Count = v2.Count + 1
-
-    local t3 = {
-        Visible = false,
-        Target = Position,
-        Rotation = CFrame.lookAt(v3, Position) - v3,
-        Model = v4
-    }
-
-    t3.Enabled = if p1:HasTag("Voting") then 1 else 0
-    v2.Arrows[p1] = t3
-end
-
-local function AltarRemoved(p1) --[[ AltarRemoved | Line: 252 | Upvalues: t2 (copy) ]]
-    local v1 = p1:GetAttribute("Name") or ""
-    local v2 = t2[v1]
-
-    if not v2 then
-        return
-    end
-
-    local v3 = v2.Arrows[p1]
-
-    if v3 then
-        DestroyArrow(v3)
-        v2.Arrows[p1] = nil
-        v2.Count = v2.Count - 1
-    end
-
-    if not (v2.Count <= 0) then
-        return
-    end
-
-    t2[v1] = nil
-end
-
-UpgradeHandler.GetUpgradeChangedSignal("RadarInstruments"):Connect(function(p1) --[[ Line: 271 | Upvalues: v9 (ref) ]]
-    if p1 == 0 then
-        v9 = false
-        StopCadenceArrow()
-    else
-        v9 = true
-        StartCadenceArrow(GetClosestInstrument() or Vector3.new(0, 1000000, 0))
-    end
-end)
-CollectionService:GetInstanceAddedSignal("CadenceOrb"):Connect(OrbAdded)
-CollectionService:GetInstanceRemovedSignal("CadenceOrb"):Connect(OrbRemoved)
-CollectionService:GetInstanceAddedSignal("Altar"):Connect(AltarAdded)
-CollectionService:GetInstanceRemovedSignal("Altar"):Connect(AltarRemoved)
-CollectionService:GetInstanceAddedSignal("Voting"):Connect(function(p1) --[[ Line: 289 | Upvalues: UpgradeHandler (copy), t2 (copy) ]]
-    if not UpgradeHandler.IsUpgradeEnabled("RadarAltars") then
-        return
-    end
-
-    local v1 = t2[p1:GetAttribute("Name") or ""]
-
-    if not v1 then
-        return
-    end
-
-    local v2 = v1.Arrows[p1]
-
-    if not v2 then
-        return
-    end
-
-    v2.Enabled = v2.Enabled + 1
-end)
-CollectionService:GetInstanceRemovedSignal("Voting"):Connect(function(p1) --[[ Line: 305 | Upvalues: t2 (copy) ]]
-    local v1 = t2[p1:GetAttribute("Name") or ""]
-
-    if not v1 then
-        return
-    end
-
-    local v2 = v1.Arrows[p1]
-
-    if not (v2 and v2.Enabled > 0) then
-        return
-    end
-
-    v2.Enabled = v2.Enabled - 1
-end)
-Enemies.ChildAdded:Connect(EnemyAdded)
-Enemies.ChildRemoved:Connect(EnemyRemoved)
-LocalPlayer.CharacterAdded:Connect(CharacterAdded)
-
-if not LocalPlayer.Character then
-    RunService.RenderStepped:Connect(Render)
-
-    return
-end
-
-CharacterAdded(LocalPlayer.Character)
-RunService.RenderStepped:Connect(Render)

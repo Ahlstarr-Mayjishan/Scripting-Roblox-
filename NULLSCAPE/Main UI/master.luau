@@ -67,6 +67,10 @@ pcall(function()
             ImmunitySpringerToggle = false,
             ImmunitySkinwalkerToggle = false,
             SpringerAutoJumpToggle = false,
+            GrapplerStaminaModeDropdown = "Off",
+            GrappleAimAssistToggle = false,
+            GrappleAimAssistTargetPriorityDropdown = "GrapplePoint",
+            GrappleAimAssistRangePriorityDropdown = "Nearest",
             SpringerImmunityModeDropdown = "Legit",
             MatrixTetrahedronToggle = false,
             MomentumReductionSlider = 100, -- Mặc định là 100% giảm quán tính
@@ -317,4 +321,3 @@ end
 
 -- Tải cấu hình lưu trữ của Rayfield
 Rayfield:LoadConfiguration()
-

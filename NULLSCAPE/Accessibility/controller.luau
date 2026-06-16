@@ -12,6 +12,10 @@ local GC = getgenv().loadModule("NULLSCAPE/Accessibility/GC.luau")
 local Controller = {
 	SpringerAutoJumpEnabled = false,
 	InfiniteAirJumpEnabled = false,
+	GrapplerStaminaMode = "Off",
+	GrappleAimAssistEnabled = false,
+	GrappleAimAssistTargetPriority = "GrapplePoint",
+	GrappleAimAssistRangePriority = "Nearest",
 	Destroyed = false,
 
 	EnemiesFolder = nil,
@@ -54,6 +58,10 @@ end
 -- Hàm dọn dẹp tài nguyên
 function Controller:CleanUp()
 	disconnectFolderObservations()
+	local globals = getgenv()._NULLSCAPE_Globals
+	if self.Destroyed or (globals and globals.activeAccessibilityController ~= self) then
+		Executor.disableGrappleAimAssist()
+	end
 	GC.cleanAll()
 	self.EnemiesFolder = nil
 
@@ -105,6 +113,96 @@ function Controller:SetInfiniteAirJump(value)
 			Duration = 2,
 		})
 	end
+end
+
+function Controller:SetGrapplerStaminaMode(mode)
+	local selectedMode = mode
+	if typeof(selectedMode) == "table" then
+		selectedMode = selectedMode[1]
+	end
+	selectedMode = tostring(selectedMode or "Off")
+
+	if selectedMode ~= "Infinite Stamina" then
+		selectedMode = "Off"
+	end
+
+	if selectedMode == "Infinite Stamina" and not Executor.initializeGrapplerInfiniteStamina() then
+		self.GrapplerStaminaMode = "Off"
+		if getgenv().Rayfield then
+			getgenv().Rayfield:Notify({
+				Title = "Accessibility Config",
+				Content = "Grapple module is not available yet",
+				Duration = 3,
+			})
+		end
+		return
+	end
+
+	self.GrapplerStaminaMode = selectedMode
+
+	if getgenv().Rayfield then
+		getgenv().Rayfield:Notify({
+			Title = "Accessibility Config",
+			Content = "Grappler stamina mode: " .. selectedMode,
+			Duration = 2,
+		})
+	end
+end
+
+function Controller:SetGrappleAimAssist(value)
+	if value and not Executor.enableGrappleAimAssist() then
+		self.GrappleAimAssistEnabled = false
+		if getgenv().Rayfield then
+			getgenv().Rayfield:Notify({
+				Title = "Accessibility Config",
+				Content = "Grapple module is not available yet",
+				Duration = 3,
+			})
+		end
+		return
+	end
+
+	self.GrappleAimAssistEnabled = value == true
+
+	if not self.GrappleAimAssistEnabled then
+		Executor.disableGrappleAimAssist()
+	end
+
+	if getgenv().Rayfield then
+		getgenv().Rayfield:Notify({
+			Title = "Accessibility Config",
+			Content = (self.GrappleAimAssistEnabled and "Activated" or "Disabled") .. " Grapple Aim Assist",
+			Duration = 2,
+		})
+	end
+end
+
+function Controller:SetGrappleAimAssistTargetPriority(option)
+	local selected = option
+	if typeof(selected) == "table" then
+		selected = selected[1]
+	end
+	selected = tostring(selected or "GrapplePoint")
+
+	if selected ~= "GrapplePoint" and selected ~= "JumpPad" and selected ~= "Bell" and selected ~= "TriaOrb" then
+		selected = "GrapplePoint"
+	end
+
+	self.GrappleAimAssistTargetPriority = selected
+end
+
+function Controller:SetGrappleAimAssistRangePriority(option)
+	local selected = option
+	if typeof(selected) == "table" then
+		selected = selected[1]
+	end
+	selected = tostring(selected or "Nearest")
+
+	if selected ~= "Nearest" and selected ~= "Farthest" and selected ~= "Random" then
+		selected = "Nearest"
+	end
+
+	self.GrappleAimAssistRangePriority = selected
 end
 
 local function handleSpringerShockwave(enemy, child)

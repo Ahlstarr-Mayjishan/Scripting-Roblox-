@@ -21,4 +21,62 @@ return function(Client, Controller)
             Controller:SetInfiniteAirJump(Value)
         end
     })
+
+    Tab:CreateDropdown({
+        Name = "Grappler Stamina",
+        Info = "Keeps the native Grapple stamina timer full while selected.",
+        Options = {"Off", "Infinite Stamina"},
+        CurrentOption = Controller.GrapplerStaminaMode or "Off",
+        MultipleOptions = false,
+        Flag = "GrapplerStaminaModeDropdown",
+        Callback = function(Option)
+            local selected = Option
+            if typeof(Option) == "table" then
+                selected = Option[1]
+            end
+            Controller:SetGrapplerStaminaMode(selected)
+        end
+    })
+
+    Tab:CreateToggle({
+        Name = "Grapple Aim Assist",
+        Info = "When native Grapple cast misses, searches visible safe targets on screen and restores Cast when disabled.",
+        CurrentValue = Controller.GrappleAimAssistEnabled or false,
+        Flag = "GrappleAimAssistToggle",
+        Callback = function(Value)
+            Controller:SetGrappleAimAssist(Value)
+        end
+    })
+
+    Tab:CreateDropdown({
+        Name = "Grapple Target Priority",
+        Info = "Preferred target type when several visible grapple targets are valid.",
+        Options = {"GrapplePoint", "JumpPad", "Bell", "TriaOrb"},
+        CurrentOption = Controller.GrappleAimAssistTargetPriority or "GrapplePoint",
+        MultipleOptions = false,
+        Flag = "GrappleAimAssistTargetPriorityDropdown",
+        Callback = function(Option)
+            local selected = Option
+            if typeof(Option) == "table" then
+                selected = Option[1]
+            end
+            Controller:SetGrappleAimAssistTargetPriority(selected)
+        end
+    })
+
+    Tab:CreateDropdown({
+        Name = "Grapple Range Priority",
+        Info = "How the assist chooses between valid visible targets.",
+        Options = {"Nearest", "Farthest", "Random"},
+        CurrentOption = Controller.GrappleAimAssistRangePriority or "Nearest",
+        MultipleOptions = false,
+        Flag = "GrappleAimAssistRangePriorityDropdown",
+        Callback = function(Option)
+            local selected = Option
+            if typeof(Option) == "table" then
+                selected = Option[1]
+            end
+            Controller:SetGrappleAimAssistRangePriority(selected)
+        end
+    })
 end
