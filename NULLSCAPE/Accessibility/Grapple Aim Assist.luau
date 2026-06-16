@@ -40,6 +40,11 @@ local Logic = {
     AutoRescueUntil = 0,
     LastAutoRescuePulseAt = 0,
     LastPanicRescuePulseAt = 0,
+    LastSharkTailAssistAt = 0,
+    LastSharkTailEvalAt = 0,
+    NextSharkTailEvalDelay = 0.08,
+    SharkTailPlanToken = 0,
+    SharkTailPlannedAt = 0,
 }
 
 local VALID_TARGETS = {
@@ -94,6 +99,48 @@ local FALLBACK_HITBOX_SIZE = Vector3.new(3, 2, 2)
 local MOMENTUM_GUARD_SPEED = 115
 local MOMENTUM_GUARD_CLAMP = 88
 local MOMENTUM_GUARD_WINDOW = 0.8
+local SHARK_TAIL_PROJECT_TIME = 0.25
+local SHARK_TAIL_MIN_SPEED = 35
+
+local SHARK_TAIL_STYLE_CONFIG = {
+    Conservative = {
+        Threshold = 76,
+        ManualThreshold = 55,
+        Cooldown = 0.48,
+        DelayMin = 0.1,
+        DelayMax = 0.18,
+        EvalMin = 0.09,
+        EvalMax = 0.14,
+    },
+    Balanced = {
+        Threshold = 64,
+        ManualThreshold = 48,
+        Cooldown = 0.35,
+        DelayMin = 0.06,
+        DelayMax = 0.14,
+        EvalMin = 0.07,
+        EvalMax = 0.12,
+    },
+    Aggressive = {
+        Threshold = 54,
+        ManualThreshold = 42,
+        Cooldown = 0.26,
+        DelayMin = 0.04,
+        DelayMax = 0.1,
+        EvalMin = 0.06,
+        EvalMax = 0.1,
+    },
+    ["Emergency Only"] = {
+        Threshold = 46,
+        ManualThreshold = 48,
+        Cooldown = 0.22,
+        DelayMin = 0.02,
+        DelayMax = 0.07,
+        EvalMin = 0.05,
+        EvalMax = 0.08,
+        EmergencyOnly = true,
+    },
+}
 
 local SCREEN_RAY_OFFSETS = {
     Vector2.new(0, 0),
@@ -246,6 +293,14 @@ local function normalizeMode(value)
         return "Automatic"
     end
     return "Manual"
+end
+
+local function normalizeStyle(value)
+    value = tostring(value or "Balanced")
+    if SHARK_TAIL_STYLE_CONFIG[value] then
+        return value
+    end
+    return "Balanced"
 end
 
 local function getTargetPart(instance)
@@ -842,6 +897,15 @@ end
 local function getModeValue(key)
     local controller = getController()
     return normalizeMode(controller and controller[key])
+end
+
+local function getSharkTailStyle()
+    local controller = getController()
+    return normalizeStyle(controller and controller.GrappleSharkTailStyle)
+end
+
+local function getSharkTailStyleConfig()
+    return SHARK_TAIL_STYLE_CONFIG[getSharkTailStyle()] or SHARK_TAIL_STYLE_CONFIG.Balanced
 end
 
 local function hasUpgrade(movement, upgradeName)
@@ -1591,6 +1655,146 @@ local function canUseSharkTail(grapple)
         and hasUpgrade(movement, "SharkTail")
 end
 
+local function getFlatUnit(vector)
+    if typeof(vector) ~= "Vector3" then
+        return nil
+    end
+
+    local flat = vector * Vector3.new(1, 0, 1)
+    if flat.Magnitude <= 0.05 then
+        return nil
+    end
+
+    return flat.Unit
+end
+
+local function getSharkTailIntentDirection(grapple)
+    local movement = grapple and grapple.Movement
+    local inputDirection = getFlatUnit(movement and movement.PlayerMoveDirection)
+    if inputDirection then
+        return inputDirection, true
+    end
+
+    local camera = Workspace.CurrentCamera
+    local cameraDirection = getFlatUnit(camera and camera.CFrame.LookVector)
+    if cameraDirection then
+        return cameraDirection, false
+    end
+
+    return getFlatUnit(grapple and grapple.RootPart and grapple.RootPart.Velocity), false
+end
+
+local function isSharkTailProjectedPathSafe(grapple, direction)
+    local movement = grapple and grapple.Movement
+    local rootPart = grapple and grapple.RootPart
+    if not (movement and rootPart and direction) then
+        return false
+    end
+
+    local velocity = rootPart.Velocity
+    local projectedSpeed = math.max(getHorizontalVelocity(rootPart).Magnitude, 70)
+    local projected = direction * projectedSpeed * SHARK_TAIL_PROJECT_TIME
+    if projected.Magnitude <= 1 then
+        return true
+    end
+
+    local hitbox = movement.Hitbox
+    if not (hitbox and hitbox.Parent and hitbox:IsA("BasePart")) then
+        hitbox = getFallbackHitbox(rootPart)
+    end
+
+    local params = movement.moveCastParams or grapple.grappleParams
+    local success, result = pcall(function()
+        return Workspace:Shapecast(hitbox, projected, params)
+    end)
+    if success then
+        if not result then
+            return true
+        end
+        return result.Normal ~= nil and result.Normal.Y >= 0.72 and velocity.Y <= 0
+    end
+
+    local rayResult = Workspace:Raycast(rootPart.Position, projected, params)
+    if not rayResult then
+        return true
+    end
+
+    return rayResult.Normal ~= nil and rayResult.Normal.Y >= 0.72 and velocity.Y <= 0
+end
+
+local function getSharkTailScore(grapple)
+    if not canUseSharkTail(grapple) then
+        return 0, false
+    end
+
+    if Logic.AdaptRecastPending or isAwaitingAdaptAttach(grapple) then
+        return 0, false
+    end
+
+    local rootPart = grapple.RootPart
+    local movement = grapple.Movement
+    local horizontal = getHorizontalVelocity(rootPart)
+    local speed = horizontal.Magnitude
+    if speed < SHARK_TAIL_MIN_SPEED then
+        return 0, false
+    end
+
+    local direction, hasInput = getSharkTailIntentDirection(grapple)
+    if not direction then
+        return 0, false
+    end
+
+    if not isSharkTailProjectedPathSafe(grapple, direction) then
+        return 0, false
+    end
+
+    local emergency = isHighMomentumDanger(grapple) or isPanicRescueDanger(grapple)
+    local velocityDirection = getFlatUnit(horizontal)
+    local velocityDot = velocityDirection and direction:Dot(velocityDirection) or 0
+
+    local intentScore = 45
+    if hasInput then
+        intentScore = math.clamp((velocityDot + 1) * 50, 0, 100)
+    else
+        local cameraDirection = getFlatUnit(Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.LookVector)
+        intentScore = cameraDirection and math.clamp((direction:Dot(cameraDirection) + 1) * 50, 0, 100) or 45
+    end
+
+    local flowScore = math.clamp((speed - 35) / 95 * 100, 0, 100)
+    if velocityDot < -0.1 and not emergency then
+        flowScore = flowScore * 0.45
+    elseif velocityDot > 0.35 then
+        flowScore = math.min(flowScore + 18, 100)
+    end
+
+    local riskScore = 100
+    if speed > 230 then
+        riskScore = 20
+    elseif speed > 180 then
+        riskScore = 45
+    elseif speed > 145 then
+        riskScore = 70
+    end
+    if movement == Logic.LastGrappleMovement and time() < Logic.SuppressBonkUntil and speed > 115 then
+        riskScore = math.min(riskScore, 55)
+    end
+
+    local emergencyScore = emergency and 100 or 0
+    local score = 35 + intentScore * 0.25 + flowScore * 0.2 + riskScore * 0.1 + emergencyScore * 0.1
+    return math.clamp(score, 0, 100), emergency
+end
+
+local function shouldUseSmartSharkTail(grapple, manual)
+    local config = getSharkTailStyleConfig()
+    local score, emergency = getSharkTailScore(grapple)
+    if config.EmergencyOnly and not emergency and not manual then
+        return false, score, emergency
+    end
+
+    local threshold = manual and config.ManualThreshold or config.Threshold
+    return score >= threshold, score, emergency
+end
+
 local function tryUseSharkTail(grapple)
     if not canUseSharkTail(grapple) then
         return false
@@ -1605,10 +1809,73 @@ local function tryUseSharkTail(grapple)
         local success = pcall(function()
             grapple:SharkTail()
         end)
+        if success then
+            Logic.LastSharkTailAssistAt = time()
+            Logic.SharkTailPlanToken = Logic.SharkTailPlanToken + 1
+            Logic.SharkTailPlannedAt = 0
+            markGrappleBonkGrace(grapple, MOMENTUM_GUARD_WINDOW)
+        end
         return success
     end
 
     return false
+end
+
+local function planSmartSharkTail(grapple)
+    local config = getSharkTailStyleConfig()
+    local now = time()
+    if Logic.SharkTailPlannedAt > now then
+        return true
+    end
+
+    if now - Logic.LastSharkTailEvalAt < Logic.NextSharkTailEvalDelay then
+        return false
+    end
+
+    Logic.LastSharkTailEvalAt = now
+    Logic.NextSharkTailEvalDelay = Logic.Random:NextNumber(config.EvalMin, config.EvalMax)
+
+    if now - Logic.LastSharkTailAssistAt < config.Cooldown then
+        return false
+    end
+
+    local shouldUse, score, emergency = shouldUseSmartSharkTail(grapple, false)
+    if not shouldUse then
+        return false
+    end
+
+    if not emergency and score < config.Threshold + 6 and Logic.Random:NextNumber() < 0.22 then
+        return false
+    end
+
+    local delay = Logic.Random:NextNumber(config.DelayMin, config.DelayMax)
+    local token = Logic.SharkTailPlanToken + 1
+    Logic.SharkTailPlanToken = token
+    Logic.SharkTailPlannedAt = now + delay
+
+    task.delay(delay, function()
+        if Logic.SharkTailPlanToken ~= token then
+            return
+        end
+
+        local activeGrapple = grapple
+        if not (activeGrapple and activeGrapple.Movement and activeGrapple.Movement.ActiveSpecial == activeGrapple) then
+            activeGrapple = getTrackedGrapple()
+        end
+        if not activeGrapple then
+            return
+        end
+
+        local latestConfig = getSharkTailStyleConfig()
+        if time() - Logic.LastSharkTailAssistAt < latestConfig.Cooldown then
+            return
+        end
+        if shouldUseSmartSharkTail(activeGrapple, false) then
+            tryUseSharkTail(activeGrapple)
+        end
+    end)
+
+    return true
 end
 
 local function isLiveBasePart(value)
@@ -1937,7 +2204,10 @@ function Logic.enable()
 
         grappleModule.AltSpecialAction = function(self, state, ...)
             if isSuiteEnabled() and state == Enum.UserInputState.Begin then
-                if isSharkTailHelperEnabled() and getModeValue("GrappleSharkTailMode") == "Manual" and tryUseSharkTail(self) then
+                local shouldManualSharkTail = isSharkTailHelperEnabled()
+                    and getModeValue("GrappleSharkTailMode") == "Manual"
+                    and shouldUseSmartSharkTail(self, true)
+                if shouldManualSharkTail and tryUseSharkTail(self) then
                     return nil
                 end
 
@@ -1978,11 +2248,12 @@ function Logic.enable()
             if isSuiteEnabled() and isInAir(self) then
                 updateAdaptInputMode(self)
 
+                local sharkTailPlanned = false
                 if isSharkTailHelperEnabled() and getModeValue("GrappleSharkTailMode") == "Automatic" then
-                    tryUseSharkTail(self)
+                    sharkTailPlanned = planSmartSharkTail(self)
                 end
 
-                if isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Automatic" then
+                if not sharkTailPlanned and isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Automatic" then
                     startSmartReel(self)
                 end
 
@@ -2071,6 +2342,11 @@ function Logic.disable()
     Logic.LastKnownGrapple = nil
     Logic.LastGrappleMovement = nil
     Logic.SuppressBonkUntil = 0
+    Logic.LastSharkTailAssistAt = 0
+    Logic.LastSharkTailEvalAt = 0
+    Logic.NextSharkTailEvalDelay = 0.08
+    Logic.SharkTailPlanToken = Logic.SharkTailPlanToken + 1
+    Logic.SharkTailPlannedAt = 0
     Logic.BellBypassToken = Logic.BellBypassToken + 1
     releaseBellBypass()
     restoreJumpPadBypassParts()

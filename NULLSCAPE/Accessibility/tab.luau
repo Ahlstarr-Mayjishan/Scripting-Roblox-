@@ -304,12 +304,12 @@ return function(Client, Controller)
     })
 
     if Tab.CreateLabel then
-        Tab:CreateLabel("SharkTail Helper: requires NinjaBelt + SharkTail. Manual uses p2 during allowSharkTail; Automatic fires only in the SharkTail window.")
+        Tab:CreateLabel("SharkTail Helper: requires NinjaBelt + SharkTail. Manual uses p2 when the SharkTail window is safe; outside that window it can fallback to Smart Reel. Automatic uses score/timing instead of firing every frame.")
     end
 
     Tab:CreateDropdown({
         Name = "SharkTail Mode",
-        Info = "Manual uses p2/sub-ability during allowSharkTail. Automatic fires only while airborne, moving fast enough, and owning NinjaBelt + SharkTail.",
+        Info = "Manual uses p2/sub-ability during allowSharkTail after a safety score. Automatic fires only when SharkTail scores better for flow, rescue, or vector change.",
         Options = {"Manual", "Automatic"},
         CurrentOption = Controller.GrappleSharkTailMode or "Manual",
         MultipleOptions = false,
@@ -320,6 +320,22 @@ return function(Client, Controller)
                 selected = Option[1]
             end
             Controller:SetGrappleSharkTailMode(selected)
+        end
+    })
+
+    Tab:CreateDropdown({
+        Name = "SharkTail Style",
+        Info = "Controls how picky automatic SharkTail is. Balanced is the pro-like default; Emergency Only only reacts during dangerous fall/momentum states.",
+        Options = {"Conservative", "Balanced", "Aggressive", "Emergency Only"},
+        CurrentOption = Controller.GrappleSharkTailStyle or "Balanced",
+        MultipleOptions = false,
+        Flag = "GrappleSharkTailStyleDropdown",
+        Callback = function(Option)
+            local selected = Option
+            if typeof(Option) == "table" then
+                selected = Option[1]
+            end
+            Controller:SetGrappleSharkTailStyle(selected)
         end
     })
 

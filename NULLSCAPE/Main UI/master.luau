@@ -94,6 +94,7 @@ pcall(function()
             GrappleSmartReelModeDropdown = "Manual",
             GrappleSharkTailHelperToggle = false,
             GrappleSharkTailModeDropdown = "Manual",
+            GrappleSharkTailStyleDropdown = "Balanced",
             GrappleMomentumGuardToggle = false,
             GrappleAirControlMultiplierSlider = 1.1,
             GrappleReelPullMultiplierSlider = 1.1,

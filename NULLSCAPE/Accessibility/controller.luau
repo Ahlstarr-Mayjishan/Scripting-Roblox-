@@ -84,6 +84,7 @@ local Controller = {
 	GrappleSmartReelMode = "Manual",
 	GrappleSharkTailHelperEnabled = false,
 	GrappleSharkTailMode = "Manual",
+	GrappleSharkTailStyle = "Balanced",
 	GrappleMomentumGuardEnabled = false,
 	GrappleAirControlMultiplier = 1.1,
 	GrappleReelPullMultiplier = 1.1,
@@ -470,6 +471,20 @@ function Controller:SetGrappleSharkTailMode(mode)
 	end
 	selected = tostring(selected or "Manual")
 	self.GrappleSharkTailMode = selected == "Automatic" and "Automatic" or "Manual"
+end
+
+function Controller:SetGrappleSharkTailStyle(style)
+	local selected = style
+	if typeof(selected) == "table" then
+		selected = selected[1]
+	end
+	selected = tostring(selected or "Balanced")
+
+	if selected ~= "Conservative" and selected ~= "Balanced" and selected ~= "Aggressive" and selected ~= "Emergency Only" then
+		selected = "Balanced"
+	end
+
+	self.GrappleSharkTailStyle = selected
 end
 
 function Controller:SetGrappleAimAssistTargetPriority(option)
