@@ -216,7 +216,7 @@ return function(Client, Controller)
 
     Tab:CreateSlider({
         Name = "Momentum Reduction",
-        Info = "Brake animation speed: 10% -> 1.11x, 50% -> 2x, >=60% bypass.",
+        Info = "Brake animation duration: 10% -> 90%, 50% -> 50%, >=60% bypass.",
         Range = {10, 100},
         Increment = 10,
         CurrentValue = math.clamp((Controller.MomentumReduction or 1.0) * 100, 10, 100),

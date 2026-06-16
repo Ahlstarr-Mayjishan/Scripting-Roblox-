@@ -28,11 +28,6 @@ local function getQuickTurnMaxDuration(reduction)
     return baseDuration * durationScale
 end
 
-local function getQuickTurnSpeed(reduction)
-    local durationScale = math.clamp(1 - reduction, 0.5, 0.9)
-    return 1 / durationScale
-end
-
 local function getDirectionBlend(reduction)
     if reduction >= 1 then
         return 1
@@ -45,25 +40,7 @@ local function getDirectionBlend(reduction)
     return math.clamp(math.max(naturalBlend, antiZigzagBlend), 0.035, 1)
 end
 
-local function setQuickTurnAnimationSpeed(movement, speed)
-    local animator = movement and movement.Animator
-    local animations = animator and animator.Animations
-    local quickTurn = animations and (animations.QuickTurn or animations["QuickTurn"])
-    if not quickTurn then
-        return
-    end
-
-    pcall(function()
-        if quickTurn.AdjustSpeed then
-            quickTurn:AdjustSpeed(speed)
-        elseif quickTurn.PlaybackSpeed ~= nil then
-            quickTurn.PlaybackSpeed = speed
-        end
-    end)
-end
-
 local function stopQuickTurn(movement)
-    setQuickTurnAnimationSpeed(movement, 1)
     movement.doingQuickTurn = false
 
     if movement.FloorParticles and movement.FloorParticles:FindFirstChild("QuickTurn") then
@@ -98,12 +75,12 @@ local function hookMovementCore(controller)
     MovementCore.SetMoveDirection = function(self, direction)
         local r = controller.MomentumReduction or Logic.MomentumReduction or 0.1
         if r > 0 and self.WantDirection and typeof(self.WantDirection) == "Vector3" and typeof(direction) == "Vector3" then
-            local bypassQuickTurn = r >= 0.6
-            if bypassQuickTurn then
+            if r >= 0.6 then
                 self.doingQuickTurn = false
+                direction = direction:Lerp(self.WantDirection, getDirectionBlend(r))
+            elseif self.doingQuickTurn then
+                direction = direction:Lerp(self.WantDirection, getDirectionBlend(r))
             end
-
-            direction = direction:Lerp(self.WantDirection, getDirectionBlend(r))
         end
         return Logic.OriginalSetMoveDirection(self, direction)
     end
@@ -135,8 +112,6 @@ local function hookHumanoidMovement(controller)
             stopQuickTurn(movement)
             Logic.QuickTurnState[movement] = nil
         elseif controller.MatrixTetrahedronEnabled and r > 0 and movement.doingQuickTurn then
-            setQuickTurnAnimationSpeed(movement, getQuickTurnSpeed(r))
-
             local now = os.clock()
             local state = Logic.QuickTurnState[movement]
             if not state then
