@@ -5,9 +5,62 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 
 local Executor = getgenv().loadModule("NULLSCAPE/Accessibility/executor.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Accessibility/GC.luau")
+
+local SETTINGS_FOLDER = "NULLSCAPE"
+local SETTINGS_FILE = SETTINGS_FOLDER .. "/master_settings.json"
+local ADAPT_INPUT_FLAG = "GrappleAdaptInputKeybind"
+
+local function normalizeKeyName(key)
+	local rawKey = tostring(key or "")
+	local keyName = rawKey:match("%.([^%.]+)$") or rawKey
+	if keyName == "" or keyName == "true" or keyName == "false" then
+		return nil
+	end
+
+	return keyName :: any
+end
+
+local function readSavedAdaptInputKey()
+	if not (isfile and readfile and isfile(SETTINGS_FILE)) then
+		return "T"
+	end
+
+	local success, decoded = pcall(function()
+		return HttpService:JSONDecode(readfile(SETTINGS_FILE))
+	end)
+	if not (success and type(decoded) == "table") then
+		return "T"
+	end
+
+	return normalizeKeyName(decoded[ADAPT_INPUT_FLAG]) or "T"
+end
+
+local function writeSavedAdaptInputKey(keyName)
+	if not (makefolder and writefile and readfile and isfile) then
+		return
+	end
+
+	local data = {}
+	if isfile(SETTINGS_FILE) then
+		local success, decoded = pcall(function()
+			return HttpService:JSONDecode(readfile(SETTINGS_FILE))
+		end)
+		if success and type(decoded) == "table" then
+			data = decoded
+		end
+	end
+
+	data[ADAPT_INPUT_FLAG] = keyName
+
+	pcall(function()
+		makefolder(SETTINGS_FOLDER)
+		writefile(SETTINGS_FILE, HttpService:JSONEncode(data))
+	end)
+end
 
 local Controller = {
 	SpringerAutoJumpEnabled = false,
@@ -15,11 +68,14 @@ local Controller = {
 	RailAssistSuiteEnabled = false,
 	RailAutoEnabled = false,
 	RailSpeedMultiplier = 1.1,
-	RailAutoDelay = 0.35,
+	RailAutoDelay = 1.5,
 	GrapplerStaminaMode = "Off",
 	GrappleAssistSuiteEnabled = false,
 	GrappleAimAssistEnabled = false,
 	GrappleRescueAssistEnabled = false,
+	GrappleEmergencyProtectionEnabled = false,
+	GrappleEmergencySpeedThreshold = 220,
+	GrappleEmergencyFallThreshold = 125,
 	GrappleAimAssistTargetPriority = "GrapplePoint",
 	GrappleAimAssistRangePriority = "Nearest",
 	GrappleAntiBonkEnabled = false,
@@ -32,7 +88,7 @@ local Controller = {
 	GrappleReelPullMultiplier = 1.1,
 	GrappleSharkTailPullMultiplier = 1.1,
 	GrappleJumpPadUsesBypassEnabled = false,
-	GrappleAdaptInputKey = "T",
+	GrappleAdaptInputKey = readSavedAdaptInputKey(),
 	Destroyed = false,
 
 	EnemiesFolder = nil,
@@ -174,7 +230,7 @@ function Controller:SetRailSpeedMultiplier(value)
 end
 
 function Controller:SetRailAutoDelay(value)
-	self.RailAutoDelay = math.clamp(tonumber(value) or 0.35, 0.35, 1)
+	self.RailAutoDelay = math.clamp(tonumber(value) or 1.5, 1.5, 3)
 end
 
 function Controller:SetGrapplerStaminaMode(mode)
@@ -215,6 +271,7 @@ end
 function Controller:HasAnyGrappleAssistFeature()
 	return self.GrappleAimAssistEnabled
 		or self.GrappleRescueAssistEnabled
+		or self.GrappleEmergencyProtectionEnabled
 		or self.GrappleAntiBonkEnabled
 		or self.GrappleSmartReelEnabled
 		or self.GrappleSharkTailHelperEnabled
@@ -298,6 +355,22 @@ function Controller:SetGrappleRescueAssist(value)
 	end
 end
 
+function Controller:SetGrappleEmergencyProtection(value)
+	self.GrappleEmergencyProtectionEnabled = value == true
+
+	if not self:RefreshGrappleAssistHook() then
+		self.GrappleEmergencyProtectionEnabled = false
+	end
+end
+
+function Controller:SetGrappleEmergencySpeedThreshold(value)
+	self.GrappleEmergencySpeedThreshold = math.clamp(tonumber(value) or 220, 150, 320)
+end
+
+function Controller:SetGrappleEmergencyFallThreshold(value)
+	self.GrappleEmergencyFallThreshold = math.clamp(tonumber(value) or 125, 80, 220)
+end
+
 function Controller:SetGrappleAntiBonk(value)
 	self.GrappleAntiBonkEnabled = value == true
 
@@ -363,10 +436,10 @@ function Controller:SetGrappleSharkTailPullMultiplier(value)
 end
 
 function Controller:SetGrappleAdaptInputKey(key)
-	local rawKey = tostring(key or "")
-	local keyName = rawKey:match("%.([^%.]+)$") or rawKey
-	if keyName ~= "" and keyName ~= "true" and keyName ~= "false" then
+	local keyName = normalizeKeyName(key)
+	if keyName then
 		self.GrappleAdaptInputKey = keyName
+		writeSavedAdaptInputKey(keyName)
 	end
 end
 

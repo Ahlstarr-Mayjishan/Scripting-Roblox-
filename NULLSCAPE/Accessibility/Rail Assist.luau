@@ -46,7 +46,7 @@ end
 
 local function getAutoRailDelay()
     local controller = getController()
-    return math.clamp(tonumber(controller and controller.RailAutoDelay) or 0.35, 0.35, 1)
+    return math.clamp(tonumber(controller and controller.RailAutoDelay) or 1.5, 1.5, 3)
 end
 
 local function getMovementCore()

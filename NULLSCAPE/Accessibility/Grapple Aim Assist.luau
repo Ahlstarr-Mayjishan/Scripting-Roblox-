@@ -77,8 +77,6 @@ local ADAPT_RECAST_TRIA_ARRIVAL_DISTANCE = 11
 local AUTO_RESCUE_SPEED = 135
 local AUTO_RESCUE_COOLDOWN = 0.45
 local AUTO_RESCUE_WINDOW = 0.3
-local PANIC_RESCUE_SPEED = 185
-local PANIC_RESCUE_FALL_SPEED = -95
 local PANIC_RESCUE_COOLDOWN = 0.16
 local PANIC_RESCUE_WINDOW = 0.55
 local PANIC_RESCUE_GROUND_CHECK_HEIGHT = 10
@@ -137,6 +135,21 @@ end
 local function isRescueEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleRescueAssistEnabled == true
+end
+
+local function isEmergencyProtectionEnabled()
+    local controller = getController()
+    return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleEmergencyProtectionEnabled == true
+end
+
+local function getEmergencySpeedThreshold()
+    local controller = getController()
+    return math.clamp(tonumber(controller and controller.GrappleEmergencySpeedThreshold) or 220, 150, 320)
+end
+
+local function getEmergencyFallThreshold()
+    local controller = getController()
+    return math.clamp(tonumber(controller and controller.GrappleEmergencyFallThreshold) or 125, 80, 220)
 end
 
 local function isAntiBonkEnabled()
@@ -817,8 +830,8 @@ local function isPanicRescueDanger(grapple)
         return false
     end
 
-    local speedDanger = getHorizontalVelocity(rootPart).Magnitude >= PANIC_RESCUE_SPEED
-    local fallDanger = velocity.Y <= PANIC_RESCUE_FALL_SPEED
+    local speedDanger = getHorizontalVelocity(rootPart).Magnitude >= getEmergencySpeedThreshold()
+    local fallDanger = velocity.Y <= -getEmergencyFallThreshold()
     if not (speedDanger or fallDanger) then
         return false
     end
@@ -1315,7 +1328,7 @@ local function scanNamedTargets(grapple, options)
     local controller = getController()
     local preferredName = normalizeTargetPriority(controller and controller.GrappleAimAssistTargetPriority)
     local rescueMode = isRescueEnabled() and isFallingFast(grapple)
-    local emergencyBrakeMode = isRescueEnabled()
+    local emergencyBrakeMode = isEmergencyProtectionEnabled()
         and (isHighMomentumDanger(grapple) or isPanicRescueDanger(grapple))
         and isAutoRescueWindowActive()
     preferredName = getEffectivePreferredTarget(grapple, preferredName)
@@ -1478,7 +1491,7 @@ local function tryAutoMomentumRescue(grapple)
 end
 
 local function tryPanicRescue(grapple)
-    if not (isRescueEnabled() and isPanicRescueDanger(grapple)) then
+    if not (isEmergencyProtectionEnabled() and isPanicRescueDanger(grapple)) then
         return false
     end
 
