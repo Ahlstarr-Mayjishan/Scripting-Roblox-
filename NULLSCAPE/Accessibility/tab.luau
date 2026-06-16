@@ -22,6 +22,18 @@ return function(Client, Controller)
         end
     })
 
+    Tab:CreateSection("Grapple Assist")
+
+    Tab:CreateToggle({
+        Name = "Grapple Assist Suite",
+        Info = "Master switch for all Grapple assist hooks. Turning it off restores Grapple logic.",
+        CurrentValue = Controller.GrappleAssistSuiteEnabled or false,
+        Flag = "GrappleAssistSuiteToggle",
+        Callback = function(Value)
+            Controller:SetGrappleAssistSuite(Value)
+        end
+    })
+
     Tab:CreateDropdown({
         Name = "Grappler Stamina",
         Info = "Keeps the native Grapple stamina timer full while selected.",
@@ -35,18 +47,6 @@ return function(Client, Controller)
                 selected = Option[1]
             end
             Controller:SetGrapplerStaminaMode(selected)
-        end
-    })
-
-    Tab:CreateSection("Grapple Assist")
-
-    Tab:CreateToggle({
-        Name = "Grapple Assist Suite",
-        Info = "Master switch for all Grapple assist hooks. Turning it off restores Grapple logic.",
-        CurrentValue = Controller.GrappleAssistSuiteEnabled or false,
-        Flag = "GrappleAssistSuiteToggle",
-        Callback = function(Value)
-            Controller:SetGrappleAssistSuite(Value)
         end
     })
 

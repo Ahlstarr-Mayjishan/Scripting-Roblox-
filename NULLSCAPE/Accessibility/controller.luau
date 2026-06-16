@@ -136,8 +136,11 @@ function Controller:SetGrapplerStaminaMode(mode)
 		selectedMode = "Off"
 	end
 
-	if selectedMode == "Infinite Stamina" and not Executor.initializeGrapplerInfiniteStamina() then
-		self.GrapplerStaminaMode = "Off"
+	local previousMode = self.GrapplerStaminaMode
+	self.GrapplerStaminaMode = selectedMode
+
+	if not self:RefreshGrappleAssistHook() then
+		self.GrapplerStaminaMode = previousMode or "Off"
 		if getgenv().Rayfield then
 			getgenv().Rayfield:Notify({
 				Title = "Accessibility Config",
@@ -147,8 +150,6 @@ function Controller:SetGrapplerStaminaMode(mode)
 		end
 		return
 	end
-
-	self.GrapplerStaminaMode = selectedMode
 
 	if getgenv().Rayfield then
 		getgenv().Rayfield:Notify({
@@ -170,7 +171,7 @@ function Controller:HasAnyGrappleAssistFeature()
 end
 
 function Controller:RefreshGrappleAssistHook()
-	if self.GrappleAssistSuiteEnabled and self:HasAnyGrappleAssistFeature() then
+	if (self.GrappleAssistSuiteEnabled and self:HasAnyGrappleAssistFeature()) or self.GrapplerStaminaMode == "Infinite Stamina" then
 		if not Executor.enableGrappleAimAssist() then
 			return false
 		end

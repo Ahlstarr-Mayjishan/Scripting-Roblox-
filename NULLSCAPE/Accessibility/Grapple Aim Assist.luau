@@ -276,6 +276,25 @@ local function getMovementCore()
     return movementCore
 end
 
+local function clearLegacyInfiniteStaminaHook(globals, grappleModule)
+    if globals.GrappleAimAssistHooked or not globals.GrapplerInfiniteStaminaHooked then
+        return
+    end
+
+    if grappleModule then
+        if globals.OriginalGrappleStep then
+            grappleModule.Step = globals.OriginalGrappleStep
+        end
+        if globals.OriginalGrappleStart then
+            grappleModule.Start = globals.OriginalGrappleStart
+        end
+    end
+
+    globals.OriginalGrappleStep = nil
+    globals.OriginalGrappleStart = nil
+    globals.GrapplerInfiniteStaminaHooked = nil
+end
+
 local function getEntitiesGC()
     local success, gc = pcall(function()
         return getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
@@ -359,6 +378,30 @@ local function getStaminaRatio(grapple)
     end
 
     return math.clamp(currentTime / maxTime, 0, 1)
+end
+
+local function refillStamina(grapple)
+    if not isInfiniteStamina() or typeof(grapple) ~= "table" then
+        return
+    end
+
+    local maxTime = tonumber(grapple.usedGrappleTime) or tonumber(grapple.TimeClamp) or tonumber(grapple.Time)
+    if not maxTime or maxTime <= 0 then
+        return
+    end
+
+    grapple.Time = maxTime
+    grapple.TimeClamp = maxTime
+    grapple.TimeDrained = false
+
+    local ui = grapple.UI
+    local frame = ui and ui:FindFirstChild("Frame")
+    local bar = frame and frame:FindFirstChild("Bar")
+    if bar then
+        pcall(function()
+            bar.Size = UDim2.fromScale(1, 1)
+        end)
+    end
 end
 
 local function getAssistRange(grapple)
@@ -1159,6 +1202,7 @@ function Logic.enable()
     if not grappleModule or typeof(grappleModule.Cast) ~= "function" then
         return false
     end
+    clearLegacyInfiniteStaminaHook(globals, grappleModule)
 
     local originalCast = grappleModule.Cast
     globals.GrappleAimAssistOriginalCast = originalCast
@@ -1172,6 +1216,7 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalStart = originalStart
 
         grappleModule.Start = function(self, result, ...)
+            refillStamina(self)
             maintainJumpPadUsesBypass()
             local jumpPadTarget = result and result.Instance
             if isJumpPadUsesBypassEnabled() and isJumpPadInstance(jumpPadTarget) then
@@ -1183,6 +1228,7 @@ function Logic.enable()
             end
 
             local startResult = originalStart(self, result, ...)
+            refillStamina(self)
             if isJumpPadUsesBypassEnabled() and isJumpPadInstance(jumpPadTarget) then
                 normalizeJumpPadForReuse(jumpPadTarget)
             end
@@ -1215,6 +1261,7 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalStep = originalStep
 
         grappleModule.Step = function(self, dt, ...)
+            refillStamina(self)
             maintainJumpPadUsesBypass()
             maintainBellBypass(self)
             if self.Movement and (self.Movement.grappling or self.jumpPadReel) then
@@ -1242,6 +1289,7 @@ function Logic.enable()
                 error(stepResult, 0)
             end
             maintainBellBypass(self)
+            refillStamina(self)
             applyAirControlMultiplier(self, dt)
             applyMomentumGuard(self)
             return stepResult
