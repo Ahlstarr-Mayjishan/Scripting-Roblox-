@@ -121,17 +121,15 @@ local function registerGiftObj(giftObj)
         if g.id == giftObj.Id then return end
     end
     
-    -- Tạo Proxy Part ảo tối giản ngay lập tức để định vị từ xa (Tối ưu hiệu năng cực hạn)
-    local proxyPart = Instance.new("Part")
-    proxyPart.Name = "GiftProxy_" .. tostring(giftObj.Id)
-    proxyPart.Size = Vector3.new(0, 0, 0)
-    proxyPart.Transparency = 1
-    proxyPart.Anchored = true
-    proxyPart.CanCollide = false
-    proxyPart.CastShadow = false
-    proxyPart.Massless = true
-    proxyPart.Position = giftObj.Position or Vector3.new(0, 0, 0)
-    proxyPart.Parent = workspace
+    local giftModel = typeof(giftObj.Model) == "Instance" and giftObj.Model or nil
+    local giftPart = nil
+    if giftModel then
+        if giftModel:IsA("BasePart") then
+            giftPart = giftModel
+        elseif giftModel:IsA("Model") then
+            giftPart = giftModel.PrimaryPart or giftModel:FindFirstChildWhichIsA("BasePart")
+        end
+    end
     
     local color = Logic.ESPColors.Gift
     local giftType = giftObj.Type or "Gift"
@@ -148,8 +146,8 @@ local function registerGiftObj(giftObj)
     
     table.insert(Controller.ActiveGifts, {
         id = giftObj.Id,
-        part = proxyPart,
-        model = proxyPart,
+        part = giftPart,
+        model = giftModel,
         color = color,
         type = giftType,
         rawObj = giftObj
@@ -161,9 +159,6 @@ local function unregisterGiftById(id)
     local removed = false
     for i, g in ipairs(Controller.ActiveGifts) do
         if g.id == id then
-            if g.part and g.part.Name:find("GiftProxy_") then
-                pcall(function() g.part:Destroy() end)
-            end
             table.remove(Controller.ActiveGifts, i)
             removed = true
             break
@@ -778,14 +773,6 @@ function Controller:CleanUp()
     self.Destroyed = true
     disconnectFolderObservations()
     stopRenderStepped()
-    
-    if self.ActiveGifts then
-        for _, g in ipairs(self.ActiveGifts) do
-            if g.part and g.part.Name:find("GiftProxy_") then
-                pcall(function() g.part:Destroy() end)
-            end
-        end
-    end
     
     if MatrixTetrahedron then
         pcall(function() MatrixTetrahedron.stop() end)

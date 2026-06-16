@@ -232,10 +232,6 @@ function Barrier.update(controller, gc)
                                             end
                                         end
                                     end
-                                    -- Ẩn cả proxyPart ảo nếu có để ESP ngừng vẽ
-                                    if g.part and g.part ~= realPart and g.part:IsA("BasePart") then
-                                        g.part.Transparency = 1
-                                    end
                                 end)
                                 
                                 task.spawn(function()

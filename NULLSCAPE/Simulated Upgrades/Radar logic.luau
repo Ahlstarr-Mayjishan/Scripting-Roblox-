@@ -288,11 +288,7 @@ local function isGiftValid(t)
 		if t.rawObj.Collected or t.rawObj.Destroyed then
 			return false
 		end
-		-- Đối với Gift từ game handler, Proxy Part (t.part) phải tồn tại trong workspace
-		if not t.part or not t.part.Parent or not t.part:IsDescendantOf(workspace) then
-			return false
-		end
-		return true
+		return t.rawObj.Position ~= nil
 	end
 
 	local part = t.part
@@ -543,21 +539,34 @@ function Logic.updateESPStyles(controller, gc, hrp)
 		end
 	end
 
-	-- Phân loại: Quà & Bẫy mìn (Đồng bộ động giữa Model thật và Proxy Part ảo)
+	-- Phân loại: Quà & Bẫy mìn. Raw gifts without a rendered instance still support arrows.
 	for _, t in ipairs(validGifts) do
-		local actualPart = (
+		local actualModel = (
 			t.rawObj
 			and t.rawObj.Model
+			and typeof(t.rawObj.Model) == "Instance"
 			and t.rawObj.Model.Parent
 			and t.rawObj.Model:IsDescendantOf(workspace)
 		)
 				and t.rawObj.Model
-			or t.part
-		local isGolden = t.type == "GoldenGift" or (string.find(actualPart.Name:lower(), "golden") ~= nil)
+			or nil
+		local actualPart = t.part and t.part.Parent and t.part:IsDescendantOf(workspace) and t.part or nil
+		if not actualPart and actualModel then
+			if actualModel:IsA("BasePart") then
+				actualPart = actualModel
+			elseif actualModel:IsA("Model") then
+				actualPart = actualModel.PrimaryPart or actualModel:FindFirstChildWhichIsA("BasePart")
+			end
+		end
+		local highlightObject = actualModel or actualPart
+		local isGolden = t.type == "GoldenGift"
+			or (highlightObject and string.find(highlightObject.Name:lower(), "golden") ~= nil)
 
-		if isGolden then
+		if not highlightObject then
+			continue
+		elseif isGolden then
 			-- Quà vàng/Mìn vàng luôn vẽ chấm Dot để không chiếm dụng Highlight pool (Giới hạn 1200 studs để tối ưu hiệu năng)
-			if t.distance <= 1200 then
+			if actualPart and t.distance <= 1200 then
 				currentTargets[actualPart] = {
 					Style = "Dot",
 					Color = t.color,
@@ -566,27 +575,15 @@ function Logic.updateESPStyles(controller, gc, hrp)
 			end
 		else
 			if controller.ESPStyle == "Highlight" then
-				if actualPart == t.part then
-					-- Nếu Hộp quà ở xa (đang dùng Proxy Part ảo), chỉ vẽ chấm Dot từ xa để tránh rối mắt và lag
-					if t.distance <= 1200 then
-						currentTargets[actualPart] = {
-							Style = "Dot",
-							Color = t.color,
-							ParentObject = actualPart,
-						}
-					end
-				else
-					-- Nếu lại gần và game đã render Model thật, vẽ Highlight "đúng nghĩa"
-					table.insert(highlightTargets, {
-						distance = t.distance,
-						part = actualPart,
-						model = actualPart,
-						color = t.color,
-					})
-				end
+				table.insert(highlightTargets, {
+					distance = t.distance,
+					part = actualPart or highlightObject,
+					model = highlightObject,
+					color = t.color,
+				})
 			else
 				local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
-				if t.distance <= 1200 then
+				if actualPart and t.distance <= 1200 then
 					currentTargets[actualPart] = {
 						Style = style,
 						Color = t.color,
