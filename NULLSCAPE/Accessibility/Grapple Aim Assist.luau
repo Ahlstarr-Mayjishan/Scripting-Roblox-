@@ -1587,6 +1587,7 @@ local function canUseSharkTail(grapple)
     return grapple.allowSharkTail == true
         and grapple.sharkTailDisable ~= true
         and isInAir(grapple)
+        and hasUpgrade(movement, "NinjaBelt")
         and hasUpgrade(movement, "SharkTail")
 end
 
@@ -1610,6 +1611,13 @@ local function tryUseSharkTail(grapple)
     return false
 end
 
+local function isLiveBasePart(value)
+    local success, result = pcall(function()
+        return value and value.Parent and value:IsA("BasePart")
+    end)
+    return success and result == true
+end
+
 local function getSmartReelTarget(grapple)
     local movement = grapple and grapple.Movement
     local targetPosition = movement and movement.grapplePoint
@@ -1618,14 +1626,14 @@ local function getSmartReelTarget(grapple)
     if typeof(targetPosition) ~= "Vector3" then
         targetPosition = grapple and grapple.grapplePoint
     end
-    if not (typeof(targetPart) == "Instance" and targetPart.Parent and targetPart:IsA("BasePart")) then
+    if not isLiveBasePart(targetPart) then
         targetPart = grapple and grapple.grapplePart
     end
 
-    if typeof(targetPosition) ~= "Vector3" and typeof(targetPart) == "Instance" and targetPart.Parent and targetPart:IsA("BasePart") then
+    if typeof(targetPosition) ~= "Vector3" and isLiveBasePart(targetPart) then
         targetPosition = targetPart.Position
     end
-    if not (typeof(targetPart) == "Instance" and targetPart.Parent and targetPart:IsA("BasePart")) then
+    if not isLiveBasePart(targetPart) then
         targetPart = nil
     end
 

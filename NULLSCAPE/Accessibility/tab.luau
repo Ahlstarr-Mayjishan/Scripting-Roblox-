@@ -295,7 +295,7 @@ return function(Client, Controller)
 
     Tab:CreateToggle({
         Name = "SharkTail Helper",
-        Info = "Adds helper behavior for SharkTail during its allowed window. It only works when Movement:HasUpgrade('SharkTail') is true.",
+        Info = "Adds helper behavior for SharkTail during its allowed window. It only works when NinjaBelt and SharkTail are both real upgrades.",
         CurrentValue = Controller.GrappleSharkTailHelperEnabled or false,
         Flag = "GrappleSharkTailHelperToggle",
         Callback = function(Value)
@@ -304,12 +304,12 @@ return function(Client, Controller)
     })
 
     if Tab.CreateLabel then
-        Tab:CreateLabel("SharkTail Helper: requires real SharkTail. Manual uses p2 during allowSharkTail; Automatic fires only while airborne in the SharkTail window with enough horizontal speed.")
+        Tab:CreateLabel("SharkTail Helper: requires NinjaBelt + SharkTail. Manual uses p2 during allowSharkTail; Automatic fires only in the SharkTail window.")
     end
 
     Tab:CreateDropdown({
         Name = "SharkTail Mode",
-        Info = "Manual uses p2/sub-ability during allowSharkTail. Automatic fires only while airborne and moving fast enough.",
+        Info = "Manual uses p2/sub-ability during allowSharkTail. Automatic fires only while airborne, moving fast enough, and owning NinjaBelt + SharkTail.",
         Options = {"Manual", "Automatic"},
         CurrentOption = Controller.GrappleSharkTailMode or "Manual",
         MultipleOptions = false,
@@ -371,7 +371,7 @@ return function(Client, Controller)
 
     Tab:CreateSlider({
         Name = "SharkTail Pull",
-        Info = "Multiplies the velocity delta created by SharkTail. Only applies when SharkTail actually fires.",
+        Info = "Multiplies the velocity delta created by SharkTail. Only applies when SharkTail actually fires and NinjaBelt + SharkTail are both owned.",
         Range = {1.1, 5},
         Increment = 0.1,
         Suffix = "x",
