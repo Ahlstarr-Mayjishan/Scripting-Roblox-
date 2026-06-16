@@ -77,10 +77,18 @@ local ADAPT_RECAST_TRIA_ARRIVAL_DISTANCE = 11
 local AUTO_RESCUE_SPEED = 135
 local AUTO_RESCUE_COOLDOWN = 0.45
 local AUTO_RESCUE_WINDOW = 0.3
-local PANIC_RESCUE_SPEED = 165
-local PANIC_RESCUE_FALL_SPEED = -75
+local PANIC_RESCUE_SPEED = 185
+local PANIC_RESCUE_FALL_SPEED = -95
 local PANIC_RESCUE_COOLDOWN = 0.16
 local PANIC_RESCUE_WINDOW = 0.55
+local PANIC_RESCUE_GROUND_CHECK_HEIGHT = 10
+local PANIC_RESCUE_GROUND_CHECK_DEPTH = 90
+
+local PANIC_RESCUE_LOOKAHEADS = {
+    0.16,
+    0.32,
+    0.52,
+}
 
 local DEFAULT_MAX_RANGE = 90
 local MAX_CANDIDATES_PER_CAST = 48
@@ -752,6 +760,52 @@ local function isHighMomentumDanger(grapple)
     return getHorizontalVelocity(grapple.RootPart).Magnitude >= AUTO_RESCUE_SPEED
 end
 
+local function getEmergencyFloorRaycastParams(grapple)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.RespectCanCollide = true
+
+    local filter = {}
+    local character = grapple and grapple.Character
+    if character then
+        table.insert(filter, character)
+    end
+
+    params.FilterDescendantsInstances = filter
+    return params
+end
+
+local function hasFloorBelow(position, params)
+    local origin = position + Vector3.new(0, PANIC_RESCUE_GROUND_CHECK_HEIGHT, 0)
+    local direction = Vector3.new(0, -PANIC_RESCUE_GROUND_CHECK_DEPTH, 0)
+    local hit = Workspace:Raycast(origin, direction, params)
+    return hit ~= nil
+end
+
+local function isProjectedPathUnsafe(grapple)
+    local rootPart = grapple and grapple.RootPart
+    local velocity = rootPart and rootPart.Velocity
+    if not (rootPart and velocity) then
+        return false
+    end
+
+    local fallenHeight = tonumber(Workspace.FallenPartsDestroyHeight)
+    if fallenHeight and rootPart.Position.Y <= fallenHeight + 45 then
+        return true
+    end
+
+    local unsafeSamples = 0
+    local params = getEmergencyFloorRaycastParams(grapple)
+    for _, lookahead in ipairs(PANIC_RESCUE_LOOKAHEADS) do
+        local projected = rootPart.Position + velocity * lookahead
+        if not hasFloorBelow(projected, params) then
+            unsafeSamples = unsafeSamples + 1
+        end
+    end
+
+    return unsafeSamples >= 2
+end
+
 local function isPanicRescueDanger(grapple)
     if not (grapple and isInAir(grapple)) then
         return false
@@ -763,7 +817,13 @@ local function isPanicRescueDanger(grapple)
         return false
     end
 
-    return getHorizontalVelocity(rootPart).Magnitude >= PANIC_RESCUE_SPEED or velocity.Y <= PANIC_RESCUE_FALL_SPEED
+    local speedDanger = getHorizontalVelocity(rootPart).Magnitude >= PANIC_RESCUE_SPEED
+    local fallDanger = velocity.Y <= PANIC_RESCUE_FALL_SPEED
+    if not (speedDanger or fallDanger) then
+        return false
+    end
+
+    return isProjectedPathUnsafe(grapple)
 end
 
 local function getModeValue(key)
