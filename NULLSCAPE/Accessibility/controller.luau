@@ -198,7 +198,7 @@ function Controller:SetGrappleAimAssistRangePriority(option)
 	end
 	selected = tostring(selected or "Nearest")
 
-	if selected ~= "Nearest" and selected ~= "Farthest" and selected ~= "Random" then
+	if selected ~= "Nearest" and selected ~= "Farthest" and selected ~= "Closest To Cursor" and selected ~= "Random" then
 		selected = "Nearest"
 	end
 

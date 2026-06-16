@@ -67,7 +67,7 @@ return function(Client, Controller)
     Tab:CreateDropdown({
         Name = "Grapple Range Priority",
         Info = "How the assist chooses between valid visible targets.",
-        Options = {"Nearest", "Farthest", "Random"},
+        Options = {"Nearest", "Farthest", "Closest To Cursor", "Random"},
         CurrentOption = Controller.GrappleAimAssistRangePriority or "Nearest",
         MultipleOptions = false,
         Flag = "GrappleAimAssistRangePriorityDropdown",

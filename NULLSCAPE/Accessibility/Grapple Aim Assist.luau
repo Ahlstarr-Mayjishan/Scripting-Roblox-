@@ -6,12 +6,14 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
 
 local Logic = {
     Connections = {},
     Candidates = {},
     CandidateCursor = 1,
     Random = Random.new(),
+    BellBypass = nil,
 }
 
 local VALID_TARGETS = {
@@ -31,11 +33,11 @@ local TARGET_OPTIONS = {
 local RANGE_OPTIONS = {
     "Nearest",
     "Farthest",
+    "Closest To Cursor",
     "Random",
 }
 
 local DEFAULT_MAX_RANGE = 90
-local INF_STAMINA_MAX_RANGE = 140
 local MAX_CANDIDATES_PER_CAST = 48
 
 local SCREEN_RAY_OFFSETS = {
@@ -195,6 +197,16 @@ local function getGrappleModule()
     return grappleModule
 end
 
+local function getEntitiesGC()
+    local success, gc = pcall(function()
+        return getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
+    end)
+    if success and typeof(gc) == "table" then
+        return gc
+    end
+    return nil
+end
+
 local function getStaminaRatio(grapple)
     if isInfiniteStamina() then
         return 1
@@ -210,10 +222,6 @@ local function getStaminaRatio(grapple)
 end
 
 local function getAssistRange(grapple)
-    if isInfiniteStamina() then
-        return INF_STAMINA_MAX_RANGE
-    end
-
     local staminaRatio = getStaminaRatio(grapple)
     if staminaRatio < 0.3 then
         return 45
@@ -228,7 +236,19 @@ local function shouldForceNearest(grapple)
     return not isInfiniteStamina() and getStaminaRatio(grapple) < 0.3
 end
 
-local function getCameraScreenScore(camera, worldPosition)
+local function getScreenAnchor(camera, rangeMode)
+    if rangeMode == "Closest To Cursor" then
+        local mouseLocation = UserInputService:GetMouseLocation()
+        local viewportSize = camera.ViewportSize
+        if mouseLocation.X >= 0 and mouseLocation.Y >= 0 and mouseLocation.X <= viewportSize.X and mouseLocation.Y <= viewportSize.Y then
+            return mouseLocation
+        end
+    end
+
+    return camera.ViewportSize * 0.5
+end
+
+local function getCameraScreenScore(camera, worldPosition, anchor)
     local viewportPoint, onScreen = camera:WorldToViewportPoint(worldPosition)
     if not onScreen or viewportPoint.Z <= 0 then
         return nil
@@ -239,8 +259,7 @@ local function getCameraScreenScore(camera, worldPosition)
         return nil
     end
 
-    local center = viewportSize * 0.5
-    local delta = Vector2.new(viewportPoint.X, viewportPoint.Y) - center
+    local delta = Vector2.new(viewportPoint.X, viewportPoint.Y) - anchor
     return delta.Magnitude / math.max(viewportSize.X, viewportSize.Y)
 end
 
@@ -266,6 +285,110 @@ local function isLineClear(grapple, targetInstance, targetPart, targetPosition, 
     end
 
     return nil
+end
+
+local function isBellInstance(instance)
+    return instance and instance.Name == "Bell"
+end
+
+local function getSavedBellData(part)
+    local gc = getEntitiesGC()
+    local data = gc and gc.SavedPartsData and gc.SavedPartsData[part]
+    if data and data.enemyName and string.find(string.lower(data.enemyName), "bell") then
+        return gc, data
+    end
+    return gc, nil
+end
+
+local function hasSavedBellImmunity(part)
+    local _, data = getSavedBellData(part)
+    return data ~= nil
+end
+
+local function releaseBellBypass()
+    local bypass = Logic.BellBypass
+    if not bypass then
+        return
+    end
+
+    local part = bypass.Part
+    local data = bypass.Data
+    local _, currentData = getSavedBellData(part)
+    if part and part.Parent and data and currentData == data then
+        data.connections = data.connections or {}
+
+        pcall(function()
+            part.CanTouch = false
+        end)
+
+        local conn = part:GetPropertyChangedSignal("CanTouch"):Connect(function()
+            if part.CanTouch then
+                part.CanTouch = false
+            end
+        end)
+        table.insert(data.connections, conn)
+    elseif part and part.Parent and bypass.RestoreCanTouch ~= nil then
+        pcall(function()
+            part.CanTouch = bypass.RestoreCanTouch
+        end)
+    end
+
+    Logic.BellBypass = nil
+end
+
+local function holdBellBypass(part)
+    if not part or not part.Parent or part.Name ~= "Bell" then
+        return
+    end
+
+    if Logic.BellBypass and Logic.BellBypass.Part == part then
+        if not part.CanTouch then
+            pcall(function()
+                part.CanTouch = true
+            end)
+        end
+        return
+    end
+
+    releaseBellBypass()
+
+    local _, data = getSavedBellData(part)
+    if data then
+        for _, conn in ipairs(data.connections or {}) do
+            if conn then
+                pcall(function()
+                    conn:Disconnect()
+                end)
+            end
+        end
+        data.connections = {}
+
+        Logic.BellBypass = {
+            Part = part,
+            Data = data,
+        }
+    elseif not part.CanTouch then
+        Logic.BellBypass = {
+            Part = part,
+            RestoreCanTouch = false,
+        }
+    end
+
+    if Logic.BellBypass then
+        pcall(function()
+            part.CanTouch = true
+        end)
+    end
+end
+
+local function maintainBellBypass(grapple)
+    local movement = grapple and grapple.Movement
+    local part = grapple and grapple.grapplePart
+    if movement and movement.grappling and isBellInstance(part) then
+        holdBellBypass(part)
+    else
+        releaseBellBypass()
+    end
 end
 
 local function getCandidateList()
@@ -309,6 +432,7 @@ local function scanNamedTargets(grapple)
 
     local maxRange = getAssistRange(grapple)
     local staminaRatio = getStaminaRatio(grapple)
+    local screenAnchor = getScreenAnchor(camera, rangeMode)
     local candidateList = getCandidateList()
     local candidateCount = #candidateList
     if candidateCount == 0 then
@@ -330,9 +454,9 @@ local function scanNamedTargets(grapple)
 
         local part = candidate and candidate.Part
         if part and part.Parent then
-            if candidate.Name ~= "Bell" or part.CanTouch then
+            if candidate.Name ~= "Bell" or part.CanTouch or hasSavedBellImmunity(part) then
                 local position = part.Position
-                local screenScore = getCameraScreenScore(camera, position)
+                local screenScore = getCameraScreenScore(camera, position, screenAnchor)
                 if screenScore then
                     local result, distance = isLineClear(grapple, candidate.Instance, part, position, maxRange)
                     if result and isUsableResult(grapple, result) then
@@ -348,6 +472,9 @@ local function scanNamedTargets(grapple)
                         else
                             local priorityScore = candidate.Name == preferredName and 0 or 1000
                             local distanceScore = rangeMode == "Farthest" and -distance or distance
+                            if rangeMode == "Closest To Cursor" then
+                                distanceScore = distance * 0.25
+                            end
                             local staminaPenalty = isInfiniteStamina() and 0 or distance * (1 - staminaRatio) * 0.12
                             local score = priorityScore + screenScore * 100 + distanceScore * 0.01 + staminaPenalty
 
@@ -412,7 +539,7 @@ function isUsableResult(grapple, result)
         return false
     end
 
-    if instance.Name == "Bell" and instance.CanTouch == false then
+    if instance.Name == "Bell" and instance.CanTouch == false and not hasSavedBellImmunity(instance) then
         return false
     end
 
@@ -437,6 +564,9 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 
     local assistedResult = scanNamedTargets(grapple) or scanScreenSurface(grapple)
     if assistedResult then
+        if assistedResult.Instance and assistedResult.Instance.Name == "Bell" then
+            holdBellBypass(assistedResult.Instance)
+        end
         return assistedResult
     end
 
@@ -462,6 +592,44 @@ function Logic.enable()
         return assistedCast(self, forceRefresh, originalCast, ...)
     end
 
+    if typeof(grappleModule.Start) == "function" then
+        local originalStart = grappleModule.Start
+        globals.GrappleAimAssistOriginalStart = originalStart
+
+        grappleModule.Start = function(self, result, ...)
+            if result and result.Instance and result.Instance.Name == "Bell" then
+                holdBellBypass(result.Instance)
+            end
+
+            local startResult = originalStart(self, result, ...)
+            maintainBellBypass(self)
+            return startResult
+        end
+    end
+
+    if typeof(grappleModule.Step) == "function" then
+        local originalStep = grappleModule.Step
+        globals.GrappleAimAssistOriginalStep = originalStep
+
+        grappleModule.Step = function(self, dt, ...)
+            maintainBellBypass(self)
+            local stepResult = originalStep(self, dt, ...)
+            maintainBellBypass(self)
+            return stepResult
+        end
+    end
+
+    if typeof(grappleModule.End) == "function" then
+        local originalEnd = grappleModule.End
+        globals.GrappleAimAssistOriginalEnd = originalEnd
+
+        grappleModule.End = function(self, ...)
+            local endResult = originalEnd(self, ...)
+            releaseBellBypass()
+            return endResult
+        end
+    end
+
     globals.GrappleAimAssistHooked = true
     watchCandidateFolder()
     return true
@@ -473,9 +641,22 @@ function Logic.disable()
     if grappleModule and globals.GrappleAimAssistOriginalCast then
         grappleModule.Cast = globals.GrappleAimAssistOriginalCast
     end
+    if grappleModule and globals.GrappleAimAssistOriginalStart then
+        grappleModule.Start = globals.GrappleAimAssistOriginalStart
+    end
+    if grappleModule and globals.GrappleAimAssistOriginalStep then
+        grappleModule.Step = globals.GrappleAimAssistOriginalStep
+    end
+    if grappleModule and globals.GrappleAimAssistOriginalEnd then
+        grappleModule.End = globals.GrappleAimAssistOriginalEnd
+    end
 
     globals.GrappleAimAssistOriginalCast = nil
+    globals.GrappleAimAssistOriginalStart = nil
+    globals.GrappleAimAssistOriginalStep = nil
+    globals.GrappleAimAssistOriginalEnd = nil
     globals.GrappleAimAssistHooked = false
+    releaseBellBypass()
     clearConnections()
     table.clear(Logic.Candidates)
 end
