@@ -25,6 +25,7 @@ local Controller = {
 	GrappleSharkTailMode = "Manual",
 	GrappleMomentumGuardEnabled = false,
 	GrappleAirControlMultiplier = 1.1,
+	GrappleJumpPadUsesBypassEnabled = false,
 	Destroyed = false,
 
 	EnemiesFolder = nil,
@@ -165,6 +166,7 @@ function Controller:HasAnyGrappleAssistFeature()
 		or self.GrappleSmartReelEnabled
 		or self.GrappleSharkTailHelperEnabled
 		or self.GrappleMomentumGuardEnabled
+		or self.GrappleJumpPadUsesBypassEnabled
 end
 
 function Controller:RefreshGrappleAssistHook()
@@ -285,6 +287,13 @@ function Controller:SetGrappleMomentumGuard(value)
 	self.GrappleMomentumGuardEnabled = value == true
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleMomentumGuardEnabled = false
+	end
+end
+
+function Controller:SetGrappleJumpPadUsesBypass(value)
+	self.GrappleJumpPadUsesBypassEnabled = value == true
+	if not self:RefreshGrappleAssistHook() then
+		self.GrappleJumpPadUsesBypassEnabled = false
 	end
 end
 

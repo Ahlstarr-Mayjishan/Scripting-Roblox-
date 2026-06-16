@@ -142,6 +142,16 @@ return function(Client, Controller)
         end
     })
 
+    Tab:CreateToggle({
+        Name = "JumpPad Uses Bypass",
+        Info = "Keeps Grapple JumpPads queryable so you can test repeated pulls on the same pad.",
+        CurrentValue = Controller.GrappleJumpPadUsesBypassEnabled or false,
+        Flag = "GrappleJumpPadUsesBypassToggle",
+        Callback = function(Value)
+            Controller:SetGrappleJumpPadUsesBypass(Value)
+        end
+    })
+
     Tab:CreateSlider({
         Name = "Grapple Air Control",
         Info = "Multiplies the native Grapple movement input force while swinging.",

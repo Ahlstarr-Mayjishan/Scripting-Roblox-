@@ -20,6 +20,8 @@ local Logic = {
     SuppressBonkUntil = 0,
     FallbackHitbox = nil,
     NoCollisionMoveCastParams = nil,
+    JumpPadStates = {},
+    LastJumpPadUsesBypassEnabled = false,
 }
 
 local VALID_TARGETS = {
@@ -105,6 +107,11 @@ end
 local function isMomentumGuardEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleMomentumGuardEnabled == true
+end
+
+local function isJumpPadUsesBypassEnabled()
+    local controller = getController()
+    return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleJumpPadUsesBypassEnabled == true
 end
 
 local function getAirControlMultiplier()
@@ -478,6 +485,118 @@ end
 
 local function isBellInstance(instance)
     return instance and instance.Name == "Bell"
+end
+
+local function isJumpPadInstance(instance)
+    return instance and instance.Name == "JumpPad" and instance:IsA("BasePart")
+end
+
+local function cacheJumpPadState(part)
+    if not isJumpPadInstance(part) or Logic.JumpPadStates[part] then
+        return
+    end
+
+    local textures = {}
+    for _, child in ipairs(part:GetChildren()) do
+        if child:IsA("Texture") then
+            textures[child] = {
+                Color3 = child.Color3,
+                Speed = child:GetAttribute("Speed"),
+            }
+        end
+    end
+
+    Logic.JumpPadStates[part] = {
+        Uses = part:GetAttribute("Uses"),
+        CanQuery = part.CanQuery,
+        Color = part.Color,
+        Textures = textures,
+    }
+end
+
+local function normalizeJumpPadForReuse(part)
+    if not isJumpPadInstance(part) then
+        return
+    end
+
+    cacheJumpPadState(part)
+
+    pcall(function()
+        part:SetAttribute("Uses", nil)
+    end)
+    pcall(function()
+        part.CanQuery = true
+    end)
+
+    local state = Logic.JumpPadStates[part]
+    if state then
+        pcall(function()
+            part.Color = state.Color
+        end)
+
+        for texture, textureState in pairs(state.Textures or {}) do
+            if texture and texture.Parent then
+                pcall(function()
+                    texture.Color3 = textureState.Color3
+                    texture:SetAttribute("Speed", textureState.Speed)
+                end)
+            end
+        end
+    end
+end
+
+local function restoreJumpPad(part, state)
+    if not (part and part.Parent and state) then
+        return
+    end
+
+    pcall(function()
+        part:SetAttribute("Uses", state.Uses)
+    end)
+    pcall(function()
+        part.CanQuery = state.CanQuery
+        part.Color = state.Color
+    end)
+
+    for texture, textureState in pairs(state.Textures or {}) do
+        if texture and texture.Parent then
+            pcall(function()
+                texture.Color3 = textureState.Color3
+                texture:SetAttribute("Speed", textureState.Speed)
+            end)
+        end
+    end
+end
+
+local function restoreJumpPadBypassParts()
+    for part, state in pairs(Logic.JumpPadStates) do
+        restoreJumpPad(part, state)
+    end
+    table.clear(Logic.JumpPadStates)
+end
+
+local function maintainJumpPadUsesBypass()
+    local enabled = isJumpPadUsesBypassEnabled()
+    if not enabled then
+        if Logic.LastJumpPadUsesBypassEnabled then
+            restoreJumpPadBypassParts()
+        end
+        Logic.LastJumpPadUsesBypassEnabled = false
+        return
+    end
+
+    Logic.LastJumpPadUsesBypassEnabled = true
+
+    local jumpPads = Workspace:FindFirstChild("JumpPads")
+    if not jumpPads then
+        return
+    end
+
+    for _, child in ipairs(jumpPads:GetChildren()) do
+        if isJumpPadInstance(child) then
+            normalizeJumpPadForReuse(child)
+        end
+    end
 end
 
 local function getSavedBellData(part)
@@ -1053,11 +1172,20 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalStart = originalStart
 
         grappleModule.Start = function(self, result, ...)
+            maintainJumpPadUsesBypass()
+            local jumpPadTarget = result and result.Instance
+            if isJumpPadUsesBypassEnabled() and isJumpPadInstance(jumpPadTarget) then
+                normalizeJumpPadForReuse(jumpPadTarget)
+            end
+
             if result and result.Instance and result.Instance.Name == "Bell" then
                 holdBellBypass(result.Instance)
             end
 
             local startResult = originalStart(self, result, ...)
+            if isJumpPadUsesBypassEnabled() and isJumpPadInstance(jumpPadTarget) then
+                normalizeJumpPadForReuse(jumpPadTarget)
+            end
             maintainBellBypass(self)
             return startResult
         end
@@ -1087,6 +1215,7 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalStep = originalStep
 
         grappleModule.Step = function(self, dt, ...)
+            maintainJumpPadUsesBypass()
             maintainBellBypass(self)
             if self.Movement and (self.Movement.grappling or self.jumpPadReel) then
                 markGrappleBonkGrace(self, 0.45)
@@ -1173,6 +1302,8 @@ function Logic.disable()
     Logic.SuppressBonkUntil = 0
     Logic.BellBypassToken = Logic.BellBypassToken + 1
     releaseBellBypass()
+    restoreJumpPadBypassParts()
+    Logic.LastJumpPadUsesBypassEnabled = false
     if Logic.FallbackHitbox then
         pcall(function()
             Logic.FallbackHitbox:Destroy()
