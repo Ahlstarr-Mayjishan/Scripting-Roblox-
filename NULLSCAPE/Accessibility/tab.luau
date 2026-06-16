@@ -48,6 +48,16 @@ return function(Client, Controller)
         end
     })
 
+    Tab:CreateToggle({
+        Name = "Grapple Anti Bonk",
+        Info = "Prevents Grapple wall-collision DiveBonk stun/knock while keeping the game's grapple end behavior.",
+        CurrentValue = Controller.GrappleAntiBonkEnabled or false,
+        Flag = "GrappleAntiBonkToggle",
+        Callback = function(Value)
+            Controller:SetGrappleAntiBonk(Value)
+        end
+    })
+
     Tab:CreateDropdown({
         Name = "Grapple Target Priority",
         Info = "Preferred target type when several visible grapple targets are valid.",

@@ -69,6 +69,7 @@ pcall(function()
             SpringerAutoJumpToggle = false,
             GrapplerStaminaModeDropdown = "Off",
             GrappleAimAssistToggle = false,
+            GrappleAntiBonkToggle = false,
             GrappleAimAssistTargetPriorityDropdown = "GrapplePoint",
             GrappleAimAssistRangePriorityDropdown = "Nearest",
             SpringerImmunityModeDropdown = "Legit",

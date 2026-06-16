@@ -14,6 +14,7 @@ local Logic = {
     CandidateCursor = 1,
     Random = Random.new(),
     BellBypass = nil,
+    CurrentGrappleStep = nil,
 }
 
 local VALID_TARGETS = {
@@ -65,6 +66,11 @@ end
 local function isEnabled()
     local controller = getController()
     return controller and controller.GrappleAimAssistEnabled == true
+end
+
+local function isAntiBonkEnabled()
+    local controller = getController()
+    return controller and controller.GrappleAntiBonkEnabled == true
 end
 
 local function isInfiniteStamina()
@@ -195,6 +201,21 @@ local function getGrappleModule()
     end
 
     return grappleModule
+end
+
+local function getMovementCore()
+    local movement = ReplicatedStorage:FindFirstChild("Movement")
+    local movementCoreScript = movement and movement:FindFirstChild("MovementCore")
+    if not movementCoreScript or not movementCoreScript:IsA("ModuleScript") then
+        return nil
+    end
+
+    local success, movementCore = pcall(require, movementCoreScript)
+    if not success or typeof(movementCore) ~= "table" then
+        return nil
+    end
+
+    return movementCore
 end
 
 local function getEntitiesGC()
@@ -573,6 +594,19 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
     return result, direction
 end
 
+local function shouldSuppressGrappleBonk(movement)
+    if not isAntiBonkEnabled() then
+        return false
+    end
+
+    local grapple = Logic.CurrentGrappleStep
+    if not grapple or grapple.Movement ~= movement then
+        return false
+    end
+
+    return movement.grappling == true or grapple.jumpPadReel == true
+end
+
 function Logic.enable()
     local globals = getGlobals()
     if globals.GrappleAimAssistHooked then
@@ -613,9 +647,30 @@ function Logic.enable()
 
         grappleModule.Step = function(self, dt, ...)
             maintainBellBypass(self)
-            local stepResult = originalStep(self, dt, ...)
+            Logic.CurrentGrappleStep = self
+            local success, stepResult = pcall(originalStep, self, dt, ...)
+            Logic.CurrentGrappleStep = nil
+            if not success then
+                error(stepResult, 0)
+            end
             maintainBellBypass(self)
             return stepResult
+        end
+    end
+
+    local movementCore = getMovementCore()
+    if movementCore and typeof(movementCore.DiveBonk) == "function" then
+        local originalDiveBonk = movementCore.DiveBonk
+        globals.GrappleAimAssistOriginalDiveBonk = originalDiveBonk
+
+        movementCore.DiveBonk = function(self, ...)
+            if shouldSuppressGrappleBonk(self) then
+                self.diveBonked = false
+                self.bonkedOffPlayer = false
+                return nil
+            end
+
+            return originalDiveBonk(self, ...)
         end
     end
 
@@ -650,12 +705,18 @@ function Logic.disable()
     if grappleModule and globals.GrappleAimAssistOriginalEnd then
         grappleModule.End = globals.GrappleAimAssistOriginalEnd
     end
+    local movementCore = getMovementCore()
+    if movementCore and globals.GrappleAimAssistOriginalDiveBonk then
+        movementCore.DiveBonk = globals.GrappleAimAssistOriginalDiveBonk
+    end
 
     globals.GrappleAimAssistOriginalCast = nil
     globals.GrappleAimAssistOriginalStart = nil
     globals.GrappleAimAssistOriginalStep = nil
     globals.GrappleAimAssistOriginalEnd = nil
+    globals.GrappleAimAssistOriginalDiveBonk = nil
     globals.GrappleAimAssistHooked = false
+    Logic.CurrentGrappleStep = nil
     releaseBellBypass()
     clearConnections()
     table.clear(Logic.Candidates)

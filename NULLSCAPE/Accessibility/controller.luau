@@ -16,6 +16,7 @@ local Controller = {
 	GrappleAimAssistEnabled = false,
 	GrappleAimAssistTargetPriority = "GrapplePoint",
 	GrappleAimAssistRangePriority = "Nearest",
+	GrappleAntiBonkEnabled = false,
 	Destroyed = false,
 
 	EnemiesFolder = nil,
@@ -164,7 +165,7 @@ function Controller:SetGrappleAimAssist(value)
 
 	self.GrappleAimAssistEnabled = value == true
 
-	if not self.GrappleAimAssistEnabled then
+	if not self.GrappleAimAssistEnabled and not self.GrappleAntiBonkEnabled then
 		Executor.disableGrappleAimAssist()
 	end
 
@@ -172,6 +173,34 @@ function Controller:SetGrappleAimAssist(value)
 		getgenv().Rayfield:Notify({
 			Title = "Accessibility Config",
 			Content = (self.GrappleAimAssistEnabled and "Activated" or "Disabled") .. " Grapple Aim Assist",
+			Duration = 2,
+		})
+	end
+end
+
+function Controller:SetGrappleAntiBonk(value)
+	if value and not Executor.enableGrappleAimAssist() then
+		self.GrappleAntiBonkEnabled = false
+		if getgenv().Rayfield then
+			getgenv().Rayfield:Notify({
+				Title = "Accessibility Config",
+				Content = "Grapple module is not available yet",
+				Duration = 3,
+			})
+		end
+		return
+	end
+
+	self.GrappleAntiBonkEnabled = value == true
+
+	if not self.GrappleAntiBonkEnabled and not self.GrappleAimAssistEnabled then
+		Executor.disableGrappleAimAssist()
+	end
+
+	if getgenv().Rayfield then
+		getgenv().Rayfield:Notify({
+			Title = "Accessibility Config",
+			Content = (self.GrappleAntiBonkEnabled and "Activated" or "Disabled") .. " Grapple Anti Bonk",
 			Duration = 2,
 		})
 	end
