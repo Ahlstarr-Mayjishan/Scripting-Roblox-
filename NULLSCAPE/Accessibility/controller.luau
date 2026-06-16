@@ -69,6 +69,7 @@ local Controller = {
 	RailAutoEnabled = false,
 	RailSpeedMultiplier = 1.1,
 	RailAutoDelay = 1.5,
+	RailAutoCaptureRange = 4,
 	GrapplerStaminaMode = "Off",
 	GrappleAssistSuiteEnabled = false,
 	GrappleAimAssistEnabled = false,
@@ -231,6 +232,10 @@ end
 
 function Controller:SetRailAutoDelay(value)
 	self.RailAutoDelay = math.clamp(tonumber(value) or 1.5, 1.5, 3)
+end
+
+function Controller:SetRailAutoCaptureRange(value)
+	self.RailAutoCaptureRange = math.clamp(tonumber(value) or 4, 1, 64)
 end
 
 function Controller:SetGrapplerStaminaMode(mode)
@@ -397,6 +402,9 @@ end
 
 function Controller:SetGrappleSmartReel(value)
 	self.GrappleSmartReelEnabled = value == true
+	if self.GrappleSmartReelEnabled then
+		self.GrappleAssistSuiteEnabled = true
+	end
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleSmartReelEnabled = false
 	end
@@ -404,6 +412,9 @@ end
 
 function Controller:SetGrappleSharkTailHelper(value)
 	self.GrappleSharkTailHelperEnabled = value == true
+	if self.GrappleSharkTailHelperEnabled then
+		self.GrappleAssistSuiteEnabled = true
+	end
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleSharkTailHelperEnabled = false
 	end

@@ -1600,12 +1600,40 @@ local function tryUseSharkTail(grapple)
         return false
     end
 
-    if typeof(grapple.SpecialAction) == "function" then
-        grapple:SpecialAction(Enum.UserInputState.Begin)
-        return true
+    if typeof(grapple.SharkTail) == "function" then
+        local success = pcall(function()
+            grapple:SharkTail()
+        end)
+        return success
     end
 
     return false
+end
+
+local function getSmartReelTarget(grapple)
+    local movement = grapple and grapple.Movement
+    local targetPosition = movement and movement.grapplePoint
+    local targetPart = movement and movement.grapplePart
+
+    if typeof(targetPosition) ~= "Vector3" then
+        targetPosition = grapple and grapple.grapplePoint
+    end
+    if not (typeof(targetPart) == "Instance" and targetPart.Parent and targetPart:IsA("BasePart")) then
+        targetPart = grapple and grapple.grapplePart
+    end
+
+    if typeof(targetPosition) ~= "Vector3" and typeof(targetPart) == "Instance" and targetPart.Parent and targetPart:IsA("BasePart") then
+        targetPosition = targetPart.Position
+    end
+    if not (typeof(targetPart) == "Instance" and targetPart.Parent and targetPart:IsA("BasePart")) then
+        targetPart = nil
+    end
+
+    if typeof(targetPosition) ~= "Vector3" then
+        return nil, nil
+    end
+
+    return targetPart, targetPosition
 end
 
 local function canStartSmartReel(grapple)
@@ -1625,11 +1653,17 @@ local function canStartSmartReel(grapple)
     if tonumber(grapple.Time) == 0 then
         return false
     end
-    if not (movement.grapplePoint and movement.grapplePart and movement.grapplePart.Parent) then
+
+    local targetPart, targetPosition = getSmartReelTarget(grapple)
+    if not targetPosition then
         return false
     end
 
-    return isPathSafeForHitbox(grapple, movement.grapplePart, movement.grapplePart, movement.grapplePoint, DEFAULT_MAX_RANGE) == true
+    if not targetPart then
+        return true
+    end
+
+    return isPathSafeForHitbox(grapple, targetPart, targetPart, targetPosition, DEFAULT_MAX_RANGE) == true
 end
 
 local function startSmartReel(grapple)
@@ -1899,8 +1933,8 @@ function Logic.enable()
                     return nil
                 end
 
-                if isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Manual" then
-                    return originalAltSpecialAction(self, state, ...)
+                if isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Manual" and startSmartReel(self) then
+                    return nil
                 end
             end
 

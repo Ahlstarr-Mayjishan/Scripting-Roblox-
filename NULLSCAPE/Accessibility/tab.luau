@@ -92,6 +92,19 @@ return function(Client, Controller)
         end
     })
 
+    Tab:CreateSlider({
+        Name = "Auto Rail Capture Range",
+        Info = "Maximum distance in studs before Auto Rail can grab a rail. It only catches rails in the front 180 degrees of your movement/look direction.",
+        Range = {1, 64},
+        Increment = 1,
+        Suffix = " studs",
+        CurrentValue = Controller.RailAutoCaptureRange or 4,
+        Flag = "RailAutoCaptureRangeSlider",
+        Callback = function(Value)
+            Controller:SetRailAutoCaptureRange(Value)
+        end
+    })
+
     Tab:CreateSection("Grapple Assist")
 
     Tab:CreateToggle({
@@ -260,6 +273,10 @@ return function(Client, Controller)
         end
     })
 
+    if Tab.CreateLabel then
+        Tab:CreateLabel("Smart Reel: requires real NinjaBelt. Manual uses p2 to start reel while already grappled; Automatic starts it when airborne, attached, path-safe, and off cooldown.")
+    end
+
     Tab:CreateDropdown({
         Name = "Smart Reel Mode",
         Info = "Manual keeps reel on p2/sub-ability. Automatic reels while airborne, already grappled, path-safe, and NinjaBelt is actually owned.",
@@ -285,6 +302,10 @@ return function(Client, Controller)
             Controller:SetGrappleSharkTailHelper(Value)
         end
     })
+
+    if Tab.CreateLabel then
+        Tab:CreateLabel("SharkTail Helper: requires real SharkTail. Manual uses p2 during allowSharkTail; Automatic fires only while airborne in the SharkTail window with enough horizontal speed.")
+    end
 
     Tab:CreateDropdown({
         Name = "SharkTail Mode",

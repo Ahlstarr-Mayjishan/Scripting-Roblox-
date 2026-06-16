@@ -49,6 +49,11 @@ local function getAutoRailDelay()
     return math.clamp(tonumber(controller and controller.RailAutoDelay) or 1.5, 1.5, 3)
 end
 
+local function getAutoRailCaptureRange()
+    local controller = getController()
+    return math.clamp(tonumber(controller and controller.RailAutoCaptureRange) or 4, 1, 64)
+end
+
 local function getMovementCore()
     local movement = ReplicatedStorage:FindFirstChild("Movement")
     local movementCoreScript = movement and movement:FindFirstChild("MovementCore")
@@ -126,20 +131,35 @@ local function clampPointToPart(part, worldPosition)
     return part.CFrame:PointToWorldSpace(clampedLocal)
 end
 
-local function getActivationDistance(part)
-    local size = part.Size
-    return math.max(4, math.max(size.X, size.Y, size.Z) * 0.65 + 2)
+local function flatten(vector)
+    return Vector3.new(vector.X, 0, vector.Z)
+end
+
+local function isPointInFrontHemisphere(rootPart, worldPosition)
+    local toPoint = flatten(worldPosition - rootPart.Position)
+    if toPoint.Magnitude <= 0.05 then
+        return true
+    end
+
+    local horizontalVelocity = flatten(rootPart.AssemblyLinearVelocity or rootPart.Velocity)
+    local referenceDirection = horizontalVelocity.Magnitude > 2 and horizontalVelocity or flatten(rootPart.CFrame.LookVector)
+    if referenceDirection.Magnitude <= 0.05 then
+        return true
+    end
+
+    return referenceDirection.Unit:Dot(toPoint.Unit) >= 0
 end
 
 local function findBestRailPart(rootPart)
     local bestPart = nil
     local bestDistance = math.huge
+    local captureRange = getAutoRailCaptureRange()
 
     for part in pairs(Logic.RailParts) do
         if part and part.Parent then
             local nearestPoint = clampPointToPart(part, rootPart.Position)
             local distance = (nearestPoint - rootPart.Position).Magnitude
-            if distance <= getActivationDistance(part) and distance < bestDistance then
+            if distance <= captureRange and distance < bestDistance and isPointInFrontHemisphere(rootPart, nearestPoint) then
                 bestDistance = distance
                 bestPart = part
             end
