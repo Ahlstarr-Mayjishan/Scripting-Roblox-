@@ -15,6 +15,8 @@ local Logic = {
     Random = Random.new(),
     BellBypass = nil,
     CurrentGrappleStep = nil,
+    LastGrappleMovement = nil,
+    SuppressBonkUntil = 0,
 }
 
 local VALID_TARGETS = {
@@ -600,16 +602,57 @@ local function shouldSuppressGrappleBonk(movement)
     end
 
     local grapple = Logic.CurrentGrappleStep
-    if not grapple or grapple.Movement ~= movement then
-        return false
+    if grapple and grapple.Movement == movement then
+        return movement.grappling == true or grapple.jumpPadReel == true
     end
 
-    return movement.grappling == true or grapple.jumpPadReel == true
+    if movement == Logic.LastGrappleMovement and time() < Logic.SuppressBonkUntil then
+        local rootPart = movement.RootPart
+        local speed = rootPart and rootPart.Velocity and rootPart.Velocity.Magnitude or 0
+        return speed > 70
+    end
+
+    return false
+end
+
+local function markGrappleBonkGrace(grapple, duration)
+    local movement = grapple and grapple.Movement
+    if not movement then
+        return
+    end
+
+    Logic.LastGrappleMovement = movement
+    Logic.SuppressBonkUntil = math.max(Logic.SuppressBonkUntil, time() + duration)
+end
+
+local function ensureDiveBonkHook(globals)
+    if globals.GrappleAimAssistOriginalDiveBonk then
+        return
+    end
+
+    local movementCore = getMovementCore()
+    if not (movementCore and typeof(movementCore.DiveBonk) == "function") then
+        return
+    end
+
+    local originalDiveBonk = movementCore.DiveBonk
+    globals.GrappleAimAssistOriginalDiveBonk = originalDiveBonk
+
+    movementCore.DiveBonk = function(self, ...)
+        if shouldSuppressGrappleBonk(self) then
+            self.diveBonked = false
+            self.bonkedOffPlayer = false
+            return nil
+        end
+
+        return originalDiveBonk(self, ...)
+    end
 end
 
 function Logic.enable()
     local globals = getGlobals()
     if globals.GrappleAimAssistHooked then
+        ensureDiveBonkHook(globals)
         watchCandidateFolder()
         return true
     end
@@ -647,6 +690,10 @@ function Logic.enable()
 
         grappleModule.Step = function(self, dt, ...)
             maintainBellBypass(self)
+            if self.Movement and (self.Movement.grappling or self.jumpPadReel) then
+                markGrappleBonkGrace(self, 0.45)
+            end
+
             Logic.CurrentGrappleStep = self
             local success, stepResult = pcall(originalStep, self, dt, ...)
             Logic.CurrentGrappleStep = nil
@@ -658,27 +705,14 @@ function Logic.enable()
         end
     end
 
-    local movementCore = getMovementCore()
-    if movementCore and typeof(movementCore.DiveBonk) == "function" then
-        local originalDiveBonk = movementCore.DiveBonk
-        globals.GrappleAimAssistOriginalDiveBonk = originalDiveBonk
-
-        movementCore.DiveBonk = function(self, ...)
-            if shouldSuppressGrappleBonk(self) then
-                self.diveBonked = false
-                self.bonkedOffPlayer = false
-                return nil
-            end
-
-            return originalDiveBonk(self, ...)
-        end
-    end
+    ensureDiveBonkHook(globals)
 
     if typeof(grappleModule.End) == "function" then
         local originalEnd = grappleModule.End
         globals.GrappleAimAssistOriginalEnd = originalEnd
 
         grappleModule.End = function(self, ...)
+            markGrappleBonkGrace(self, 0.45)
             local endResult = originalEnd(self, ...)
             releaseBellBypass()
             return endResult
@@ -717,6 +751,8 @@ function Logic.disable()
     globals.GrappleAimAssistOriginalDiveBonk = nil
     globals.GrappleAimAssistHooked = false
     Logic.CurrentGrappleStep = nil
+    Logic.LastGrappleMovement = nil
+    Logic.SuppressBonkUntil = 0
     releaseBellBypass()
     clearConnections()
     table.clear(Logic.Candidates)
