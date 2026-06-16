@@ -213,6 +213,32 @@ return function(Client, Controller)
         end
     })
 
+    Tab:CreateSlider({
+        Name = "Grapple Reel Pull",
+        Info = "Multiplies reel pull speed for GrapplePoint, JumpPad, Bell, TriaOrb, and NinjaBelt reel.",
+        Range = {1.1, 5},
+        Increment = 0.1,
+        Suffix = "x",
+        CurrentValue = Controller.GrappleReelPullMultiplier or 1.1,
+        Flag = "GrappleReelPullMultiplierSlider",
+        Callback = function(Value)
+            Controller:SetGrappleReelPullMultiplier(Value)
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "SharkTail Pull",
+        Info = "Multiplies the launch strength when SharkTail fires during the Grapple window.",
+        Range = {1.1, 5},
+        Increment = 0.1,
+        Suffix = "x",
+        CurrentValue = Controller.GrappleSharkTailPullMultiplier or 1.1,
+        Flag = "GrappleSharkTailPullMultiplierSlider",
+        Callback = function(Value)
+            Controller:SetGrappleSharkTailPullMultiplier(Value)
+        end
+    })
+
     Tab:CreateDropdown({
         Name = "Grapple Target Priority",
         Info = "Preferred target type when several visible grapple targets are valid.",

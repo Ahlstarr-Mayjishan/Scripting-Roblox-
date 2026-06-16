@@ -139,6 +139,24 @@ local function getAirControlMultiplier()
     return math.clamp(tonumber(controller.GrappleAirControlMultiplier) or 1, 1, 5)
 end
 
+local function getReelPullMultiplier()
+    local controller = getController()
+    if not (controller and controller.GrappleAssistSuiteEnabled == true) then
+        return 1
+    end
+
+    return math.clamp(tonumber(controller.GrappleReelPullMultiplier) or 1, 1, 5)
+end
+
+local function getSharkTailPullMultiplier()
+    local controller = getController()
+    if not (controller and controller.GrappleAssistSuiteEnabled == true) then
+        return 1
+    end
+
+    return math.clamp(tonumber(controller.GrappleSharkTailPullMultiplier) or 1, 1, 5)
+end
+
 local function isInfiniteStamina()
     local controller = getController()
     return controller and controller.GrapplerStaminaMode == "Infinite Stamina"
@@ -1139,6 +1157,44 @@ local function applyAirControlMultiplier(grapple, dt)
     rootPart.Velocity = rootPart.Velocity + extraForce
 end
 
+local function applyReelPullMultiplier(grapple)
+    local multiplier = getReelPullMultiplier()
+    if multiplier <= 1 then
+        return
+    end
+
+    local rootPart = grapple and grapple.RootPart
+    if not (grapple and rootPart and grapple.jumpPadReel) then
+        return
+    end
+
+    rootPart.Velocity = rootPart.Velocity * multiplier
+end
+
+local function applySharkTailPullMultiplier(grapple, previousVelocity)
+    local multiplier = getSharkTailPullMultiplier()
+    if multiplier <= 1 then
+        return
+    end
+
+    local rootPart = grapple and grapple.RootPart
+    if not (grapple and rootPart) then
+        return
+    end
+
+    local beforeVelocity = previousVelocity
+    if typeof(beforeVelocity) ~= "Vector3" then
+        beforeVelocity = Vector3.new(0, 0, 0)
+    end
+
+    local deltaVelocity = rootPart.Velocity - beforeVelocity
+    if deltaVelocity.Magnitude <= 0.01 then
+        return
+    end
+
+    rootPart.Velocity = beforeVelocity + deltaVelocity * multiplier
+end
+
 local function shouldSuppressGrappleBonk(movement)
     if not isAntiBonkEnabled() then
         return false
@@ -1308,6 +1364,18 @@ function Logic.enable()
         end
     end
 
+    if typeof(grappleModule.SharkTail) == "function" then
+        local originalSharkTail = grappleModule.SharkTail
+        globals.GrappleAimAssistOriginalSharkTail = originalSharkTail
+
+        grappleModule.SharkTail = function(self, ...)
+            local previousVelocity = self and self.RootPart and self.RootPart.Velocity
+            local result = originalSharkTail(self, ...)
+            applySharkTailPullMultiplier(self, previousVelocity)
+            return result
+        end
+    end
+
     if typeof(grappleModule.Step) == "function" then
         local originalStep = grappleModule.Step
         globals.GrappleAimAssistOriginalStep = originalStep
@@ -1342,6 +1410,7 @@ function Logic.enable()
             end
             maintainBellBypass(self)
             refillStamina(self)
+            applyReelPullMultiplier(self)
             applyAirControlMultiplier(self, dt)
             applyMomentumGuard(self)
             return stepResult
@@ -1386,6 +1455,9 @@ function Logic.disable()
     if grappleModule and globals.GrappleAimAssistOriginalAltSpecialAction then
         grappleModule.AltSpecialAction = globals.GrappleAimAssistOriginalAltSpecialAction
     end
+    if grappleModule and globals.GrappleAimAssistOriginalSharkTail then
+        grappleModule.SharkTail = globals.GrappleAimAssistOriginalSharkTail
+    end
     local movementCore = getMovementCore()
     if movementCore and globals.GrappleAimAssistOriginalDiveBonk then
         movementCore.DiveBonk = globals.GrappleAimAssistOriginalDiveBonk
@@ -1396,6 +1468,7 @@ function Logic.disable()
     globals.GrappleAimAssistOriginalStep = nil
     globals.GrappleAimAssistOriginalEnd = nil
     globals.GrappleAimAssistOriginalAltSpecialAction = nil
+    globals.GrappleAimAssistOriginalSharkTail = nil
     globals.GrappleAimAssistOriginalDiveBonk = nil
     globals.GrappleAimAssistHooked = false
     Logic.CurrentGrappleStep = nil

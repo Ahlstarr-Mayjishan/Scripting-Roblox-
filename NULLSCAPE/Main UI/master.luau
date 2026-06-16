@@ -89,6 +89,8 @@ pcall(function()
             GrappleSharkTailModeDropdown = "Manual",
             GrappleMomentumGuardToggle = false,
             GrappleAirControlMultiplierSlider = 1.1,
+            GrappleReelPullMultiplierSlider = 1.1,
+            GrappleSharkTailPullMultiplierSlider = 1.1,
             GrappleJumpPadUsesBypassToggle = false,
             GrappleAdaptInputKeybind = "T",
             GrappleAimAssistTargetPriorityDropdown = "GrapplePoint",

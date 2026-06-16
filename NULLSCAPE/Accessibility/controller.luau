@@ -28,6 +28,8 @@ local Controller = {
 	GrappleSharkTailMode = "Manual",
 	GrappleMomentumGuardEnabled = false,
 	GrappleAirControlMultiplier = 1.1,
+	GrappleReelPullMultiplier = 1.1,
+	GrappleSharkTailPullMultiplier = 1.1,
 	GrappleJumpPadUsesBypassEnabled = false,
 	GrappleAdaptInputKey = "T",
 	Destroyed = false,
@@ -345,6 +347,14 @@ end
 
 function Controller:SetGrappleAirControlMultiplier(value)
 	self.GrappleAirControlMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
+end
+
+function Controller:SetGrappleReelPullMultiplier(value)
+	self.GrappleReelPullMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
+end
+
+function Controller:SetGrappleSharkTailPullMultiplier(value)
+	self.GrappleSharkTailPullMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
 end
 
 function Controller:SetGrappleAdaptInputKey(key)
