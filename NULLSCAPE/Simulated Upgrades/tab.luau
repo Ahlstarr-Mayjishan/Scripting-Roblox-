@@ -250,4 +250,52 @@ return function(Client, Controller)
             Controller:SetGraceWingsAirControlMultiplier(Value)
         end
     })
+
+    Tab:CreateSection("Advanced Gravity Coil")
+
+    Tab:CreateToggle({
+        Name = "Enable Advanced Gravity Coil",
+        Info = "Spoofs the upgrade and applies the JumpPower override from Ref logic.",
+        CurrentValue = Controller.AdvancedGravityCoilEnabled or false,
+        Flag = "AdvancedGravityCoilToggle",
+        Callback = function(Value)
+            Controller:SetAdvancedGravityCoil(Value)
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "Jump Power",
+        Info = "Ref minimum is 35 * 0.8 = 28. Raise it up to 100.",
+        Range = {28, 100},
+        Increment = 1,
+        CurrentValue = Controller.AdvancedGravityCoilJumpPower or 28,
+        Flag = "AdvancedGravityCoilJumpPowerSlider",
+        Callback = function(Value)
+            Controller:SetAdvancedGravityCoilJumpPower(Value)
+        end
+    })
+
+    Tab:CreateSection("Better Jump Pad")
+
+    Tab:CreateToggle({
+        Name = "Enable Better Jump Pad",
+        Info = "Spoofs BetterJumpPad and raises JumpPad vertical launch.",
+        CurrentValue = Controller.BetterJumpPadEnabled or false,
+        Flag = "BetterJumpPadToggle",
+        Callback = function(Value)
+            Controller:SetBetterJumpPad(Value)
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "JumpPad Power",
+        Info = "Ref JumpPad power is 100. Raise it up to 200.",
+        Range = {100, 200},
+        Increment = 1,
+        CurrentValue = Controller.BetterJumpPadPower or 100,
+        Flag = "BetterJumpPadPowerSlider",
+        Callback = function(Value)
+            Controller:SetBetterJumpPadPower(Value)
+        end
+    })
 end

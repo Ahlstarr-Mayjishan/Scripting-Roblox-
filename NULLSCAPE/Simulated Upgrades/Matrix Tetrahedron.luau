@@ -33,9 +33,9 @@ local function getDirectionBlend(reduction)
 
     local framesToConverge = 60 * (1 - reduction)
     local naturalBlend = 1 - math.pow(0.1, 1 / framesToConverge)
-    local antiZigzagBlend = 0.055 + reduction * 0.25
+    local antiZigzagBlend = 0.025 + reduction * 0.08
 
-    return math.clamp(math.max(naturalBlend, antiZigzagBlend), 0.08, 1)
+    return math.clamp(math.max(naturalBlend, antiZigzagBlend), 0.035, 1)
 end
 
 local function stopQuickTurn(movement)

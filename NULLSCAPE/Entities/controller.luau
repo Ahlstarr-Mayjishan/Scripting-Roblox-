@@ -251,14 +251,6 @@ function Controller:SetImmunity(entityName, value)
 			end
 		end
 	end
-
-	if getgenv().Rayfield then
-		getgenv().Rayfield:Notify({
-			Title = "Protection Config",
-			Content = (value and "Activated") .. " immunity for " .. entityName,
-			Duration = 2,
-		})
-	end
 end
 
 -- Cấu hình chế độ bảo vệ Springer (Blatant: tắt hẳn sóng, Legit: giữ lại lực đẩy sóng)
