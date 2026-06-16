@@ -81,6 +81,7 @@ pcall(function()
             RailAssistSuiteToggle = false,
             RailAutoToggle = false,
             RailSpeedMultiplierSlider = 1.1,
+            RailAutoDelaySlider = 0.35,
             GrappleAssistSuiteToggle = false,
             GrappleAimAssistToggle = false,
             GrappleRescueAssistToggle = false,

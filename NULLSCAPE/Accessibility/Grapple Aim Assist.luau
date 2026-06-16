@@ -5,6 +5,7 @@
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 
@@ -38,6 +39,7 @@ local Logic = {
     AdaptRetryAt = 0,
     AutoRescueUntil = 0,
     LastAutoRescuePulseAt = 0,
+    LastPanicRescuePulseAt = 0,
 }
 
 local VALID_TARGETS = {
@@ -75,6 +77,10 @@ local ADAPT_RECAST_TRIA_ARRIVAL_DISTANCE = 11
 local AUTO_RESCUE_SPEED = 135
 local AUTO_RESCUE_COOLDOWN = 0.45
 local AUTO_RESCUE_WINDOW = 0.3
+local PANIC_RESCUE_SPEED = 165
+local PANIC_RESCUE_FALL_SPEED = -75
+local PANIC_RESCUE_COOLDOWN = 0.16
+local PANIC_RESCUE_WINDOW = 0.55
 
 local DEFAULT_MAX_RANGE = 90
 local MAX_CANDIDATES_PER_CAST = 48
@@ -746,6 +752,20 @@ local function isHighMomentumDanger(grapple)
     return getHorizontalVelocity(grapple.RootPart).Magnitude >= AUTO_RESCUE_SPEED
 end
 
+local function isPanicRescueDanger(grapple)
+    if not (grapple and isInAir(grapple)) then
+        return false
+    end
+
+    local rootPart = grapple.RootPart
+    local velocity = rootPart and rootPart.Velocity
+    if not velocity then
+        return false
+    end
+
+    return getHorizontalVelocity(rootPart).Magnitude >= PANIC_RESCUE_SPEED or velocity.Y <= PANIC_RESCUE_FALL_SPEED
+end
+
 local function getModeValue(key)
     local controller = getController()
     return normalizeMode(controller and controller[key])
@@ -1217,7 +1237,7 @@ local function chooseRandomCandidate(validResults, preferredName)
 end
 
 local function getEffectivePreferredTarget(grapple, preferredName)
-    if isAutoRescueWindowActive() and isHighMomentumDanger(grapple) then
+    if isAutoRescueWindowActive() and (isHighMomentumDanger(grapple) or isPanicRescueDanger(grapple)) then
         return "TriaOrb"
     end
 
@@ -1235,7 +1255,9 @@ local function scanNamedTargets(grapple, options)
     local controller = getController()
     local preferredName = normalizeTargetPriority(controller and controller.GrappleAimAssistTargetPriority)
     local rescueMode = isRescueEnabled() and isFallingFast(grapple)
-    local emergencyBrakeMode = isRescueEnabled() and isHighMomentumDanger(grapple) and isAutoRescueWindowActive()
+    local emergencyBrakeMode = isRescueEnabled()
+        and (isHighMomentumDanger(grapple) or isPanicRescueDanger(grapple))
+        and isAutoRescueWindowActive()
     preferredName = getEffectivePreferredTarget(grapple, preferredName)
     local rangeMode = normalizeRangePriority(controller and controller.GrappleAimAssistRangePriority)
     if not driveMode and shouldForceNearest(grapple) then
@@ -1262,7 +1284,7 @@ local function scanNamedTargets(grapple, options)
     }
     local bestScore = math.huge
     local bestResult = nil
-    local checks = driveMode and candidateCount or math.min(candidateCount, MAX_CANDIDATES_PER_CAST)
+    local checks = (driveMode or emergencyBrakeMode) and candidateCount or math.min(candidateCount, MAX_CANDIDATES_PER_CAST)
 
     for _ = 1, checks do
         if Logic.CandidateCursor > candidateCount then
@@ -1393,6 +1415,46 @@ local function tryAutoMomentumRescue(grapple)
 
     Logic.LastAutoRescuePulseAt = time()
     return pulseSpecialAction(grapple)
+end
+
+local function tryPanicRescue(grapple)
+    if not (isRescueEnabled() and isPanicRescueDanger(grapple)) then
+        return false
+    end
+
+    local movement = grapple and grapple.Movement
+    if not (grapple and movement and isInAir(grapple)) then
+        return false
+    end
+    if movement.grappling or grapple.jumpPadReel or isAwaitingAdaptAttach(grapple) then
+        return false
+    end
+    if time() - Logic.LastPanicRescuePulseAt < PANIC_RESCUE_COOLDOWN then
+        return false
+    end
+
+    Logic.AutoRescueUntil = time() + PANIC_RESCUE_WINDOW
+    local previewResult = scanNamedTargets(grapple, { driveMode = true })
+    if not previewResult then
+        return false
+    end
+
+    local instance = previewResult.Instance
+    if not (instance and (instance.Name == "TriaOrb" or instance.Name == "Bell" or instance.Name == "GrapplePoint" or instance.Name == "JumpPad")) then
+        return false
+    end
+
+    Logic.LastPanicRescuePulseAt = time()
+    return pulseSpecialAction(grapple)
+end
+
+local function panicRescueWatchdog()
+    local grapple = Logic.LastKnownGrapple or getTrackedGrapple()
+    if not grapple then
+        return
+    end
+
+    tryPanicRescue(grapple)
 end
 
 function isUsableResult(grapple, result)
@@ -1809,6 +1871,7 @@ function Logic.enable()
                     startSmartReel(self)
                 end
 
+                tryPanicRescue(self)
                 tryAutoMomentumRescue(self)
                 maintainAdaptInputHold(self)
             end
@@ -1851,6 +1914,7 @@ function Logic.enable()
     globals.GrappleAimAssistHooked = true
     watchAdaptInput()
     watchCandidateFolder()
+    table.insert(Logic.Connections, RunService.Heartbeat:Connect(panicRescueWatchdog))
     return true
 end
 

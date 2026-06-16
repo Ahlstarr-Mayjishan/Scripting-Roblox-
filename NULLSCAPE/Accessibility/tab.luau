@@ -78,6 +78,19 @@ return function(Client, Controller)
         end
     })
 
+    Tab:CreateSlider({
+        Name = "Auto Rail Delay",
+        Info = "Minimum delay before Auto Rail can snap onto another rail.",
+        Range = {0.35, 1},
+        Increment = 0.05,
+        Suffix = "s",
+        CurrentValue = Controller.RailAutoDelay or 0.35,
+        Flag = "RailAutoDelaySlider",
+        Callback = function(Value)
+            Controller:SetRailAutoDelay(Value)
+        end
+    })
+
     Tab:CreateSection("Grapple Assist")
 
     Tab:CreateToggle({

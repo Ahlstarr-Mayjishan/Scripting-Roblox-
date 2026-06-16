@@ -15,6 +15,7 @@ local Controller = {
 	RailAssistSuiteEnabled = false,
 	RailAutoEnabled = false,
 	RailSpeedMultiplier = 1.1,
+	RailAutoDelay = 0.35,
 	GrapplerStaminaMode = "Off",
 	GrappleAssistSuiteEnabled = false,
 	GrappleAimAssistEnabled = false,
@@ -170,6 +171,10 @@ end
 
 function Controller:SetRailSpeedMultiplier(value)
 	self.RailSpeedMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
+end
+
+function Controller:SetRailAutoDelay(value)
+	self.RailAutoDelay = math.clamp(tonumber(value) or 0.35, 0.35, 1)
 end
 
 function Controller:SetGrapplerStaminaMode(mode)

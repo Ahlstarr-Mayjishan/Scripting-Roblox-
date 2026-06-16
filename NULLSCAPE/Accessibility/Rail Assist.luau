@@ -44,6 +44,11 @@ local function getSpeedMultiplier()
     return math.clamp(tonumber(controller.RailSpeedMultiplier) or 1.1, 1.1, 5)
 end
 
+local function getAutoRailDelay()
+    local controller = getController()
+    return math.clamp(tonumber(controller and controller.RailAutoDelay) or 0.35, 0.35, 1)
+end
+
 local function getMovementCore()
     local movement = ReplicatedStorage:FindFirstChild("Movement")
     local movementCoreScript = movement and movement:FindFirstChild("MovementCore")
@@ -173,7 +178,7 @@ local function canAutoRail(movement)
         return false
     end
 
-    if time() - Logic.LastAutoRailAt < 0.2 then
+    if time() - Logic.LastAutoRailAt < getAutoRailDelay() then
         return false
     end
 
