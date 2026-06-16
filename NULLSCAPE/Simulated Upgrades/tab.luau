@@ -308,4 +308,39 @@ return function(Client, Controller)
             Controller:SetBetterJumpPadPower(Value)
         end
     })
+
+    local SpeedBuffOptions = {
+        "Swiftness Ring (+10%)",
+        "Adrenaline (+20%)",
+        "Sport Shoes (+40%)",
+    }
+
+    local SpeedBuffSelection
+    local isSettingSpeedBuffs = false
+
+    Tab:CreateSection("Speed Buffs")
+
+    SpeedBuffSelection = Tab:CreateDropdown({
+        Name = "Buff Speed",
+        Info = "Multi-select simulated speed upgrades. Bonuses stack together.",
+        Options = SpeedBuffOptions,
+        CurrentOption = Controller.SpeedBuffSelections or {},
+        MultipleOptions = true,
+        Flag = "SpeedBuffSelectionsDropdown",
+        Callback = function(SelectedOptions)
+            if typeof(SelectedOptions) ~= "table" then
+                SelectedOptions = {}
+            end
+
+            Controller:SetSpeedBuffSelections(SelectedOptions)
+
+            if not isSettingSpeedBuffs and SpeedBuffSelection then
+                isSettingSpeedBuffs = true
+                pcall(function()
+                    SpeedBuffSelection:Set(SelectedOptions)
+                end)
+                isSettingSpeedBuffs = false
+            end
+        end
+    })
 end

@@ -3,6 +3,7 @@ local UserInputService = game:GetService("UserInputService")
 return function(Client, Controller)
     local Tab = Client.Window:CreateTab("Accessibility", 4483362458)
     local adaptInputCaptureConnection = nil
+    local adaptInputStatusLabel = nil
 
     local function disconnectAdaptCapture()
         if typeof(adaptInputCaptureConnection) == "RBXScriptConnection" then
@@ -11,6 +12,14 @@ return function(Client, Controller)
             end)
         end
         adaptInputCaptureConnection = nil
+    end
+
+    local function setAdaptInputStatus(text)
+        if adaptInputStatusLabel and typeof(adaptInputStatusLabel.Set) == "function" then
+            pcall(function()
+                adaptInputStatusLabel:Set(text)
+            end)
+        end
     end
     
     Tab:CreateSection("Accessibility Features")
@@ -81,17 +90,22 @@ return function(Client, Controller)
         end
     })
 
+    if Tab.CreateLabel then
+        adaptInputStatusLabel = Tab:CreateLabel("Grapple Adapt Input: " .. tostring(Controller.GrappleAdaptInputKey or "T"))
+    end
+
     Tab:CreateButton({
         Name = "Rebind Grapple Adapt Input",
-        Info = "Click, then press any keyboard key. This avoids the unstable Rayfield keybind widget.",
+        Info = "Click, then press any keyboard key. Esc cancels. Tap = one manual cast/recast. Hold = enter auto-drive while airborne.",
         Callback = function()
             disconnectAdaptCapture()
+            setAdaptInputStatus("Grapple Adapt Input: waiting for key...")
 
             if getgenv().Rayfield then
                 getgenv().Rayfield:Notify({
                     Title = "Accessibility Config",
-                    Content = "Press any key to bind Grapple Adapt Input. Current: " .. tostring(Controller.GrappleAdaptInputKey or "T"),
-                    Duration = 3,
+                    Content = "Press any keyboard key to bind Grapple Adapt Input. Press Esc to cancel. Current: " .. tostring(Controller.GrappleAdaptInputKey or "T"),
+                    Duration = 4,
                 })
             end
 
@@ -103,9 +117,23 @@ return function(Client, Controller)
                     return
                 end
 
+                if input.KeyCode == Enum.KeyCode.Escape then
+                    disconnectAdaptCapture()
+                    setAdaptInputStatus("Grapple Adapt Input: " .. tostring(Controller.GrappleAdaptInputKey or "T"))
+                    if getgenv().Rayfield then
+                        getgenv().Rayfield:Notify({
+                            Title = "Accessibility Config",
+                            Content = "Grapple Adapt Input rebind cancelled",
+                            Duration = 2.5,
+                        })
+                    end
+                    return
+                end
+
                 local keyName = input.KeyCode.Name
                 Controller:SetGrappleAdaptInputKey(keyName)
                 disconnectAdaptCapture()
+                setAdaptInputStatus("Grapple Adapt Input: " .. keyName)
 
                 if getgenv().Rayfield then
                     getgenv().Rayfield:Notify({

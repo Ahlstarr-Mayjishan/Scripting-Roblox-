@@ -98,6 +98,7 @@ pcall(function()
             SpringerImmunityModeDropdown = "Legit",
             MatrixTetrahedronToggle = false,
             MomentumReductionSlider = 100, -- Mặc định là 100% giảm quán tính
+            SpeedBuffSelectionsDropdown = {},
             AutoCollectGiftsToggle = false,
             AutoCollectRangeSlider = 20,
             TripmineBarrierToggle = false,

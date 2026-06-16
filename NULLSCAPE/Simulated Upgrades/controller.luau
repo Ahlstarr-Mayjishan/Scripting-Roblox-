@@ -22,6 +22,7 @@ local MatrixTetrahedron = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Mat
 local GraceWings = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Grace Wings.luau")
 local AdvancedGravityCoil = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Advanced Gravity Coil.luau")
 local BetterJumpPad = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Better Jump Pad.luau")
+local SpeedBuffs = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Speed Buffs.luau")
 
 local Controller = {
 	RadarEnabled = false,
@@ -46,6 +47,8 @@ local Controller = {
 	AdvancedGravityCoilJumpPower = 28,
 	BetterJumpPadEnabled = false,
 	BetterJumpPadPower = 100,
+	SpeedBuffsEnabled = false,
+	SpeedBuffSelections = {},
 
 	TripmineBarrierEnabled = false,
 	TripmineMode = "Delayed", -- "Delayed" (Nổ trễ an toàn) hoặc "Barrier" (Đi xuyên mìn)
@@ -708,6 +711,12 @@ local function startUtilityLoop()
 						BetterJumpPad.start(Controller, GC)
 					end)
 				end
+				if Controller.SpeedBuffsEnabled and SpeedBuffs and not SpeedBuffs.Hooked then
+					pcall(function()
+						SpeedBuffs.setSelectedBuffs(Controller.SpeedBuffSelections or {})
+						SpeedBuffs.start(Controller, GC)
+					end)
+				end
 			end
 			task.wait(0.1)
 		end
@@ -919,6 +928,34 @@ function Controller:SetBetterJumpPadPower(value)
 	end
 end
 
+function Controller:SetSpeedBuffSelections(selectedOptions)
+	if typeof(selectedOptions) ~= "table" then
+		selectedOptions = {}
+	end
+
+	local validOptions = SpeedBuffs and SpeedBuffs.getOptions and SpeedBuffs.getOptions() or {}
+	local normalized = {}
+	for _, option in ipairs(selectedOptions) do
+		if table.find(validOptions, option) and not table.find(normalized, option) then
+			table.insert(normalized, option)
+		end
+	end
+
+	self.SpeedBuffSelections = normalized
+	self.SpeedBuffsEnabled = #normalized > 0
+
+	if SpeedBuffs then
+		SpeedBuffs.setSelectedBuffs(normalized)
+		if self.SpeedBuffsEnabled then
+			SpeedBuffs.start(self, GC)
+		else
+			SpeedBuffs.stop()
+		end
+	end
+
+	refreshUpgradeServerState()
+end
+
 function Controller:SetAutoCollectRange(value)
 	self.AutoCollectRange = value
 end
@@ -964,6 +1001,7 @@ function Controller:CleanUp()
 	self.GraceWingsEnabled = false
 	self.AdvancedGravityCoilEnabled = false
 	self.BetterJumpPadEnabled = false
+	self.SpeedBuffsEnabled = false
 	disconnectFolderObservations()
 	stopRenderStepped()
 
@@ -985,6 +1023,11 @@ function Controller:CleanUp()
 	if BetterJumpPad then
 		pcall(function()
 			BetterJumpPad.stop()
+		end)
+	end
+	if SpeedBuffs then
+		pcall(function()
+			SpeedBuffs.stop()
 		end)
 	end
 	refreshUpgradeServerState()

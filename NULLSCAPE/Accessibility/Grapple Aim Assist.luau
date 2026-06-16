@@ -24,7 +24,9 @@ local Logic = {
     JumpPadStates = {},
     LastJumpPadUsesBypassEnabled = false,
     AdaptInputHeld = false,
+    AdaptInputBeganAt = 0,
     LastAdaptInputPressed = 0,
+    AdaptDriveActive = false,
     AdaptRecastToken = 0,
     LastKnownGrapple = nil,
     AdaptRecastPending = false,
@@ -33,6 +35,7 @@ local Logic = {
     AdaptRecastReleaseAt = 0,
     LastAdaptPulseAt = 0,
     AdaptAwaitingAttachUntil = 0,
+    AdaptRetryAt = 0,
     AutoRescueUntil = 0,
     LastAutoRescuePulseAt = 0,
 }
@@ -59,10 +62,12 @@ local RANGE_OPTIONS = {
 }
 
 local ADAPT_INPUT_PULSE_DURATION = 0.05
+local ADAPT_TAP_THRESHOLD = 0.16
 local ADAPT_RECAST_RELEASE_DELAY = 0.045
 local ADAPT_RECAST_COOLDOWN = 0.12
 local ADAPT_RECAST_MAX_WAIT = 0.35
 local ADAPT_ATTACH_GRACE = 0.18
+local ADAPT_RETRY_DELAY = 0.26
 local ADAPT_RECAST_SAFE_SPEED = 92
 local ADAPT_RECAST_CLAMP_SPEED = 78
 local ADAPT_RECAST_ARRIVAL_DISTANCE = 7
@@ -93,6 +98,7 @@ local SCREEN_RAY_OFFSETS = {
 local markGrappleBonkGrace
 local getHorizontalVelocity
 local isInAir
+local hasAdaptDriveTarget
 
 local function getGlobals()
     local env = getgenv()
@@ -284,10 +290,13 @@ local function clearInputConnections()
     end
     table.clear(Logic.InputConnections)
     Logic.AdaptInputHeld = false
+    Logic.AdaptInputBeganAt = 0
+    Logic.AdaptDriveActive = false
     Logic.AdaptRecastToken = Logic.AdaptRecastToken + 1
     Logic.AdaptRecastPending = false
     Logic.AdaptRecastReleaseIssued = false
     Logic.AdaptAwaitingAttachUntil = 0
+    Logic.AdaptRetryAt = 0
 end
 
 local function getTrackedGrapple()
@@ -331,6 +340,7 @@ local function pulseSpecialAction(grapple)
 
     Logic.LastAdaptPulseAt = time()
     Logic.AdaptAwaitingAttachUntil = Logic.LastAdaptPulseAt + ADAPT_ATTACH_GRACE
+    Logic.AdaptRetryAt = Logic.AdaptAwaitingAttachUntil + ADAPT_RETRY_DELAY
 
     local token = Logic.AdaptRecastToken + 1
     Logic.AdaptRecastToken = token
@@ -366,6 +376,7 @@ local function isAwaitingAdaptAttach(grapple)
     local movement = grapple and grapple.Movement
     if movement and (movement.grappling == true or grapple.jumpPadReel == true) then
         Logic.AdaptAwaitingAttachUntil = 0
+        Logic.AdaptRetryAt = 0
         return false
     end
 
@@ -465,6 +476,21 @@ local function requestAdaptRecast(grapple)
     return pulseSpecialAction(grapple)
 end
 
+local function beginAdaptDrive(grapple)
+    if Logic.AdaptDriveActive then
+        return false
+    end
+
+    Logic.AdaptDriveActive = true
+    Logic.LastAdaptInputPressed = time()
+
+    if grapple then
+        return requestAdaptRecast(grapple)
+    end
+
+    return false
+end
+
 local function updateAdaptRecast(grapple)
     if not Logic.AdaptRecastPending then
         return
@@ -514,7 +540,7 @@ local function updateAdaptRecast(grapple)
 end
 
 local function maintainAdaptInputHold(grapple)
-    if not (Logic.AdaptInputHeld and isSuiteEnabled() and isInAir(grapple)) then
+    if not (Logic.AdaptDriveActive and Logic.AdaptInputHeld and isSuiteEnabled() and isInAir(grapple)) then
         return
     end
     if Logic.AdaptRecastPending then
@@ -526,6 +552,9 @@ local function maintainAdaptInputHold(grapple)
         return
     end
     if isAwaitingAdaptAttach(grapple) then
+        return
+    end
+    if time() < (Logic.AdaptRetryAt or 0) then
         return
     end
     if time() - Logic.LastAdaptPulseAt < ADAPT_RECAST_COOLDOWN then
@@ -540,7 +569,26 @@ local function maintainAdaptInputHold(grapple)
         return
     end
 
+    if not hasAdaptDriveTarget(grapple) then
+        Logic.AdaptRetryAt = time() + ADAPT_RETRY_DELAY
+        return
+    end
+
     pulseSpecialAction(grapple)
+end
+
+local function updateAdaptInputMode(grapple)
+    if not (Logic.AdaptInputHeld and isSuiteEnabled()) then
+        return
+    end
+    if Logic.AdaptDriveActive then
+        return
+    end
+    if time() - (Logic.AdaptInputBeganAt or 0) < ADAPT_TAP_THRESHOLD then
+        return
+    end
+
+    beginAdaptDrive(grapple)
 end
 
 local function watchAdaptInput()
@@ -554,14 +602,7 @@ local function watchAdaptInput()
         end
 
         Logic.AdaptInputHeld = true
-        Logic.LastAdaptInputPressed = time()
-
-        local grapple = getTrackedGrapple()
-        if not grapple then
-            return
-        end
-
-        requestAdaptRecast(grapple)
+        Logic.AdaptInputBeganAt = time()
     end))
 
     table.insert(Logic.InputConnections, UserInputService.InputEnded:Connect(function(input)
@@ -569,10 +610,24 @@ local function watchAdaptInput()
             return
         end
 
+        local heldDuration = time() - (Logic.AdaptInputBeganAt or 0)
+        local shouldTap = heldDuration <= ADAPT_TAP_THRESHOLD and Logic.AdaptDriveActive ~= true
+
         Logic.AdaptInputHeld = false
+        Logic.AdaptInputBeganAt = 0
+        Logic.AdaptDriveActive = false
         Logic.AdaptRecastPending = false
         Logic.AdaptRecastReleaseIssued = false
         Logic.AdaptAwaitingAttachUntil = 0
+        Logic.AdaptRetryAt = 0
+
+        if shouldTap and isSuiteEnabled() then
+            local grapple = getTrackedGrapple()
+            if grapple then
+                Logic.LastAdaptInputPressed = time()
+                requestAdaptRecast(grapple)
+            end
+        end
     end))
 end
 
@@ -775,7 +830,11 @@ local function refillStamina(grapple)
     end
 end
 
-local function getAssistRange(grapple)
+local function getAssistRange(grapple, ignoreStamina)
+    if ignoreStamina then
+        return DEFAULT_MAX_RANGE
+    end
+
     local staminaRatio = getStaminaRatio(grapple)
     if staminaRatio < 0.3 then
         return 45
@@ -1165,11 +1224,13 @@ local function getEffectivePreferredTarget(grapple, preferredName)
     return preferredName
 end
 
-local function scanNamedTargets(grapple)
+local function scanNamedTargets(grapple, options)
     local camera = Workspace.CurrentCamera
     if not camera then
         return nil
     end
+
+    local driveMode = typeof(options) == "table" and options.driveMode == true
 
     local controller = getController()
     local preferredName = normalizeTargetPriority(controller and controller.GrappleAimAssistTargetPriority)
@@ -1177,13 +1238,13 @@ local function scanNamedTargets(grapple)
     local emergencyBrakeMode = isRescueEnabled() and isHighMomentumDanger(grapple) and isAutoRescueWindowActive()
     preferredName = getEffectivePreferredTarget(grapple, preferredName)
     local rangeMode = normalizeRangePriority(controller and controller.GrappleAimAssistRangePriority)
-    if shouldForceNearest(grapple) then
+    if not driveMode and shouldForceNearest(grapple) then
         rangeMode = "Nearest"
     elseif emergencyBrakeMode then
         rangeMode = "Nearest"
     end
 
-    local maxRange = getAssistRange(grapple)
+    local maxRange = getAssistRange(grapple, driveMode)
     local staminaRatio = getStaminaRatio(grapple)
     local screenAnchor = getScreenAnchor(camera, rangeMode)
     local candidateList = getCandidateList()
@@ -1201,7 +1262,7 @@ local function scanNamedTargets(grapple)
     }
     local bestScore = math.huge
     local bestResult = nil
-    local checks = math.min(candidateCount, MAX_CANDIDATES_PER_CAST)
+    local checks = driveMode and candidateCount or math.min(candidateCount, MAX_CANDIDATES_PER_CAST)
 
     for _ = 1, checks do
         if Logic.CandidateCursor > candidateCount then
@@ -1243,7 +1304,7 @@ local function scanNamedTargets(grapple)
                             if rangeMode == "Closest To Cursor" then
                                 distanceScore = distance * 0.25
                             end
-                            local staminaPenalty = isInfiniteStamina() and 0 or distance * (1 - staminaRatio) * 0.12
+                            local staminaPenalty = driveMode and 0 or (isInfiniteStamina() and 0 or distance * (1 - staminaRatio) * 0.12)
                             local score = priorityScore + screenScore * 100 + distanceScore * 0.01 + staminaPenalty
 
                             if score < bestScore then
@@ -1266,15 +1327,17 @@ local function scanNamedTargets(grapple)
     return bestResult
 end
 
-local function scanScreenSurface(grapple)
+local function scanScreenSurface(grapple, options)
     local camera = Workspace.CurrentCamera
     local rootPart = grapple and grapple.RootPart
     if not camera or not rootPart then
         return nil
     end
 
+    local driveMode = typeof(options) == "table" and options.driveMode == true
+
     local viewportSize = camera.ViewportSize
-    local maxRange = getAssistRange(grapple)
+    local maxRange = getAssistRange(grapple, driveMode)
 
     for _, offset in ipairs(SCREEN_RAY_OFFSETS) do
         local screenPoint = Vector2.new(
@@ -1299,6 +1362,11 @@ local function scanScreenSurface(grapple)
     end
 
     return nil
+end
+
+function hasAdaptDriveTarget(grapple)
+    local driveOptions = { driveMode = true }
+    return scanNamedTargets(grapple, driveOptions) ~= nil or scanScreenSurface(grapple, driveOptions) ~= nil
 end
 
 local function tryAutoMomentumRescue(grapple)
@@ -1731,6 +1799,8 @@ function Logic.enable()
             end
 
             if isSuiteEnabled() and isInAir(self) then
+                updateAdaptInputMode(self)
+
                 if isSharkTailHelperEnabled() and getModeValue("GrappleSharkTailMode") == "Automatic" then
                     tryUseSharkTail(self)
                 end
