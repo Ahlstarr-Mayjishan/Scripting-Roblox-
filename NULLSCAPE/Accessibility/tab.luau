@@ -1,7 +1,17 @@
-local ADAPT_INPUT_OPTIONS = {"T", "R", "F", "G", "C", "V", "X", "Z", "Q", "E"}
+local UserInputService = game:GetService("UserInputService")
 
 return function(Client, Controller)
     local Tab = Client.Window:CreateTab("Accessibility", 4483362458)
+    local adaptInputCaptureConnection = nil
+
+    local function disconnectAdaptCapture()
+        if typeof(adaptInputCaptureConnection) == "RBXScriptConnection" then
+            pcall(function()
+                adaptInputCaptureConnection:Disconnect()
+            end)
+        end
+        adaptInputCaptureConnection = nil
+    end
     
     Tab:CreateSection("Accessibility Features")
     
@@ -71,21 +81,48 @@ return function(Client, Controller)
         end
     })
 
-    Tab:CreateDropdown({
-        Name = "Grapple Adapt Input",
-        Info = "Dedicated Grapple assist input. Acts like a tap pulse, so it will not hold charge. Default is T.",
-        Options = ADAPT_INPUT_OPTIONS,
-        CurrentOption = Controller.GrappleAdaptInputKey or "T",
-        MultipleOptions = false,
-        Flag = "GrappleAdaptInputKeybind",
-        Callback = function(Option)
-            local selected = Option
-            if typeof(Option) == "table" then
-                selected = Option[1]
+    Tab:CreateButton({
+        Name = "Rebind Grapple Adapt Input",
+        Info = "Click, then press any keyboard key. This avoids the unstable Rayfield keybind widget.",
+        Callback = function()
+            disconnectAdaptCapture()
+
+            if getgenv().Rayfield then
+                getgenv().Rayfield:Notify({
+                    Title = "Accessibility Config",
+                    Content = "Press any key to bind Grapple Adapt Input. Current: " .. tostring(Controller.GrappleAdaptInputKey or "T"),
+                    Duration = 3,
+                })
             end
-            Controller:SetGrappleAdaptInputKey(selected)
+
+            adaptInputCaptureConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+                if gameProcessed then
+                    return
+                end
+                if input.UserInputType ~= Enum.UserInputType.Keyboard or input.KeyCode == Enum.KeyCode.Unknown then
+                    return
+                end
+
+                local keyName = input.KeyCode.Name
+                Controller:SetGrappleAdaptInputKey(keyName)
+                disconnectAdaptCapture()
+
+                if getgenv().Rayfield then
+                    getgenv().Rayfield:Notify({
+                        Title = "Accessibility Config",
+                        Content = "Grapple Adapt Input bound to " .. keyName,
+                        Duration = 3,
+                    })
+                end
+            end)
         end
     })
+
+    if Client and type(Client.ActiveConnections) == "table" then
+        table.insert(Client.ActiveConnections, {
+            Disconnect = disconnectAdaptCapture
+        })
+    end
 
     Tab:CreateDropdown({
         Name = "Grappler Stamina",

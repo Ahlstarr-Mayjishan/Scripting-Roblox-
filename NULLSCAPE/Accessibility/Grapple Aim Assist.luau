@@ -27,6 +27,14 @@ local Logic = {
     LastAdaptInputPressed = 0,
     AdaptRecastToken = 0,
     LastKnownGrapple = nil,
+    AdaptRecastPending = false,
+    AdaptRecastReleaseIssued = false,
+    AdaptRecastRequestedAt = 0,
+    AdaptRecastReleaseAt = 0,
+    LastAdaptPulseAt = 0,
+    AdaptAwaitingAttachUntil = 0,
+    AutoRescueUntil = 0,
+    LastAutoRescuePulseAt = 0,
 }
 
 local VALID_TARGETS = {
@@ -51,6 +59,17 @@ local RANGE_OPTIONS = {
 }
 
 local ADAPT_INPUT_PULSE_DURATION = 0.05
+local ADAPT_RECAST_RELEASE_DELAY = 0.045
+local ADAPT_RECAST_COOLDOWN = 0.12
+local ADAPT_RECAST_MAX_WAIT = 0.35
+local ADAPT_ATTACH_GRACE = 0.18
+local ADAPT_RECAST_SAFE_SPEED = 92
+local ADAPT_RECAST_CLAMP_SPEED = 78
+local ADAPT_RECAST_ARRIVAL_DISTANCE = 7
+local ADAPT_RECAST_TRIA_ARRIVAL_DISTANCE = 11
+local AUTO_RESCUE_SPEED = 135
+local AUTO_RESCUE_COOLDOWN = 0.45
+local AUTO_RESCUE_WINDOW = 0.3
 
 local DEFAULT_MAX_RANGE = 90
 local MAX_CANDIDATES_PER_CAST = 48
@@ -70,6 +89,10 @@ local SCREEN_RAY_OFFSETS = {
     Vector2.new(0.1, -0.06),
     Vector2.new(-0.1, -0.06),
 }
+
+local markGrappleBonkGrace
+local getHorizontalVelocity
+local isInAir
 
 local function getGlobals()
     local env = getgenv()
@@ -262,6 +285,9 @@ local function clearInputConnections()
     table.clear(Logic.InputConnections)
     Logic.AdaptInputHeld = false
     Logic.AdaptRecastToken = Logic.AdaptRecastToken + 1
+    Logic.AdaptRecastPending = false
+    Logic.AdaptRecastReleaseIssued = false
+    Logic.AdaptAwaitingAttachUntil = 0
 end
 
 local function getTrackedGrapple()
@@ -296,9 +322,15 @@ local function fireSpecialAction(grapple, state)
 end
 
 local function pulseSpecialAction(grapple)
+    if time() - Logic.LastAdaptPulseAt < ADAPT_RECAST_COOLDOWN then
+        return false
+    end
     if not fireSpecialAction(grapple, Enum.UserInputState.Begin) then
         return false
     end
+
+    Logic.LastAdaptPulseAt = time()
+    Logic.AdaptAwaitingAttachUntil = Logic.LastAdaptPulseAt + ADAPT_ATTACH_GRACE
 
     local token = Logic.AdaptRecastToken + 1
     Logic.AdaptRecastToken = token
@@ -322,28 +354,193 @@ local function pulseSpecialAction(grapple)
     return true
 end
 
-local function queueAdaptRecast(grapple)
-    local token = Logic.AdaptRecastToken + 1
-    Logic.AdaptRecastToken = token
+local function armAutoRescueWindow()
+    Logic.AutoRescueUntil = time() + AUTO_RESCUE_WINDOW
+end
 
-    task.defer(function()
-        if Logic.AdaptRecastToken ~= token then
+local function isAutoRescueWindowActive()
+    return time() <= (Logic.AutoRescueUntil or 0)
+end
+
+local function isAwaitingAdaptAttach(grapple)
+    local movement = grapple and grapple.Movement
+    if movement and (movement.grappling == true or grapple.jumpPadReel == true) then
+        Logic.AdaptAwaitingAttachUntil = 0
+        return false
+    end
+
+    return time() <= (Logic.AdaptAwaitingAttachUntil or 0)
+end
+
+local function getAdaptHorizontalSpeed(grapple)
+    local rootPart = grapple and grapple.RootPart
+    local horizontal = getHorizontalVelocity(rootPart)
+    return horizontal.Magnitude, horizontal
+end
+
+local function getActiveGrappleTargetPosition(grapple)
+    local movement = grapple and grapple.Movement
+    if movement and typeof(movement.grapplePoint) == "Vector3" then
+        return movement.grapplePoint
+    end
+
+    local part = (movement and movement.grapplePart) or grapple and grapple.grapplePart
+    if part and part.Parent and part:IsA("BasePart") then
+        return part.Position
+    end
+
+    return nil
+end
+
+local function getAdaptArrivalDistance(grapple)
+    local movement = grapple and grapple.Movement
+    local part = (movement and movement.grapplePart) or grapple and grapple.grapplePart
+    if part and part.Parent and part.Name == "TriaOrb" then
+        return ADAPT_RECAST_TRIA_ARRIVAL_DISTANCE
+    end
+
+    local size = part and part.Parent and part:IsA("BasePart") and part.Size.Magnitude * 0.45 or 0
+    return math.max(ADAPT_RECAST_ARRIVAL_DISTANCE, size)
+end
+
+local function hasReachedGrappleDestination(grapple)
+    local rootPart = grapple and grapple.RootPart
+    local targetPosition = getActiveGrappleTargetPosition(grapple)
+    if not (rootPart and targetPosition) then
+        return true
+    end
+
+    local remainingDistance = (targetPosition - rootPart.Position).Magnitude
+    if remainingDistance <= getAdaptArrivalDistance(grapple) then
+        return true
+    end
+
+    local rootVelocity = rootPart.Velocity
+    if not rootVelocity then
+        return false
+    end
+
+    local toTarget = targetPosition - rootPart.Position
+    if toTarget.Magnitude <= 0.001 then
+        return true
+    end
+
+    return rootVelocity:Dot(toTarget.Unit) <= 0
+end
+
+local function clampAdaptRecastVelocity(grapple)
+    local rootPart = grapple and grapple.RootPart
+    if not rootPart then
+        return
+    end
+
+    local speed, horizontal = getAdaptHorizontalSpeed(grapple)
+    if speed <= ADAPT_RECAST_SAFE_SPEED or speed <= 0 then
+        return
+    end
+
+    local clampedHorizontal = horizontal.Unit * ADAPT_RECAST_CLAMP_SPEED
+    rootPart.Velocity = Vector3.new(clampedHorizontal.X, rootPart.Velocity.Y, clampedHorizontal.Z)
+end
+
+local function requestAdaptRecast(grapple)
+    local now = time()
+    if now - Logic.LastAdaptPulseAt < ADAPT_RECAST_COOLDOWN then
+        return false
+    end
+
+    local movement = grapple and grapple.Movement
+    if movement and (movement.grappling == true or grapple.jumpPadReel == true) then
+        if not hasReachedGrappleDestination(grapple) then
+            return false
+        end
+        Logic.AdaptRecastPending = true
+        Logic.AdaptRecastReleaseIssued = fireSpecialAction(grapple, Enum.UserInputState.End) == true
+        Logic.AdaptRecastRequestedAt = now
+        Logic.AdaptRecastReleaseAt = now
+        markGrappleBonkGrace(grapple, 0.5)
+        return Logic.AdaptRecastReleaseIssued
+    end
+
+    return pulseSpecialAction(grapple)
+end
+
+local function updateAdaptRecast(grapple)
+    if not Logic.AdaptRecastPending then
+        return
+    end
+    if not (Logic.AdaptInputHeld and isSuiteEnabled()) then
+        Logic.AdaptRecastPending = false
+        Logic.AdaptRecastReleaseIssued = false
+        return
+    end
+
+    local movement = grapple and grapple.Movement
+    if not (grapple and movement) then
+        return
+    end
+
+    local now = time()
+    local releaseElapsed = now - Logic.AdaptRecastReleaseAt
+    local requestElapsed = now - Logic.AdaptRecastRequestedAt
+    local detached = movement.grappling ~= true and grapple.jumpPadReel ~= true
+    local speed = getAdaptHorizontalSpeed(grapple)
+
+    if speed > ADAPT_RECAST_SAFE_SPEED then
+        clampAdaptRecastVelocity(grapple)
+        markGrappleBonkGrace(grapple, 0.3)
+        speed = getAdaptHorizontalSpeed(grapple)
+    end
+
+    if not Logic.AdaptRecastReleaseIssued then
+        Logic.AdaptRecastReleaseIssued = fireSpecialAction(grapple, Enum.UserInputState.End) == true
+        Logic.AdaptRecastReleaseAt = now
+        return
+    end
+
+    if not detached then
+        return
+    end
+    if releaseElapsed < ADAPT_RECAST_RELEASE_DELAY then
+        return
+    end
+    if speed > ADAPT_RECAST_SAFE_SPEED and requestElapsed < ADAPT_RECAST_MAX_WAIT then
+        return
+    end
+
+    Logic.AdaptRecastPending = false
+    Logic.AdaptRecastReleaseIssued = false
+    pulseSpecialAction(grapple)
+end
+
+local function maintainAdaptInputHold(grapple)
+    if not (Logic.AdaptInputHeld and isSuiteEnabled() and isInAir(grapple)) then
+        return
+    end
+    if Logic.AdaptRecastPending then
+        return
+    end
+
+    local movement = grapple and grapple.Movement
+    if not (grapple and movement) then
+        return
+    end
+    if isAwaitingAdaptAttach(grapple) then
+        return
+    end
+    if time() - Logic.LastAdaptPulseAt < ADAPT_RECAST_COOLDOWN then
+        return
+    end
+
+    if movement.grappling == true or grapple.jumpPadReel == true then
+        if not hasReachedGrappleDestination(grapple) then
             return
         end
-        if not (Logic.AdaptInputHeld and isSuiteEnabled()) then
-            return
-        end
+        requestAdaptRecast(grapple)
+        return
+    end
 
-        local activeGrapple = grapple
-        if not (activeGrapple and activeGrapple.Movement and activeGrapple.Movement.ActiveSpecial == activeGrapple) then
-            activeGrapple = getTrackedGrapple()
-        end
-        if not activeGrapple then
-            return
-        end
-
-        pulseSpecialAction(activeGrapple)
-    end)
+    pulseSpecialAction(grapple)
 end
 
 local function watchAdaptInput()
@@ -364,14 +561,7 @@ local function watchAdaptInput()
             return
         end
 
-        local movement = grapple.Movement
-        if movement and (movement.grappling == true or grapple.jumpPadReel == true) then
-            fireSpecialAction(grapple, Enum.UserInputState.End)
-            queueAdaptRecast(grapple)
-            return
-        end
-
-        pulseSpecialAction(grapple)
+        requestAdaptRecast(grapple)
     end))
 
     table.insert(Logic.InputConnections, UserInputService.InputEnded:Connect(function(input)
@@ -380,6 +570,9 @@ local function watchAdaptInput()
         end
 
         Logic.AdaptInputHeld = false
+        Logic.AdaptRecastPending = false
+        Logic.AdaptRecastReleaseIssued = false
+        Logic.AdaptAwaitingAttachUntil = 0
     end))
 end
 
@@ -475,7 +668,7 @@ local function getEntitiesGC()
     return nil
 end
 
-local function isInAir(grapple)
+function isInAir(grapple)
     local humanoid = grapple and grapple.Humanoid
     if not humanoid then
         return false
@@ -488,6 +681,14 @@ local function isFallingFast(grapple)
     local rootPart = grapple and grapple.RootPart
     local velocity = rootPart and rootPart.Velocity
     return velocity and velocity.Y < -35
+end
+
+local function isHighMomentumDanger(grapple)
+    if not (grapple and isInAir(grapple)) then
+        return false
+    end
+
+    return getHorizontalVelocity(grapple.RootPart).Magnitude >= AUTO_RESCUE_SPEED
 end
 
 local function getModeValue(key)
@@ -506,7 +707,7 @@ local function hasUpgrade(movement, upgradeName)
     return success and result == true
 end
 
-local function getHorizontalVelocity(rootPart)
+function getHorizontalVelocity(rootPart)
     local velocity = rootPart and rootPart.Velocity
     if not velocity then
         return Vector3.new(0, 0, 0)
@@ -956,6 +1157,14 @@ local function chooseRandomCandidate(validResults, preferredName)
     return source[Logic.Random:NextInteger(1, #source)].Result
 end
 
+local function getEffectivePreferredTarget(grapple, preferredName)
+    if isAutoRescueWindowActive() and isHighMomentumDanger(grapple) then
+        return "TriaOrb"
+    end
+
+    return preferredName
+end
+
 local function scanNamedTargets(grapple)
     local camera = Workspace.CurrentCamera
     if not camera then
@@ -965,8 +1174,12 @@ local function scanNamedTargets(grapple)
     local controller = getController()
     local preferredName = normalizeTargetPriority(controller and controller.GrappleAimAssistTargetPriority)
     local rescueMode = isRescueEnabled() and isFallingFast(grapple)
+    local emergencyBrakeMode = isRescueEnabled() and isHighMomentumDanger(grapple) and isAutoRescueWindowActive()
+    preferredName = getEffectivePreferredTarget(grapple, preferredName)
     local rangeMode = normalizeRangePriority(controller and controller.GrappleAimAssistRangePriority)
     if shouldForceNearest(grapple) then
+        rangeMode = "Nearest"
+    elseif emergencyBrakeMode then
         rangeMode = "Nearest"
     end
 
@@ -1023,6 +1236,8 @@ local function scanNamedTargets(grapple)
                             local priorityScore = candidate.Name == preferredName and 0 or 1000
                             if rescueMode then
                                 priorityScore = rescuePriority[candidate.Name] or 1000
+                            elseif emergencyBrakeMode then
+                                priorityScore = candidate.Name == "TriaOrb" and 0 or 5000
                             end
                             local distanceScore = rangeMode == "Farthest" and -distance or distance
                             if rangeMode == "Closest To Cursor" then
@@ -1086,6 +1301,32 @@ local function scanScreenSurface(grapple)
     return nil
 end
 
+local function tryAutoMomentumRescue(grapple)
+    if not (isRescueEnabled() and isHighMomentumDanger(grapple)) then
+        return false
+    end
+
+    local movement = grapple and grapple.Movement
+    if not (grapple and movement and grapple.specialHeld and isInAir(grapple)) then
+        return false
+    end
+    if movement.grappling or grapple.jumpPadReel then
+        return false
+    end
+    if time() - Logic.LastAutoRescuePulseAt < AUTO_RESCUE_COOLDOWN then
+        return false
+    end
+
+    armAutoRescueWindow()
+    local previewResult = scanNamedTargets(grapple)
+    if not (previewResult and previewResult.Instance and previewResult.Instance.Name == "TriaOrb") then
+        return false
+    end
+
+    Logic.LastAutoRescuePulseAt = time()
+    return pulseSpecialAction(grapple)
+end
+
 function isUsableResult(grapple, result)
     if not result then
         return false
@@ -1130,8 +1371,6 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 
     return result, direction
 end
-
-local markGrappleBonkGrace
 
 local function canUseSharkTail(grapple)
     local movement = grapple and grapple.Movement
@@ -1499,6 +1738,9 @@ function Logic.enable()
                 if isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Automatic" then
                     startSmartReel(self)
                 end
+
+                tryAutoMomentumRescue(self)
+                maintainAdaptInputHold(self)
             end
 
             Logic.CurrentGrappleStep = self
@@ -1516,6 +1758,7 @@ function Logic.enable()
             applyReelPullMultiplier(self)
             applyAirControlMultiplier(self, dt)
             applyMomentumGuard(self)
+            updateAdaptRecast(self)
             return stepResult
         end
     end
