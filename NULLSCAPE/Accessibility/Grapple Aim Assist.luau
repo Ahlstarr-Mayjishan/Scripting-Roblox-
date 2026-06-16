@@ -19,6 +19,7 @@ local Logic = {
     LastGrappleMovement = nil,
     SuppressBonkUntil = 0,
     FallbackHitbox = nil,
+    NoCollisionMoveCastParams = nil,
 }
 
 local VALID_TARGETS = {
@@ -944,6 +945,55 @@ local function shouldSuppressGrappleBonk(movement)
     return false
 end
 
+local function getNoCollisionMoveCastParams()
+    if Logic.NoCollisionMoveCastParams then
+        return Logic.NoCollisionMoveCastParams
+    end
+
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = { Workspace }
+    params.RespectCanCollide = true
+    Logic.NoCollisionMoveCastParams = params
+
+    return params
+end
+
+local function shouldSuppressGrappleCollisionCheck(grapple)
+    if not isAntiBonkEnabled() then
+        return false
+    end
+
+    local movement = grapple and grapple.Movement
+    local rootPart = grapple and grapple.RootPart
+    if not (movement and rootPart) then
+        return false
+    end
+
+    if movement.grappling == true or grapple.jumpPadReel == true then
+        return true
+    end
+
+    local lastRelease = tonumber(grapple.lastGrappleRelease)
+    return lastRelease ~= nil and time() - lastRelease < 1.5 and rootPart.Velocity.Magnitude > 70
+end
+
+local function beginGrappleCollisionBypass(grapple)
+    if not shouldSuppressGrappleCollisionCheck(grapple) then
+        return nil
+    end
+
+    local movement = grapple.Movement
+    local previousMoveCastParams = movement.moveCastParams
+    movement.moveCastParams = getNoCollisionMoveCastParams()
+
+    return function()
+        if movement then
+            movement.moveCastParams = previousMoveCastParams
+        end
+    end
+end
+
 function markGrappleBonkGrace(grapple, duration)
     local movement = grapple and grapple.Movement
     if not movement then
@@ -1053,8 +1103,12 @@ function Logic.enable()
             end
 
             Logic.CurrentGrappleStep = self
+            local restoreCollisionCheck = beginGrappleCollisionBypass(self)
             local success, stepResult = pcall(originalStep, self, dt, ...)
             Logic.CurrentGrappleStep = nil
+            if restoreCollisionCheck then
+                restoreCollisionCheck()
+            end
             if not success then
                 error(stepResult, 0)
             end
