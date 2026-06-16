@@ -19,9 +19,9 @@ Logic.Config = {
     },
     ["Guardian"] = {
         ControllerFlag = "GuardianImmune",
-        Remotes = { "ClientEvent" },
-        Keywords = { "Kill" },
-        LegitKeywords = { "Kill" }
+        Remotes = { "ClientEvent", "Died" },
+        Keywords = { "Kill", "Guardian" },
+        LegitKeywords = { "Kill", "Guardian" }
     },
     ["ShadowGuardian"] = {
         ControllerFlag = "GuardianImmune",
