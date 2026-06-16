@@ -1,3 +1,5 @@
+local ADAPT_INPUT_OPTIONS = {"T", "R", "F", "G", "C", "V", "X", "Z", "Q", "E"}
+
 return function(Client, Controller)
     local Tab = Client.Window:CreateTab("Accessibility", 4483362458)
     
@@ -69,18 +71,21 @@ return function(Client, Controller)
         end
     })
 
-    if Tab.CreateKeybind then
-        Tab:CreateKeybind({
-            Name = "Grapple Adapt Input",
-            Info = "Dedicated Grapple assist input. Default is T, so p2 stays free for NinjaBelt/SharkTail.",
-            CurrentKeybind = Controller.GrappleAdaptInputKey or "T",
-            HoldToInteract = true,
-            Flag = "GrappleAdaptInputKeybind",
-            Callback = function(Keybind)
-                Controller:SetGrappleAdaptInputKey(Keybind)
+    Tab:CreateDropdown({
+        Name = "Grapple Adapt Input",
+        Info = "Dedicated Grapple assist input. Acts like a tap pulse, so it will not hold charge. Default is T.",
+        Options = ADAPT_INPUT_OPTIONS,
+        CurrentOption = Controller.GrappleAdaptInputKey or "T",
+        MultipleOptions = false,
+        Flag = "GrappleAdaptInputKeybind",
+        Callback = function(Option)
+            local selected = Option
+            if typeof(Option) == "table" then
+                selected = Option[1]
             end
-        })
-    end
+            Controller:SetGrappleAdaptInputKey(selected)
+        end
+    })
 
     Tab:CreateDropdown({
         Name = "Grappler Stamina",

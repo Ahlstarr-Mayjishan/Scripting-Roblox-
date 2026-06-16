@@ -50,6 +50,8 @@ local RANGE_OPTIONS = {
     "Random",
 }
 
+local ADAPT_INPUT_PULSE_DURATION = 0.05
+
 local DEFAULT_MAX_RANGE = 90
 local MAX_CANDIDATES_PER_CAST = 48
 local FALLBACK_HITBOX_SIZE = Vector3.new(3, 2, 2)
@@ -293,6 +295,33 @@ local function fireSpecialAction(grapple, state)
     return success
 end
 
+local function pulseSpecialAction(grapple)
+    if not fireSpecialAction(grapple, Enum.UserInputState.Begin) then
+        return false
+    end
+
+    local token = Logic.AdaptRecastToken + 1
+    Logic.AdaptRecastToken = token
+
+    task.delay(ADAPT_INPUT_PULSE_DURATION, function()
+        if Logic.AdaptRecastToken ~= token then
+            return
+        end
+
+        local activeGrapple = grapple
+        if not (activeGrapple and activeGrapple.Movement and activeGrapple.Movement.ActiveSpecial == activeGrapple) then
+            activeGrapple = getTrackedGrapple()
+        end
+        if not activeGrapple then
+            return
+        end
+
+        fireSpecialAction(activeGrapple, Enum.UserInputState.End)
+    end)
+
+    return true
+end
+
 local function queueAdaptRecast(grapple)
     local token = Logic.AdaptRecastToken + 1
     Logic.AdaptRecastToken = token
@@ -313,7 +342,7 @@ local function queueAdaptRecast(grapple)
             return
         end
 
-        fireSpecialAction(activeGrapple, Enum.UserInputState.Begin)
+        pulseSpecialAction(activeGrapple)
     end)
 end
 
@@ -342,7 +371,7 @@ local function watchAdaptInput()
             return
         end
 
-        fireSpecialAction(grapple, Enum.UserInputState.Begin)
+        pulseSpecialAction(grapple)
     end))
 
     table.insert(Logic.InputConnections, UserInputService.InputEnded:Connect(function(input)
@@ -351,14 +380,6 @@ local function watchAdaptInput()
         end
 
         Logic.AdaptInputHeld = false
-        Logic.AdaptRecastToken = Logic.AdaptRecastToken + 1
-
-        local grapple = getTrackedGrapple()
-        if not grapple then
-            return
-        end
-
-        fireSpecialAction(grapple, Enum.UserInputState.End)
     end))
 end
 

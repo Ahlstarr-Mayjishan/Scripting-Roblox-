@@ -63,6 +63,12 @@ local Controller = {
 	PermanentConnections = {},
 }
 
+local function safeControllerCleanUp()
+	if typeof(Controller) == "table" and typeof(Controller.CleanUp) == "function" then
+		Controller:CleanUp()
+	end
+end
+
 -- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
 local function isInMatch()
 	local inRoundVal = ReplicatedStorage:FindFirstChild("InRound")
@@ -605,7 +611,7 @@ startRenderStepped = function()
 			return
 		end
 		if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
-			Controller:CleanUp()
+			safeControllerCleanUp()
 			stopRenderStepped()
 			return
 		end
@@ -632,7 +638,7 @@ startMatchLoops = function()
 	task.spawn(function()
 		while not Controller.Destroyed and checkActiveState() do
 			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
-				Controller:CleanUp()
+				safeControllerCleanUp()
 				break
 			end
 			local char = LocalPlayer.Character
@@ -661,7 +667,7 @@ local function startUtilityLoop()
 	task.spawn(function()
 		while not Controller.Destroyed do
 			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
-				Controller:CleanUp()
+				safeControllerCleanUp()
 				break
 			end
 			local char = LocalPlayer.Character
@@ -1066,7 +1072,7 @@ local function startGiftPoolObserver()
 	task.spawn(function()
 		while not Controller.Destroyed do
 			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
-				Controller:CleanUp()
+				safeControllerCleanUp()
 				break
 			end
 			if Controller.RadarEnabled and Controller.GiftESPEnabled then
@@ -1325,7 +1331,7 @@ task.spawn(function()
 				return
 			end
 			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
-				Controller:CleanUp()
+				safeControllerCleanUp()
 				return
 			end
 			setInLobby(not val)
@@ -1342,7 +1348,7 @@ task.spawn(function()
 			break
 		end
 		if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
-			Controller:CleanUp()
+			safeControllerCleanUp()
 			break
 		end
 		setInLobby(not isInMatch())
