@@ -38,6 +38,18 @@ return function(Client, Controller)
         end
     })
 
+    Tab:CreateSection("Grapple Assist")
+
+    Tab:CreateToggle({
+        Name = "Grapple Assist Suite",
+        Info = "Master switch for all Grapple assist hooks. Turning it off restores Grapple logic.",
+        CurrentValue = Controller.GrappleAssistSuiteEnabled or false,
+        Flag = "GrappleAssistSuiteToggle",
+        Callback = function(Value)
+            Controller:SetGrappleAssistSuite(Value)
+        end
+    })
+
     Tab:CreateToggle({
         Name = "Grapple Aim Assist",
         Info = "When native Grapple cast misses, searches visible safe targets on screen and restores Cast when disabled.",
@@ -49,12 +61,97 @@ return function(Client, Controller)
     })
 
     Tab:CreateToggle({
+        Name = "Grapple Rescue Assist",
+        Info = "When falling fast in air, prioritizes rescue targets while you are holding Grapple.",
+        CurrentValue = Controller.GrappleRescueAssistEnabled or false,
+        Flag = "GrappleRescueAssistToggle",
+        Callback = function(Value)
+            Controller:SetGrappleRescueAssist(Value)
+        end
+    })
+
+    Tab:CreateToggle({
         Name = "Grapple Anti Bonk",
         Info = "Prevents Grapple wall-collision DiveBonk stun/knock while keeping the game's grapple end behavior.",
         CurrentValue = Controller.GrappleAntiBonkEnabled or false,
         Flag = "GrappleAntiBonkToggle",
         Callback = function(Value)
             Controller:SetGrappleAntiBonk(Value)
+        end
+    })
+
+    Tab:CreateToggle({
+        Name = "Grapple Smart Reel",
+        Info = "Uses reel only when you really have NinjaBelt.",
+        CurrentValue = Controller.GrappleSmartReelEnabled or false,
+        Flag = "GrappleSmartReelToggle",
+        Callback = function(Value)
+            Controller:SetGrappleSmartReel(Value)
+        end
+    })
+
+    Tab:CreateDropdown({
+        Name = "Smart Reel Mode",
+        Info = "Manual uses p2/sub-ability. Automatic reels only when NinjaBelt is really available.",
+        Options = {"Manual", "Automatic"},
+        CurrentOption = Controller.GrappleSmartReelMode or "Manual",
+        MultipleOptions = false,
+        Flag = "GrappleSmartReelModeDropdown",
+        Callback = function(Option)
+            local selected = Option
+            if typeof(Option) == "table" then
+                selected = Option[1]
+            end
+            Controller:SetGrappleSmartReelMode(selected)
+        end
+    })
+
+    Tab:CreateToggle({
+        Name = "SharkTail Helper",
+        Info = "Uses SharkTail only when you really have SharkTail.",
+        CurrentValue = Controller.GrappleSharkTailHelperEnabled or false,
+        Flag = "GrappleSharkTailHelperToggle",
+        Callback = function(Value)
+            Controller:SetGrappleSharkTailHelper(Value)
+        end
+    })
+
+    Tab:CreateDropdown({
+        Name = "SharkTail Mode",
+        Info = "Manual uses p2/sub-ability during SharkTail window. Automatic triggers only when safe.",
+        Options = {"Manual", "Automatic"},
+        CurrentOption = Controller.GrappleSharkTailMode or "Manual",
+        MultipleOptions = false,
+        Flag = "GrappleSharkTailModeDropdown",
+        Callback = function(Option)
+            local selected = Option
+            if typeof(Option) == "table" then
+                selected = Option[1]
+            end
+            Controller:SetGrappleSharkTailMode(selected)
+        end
+    })
+
+    Tab:CreateToggle({
+        Name = "Grapple Momentum Guard",
+        Info = "Soft-limits excessive horizontal speed after reel/grapple chains.",
+        CurrentValue = Controller.GrappleMomentumGuardEnabled or false,
+        Flag = "GrappleMomentumGuardToggle",
+        Callback = function(Value)
+            Controller:SetGrappleMomentumGuard(Value)
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "Grapple Air Control",
+        Info = "Multiplies the native Grapple movement input force while swinging.",
+        Range = {1.1, 5},
+        Increment = 0.1,
+        Suffix = "x",
+        CurrentValue = Controller.GrappleAirControlMultiplier or 1.1,
+        Flag = "GrappleAirControlMultiplierSlider",
+        Callback = function(Value)
+            Controller:SetGrappleAirControlMultiplier(Value)
         end
     })
 

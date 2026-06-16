@@ -14,9 +14,11 @@ local Logic = {
     CandidateCursor = 1,
     Random = Random.new(),
     BellBypass = nil,
+    BellBypassToken = 0,
     CurrentGrappleStep = nil,
     LastGrappleMovement = nil,
     SuppressBonkUntil = 0,
+    FallbackHitbox = nil,
 }
 
 local VALID_TARGETS = {
@@ -42,6 +44,10 @@ local RANGE_OPTIONS = {
 
 local DEFAULT_MAX_RANGE = 90
 local MAX_CANDIDATES_PER_CAST = 48
+local FALLBACK_HITBOX_SIZE = Vector3.new(3, 2, 2)
+local MOMENTUM_GUARD_SPEED = 115
+local MOMENTUM_GUARD_CLAMP = 88
+local MOMENTUM_GUARD_WINDOW = 0.8
 
 local SCREEN_RAY_OFFSETS = {
     Vector2.new(0, 0),
@@ -67,12 +73,46 @@ end
 
 local function isEnabled()
     local controller = getController()
-    return controller and controller.GrappleAimAssistEnabled == true
+    return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleAimAssistEnabled == true
+end
+
+local function isSuiteEnabled()
+    local controller = getController()
+    return controller and controller.GrappleAssistSuiteEnabled == true
+end
+
+local function isRescueEnabled()
+    local controller = getController()
+    return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleRescueAssistEnabled == true
 end
 
 local function isAntiBonkEnabled()
     local controller = getController()
-    return controller and controller.GrappleAntiBonkEnabled == true
+    return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleAntiBonkEnabled == true
+end
+
+local function isSmartReelEnabled()
+    local controller = getController()
+    return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleSmartReelEnabled == true
+end
+
+local function isSharkTailHelperEnabled()
+    local controller = getController()
+    return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleSharkTailHelperEnabled == true
+end
+
+local function isMomentumGuardEnabled()
+    local controller = getController()
+    return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleMomentumGuardEnabled == true
+end
+
+local function getAirControlMultiplier()
+    local controller = getController()
+    if not (controller and controller.GrappleAssistSuiteEnabled == true) then
+        return 1
+    end
+
+    return math.clamp(tonumber(controller.GrappleAirControlMultiplier) or 1, 1, 5)
 end
 
 local function isInfiniteStamina()
@@ -96,6 +136,14 @@ local function normalizeRangePriority(value)
         end
     end
     return "Nearest"
+end
+
+local function normalizeMode(value)
+    value = tostring(value or "Manual")
+    if value == "Automatic" then
+        return "Automatic"
+    end
+    return "Manual"
 end
 
 local function getTargetPart(instance)
@@ -230,6 +278,67 @@ local function getEntitiesGC()
     return nil
 end
 
+local function isInAir(grapple)
+    local humanoid = grapple and grapple.Humanoid
+    if not humanoid then
+        return false
+    end
+
+    return humanoid.FloorMaterial == Enum.Material.Air
+end
+
+local function isFallingFast(grapple)
+    local rootPart = grapple and grapple.RootPart
+    local velocity = rootPart and rootPart.Velocity
+    return velocity and velocity.Y < -35
+end
+
+local function getModeValue(key)
+    local controller = getController()
+    return normalizeMode(controller and controller[key])
+end
+
+local function hasUpgrade(movement, upgradeName)
+    if not (movement and typeof(movement.HasUpgrade) == "function") then
+        return false
+    end
+
+    local success, result = pcall(function()
+        return movement:HasUpgrade(upgradeName)
+    end)
+    return success and result == true
+end
+
+local function getHorizontalVelocity(rootPart)
+    local velocity = rootPart and rootPart.Velocity
+    if not velocity then
+        return Vector3.new(0, 0, 0)
+    end
+
+    return velocity * Vector3.new(1, 0, 1)
+end
+
+local function getFallbackHitbox(rootPart)
+    if Logic.FallbackHitbox and Logic.FallbackHitbox.Parent then
+        Logic.FallbackHitbox.CFrame = rootPart.CFrame
+        return Logic.FallbackHitbox
+    end
+
+    local part = Instance.new("Part")
+    part.Name = "NULLSCAPE_GrappleFallbackHitbox"
+    part.Size = FALLBACK_HITBOX_SIZE
+    part.Transparency = 1
+    part.Anchored = true
+    part.CanCollide = false
+    part.CanTouch = false
+    part.CanQuery = false
+    part.CFrame = rootPart.CFrame
+    part.Parent = Workspace
+    Logic.FallbackHitbox = part
+
+    return part
+end
+
 local function getStaminaRatio(grapple)
     if isInfiniteStamina() then
         return 1
@@ -310,6 +419,62 @@ local function isLineClear(grapple, targetInstance, targetPart, targetPosition, 
     return nil
 end
 
+local function isTargetHit(result, targetInstance, targetPart)
+    if not result or not result.Instance then
+        return false
+    end
+
+    return result.Instance == targetPart or result.Instance:IsDescendantOf(targetInstance)
+end
+
+local function isPathSafeForHitbox(grapple, targetInstance, targetPart, targetPosition, maxRange)
+    local movement = grapple and grapple.Movement
+    local rootPart = grapple and grapple.RootPart
+    if not rootPart then
+        return nil
+    end
+
+    local offset = targetPosition - rootPart.Position
+    local distance = offset.Magnitude
+    if distance <= 0 or distance > maxRange then
+        return nil
+    end
+
+    local hitbox = movement and movement.Hitbox
+    if not (hitbox and hitbox.Parent and hitbox:IsA("BasePart")) then
+        hitbox = getFallbackHitbox(rootPart)
+    end
+
+    local size = hitbox.Size or FALLBACK_HITBOX_SIZE
+    local buffer = math.max(size.X, size.Y, size.Z) * 0.5
+    local castDistance = math.max(distance - buffer, 0)
+    if castDistance <= 0 then
+        return true
+    end
+
+    local direction = offset.Unit * castDistance
+    local success, result = pcall(function()
+        return Workspace:Shapecast(hitbox, direction, movement and movement.moveCastParams or grapple.grappleParams)
+    end)
+    if not success then
+        return true
+    end
+
+    if not result then
+        return true
+    end
+
+    if isTargetHit(result, targetInstance, targetPart) then
+        return true
+    end
+
+    if result.Normal and result.Normal.Y < 0.7 then
+        return false
+    end
+
+    return false
+end
+
 local function isBellInstance(instance)
     return instance and instance.Name == "Bell"
 end
@@ -359,6 +524,23 @@ local function releaseBellBypass()
     Logic.BellBypass = nil
 end
 
+local function scheduleBellBypassRelease(delaySeconds)
+    if not Logic.BellBypass then
+        return
+    end
+
+    Logic.BellBypassToken = Logic.BellBypassToken + 1
+    local token = Logic.BellBypassToken
+
+    task.delay(delaySeconds or 0.5, function()
+        if token ~= Logic.BellBypassToken then
+            return
+        end
+
+        releaseBellBypass()
+    end)
+end
+
 local function holdBellBypass(part)
     if not part or not part.Parent or part.Name ~= "Bell" then
         return
@@ -373,6 +555,7 @@ local function holdBellBypass(part)
         return
     end
 
+    Logic.BellBypassToken = Logic.BellBypassToken + 1
     releaseBellBypass()
 
     local _, data = getSavedBellData(part)
@@ -410,7 +593,7 @@ local function maintainBellBypass(grapple)
     if movement and movement.grappling and isBellInstance(part) then
         holdBellBypass(part)
     else
-        releaseBellBypass()
+        scheduleBellBypassRelease(0.5)
     end
 end
 
@@ -448,6 +631,7 @@ local function scanNamedTargets(grapple)
 
     local controller = getController()
     local preferredName = normalizeTargetPriority(controller and controller.GrappleAimAssistTargetPriority)
+    local rescueMode = isRescueEnabled() and isFallingFast(grapple)
     local rangeMode = normalizeRangePriority(controller and controller.GrappleAimAssistRangePriority)
     if shouldForceNearest(grapple) then
         rangeMode = "Nearest"
@@ -463,6 +647,12 @@ local function scanNamedTargets(grapple)
     end
 
     local validResults = {}
+    local rescuePriority = {
+        Bell = 0,
+        GrapplePoint = 1,
+        JumpPad = 2,
+        TriaOrb = 3,
+    }
     local bestScore = math.huge
     local bestResult = nil
     local checks = math.min(candidateCount, MAX_CANDIDATES_PER_CAST)
@@ -482,7 +672,11 @@ local function scanNamedTargets(grapple)
                 local screenScore = getCameraScreenScore(camera, position, screenAnchor)
                 if screenScore then
                     local result, distance = isLineClear(grapple, candidate.Instance, part, position, maxRange)
-                    if result and isUsableResult(grapple, result) then
+                    if
+                        result
+                        and isUsableResult(grapple, result)
+                        and isPathSafeForHitbox(grapple, candidate.Instance, part, position, maxRange)
+                    then
                         local item = {
                             Name = candidate.Name,
                             Result = result,
@@ -494,6 +688,9 @@ local function scanNamedTargets(grapple)
                             table.insert(validResults, item)
                         else
                             local priorityScore = candidate.Name == preferredName and 0 or 1000
+                            if rescueMode then
+                                priorityScore = rescuePriority[candidate.Name] or 1000
+                            end
                             local distanceScore = rangeMode == "Farthest" and -distance or distance
                             if rangeMode == "Closest To Cursor" then
                                 distanceScore = distance * 0.25
@@ -542,7 +739,11 @@ local function scanScreenSurface(grapple)
             local directOffset = cameraHit.Position - rootPart.Position
             if directOffset.Magnitude > 0 and directOffset.Magnitude <= maxRange then
                 local directHit = Workspace:Raycast(rootPart.Position, directOffset, grapple.grappleParams)
-                if directHit and isUsableResult(grapple, directHit) then
+                if
+                    directHit
+                    and isUsableResult(grapple, directHit)
+                    and isPathSafeForHitbox(grapple, directHit.Instance, directHit.Instance, directHit.Position, maxRange)
+                then
                     return directHit
                 end
             end
@@ -576,12 +777,13 @@ end
 
 local function assistedCast(grapple, forceRefresh, originalCast, ...)
     local result, direction = originalCast(grapple, forceRefresh, ...)
-    if isUsableResult(grapple, result) or not isEnabled() then
+    local canAssist = isEnabled() or (isRescueEnabled() and isFallingFast(grapple))
+    if isUsableResult(grapple, result) or not canAssist then
         return result, direction
     end
 
     local movement = grapple and grapple.Movement
-    if not (grapple and movement and grapple.specialHeld and not movement.grappling) then
+    if not (grapple and movement and grapple.specialHeld and not movement.grappling and isInAir(grapple)) then
         return result, direction
     end
 
@@ -594,6 +796,133 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
     end
 
     return result, direction
+end
+
+local markGrappleBonkGrace
+
+local function canUseSharkTail(grapple)
+    local movement = grapple and grapple.Movement
+    if not (grapple and movement and isSharkTailHelperEnabled()) then
+        return false
+    end
+    if getModeValue("GrappleSharkTailMode") ~= "Automatic" and getModeValue("GrappleSharkTailMode") ~= "Manual" then
+        return false
+    end
+
+    return grapple.allowSharkTail == true
+        and grapple.sharkTailDisable ~= true
+        and isInAir(grapple)
+        and hasUpgrade(movement, "SharkTail")
+end
+
+local function tryUseSharkTail(grapple)
+    if not canUseSharkTail(grapple) then
+        return false
+    end
+
+    local horizontal = getHorizontalVelocity(grapple.RootPart)
+    if horizontal.Magnitude < 35 then
+        return false
+    end
+
+    if typeof(grapple.SpecialAction) == "function" then
+        grapple:SpecialAction(Enum.UserInputState.Begin)
+        return true
+    end
+
+    return false
+end
+
+local function canStartSmartReel(grapple)
+    local movement = grapple and grapple.Movement
+    if not (grapple and movement and isSmartReelEnabled()) then
+        return false
+    end
+    if not isInAir(grapple) then
+        return false
+    end
+    if not hasUpgrade(movement, "NinjaBelt") then
+        return false
+    end
+    if not movement.grappling or grapple.jumpPadReel or grapple.reelCooldown or grapple.sharkTailDisable then
+        return false
+    end
+    if tonumber(grapple.Time) == 0 then
+        return false
+    end
+    if not (movement.grapplePoint and movement.grapplePart and movement.grapplePart.Parent) then
+        return false
+    end
+
+    return isPathSafeForHitbox(grapple, movement.grapplePart, movement.grapplePart, movement.grapplePoint, DEFAULT_MAX_RANGE) == true
+end
+
+local function startSmartReel(grapple)
+    if not canStartSmartReel(grapple) then
+        return false
+    end
+
+    grapple.jumpPadReel = true
+    grapple.reelStart = time()
+    grapple.grappleReel = true
+    markGrappleBonkGrace(grapple, MOMENTUM_GUARD_WINDOW)
+
+    if grapple.SFX and grapple.SFX.PlaySound then
+        pcall(function()
+            grapple.SFX:PlaySound("GrapplerReel")
+        end)
+    end
+
+    return true
+end
+
+local function applyMomentumGuard(grapple)
+    if not isMomentumGuardEnabled() then
+        return
+    end
+
+    local movement = grapple and grapple.Movement
+    local rootPart = grapple and grapple.RootPart
+    if not (movement and rootPart) then
+        return
+    end
+    if movement ~= Logic.LastGrappleMovement or time() > Logic.SuppressBonkUntil then
+        return
+    end
+
+    local horizontal = getHorizontalVelocity(rootPart)
+    local speed = horizontal.Magnitude
+    if speed <= MOMENTUM_GUARD_SPEED then
+        return
+    end
+
+    local targetSpeed = math.max(MOMENTUM_GUARD_CLAMP, speed - (speed - MOMENTUM_GUARD_CLAMP) * 0.35)
+    local clampedHorizontal = horizontal.Unit * targetSpeed
+    rootPart.Velocity = Vector3.new(clampedHorizontal.X, rootPart.Velocity.Y, clampedHorizontal.Z)
+end
+
+local function applyAirControlMultiplier(grapple, dt)
+    local multiplier = getAirControlMultiplier()
+    if multiplier <= 1 then
+        return
+    end
+
+    local movement = grapple and grapple.Movement
+    local rootPart = grapple and grapple.RootPart
+    if not (movement and rootPart and movement.grappling and not grapple.jumpPadReel) then
+        return
+    end
+
+    local playerMoveDirection = movement.PlayerMoveDirection
+    if typeof(playerMoveDirection) ~= "Vector3" or playerMoveDirection.Magnitude <= 0.01 then
+        return
+    end
+
+    local graceWingsMultiplier = hasUpgrade(movement, "GraceWings") and 1.5 or 1
+    local movementSpeedMultiplier = tonumber(movement.movementSpeedMulti) or 1
+    local extraForce = playerMoveDirection * 12 * graceWingsMultiplier * (multiplier - 1) * dt * movementSpeedMultiplier
+
+    rootPart.Velocity = rootPart.Velocity + extraForce
 end
 
 local function shouldSuppressGrappleBonk(movement)
@@ -615,7 +944,7 @@ local function shouldSuppressGrappleBonk(movement)
     return false
 end
 
-local function markGrappleBonkGrace(grapple, duration)
+function markGrappleBonkGrace(grapple, duration)
     local movement = grapple and grapple.Movement
     if not movement then
         return
@@ -684,6 +1013,25 @@ function Logic.enable()
         end
     end
 
+    if typeof(grappleModule.AltSpecialAction) == "function" then
+        local originalAltSpecialAction = grappleModule.AltSpecialAction
+        globals.GrappleAimAssistOriginalAltSpecialAction = originalAltSpecialAction
+
+        grappleModule.AltSpecialAction = function(self, state, ...)
+            if isSuiteEnabled() and state == Enum.UserInputState.Begin then
+                if isSharkTailHelperEnabled() and getModeValue("GrappleSharkTailMode") == "Manual" and tryUseSharkTail(self) then
+                    return nil
+                end
+
+                if isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Manual" then
+                    return originalAltSpecialAction(self, state, ...)
+                end
+            end
+
+            return originalAltSpecialAction(self, state, ...)
+        end
+    end
+
     if typeof(grappleModule.Step) == "function" then
         local originalStep = grappleModule.Step
         globals.GrappleAimAssistOriginalStep = originalStep
@@ -694,6 +1042,16 @@ function Logic.enable()
                 markGrappleBonkGrace(self, 0.45)
             end
 
+            if isSuiteEnabled() and isInAir(self) then
+                if isSharkTailHelperEnabled() and getModeValue("GrappleSharkTailMode") == "Automatic" then
+                    tryUseSharkTail(self)
+                end
+
+                if isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Automatic" then
+                    startSmartReel(self)
+                end
+            end
+
             Logic.CurrentGrappleStep = self
             local success, stepResult = pcall(originalStep, self, dt, ...)
             Logic.CurrentGrappleStep = nil
@@ -701,6 +1059,8 @@ function Logic.enable()
                 error(stepResult, 0)
             end
             maintainBellBypass(self)
+            applyAirControlMultiplier(self, dt)
+            applyMomentumGuard(self)
             return stepResult
         end
     end
@@ -714,7 +1074,7 @@ function Logic.enable()
         grappleModule.End = function(self, ...)
             markGrappleBonkGrace(self, 0.45)
             local endResult = originalEnd(self, ...)
-            releaseBellBypass()
+            scheduleBellBypassRelease(0.5)
             return endResult
         end
     end
@@ -739,6 +1099,9 @@ function Logic.disable()
     if grappleModule and globals.GrappleAimAssistOriginalEnd then
         grappleModule.End = globals.GrappleAimAssistOriginalEnd
     end
+    if grappleModule and globals.GrappleAimAssistOriginalAltSpecialAction then
+        grappleModule.AltSpecialAction = globals.GrappleAimAssistOriginalAltSpecialAction
+    end
     local movementCore = getMovementCore()
     if movementCore and globals.GrappleAimAssistOriginalDiveBonk then
         movementCore.DiveBonk = globals.GrappleAimAssistOriginalDiveBonk
@@ -748,12 +1111,20 @@ function Logic.disable()
     globals.GrappleAimAssistOriginalStart = nil
     globals.GrappleAimAssistOriginalStep = nil
     globals.GrappleAimAssistOriginalEnd = nil
+    globals.GrappleAimAssistOriginalAltSpecialAction = nil
     globals.GrappleAimAssistOriginalDiveBonk = nil
     globals.GrappleAimAssistHooked = false
     Logic.CurrentGrappleStep = nil
     Logic.LastGrappleMovement = nil
     Logic.SuppressBonkUntil = 0
+    Logic.BellBypassToken = Logic.BellBypassToken + 1
     releaseBellBypass()
+    if Logic.FallbackHitbox then
+        pcall(function()
+            Logic.FallbackHitbox:Destroy()
+        end)
+        Logic.FallbackHitbox = nil
+    end
     clearConnections()
     table.clear(Logic.Candidates)
 end

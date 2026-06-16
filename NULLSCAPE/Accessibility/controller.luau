@@ -13,10 +13,18 @@ local Controller = {
 	SpringerAutoJumpEnabled = false,
 	InfiniteAirJumpEnabled = false,
 	GrapplerStaminaMode = "Off",
+	GrappleAssistSuiteEnabled = false,
 	GrappleAimAssistEnabled = false,
+	GrappleRescueAssistEnabled = false,
 	GrappleAimAssistTargetPriority = "GrapplePoint",
 	GrappleAimAssistRangePriority = "Nearest",
 	GrappleAntiBonkEnabled = false,
+	GrappleSmartReelEnabled = false,
+	GrappleSmartReelMode = "Manual",
+	GrappleSharkTailHelperEnabled = false,
+	GrappleSharkTailMode = "Manual",
+	GrappleMomentumGuardEnabled = false,
+	GrappleAirControlMultiplier = 1.1,
 	Destroyed = false,
 
 	EnemiesFolder = nil,
@@ -150,8 +158,55 @@ function Controller:SetGrapplerStaminaMode(mode)
 	end
 end
 
+function Controller:HasAnyGrappleAssistFeature()
+	return self.GrappleAimAssistEnabled
+		or self.GrappleRescueAssistEnabled
+		or self.GrappleAntiBonkEnabled
+		or self.GrappleSmartReelEnabled
+		or self.GrappleSharkTailHelperEnabled
+		or self.GrappleMomentumGuardEnabled
+end
+
+function Controller:RefreshGrappleAssistHook()
+	if self.GrappleAssistSuiteEnabled and self:HasAnyGrappleAssistFeature() then
+		if not Executor.enableGrappleAimAssist() then
+			return false
+		end
+	else
+		Executor.disableGrappleAimAssist()
+	end
+
+	return true
+end
+
+function Controller:SetGrappleAssistSuite(value)
+	self.GrappleAssistSuiteEnabled = value == true
+
+	if not self:RefreshGrappleAssistHook() then
+		self.GrappleAssistSuiteEnabled = false
+		if getgenv().Rayfield then
+			getgenv().Rayfield:Notify({
+				Title = "Accessibility Config",
+				Content = "Grapple module is not available yet",
+				Duration = 3,
+			})
+		end
+		return
+	end
+
+	if getgenv().Rayfield then
+		getgenv().Rayfield:Notify({
+			Title = "Accessibility Config",
+			Content = (self.GrappleAssistSuiteEnabled and "Activated" or "Disabled") .. " Grapple Assist Suite",
+			Duration = 2,
+		})
+	end
+end
+
 function Controller:SetGrappleAimAssist(value)
-	if value and not Executor.enableGrappleAimAssist() then
+	self.GrappleAimAssistEnabled = value == true
+
+	if not self:RefreshGrappleAssistHook() then
 		self.GrappleAimAssistEnabled = false
 		if getgenv().Rayfield then
 			getgenv().Rayfield:Notify({
@@ -163,12 +218,6 @@ function Controller:SetGrappleAimAssist(value)
 		return
 	end
 
-	self.GrappleAimAssistEnabled = value == true
-
-	if not self.GrappleAimAssistEnabled and not self.GrappleAntiBonkEnabled then
-		Executor.disableGrappleAimAssist()
-	end
-
 	if getgenv().Rayfield then
 		getgenv().Rayfield:Notify({
 			Title = "Accessibility Config",
@@ -178,8 +227,26 @@ function Controller:SetGrappleAimAssist(value)
 	end
 end
 
+function Controller:SetGrappleRescueAssist(value)
+	self.GrappleRescueAssistEnabled = value == true
+
+	if not self:RefreshGrappleAssistHook() then
+		self.GrappleRescueAssistEnabled = false
+		if getgenv().Rayfield then
+			getgenv().Rayfield:Notify({
+				Title = "Accessibility Config",
+				Content = "Grapple module is not available yet",
+				Duration = 3,
+			})
+		end
+		return
+	end
+end
+
 function Controller:SetGrappleAntiBonk(value)
-	if value and not Executor.enableGrappleAimAssist() then
+	self.GrappleAntiBonkEnabled = value == true
+
+	if not self:RefreshGrappleAssistHook() then
 		self.GrappleAntiBonkEnabled = false
 		if getgenv().Rayfield then
 			getgenv().Rayfield:Notify({
@@ -191,12 +258,6 @@ function Controller:SetGrappleAntiBonk(value)
 		return
 	end
 
-	self.GrappleAntiBonkEnabled = value == true
-
-	if not self.GrappleAntiBonkEnabled and not self.GrappleAimAssistEnabled then
-		Executor.disableGrappleAimAssist()
-	end
-
 	if getgenv().Rayfield then
 		getgenv().Rayfield:Notify({
 			Title = "Accessibility Config",
@@ -204,6 +265,49 @@ function Controller:SetGrappleAntiBonk(value)
 			Duration = 2,
 		})
 	end
+end
+
+function Controller:SetGrappleSmartReel(value)
+	self.GrappleSmartReelEnabled = value == true
+	if not self:RefreshGrappleAssistHook() then
+		self.GrappleSmartReelEnabled = false
+	end
+end
+
+function Controller:SetGrappleSharkTailHelper(value)
+	self.GrappleSharkTailHelperEnabled = value == true
+	if not self:RefreshGrappleAssistHook() then
+		self.GrappleSharkTailHelperEnabled = false
+	end
+end
+
+function Controller:SetGrappleMomentumGuard(value)
+	self.GrappleMomentumGuardEnabled = value == true
+	if not self:RefreshGrappleAssistHook() then
+		self.GrappleMomentumGuardEnabled = false
+	end
+end
+
+function Controller:SetGrappleAirControlMultiplier(value)
+	self.GrappleAirControlMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
+end
+
+function Controller:SetGrappleSmartReelMode(mode)
+	local selected = mode
+	if typeof(selected) == "table" then
+		selected = selected[1]
+	end
+	selected = tostring(selected or "Manual")
+	self.GrappleSmartReelMode = selected == "Automatic" and "Automatic" or "Manual"
+end
+
+function Controller:SetGrappleSharkTailMode(mode)
+	local selected = mode
+	if typeof(selected) == "table" then
+		selected = selected[1]
+	end
+	selected = tostring(selected or "Manual")
+	self.GrappleSharkTailMode = selected == "Automatic" and "Automatic" or "Manual"
 end
 
 function Controller:SetGrappleAimAssistTargetPriority(option)
