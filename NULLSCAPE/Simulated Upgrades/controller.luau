@@ -72,6 +72,21 @@ local function isInMatch()
 end
 
 local inLobby = not isInMatch()       -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
+local function refreshUpgradeServerState()
+    task.spawn(function()
+        local ClientModules = ReplicatedFirst:FindFirstChild("ClientModules") or ReplicatedFirst:WaitForChild("ClientModules", 5)
+        local UpgradeHandlerModule = ClientModules and ClientModules:FindFirstChild("UpgradeHandler")
+        if not UpgradeHandlerModule then return end
+
+        local success, UpgradeHandler = pcall(require, UpgradeHandlerModule)
+        if success and typeof(UpgradeHandler) == "table" and typeof(UpgradeHandler.ForceSyncServer) == "function" then
+            pcall(function()
+                UpgradeHandler.ForceSyncServer()
+            end)
+        end
+    end)
+end
+
 local hasInRoundValue = false
 local matchLoopsActive = false
 local folderConnections = {}
@@ -738,15 +753,16 @@ end
 
 -- Điều chỉnh khoảng cách Auto Collect
 function Controller:SetGraceWings(value)
-    self.GraceWingsEnabled = value
+    self.GraceWingsEnabled = value == true
     if GraceWings then
-        if value then
+        if self.GraceWingsEnabled then
             GraceWings.setMultiplier(self.GraceWingsAirControlMultiplier or 1.1)
             GraceWings.start(self, GC)
         else
             GraceWings.stop()
         end
     end
+    refreshUpgradeServerState()
 end
 
 function Controller:SetGraceWingsAirControlMultiplier(value)
@@ -804,6 +820,7 @@ end
 -- Hàm dọn dẹp tài nguyên (GC) khi tắt hoặc hủy UI
 function Controller:CleanUp()
     self.Destroyed = true
+    self.GraceWingsEnabled = false
     disconnectFolderObservations()
     stopRenderStepped()
     
@@ -813,6 +830,7 @@ function Controller:CleanUp()
     if GraceWings then
         pcall(function() GraceWings.stop() end)
     end
+    refreshUpgradeServerState()
     
     if self.PermanentConnections then
         for _, conn in ipairs(self.PermanentConnections) do

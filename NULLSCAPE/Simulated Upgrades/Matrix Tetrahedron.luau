@@ -26,6 +26,18 @@ local function getQuickTurnMaxDuration(reduction)
     return math.clamp(0.28 - reduction * 0.32, 0.06, 0.25)
 end
 
+local function getDirectionBlend(reduction)
+    if reduction >= 1 then
+        return 1
+    end
+
+    local framesToConverge = 60 * (1 - reduction)
+    local naturalBlend = 1 - math.pow(0.1, 1 / framesToConverge)
+    local antiZigzagBlend = 0.055 + reduction * 0.25
+
+    return math.clamp(math.max(naturalBlend, antiZigzagBlend), 0.08, 1)
+end
+
 local function stopQuickTurn(movement)
     movement.doingQuickTurn = false
 
@@ -62,19 +74,11 @@ local function hookMovementCore(controller)
         local r = controller.MomentumReduction or Logic.MomentumReduction or 0.1
         if r > 0 and self.WantDirection and typeof(self.WantDirection) == "Vector3" and typeof(direction) == "Vector3" then
             local bypassQuickTurn = r >= 0.6
-            if bypassQuickTurn or not self.doingQuickTurn then
-                if bypassQuickTurn then
-                    self.doingQuickTurn = false
-                end
-                
-                local k = 1
-                if r < 1 then
-                    local framesToConverge = 60 * (1 - r)
-                    k = 1 - math.pow(0.1, 1 / framesToConverge)
-                end
-                
-                direction = direction:Lerp(self.WantDirection, k)
+            if bypassQuickTurn then
+                self.doingQuickTurn = false
             end
+
+            direction = direction:Lerp(self.WantDirection, getDirectionBlend(r))
         end
         return Logic.OriginalSetMoveDirection(self, direction)
     end

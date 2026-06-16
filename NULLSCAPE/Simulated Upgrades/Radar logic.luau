@@ -201,7 +201,7 @@ local function setArrowColor(arrow, color)
 		-- Giới hạn kích thước tối đa của Part để không bị quá to
 		local maxDim = math.max(arrow.Size.X, arrow.Size.Y, arrow.Size.Z)
 		if maxDim > 1.5 then
-			arrow.Size = arrow.Size * (1.5 / maxDim)
+			arrow.Size = arrow.Size * (2 / maxDim)
 		end
 	end
 

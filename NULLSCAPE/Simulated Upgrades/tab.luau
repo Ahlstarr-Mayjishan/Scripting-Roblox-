@@ -230,8 +230,8 @@ return function(Client, Controller)
     Tab:CreateSection("Grace Wings")
 
     Tab:CreateToggle({
-        Name = "Simulate Grace Wings",
-        Info = "Boosts air-control while airborne.",
+        Name = "Enable Grace Wings",
+        Info = "Master toggle. Turning it off restores movement hook and stops spoofing GraceWings.",
         CurrentValue = Controller.GraceWingsEnabled or false,
         Flag = "GraceWingsToggle",
         Callback = function(Value)
