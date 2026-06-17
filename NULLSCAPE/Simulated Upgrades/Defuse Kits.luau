@@ -80,11 +80,101 @@ end
 -- passthroughState[giftId] = "inside" | "exited"
 local processedMines = {}
 local passthroughState = {}
+local pendingDetonations = {}
 
 local function clearMineState(giftId)
     processedMines[giftId] = nil
     processedMines["__dist_" .. giftId] = nil
     passthroughState[giftId] = nil
+    pendingDetonations[giftId] = nil
+end
+
+local function getEffectiveSafeRadius(gift, configuredRadius)
+    local sizeValue = gift and gift.Size
+    local size = if type(sizeValue) == "number" then sizeValue else 1
+    return math.max(configuredRadius or 8, 18, size * 10)
+end
+
+local function getGiftDistance(hrp, gift)
+    if not (hrp and gift and gift.Position) then
+        return math.huge
+    end
+    return (hrp.Position - gift.Position).Magnitude
+end
+
+local function waitUntilTripmineSafe(hrp, gift, configuredRadius, timeoutSeconds)
+    local startedAt = os.clock()
+    local effectiveSafeRadius = getEffectiveSafeRadius(gift, configuredRadius)
+
+    while gift and not gift.Collected and os.clock() - startedAt < (timeoutSeconds or 10) do
+        local currentDist = getGiftDistance(hrp, gift)
+        if currentDist >= effectiveSafeRadius then
+            return true, currentDist, effectiveSafeRadius
+        end
+        addIframes()
+        task.wait()
+    end
+
+    return false, getGiftDistance(hrp, gift), effectiveSafeRadius
+end
+
+local function safeCollectTripmine(gift, giftId, hrp, configuredRadius, reason)
+    if not (gift and not gift.Collected) then
+        return false
+    end
+
+    local effectiveSafeRadius = getEffectiveSafeRadius(gift, configuredRadius)
+    local currentDist = getGiftDistance(hrp, gift)
+    if currentDist < effectiveSafeRadius then
+        return false, currentDist, effectiveSafeRadius
+    end
+
+    addIframes()
+    local ok = pcall(function()
+        gift:Collect(false, true, 0)
+    end)
+    if ok then
+        processedMines[giftId] = true
+        print("[NULLSCAPE] " .. reason .. ": tripmine detonated", giftId, "at", math.round(currentDist), "studs (safe:", math.round(effectiveSafeRadius), ")")
+    end
+    return ok, currentDist, effectiveSafeRadius
+end
+
+local function queueSafeDetonation(giftId, gift, safeRadius, reason)
+    if pendingDetonations[giftId] then
+        return
+    end
+
+    pendingDetonations[giftId] = true
+    task.spawn(function()
+        while activeController and activeController.TripmineBarrierEnabled and gift and not gift.Collected do
+            if (activeController.TripmineMode or "Passthrough") == "Barrier" then
+                break
+            end
+
+            addIframes()
+
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then
+                task.wait()
+                continue
+            end
+
+            local isSafe = waitUntilTripmineSafe(hrp, gift, safeRadius, 0.35)
+            if isSafe then
+                safeCollectTripmine(gift, giftId, hrp, safeRadius, reason)
+                break
+            end
+
+            task.wait()
+        end
+
+        pendingDetonations[giftId] = nil
+        if gift and gift.Collected then
+            clearMineState(giftId)
+        end
+    end)
 end
 
 -- ─────────────────────────────────────────────────────────────────────
@@ -107,10 +197,12 @@ local function startWatcher()
             end
 
             local mode = activeController.TripmineMode or "Passthrough"
+            addIframes()
 
             -- Barrier mode: chỉ cần duy trì iframes liên tục, không cần quét nổ
             if mode == "Barrier" then
-                addIframes()
+                table.clear(passthroughState)
+                table.clear(pendingDetonations)
                 continue
             end
 
@@ -180,44 +272,13 @@ local function startWatcher()
                             passthroughState[giftId] = "exited"
                             print("[NULLSCAPE] Passthrough: đã đi ra cách mìn", math.round(dist), "studs, chờ khoảng cách an toàn trước khi nổ...", giftId)
 
-                            -- Kích hoạt luồng chờ kích nổ an toàn
-                            task.spawn(function()
-                                local char2 = LocalPlayer.Character
-                                local hrp2 = char2 and char2:FindFirstChild("HumanoidRootPart")
-                                if hrp2 and gift and not gift.Collected then
-                                    -- Giữ iframes liên tục trong suốt quá trình chờ nổ
-                                    addIframes()
-                                    local timeout = 0
-                                    -- Sử dụng task.wait() (mỗi frame) thay vì 0.05s để chính xác tối đa khi di chuyển nhanh
-                                    while gift and not gift.Collected and timeout < 10 do
-                                        local currentDist = (hrp2.Position - gift.Position).Magnitude
-                                        if currentDist >= safeRadius then
-                                            break -- Đã ra ngoài tầm sát thương của vụ nổ
-                                        end
-                                        task.wait()
-                                        timeout = timeout + 0.015
-                                    end
-
-                                    -- Gọi thẳng Collect mà không tắt iframes nhằm tránh bị nổ ngược do lag gói tin
-                                    if gift and not gift.Collected then
-                                        local finalDist = (hrp2.Position - gift.Position).Magnitude
-                                        local ok = pcall(function() gift:Collect(false, true, 0) end)
-                                        if ok then
-                                            print("[NULLSCAPE] Passthrough: đã kích nổ mìn sau lưng", giftId, "tại khoảng cách", math.round(finalDist), "studs")
-                                        end
-                                    end
-                                end
-                                clearMineState(giftId)
-                            end)
+                            queueSafeDetonation(giftId, gift, safeRadius, "Passthrough")
                         end
                     end
 
                 -- ── CHẾ ĐỘ PREDETONATE ─────────────────────────────────
                 elseif mode == "PreDetonate" then
-                    -- Luôn duy trì iframes để tránh các mìn khác nổ tự phát
-                    addIframes()
-
-                    if processedMines[giftId] then continue end
+                    if processedMines[giftId] or pendingDetonations[giftId] then continue end
 
                     -- Xác định khoảng cách kích nổ sớm cho quả mìn này
                     if not processedMines["__dist_" .. giftId] then
@@ -229,51 +290,11 @@ local function startWatcher()
 
                     -- Khi player đi vào vùng kích nổ sớm
                     if dist <= targetDist then
-                        processedMines[giftId] = true
-
-                        local capturedGift = gift
-                        local capturedId = giftId
-                        task.spawn(function()
-                            local char2 = LocalPlayer.Character
-                            local hrp2 = char2 and char2:FindFirstChild("HumanoidRootPart")
-                            if hrp2 and capturedGift and not capturedGift.Collected then
-                                -- Chờ cho đến khi chắc chắn ở ngoài tầm BlastSafeRadius
-                                local timeout = 0
-                                while capturedGift and not capturedGift.Collected and timeout < 10 do
-                                    local currentDist = (hrp2.Position - capturedGift.Position).Magnitude
-                                    if currentDist >= safeRadius then
-                                        break
-                                    end
-                                    task.wait()
-                                    timeout = timeout + 0.015
-                                end
-                                
-                                -- Không tắt iframes nữa để giữ an toàn tuyệt đối
-                                if capturedGift and not capturedGift.Collected then
-                                    local finalDist = hrp2 and (hrp2.Position - capturedGift.Position).Magnitude or 0
-                                    local ok = pcall(function() capturedGift:Collect(false, true, 0) end)
-                                    if ok then
-                                        print("[NULLSCAPE] PreDetonate: kích nổ mìn từ xa", capturedId, "tại khoảng cách", math.round(finalDist), "studs (safe:", safeRadius, ")")
-                                    end
-                                end
-                            end
-                            processedMines["__dist_" .. capturedId] = nil
-                        end)
+                        queueSafeDetonation(giftId, gift, safeRadius, "PreDetonate")
                     end
                 end
             end
 
-            -- ── Quản lý bật/tắt iframes chung cho chế độ Passthrough ───
-            if mode == "Passthrough" then
-                local anyActive = (next(passthroughState) ~= nil)
-                if anyActive then
-                    addIframes()
-                else
-                    if hasIframes() then
-                        removeIframes()
-                    end
-                end
-            end
         end
     end)
 end
@@ -289,6 +310,7 @@ function Barrier.update(controller, gc)
         -- Reset trạng thái khi tắt bypass
         table.clear(processedMines)
         table.clear(passthroughState)
+        table.clear(pendingDetonations)
     end
 end
 
