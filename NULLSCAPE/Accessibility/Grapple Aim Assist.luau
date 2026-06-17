@@ -52,9 +52,13 @@ local Logic = {
     NextSharkTailEvalDelay = 0.08,
     SharkTailPlanToken = 0,
     SharkTailPlannedAt = 0,
+    SharkTailStabilizeUntil = 0,
+    LastSmartReelStartAt = 0,
     LastAssistTargetInstance = nil,
     LastAssistTargetAt = 0,
     LastAssistDebug = nil,
+    LastSmartReelEvalAt = 0,
+    LastSmartReelDebug = nil,
 }
 
 local VALID_TARGETS = {
@@ -88,7 +92,19 @@ local ADAPT_RETRY_DELAY = 0.26
 local ADAPT_RECAST_SAFE_SPEED = 92
 local ADAPT_RECAST_CLAMP_SPEED = 78
 local ADAPT_RECAST_ARRIVAL_DISTANCE = 7
-local ADAPT_RECAST_TRIA_ARRIVAL_DISTANCE = 11
+local ADAPT_RECAST_TRIA_ARRIVAL_DISTANCE = 6
+local ADAPT_RECAST_GRAPPLEPOINT_DISTANCE = 15
+local ADAPT_RECAST_BOUNCE_DISTANCE = 7
+local ADAPT_DRIVE_FORWARD_BONUS = -34
+local ADAPT_DRIVE_BACKWARD_PENALTY = 70
+local ADAPT_DRIVE_CHAIN_LOOKAHEAD = 0.45
+local ADAPT_DRIVE_SPECIAL_FALL_SPEED = -45
+local ADAPT_DRIVE_BOUNCE_BONUS = -24
+local ADAPT_DRIVE_GRAPPLEPOINT_BONUS = -18
+local ADAPT_DRIVE_TRIA_STEER_BONUS = -26
+local ADAPT_DRIVE_TRIA_CENTER_BONUS = -14
+local ADAPT_DRIVE_SCREEN_WEIGHT = 65
+local ADAPT_DRIVE_DISTANCE_WEIGHT = 0.018
 local AUTO_RESCUE_SPEED = 135
 local AUTO_RESCUE_COOLDOWN = 0.45
 local AUTO_RESCUE_WINDOW = 0.3
@@ -121,6 +137,16 @@ local MOMENTUM_GUARD_CLAMP = 88
 local MOMENTUM_GUARD_WINDOW = 0.8
 local SHARK_TAIL_PROJECT_TIME = 0.25
 local SHARK_TAIL_MIN_SPEED = 35
+local SHARK_TAIL_CHAIN_GRACE = 0.12
+local SHARK_TAIL_OVERPOP_UP_SPEED = 58
+local SHARK_TAIL_OVERPOP_PENALTY = 28
+local SHARK_TAIL_CEILING_CHECK_HEIGHT = 18
+local SHARK_TAIL_STABILIZE_WINDOW = 0.38
+local SHARK_TAIL_STABILIZE_HORIZONTAL_SPEED = 190
+local SHARK_TAIL_STABILIZE_HORIZONTAL_CLAMP = 148
+local SHARK_TAIL_STABILIZE_UP_SPEED = 96
+local SHARK_TAIL_STABILIZE_UP_CLAMP = 74
+local SHARK_TAIL_LOW_CEILING_PENALTY = 35
 local CURSOR_INTENT_SCREEN_WEIGHT = 1000
 local CURSOR_INTENT_DISTANCE_WEIGHT = 0.015
 local CURSOR_INTENT_PREFERRED_BONUS = -4
@@ -139,6 +165,21 @@ local ASSIST_WRONG_ANCHOR_PENALTY = 70
 local ASSIST_SPECIAL_TRIA_SPEED = 120
 local ASSIST_SPECIAL_BELL_FALL_SPEED = -45
 local ASSIST_SPECIAL_JUMPPAD_FALL_SPEED = -70
+local SMART_REEL_EVAL_INTERVAL = 0.06
+local SMART_REEL_AUTO_THRESHOLD = 62
+local SMART_REEL_MANUAL_THRESHOLD = 36
+local SMART_REEL_MIN_ATTACH_TIME = 0.06
+local SMART_REEL_NEAR_CUTOFF = 8
+local SMART_REEL_EXIT_DISTANCE = 12
+local SMART_REEL_GOOD_DISTANCE = 30
+local SMART_REEL_FAR_DISTANCE = 82
+local SMART_REEL_HIGH_SPEED = 135
+local SMART_REEL_EXTREME_SPEED = 190
+local SMART_REEL_LOW_ARC_HEIGHT = 16
+local SMART_REEL_LOW_ARC_UP_SPEED = 42
+local SMART_REEL_OVERSHOOT_LOOKAHEAD = 0.18
+local SMART_REEL_AUTO_MIN_DOT = -0.2
+local SMART_REEL_MANUAL_MIN_DOT = -0.55
 
 local SHARK_TAIL_STYLE_CONFIG = {
     Conservative = {
@@ -549,6 +590,10 @@ local function getAdaptArrivalDistance(grapple)
     local part = (movement and movement.grapplePart) or grapple and grapple.grapplePart
     if part and part.Parent and part.Name == "TriaOrb" then
         return ADAPT_RECAST_TRIA_ARRIVAL_DISTANCE
+    elseif part and part.Parent and part.Name == "GrapplePoint" then
+        return ADAPT_RECAST_GRAPPLEPOINT_DISTANCE
+    elseif part and part.Parent and (part.Name == "JumpPad" or part.Name == "Bell") then
+        return ADAPT_RECAST_BOUNCE_DISTANCE
     end
 
     local size = part and part.Parent and part:IsA("BasePart") and part.Size.Magnitude * 0.45 or 0
@@ -1582,6 +1627,59 @@ local function getSpecialAnchorBonus(grapple, targetName, targetPosition)
     return 0
 end
 
+local function getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
+    local rootPart = grapple and grapple.RootPart
+    local movement = grapple and grapple.Movement
+    if not (rootPart and movement) then
+        return math.huge
+    end
+
+    local velocity = rootPart.Velocity
+    local horizontal = getHorizontalVelocity(rootPart)
+    local horizontalSpeed = horizontal.Magnitude
+    local targetDirection = getAssistFlatUnit(position - rootPart.Position)
+    local velocityDirection = getAssistFlatUnit(horizontal)
+    local inputDirection = getAssistFlatUnit(movement.PlayerMoveDirection)
+    local cameraDirection = getAssistFlatUnit(Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.LookVector)
+    local intentDirection = inputDirection or velocityDirection or cameraDirection
+
+    local score = screenScore * ADAPT_DRIVE_SCREEN_WEIGHT + distance * ADAPT_DRIVE_DISTANCE_WEIGHT
+    if candidate.Name == "GrapplePoint" then
+        score = score + ADAPT_DRIVE_GRAPPLEPOINT_BONUS
+    end
+
+    if targetDirection and intentDirection then
+        local intentDot = targetDirection:Dot(intentDirection)
+        if intentDot > 0.25 then
+            score = score + ADAPT_DRIVE_FORWARD_BONUS * math.clamp(intentDot, 0, 1)
+        elseif intentDot < -0.15 then
+            score = score + ADAPT_DRIVE_BACKWARD_PENALTY * math.clamp(-intentDot, 0, 1)
+        end
+    end
+
+    if horizontalSpeed > 35 then
+        local projected = rootPart.Position + horizontal * ADAPT_DRIVE_CHAIN_LOOKAHEAD
+        local currentDistance = (position - rootPart.Position).Magnitude
+        local projectedDistance = (position - projected).Magnitude
+        if projectedDistance < currentDistance then
+            score = score - math.clamp((currentDistance - projectedDistance) / math.max(currentDistance, 1), 0, 1) * 22
+        end
+    end
+
+    if (candidate.Name == "JumpPad" or candidate.Name == "Bell") and velocity.Y <= ADAPT_DRIVE_SPECIAL_FALL_SPEED then
+        score = score + ADAPT_DRIVE_BOUNCE_BONUS
+    elseif candidate.Name == "TriaOrb" then
+        if horizontalSpeed >= ASSIST_SPECIAL_TRIA_SPEED then
+            score = score + ADAPT_DRIVE_TRIA_STEER_BONUS
+        end
+        if targetDirection and intentDirection and targetDirection:Dot(intentDirection) > 0.15 then
+            score = score + ADAPT_DRIVE_TRIA_CENTER_BONUS
+        end
+    end
+
+    return score
+end
+
 local function getAssistLockBonus(candidateInstance)
     if candidateInstance and candidateInstance == Logic.LastAssistTargetInstance and time() - Logic.LastAssistTargetAt <= ASSIST_TARGET_LOCK_DURATION then
         return ASSIST_TARGET_LOCK_BONUS
@@ -1736,7 +1834,9 @@ local function scanNamedTargets(grapple, options)
                         else
                             local priorityScore = candidate.Name == preferredName and 0 or 1000
                             local score
-                            if panicMode then
+                            if driveMode and not emergencyBrakeMode then
+                                priorityScore = 0
+                            elseif panicMode then
                                 priorityScore = getPanicTargetPriority(candidate.Name)
                             elseif rescueMode then
                                 priorityScore = rescuePriority[candidate.Name] or 1000
@@ -1764,7 +1864,12 @@ local function scanNamedTargets(grapple, options)
                                 rangeMode == "Closest To Cursor" and screenScore <= CURSOR_SPECIAL_FOCUS_LIMIT
                             )
                             local lockBonus = getAssistLockBonus(candidate.Instance)
-                            if panicMode then
+                            if driveMode and not emergencyBrakeMode then
+                                score = getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
+                                    + specialBonus
+                                    + wrongAnchorPenalty * 0.35
+                                    + lockBonus
+                            elseif panicMode then
                                 score = getPanicRescueScore(grapple, candidate, position, distance, screenScore)
                                     + lockBonus
                             elseif rangeMode == "Closest To Cursor" and not rescueMode and not emergencyBrakeMode then
@@ -1867,7 +1972,7 @@ end
 
 function hasAdaptDriveTarget(grapple)
     local driveOptions = { driveMode = true }
-    return scanNamedTargets(grapple, driveOptions) ~= nil or scanScreenSurface(grapple, driveOptions) ~= nil
+    return scanNamedTargets(grapple, driveOptions) ~= nil
 end
 
 local function tryAutoMomentumRescue(grapple)
@@ -1986,7 +2091,12 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
         return result, direction
     end
 
-    local assistedResult = scanNamedTargets(grapple) or scanScreenSurface(grapple)
+    local assistedResult
+    if Logic.AdaptDriveActive then
+        assistedResult = scanNamedTargets(grapple, { driveMode = true })
+    else
+        assistedResult = scanNamedTargets(grapple) or scanScreenSurface(grapple)
+    end
     if assistedResult then
         if assistedResult.Instance and assistedResult.Instance.Name == "Bell" then
             holdBellBypass(assistedResult.Instance)
@@ -2080,6 +2190,60 @@ local function isSharkTailProjectedPathSafe(grapple, direction)
     return rayResult.Normal ~= nil and rayResult.Normal.Y >= 0.72 and velocity.Y <= 0
 end
 
+local function isSharkTailLaunchSpaceSafe(grapple)
+    local movement = grapple and grapple.Movement
+    local rootPart = grapple and grapple.RootPart
+    if not (movement and rootPart) then
+        return false
+    end
+
+    local hitbox = movement.Hitbox
+    if not (hitbox and hitbox.Parent and hitbox:IsA("BasePart")) then
+        hitbox = getFallbackHitbox(rootPart)
+    end
+
+    local params = movement.moveCastParams or grapple.grappleParams
+    local upward = Vector3.new(0, SHARK_TAIL_CEILING_CHECK_HEIGHT, 0)
+    local success, result = pcall(function()
+        return Workspace:Shapecast(hitbox, upward, params)
+    end)
+    if success then
+        return result == nil
+    end
+
+    return Workspace:Raycast(rootPart.Position, upward, params) == nil
+end
+
+local function getSharkTailOverpopPenalty(grapple, emergency, hasInput)
+    if emergency then
+        return 0
+    end
+
+    local rootPart = grapple and grapple.RootPart
+    local velocity = rootPart and rootPart.Velocity
+    if not velocity then
+        return 0
+    end
+
+    local penalty = 0
+    if velocity.Y > SHARK_TAIL_OVERPOP_UP_SPEED then
+        penalty = penalty + SHARK_TAIL_OVERPOP_PENALTY
+        if not hasInput then
+            penalty = penalty + 10
+        end
+    end
+
+    if not isSharkTailLaunchSpaceSafe(grapple) then
+        penalty = penalty + SHARK_TAIL_LOW_CEILING_PENALTY
+    end
+
+    if time() - (Logic.LastSmartReelStartAt or 0) < SHARK_TAIL_CHAIN_GRACE then
+        penalty = penalty + 18
+    end
+
+    return penalty
+end
+
 local function getSharkTailScore(grapple)
     if not canUseSharkTail(grapple) then
         return 0, false
@@ -2138,7 +2302,8 @@ local function getSharkTailScore(grapple)
     end
 
     local emergencyScore = emergency and 100 or 0
-    local score = 35 + intentScore * 0.25 + flowScore * 0.2 + riskScore * 0.1 + emergencyScore * 0.1
+    local launchPenalty = getSharkTailOverpopPenalty(grapple, emergency, hasInput)
+    local score = 35 + intentScore * 0.25 + flowScore * 0.2 + riskScore * 0.1 + emergencyScore * 0.1 - launchPenalty
     return math.clamp(score, 0, 100), emergency
 end
 
@@ -2171,6 +2336,7 @@ local function tryUseSharkTail(grapple)
             Logic.LastSharkTailAssistAt = time()
             Logic.SharkTailPlanToken = Logic.SharkTailPlanToken + 1
             Logic.SharkTailPlannedAt = 0
+            Logic.SharkTailStabilizeUntil = time() + SHARK_TAIL_STABILIZE_WINDOW
             markGrappleBonkGrace(grapple, MOMENTUM_GUARD_WINDOW)
         end
         return success
@@ -2269,44 +2435,174 @@ local function getSmartReelTarget(grapple)
     return targetPart, targetPosition
 end
 
-local function canStartSmartReel(grapple)
+local function getSmartReelBaseState(grapple)
     local movement = grapple and grapple.Movement
     if not (grapple and movement and isSmartReelEnabled()) then
-        return false
+        return nil
     end
     if not isInAir(grapple) then
-        return false
+        return nil
     end
     if not hasUpgrade(movement, "NinjaBelt") then
-        return false
+        return nil
     end
     if not movement.grappling or grapple.jumpPadReel or grapple.reelCooldown or grapple.sharkTailDisable then
-        return false
+        return nil
     end
     if tonumber(grapple.Time) == 0 then
-        return false
+        return nil
     end
 
     local targetPart, targetPosition = getSmartReelTarget(grapple)
     if not targetPosition then
-        return false
+        return nil
     end
 
-    if not targetPart then
+    local rootPart = grapple.RootPart
+    if not rootPart then
+        return nil
+    end
+
+    local offset = targetPosition - rootPart.Position
+    local distance = offset.Magnitude
+    if distance <= SMART_REEL_NEAR_CUTOFF or distance > DEFAULT_MAX_RANGE then
+        return nil
+    end
+
+    return {
+        Movement = movement,
+        RootPart = rootPart,
+        TargetPart = targetPart,
+        TargetPosition = targetPosition,
+        Offset = offset,
+        Distance = distance,
+    }
+end
+
+local function isSmartReelPathSafe(grapple, state)
+    if not state.TargetPart then
         return true
     end
 
-    return isPathSafeForHitbox(grapple, targetPart, targetPart, targetPosition, DEFAULT_MAX_RANGE) == true
+    return isPathSafeForHitbox(grapple, state.TargetPart, state.TargetPart, state.TargetPosition, DEFAULT_MAX_RANGE) == true
 end
 
-local function startSmartReel(grapple)
-    if not canStartSmartReel(grapple) then
+local function getSmartReelScore(grapple, manual)
+    local state = getSmartReelBaseState(grapple)
+    if not state then
+        return 0, "Unavailable", nil
+    end
+
+    local rootPart = state.RootPart
+    local velocity = rootPart.Velocity
+    local horizontal = getHorizontalVelocity(rootPart)
+    local horizontalSpeed = horizontal.Magnitude
+    local toTarget = state.Offset.Unit
+    local flatToTarget = getAssistFlatUnit(state.Offset)
+    local velocityDirection = getAssistFlatUnit(velocity)
+    local inputDirection = getAssistFlatUnit(state.Movement.PlayerMoveDirection)
+    local velocityDot = velocityDirection and velocityDirection:Dot(toTarget) or 0
+    local flatVelocityDot = (flatToTarget and velocityDirection) and flatToTarget:Dot(velocityDirection) or velocityDot
+    local inputDot = (flatToTarget and inputDirection) and flatToTarget:Dot(inputDirection) or 0
+    local panic = isEmergencyProtectionEnabled() and getCachedPanicRescueDanger(grapple)
+
+    local attachAge = time() - (tonumber(grapple.reelStart) or 0)
+    if not manual and not panic and attachAge < SMART_REEL_MIN_ATTACH_TIME then
+        return 0, "CommitDelay", state
+    end
+
+    local minDot = manual and SMART_REEL_MANUAL_MIN_DOT or SMART_REEL_AUTO_MIN_DOT
+    if not panic and flatVelocityDot < minDot and inputDot < 0.35 then
+        return 0, "AngleGate", state
+    end
+
+    if not isSmartReelPathSafe(grapple, state) then
+        return 0, "UnsafePath", state
+    end
+
+    local score = 28
+    local reason = "SoftReel"
+
+    if state.Distance >= SMART_REEL_GOOD_DISTANCE then
+        score = score + math.clamp((state.Distance - SMART_REEL_GOOD_DISTANCE) / (SMART_REEL_FAR_DISTANCE - SMART_REEL_GOOD_DISTANCE), 0, 1) * 18
+    end
+
+    if velocityDot > 0.35 then
+        score = score + 16
+    elseif velocityDot < -0.15 then
+        score = score - 18
+    end
+
+    if inputDirection then
+        score = score + math.clamp((inputDot + 1) * 0.5, 0, 1) * 12
+    end
+
+    local projectedDistance = (state.TargetPosition - (rootPart.Position + velocity * SMART_REEL_OVERSHOOT_LOOKAHEAD)).Magnitude
+    if projectedDistance > state.Distance and state.Distance <= SMART_REEL_EXIT_DISTANCE + horizontalSpeed * 0.045 then
+        score = score - 42
+        reason = "OvershootGuard"
+    elseif horizontalSpeed >= SMART_REEL_HIGH_SPEED and velocityDot > 0.2 and state.Distance > SMART_REEL_EXIT_DISTANCE then
+        score = score + 12
+        reason = "BrakeReel"
+    end
+
+    local targetHeight = state.TargetPosition.Y - rootPart.Position.Y
+    if not panic and targetHeight > SMART_REEL_LOW_ARC_HEIGHT and velocity.Y > SMART_REEL_LOW_ARC_UP_SPEED then
+        score = score - 34
+        reason = "LowArcGuard"
+    end
+
+    if horizontalSpeed >= SMART_REEL_EXTREME_SPEED and not panic then
+        score = score - 16
+        reason = "ExtremeSpeedGuard"
+    end
+
+    if panic then
+        score = score + 38
+        reason = "PanicPull"
+    end
+
+    if state.Distance <= SMART_REEL_EXIT_DISTANCE and not panic then
+        score = score - 32
+        reason = "ExitAssist"
+    end
+
+    if manual then
+        score = score + 10
+    end
+
+    return math.clamp(score, 0, 100), reason, state
+end
+
+local function canStartSmartReel(grapple, manual)
+    local now = time()
+    if not manual and now - Logic.LastSmartReelEvalAt < SMART_REEL_EVAL_INTERVAL then
+        return false
+    end
+    if not manual then
+        Logic.LastSmartReelEvalAt = now
+    end
+
+    local score, reason = getSmartReelScore(grapple, manual)
+    local threshold = manual and SMART_REEL_MANUAL_THRESHOLD or SMART_REEL_AUTO_THRESHOLD
+    Logic.LastSmartReelDebug = {
+        Score = score,
+        Reason = reason,
+        Manual = manual == true,
+    }
+
+    return score >= threshold
+end
+
+local function startSmartReel(grapple, manual)
+    if not canStartSmartReel(grapple, manual == true) then
         return false
     end
 
     grapple.jumpPadReel = true
     grapple.reelStart = time()
     grapple.grappleReel = true
+    Logic.LastSmartReelStartAt = time()
     markGrappleBonkGrace(grapple, MOMENTUM_GUARD_WINDOW)
 
     if grapple.SFX and grapple.SFX.PlaySound then
@@ -2362,6 +2658,38 @@ local function applyPanicStabilize(grapple)
     local targetSpeed = math.max(PANIC_STABILIZE_CLAMP, speed - (speed - PANIC_STABILIZE_CLAMP) * 0.45)
     local clampedHorizontal = horizontal.Unit * targetSpeed
     rootPart.Velocity = Vector3.new(clampedHorizontal.X, rootPart.Velocity.Y, clampedHorizontal.Z)
+end
+
+local function applySharkTailStabilize(grapple)
+    if time() > (Logic.SharkTailStabilizeUntil or 0) then
+        return
+    end
+
+    local rootPart = grapple and grapple.RootPart
+    if not rootPart then
+        return
+    end
+
+    local velocity = rootPart.Velocity
+    local horizontal = getHorizontalVelocity(rootPart)
+    local speed = horizontal.Magnitude
+    local nextHorizontal = horizontal
+    if speed > SHARK_TAIL_STABILIZE_HORIZONTAL_SPEED then
+        local targetSpeed = math.max(
+            SHARK_TAIL_STABILIZE_HORIZONTAL_CLAMP,
+            speed - (speed - SHARK_TAIL_STABILIZE_HORIZONTAL_CLAMP) * 0.4
+        )
+        nextHorizontal = horizontal.Unit * targetSpeed
+    end
+
+    local nextY = velocity.Y
+    if nextY > SHARK_TAIL_STABILIZE_UP_SPEED then
+        nextY = math.max(SHARK_TAIL_STABILIZE_UP_CLAMP, nextY - (nextY - SHARK_TAIL_STABILIZE_UP_CLAMP) * 0.5)
+    end
+
+    if nextHorizontal ~= horizontal or nextY ~= velocity.Y then
+        rootPart.Velocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
+    end
 end
 
 local function applyAirControlMultiplier(grapple, dt)
@@ -2590,7 +2918,7 @@ function Logic.enable()
                     return nil
                 end
 
-                if isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Manual" and startSmartReel(self) then
+                if isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Manual" and startSmartReel(self, true) then
                     return nil
                 end
             end
@@ -2633,7 +2961,7 @@ function Logic.enable()
                 end
 
                 if not sharkTailPlanned and isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Automatic" then
-                    startSmartReel(self)
+                    startSmartReel(self, false)
                 end
 
                 tryPanicRescue(self)
@@ -2657,6 +2985,7 @@ function Logic.enable()
             applyAirControlMultiplier(self, dt)
             applyMomentumGuard(self)
             applyPanicStabilize(self)
+            applySharkTailStabilize(self)
             updateAdaptRecast(self)
             return stepResult
         end
@@ -2727,6 +3056,8 @@ function Logic.disable()
     Logic.NextSharkTailEvalDelay = 0.08
     Logic.SharkTailPlanToken = Logic.SharkTailPlanToken + 1
     Logic.SharkTailPlannedAt = 0
+    Logic.SharkTailStabilizeUntil = 0
+    Logic.LastSmartReelStartAt = 0
     Logic.LastPanicInputAt = 0
     Logic.PanicInputCount = 0
     Logic.PanicPressureUntil = 0
@@ -2737,6 +3068,8 @@ function Logic.disable()
     Logic.LastAssistTargetInstance = nil
     Logic.LastAssistTargetAt = 0
     Logic.LastAssistDebug = nil
+    Logic.LastSmartReelEvalAt = 0
+    Logic.LastSmartReelDebug = nil
     Logic.BellBypassToken = Logic.BellBypassToken + 1
     releaseBellBypass()
     restoreJumpPadBypassParts()

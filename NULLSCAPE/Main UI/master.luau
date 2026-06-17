@@ -300,16 +300,29 @@ local function loadModule(path)
     if moduleCache[path] then
         return moduleCache[path]
     end
-    
-    local result
+
+    local source
     if isfile and readfile and isfile(path) then
-        result = loadstring(readfile(path))()
+        source = readfile(path)
     else
         local githubRawUrl = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
         local url = (githubRawUrl .. path):gsub(" ", "%%20")
-        result = loadstring(game:HttpGet(url))()
+        source = game:HttpGet(url)
     end
-    
+
+    local chunk, compileErr = loadstring(source)
+    if not chunk then
+        error("[NULLSCAPE] Compile failed in " .. tostring(path) .. ": " .. tostring(compileErr), 2)
+    end
+
+    local traceback = debug and debug.traceback or function(message)
+        return tostring(message)
+    end
+    local success, result = xpcall(chunk, traceback)
+    if not success then
+        error("[NULLSCAPE] Runtime failed in " .. tostring(path) .. ":\n" .. tostring(result), 2)
+    end
+
     moduleCache[path] = result
     return result
 end

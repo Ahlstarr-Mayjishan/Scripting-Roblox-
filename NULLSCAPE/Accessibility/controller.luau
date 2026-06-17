@@ -21,7 +21,7 @@ local function normalizeKeyName(key)
 		return nil
 	end
 
-	return keyName :: any
+	return keyName
 end
 
 local function readSavedAdaptInputKey()

@@ -2,7 +2,7 @@ local UserInputService = game:GetService("UserInputService")
 
 return function(Client, Controller)
 	local Tab = Client.Window:CreateTab("Accessibility", 4483362458)
-	local adaptInputCaptureConnection: RBXScriptConnection? = nil
+	local adaptInputCaptureConnection = nil
 	local adaptInputStatusLabel = nil
 
 	local function disconnectAdaptCapture()
