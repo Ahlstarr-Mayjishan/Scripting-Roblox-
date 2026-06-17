@@ -92,6 +92,9 @@ end
 
 -- Bộ lọc nhận dạng nhạc cụ Cadence
 local instrumentKeywords = { "harp", "violin", "guitar", "flute", "drum", "piano", "trumpet", "instrument" }
+local FALLBACK_ARROW_MESH_ID = "rbxassetid://118015691029311"
+local FALLBACK_ARROW_SCALE = Vector3.new(1.35, 1.35, 1.35)
+
 local function isInstrument(name)
 	if not name then
 		return false
@@ -168,14 +171,21 @@ local function findTemplate(key)
 
 		-- 2. Thử tìm trong workspace.Arrows
 		local wArrows = workspace:FindFirstChild("Arrows")
-		template = wArrows
-			and (
-				wArrows:FindFirstChild("Template")
-				or wArrows:FindFirstChildWhichIsA("BasePart")
-				or wArrows:FindFirstChildWhichIsA("Model")
-			)
-		if template then
-			return template
+		if wArrows then
+			template = wArrows:FindFirstChild("Template")
+			if template then
+				return template
+			end
+
+			for _, child in ipairs(wArrows:GetChildren()) do
+				if
+					child.Name ~= "CadenceArrow"
+					and not string.find(child.Name, "NULLSCAPE_")
+					and (child:IsA("BasePart") or child:IsA("Model"))
+				then
+					return child
+				end
+			end
 		end
 	end
 	return nil
@@ -186,7 +196,7 @@ local function setArrowColor(arrow, color)
 		return
 	end
 
-	-- Đảm bảo màu sắc, vật liệu Neon và kích thước nhỏ gọn
+	-- Đảm bảo màu sắc/vật liệu mà không phá texture hoặc scale mesh gốc của game.
 	if arrow:IsA("BasePart") then
 		if arrow.Color ~= color then
 			arrow.Color = color
@@ -194,14 +204,9 @@ local function setArrowColor(arrow, color)
 		if arrow.Material ~= Enum.Material.Neon then
 			arrow.Material = Enum.Material.Neon
 		end
-		if arrow:IsA("MeshPart") and arrow.TextureID ~= "" then
-			arrow.TextureID = ""
-		end
-
-		-- Giới hạn kích thước tối đa của Part để không bị quá to
 		local maxDim = math.max(arrow.Size.X, arrow.Size.Y, arrow.Size.Z)
-		if maxDim > 1.5 then
-			arrow.Size = arrow.Size * (2 / maxDim)
+		if maxDim > 4 then
+			arrow.Size = arrow.Size * (2.5 / maxDim)
 		end
 	end
 
@@ -213,26 +218,16 @@ local function setArrowColor(arrow, color)
 			if child.Material ~= Enum.Material.Neon then
 				child.Material = Enum.Material.Neon
 			end
-			if child:IsA("MeshPart") and child.TextureID ~= "" then
-				child.TextureID = ""
-			end
 			local maxDim = math.max(child.Size.X, child.Size.Y, child.Size.Z)
-			if maxDim > 1.5 then
-				child.Size = child.Size * (1.2 / maxDim)
+			if maxDim > 4 then
+				child.Size = child.Size * (2.5 / maxDim)
 			end
 		elseif child:IsA("SpecialMesh") then
-			if child.TextureId ~= "" then
-				child.TextureId = ""
-			end
-			-- Giới hạn scale hiển thị của SpecialMesh để không bị to quá đà
+			child.VertexColor = Vector3.new(color.R, color.G, color.B)
 			local maxScale = math.max(child.Scale.X, child.Scale.Y, child.Scale.Z)
-			if maxScale > 1.5 or child.MeshId == "rbxassetid://118015691029311" then
-				if child.Scale.X ~= 0.18 or child.Scale.Y ~= 0.18 or child.Scale.Z ~= 0.18 then
-					child.Scale = Vector3.new(0.18, 0.18, 0.18)
-				end
+			if maxScale > 4 then
+				child.Scale = child.Scale * (2.5 / maxScale)
 			end
-		elseif child:IsA("Decal") or child:IsA("Texture") then
-			child:Destroy()
 		end
 	end
 end
@@ -254,11 +249,17 @@ local function setArrowPhysics(arrow)
 	end
 	if arrow:IsA("BasePart") then
 		arrow.CanCollide = false
+		arrow.CanQuery = false
+		arrow.CanTouch = false
+		arrow.CastShadow = false
 		arrow.Anchored = true
 	else
 		for _, child in ipairs(arrow:GetDescendants()) do
 			if child:IsA("BasePart") then
 				child.CanCollide = false
+				child.CanQuery = false
+				child.CanTouch = false
+				child.CastShadow = false
 				child.Anchored = true
 			end
 		end
@@ -282,8 +283,8 @@ local function getOrCreateArrow(saved, key, color)
 
 			local mesh = Instance.new("SpecialMesh")
 			mesh.MeshType = Enum.MeshType.FileMesh
-			mesh.MeshId = "rbxassetid://118015691029311"
-			mesh.Scale = Vector3.new(2, 2, 2) -- Kích thước nhỏ gọn vừa vặn
+			mesh.MeshId = FALLBACK_ARROW_MESH_ID
+			mesh.Scale = FALLBACK_ARROW_SCALE
 			mesh.Parent = arrow
 
 			arrow.Material = Enum.Material.Neon
@@ -899,35 +900,6 @@ local function isGameGiftArrowActive()
 	return false
 end
 
-local function isGameCadenceArrowActive()
-	local arrowsFolder = workspace:FindFirstChild("Arrows")
-	local cadenceArrow = arrowsFolder and arrowsFolder:FindFirstChild("CadenceArrow")
-	if cadenceArrow and cadenceArrow:IsA("BasePart") then
-		return cadenceArrow.CFrame.Position.Y < 500000
-	end
-	return false
-end
-
-local function isGameAltarArrowActive()
-	local arrowsFolder = workspace:FindFirstChild("Arrows")
-	if arrowsFolder then
-		for _, child in ipairs(arrowsFolder:GetChildren()) do
-			if child.Name ~= "CadenceArrow" and child.Name ~= "Template" then
-				if child:IsA("BasePart") and child.Transparency < 0.99 then
-					return true
-				elseif child:IsA("Model") then
-					for _, p in ipairs(child:GetDescendants()) do
-						if p:IsA("BasePart") and p.Transparency < 0.99 then
-							return true
-						end
-					end
-				end
-			end
-		end
-	end
-	return false
-end
-
 -- Cập nhật chuyển động thời gian thực của các mũi tên và Ping
 function Logic.updateRender(controller, gc, hrp)
 	local saved = gc.SavedVisuals
@@ -983,7 +955,7 @@ function Logic.updateRender(controller, gc, hrp)
 	-- 3. Cập nhật hiển thị và hướng xoay cho Mũi tên Nhạc cụ (Đỏ - Cadence)
 	local arrowCadence = saved.ArrowCadence
 	if arrowCadence and arrowCadence.Parent then
-		if nearestCadencePos and nearestCadenceDist > 3.5 and not isGameCadenceArrowActive() then
+		if nearestCadencePos and nearestCadenceDist > 3.5 then
 			setArrowTransparency(arrowCadence, 0)
 			setArrowColor(arrowCadence, nearestCadenceColor)
 
@@ -1007,7 +979,7 @@ function Logic.updateRender(controller, gc, hrp)
 	-- 4. Cập nhật hiển thị và hướng xoay cho Mũi tên Đàn tế (Màu tương ứng của Altar)
 	local arrowAltar = saved.ArrowAltar
 	if arrowAltar and arrowAltar.Parent then
-		if nearestAltarPos and nearestAltarDist > 3.5 and not isGameAltarArrowActive() then
+		if nearestAltarPos and nearestAltarDist > 3.5 then
 			setArrowTransparency(arrowAltar, 0)
 			setArrowColor(arrowAltar, nearestAltarColor)
 
