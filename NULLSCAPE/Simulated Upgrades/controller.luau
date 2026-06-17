@@ -1208,11 +1208,8 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	if isRadarPlayer and Controller.RadarEnabled then
 		return true, true
 	end
-	if isRadarAltars and Controller.RadarEnabled and Controller.AltarESPEnabled then
-		return true, true
-	end
-	if isRadarInstruments and Controller.RadarEnabled and Controller.CadenceESPEnabled then
-		return true, true
+	if isRadarAltars or isRadarInstruments then
+		return false
 	end
 	return false
 end
@@ -1224,7 +1221,8 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	local isGraceWings = false
 	local isAdvancedGravityCoil = false
 	local isBetterJumpPad = false
-	local isRadar = false
+	local isRadarPlayer = false
+	local isRadarSubUpgrade = false
 	for _, v in ipairs(args) do
 		if v == "DefuseKit" or v == "Defuse Kit" then
 			isDefuse = true
@@ -1236,8 +1234,10 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 			isAdvancedGravityCoil = true
 		elseif v == "BetterJumpPad" or v == "Better Jump Pad" then
 			isBetterJumpPad = true
-		elseif v == "RadarPlayer" or v == "RadarAltars" or v == "RadarInstruments" then
-			isRadar = true
+		elseif v == "RadarPlayer" then
+			isRadarPlayer = true
+		elseif v == "RadarAltars" or v == "RadarInstruments" then
+			isRadarSubUpgrade = true
 		end
 	end
 	if isDefuse and Controller.SimulateDefuseKit then
@@ -1255,8 +1255,11 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	if isBetterJumpPad and Controller.BetterJumpPadEnabled then
 		return true, 1
 	end
-	if isRadar and Controller.RadarEnabled then
+	if isRadarPlayer and Controller.RadarEnabled then
 		return true, 1
+	end
+	if isRadarSubUpgrade then
+		return false
 	end
 	return false
 end

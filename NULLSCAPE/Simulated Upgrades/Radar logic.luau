@@ -33,6 +33,11 @@ local ESPColors = {
 }
 Logic.ESPColors = ESPColors
 
+local RADAR_ARROW_COLORS = {
+	Altar = Color3.fromRGB(255, 128, 0),
+	Cadence = Color3.fromRGB(255, 0, 0),
+}
+
 -- Nhận diện loại Altar dựa vào tên đối tượng hoặc cha/con của nó
 local function getAltarTypeAndColor(altarObj)
 	-- Ưu tiên 1: Attribute "Name" theo ref.lua ArrowHandler (AltarAdded dùng GetAttribute("Name"))
@@ -191,7 +196,7 @@ local function findTemplate(key)
 	return nil
 end
 
-local function setArrowColor(arrow, color)
+local function setArrowColor(arrow, color, forceSolidColor)
 	if not arrow then
 		return
 	end
@@ -203,6 +208,9 @@ local function setArrowColor(arrow, color)
 		end
 		if arrow.Material ~= Enum.Material.Neon then
 			arrow.Material = Enum.Material.Neon
+		end
+		if forceSolidColor and arrow:IsA("MeshPart") and arrow.TextureID ~= "" then
+			arrow.TextureID = ""
 		end
 		local maxDim = math.max(arrow.Size.X, arrow.Size.Y, arrow.Size.Z)
 		if maxDim > 4 then
@@ -218,16 +226,24 @@ local function setArrowColor(arrow, color)
 			if child.Material ~= Enum.Material.Neon then
 				child.Material = Enum.Material.Neon
 			end
+			if forceSolidColor and child:IsA("MeshPart") and child.TextureID ~= "" then
+				child.TextureID = ""
+			end
 			local maxDim = math.max(child.Size.X, child.Size.Y, child.Size.Z)
 			if maxDim > 4 then
 				child.Size = child.Size * (2.5 / maxDim)
 			end
 		elseif child:IsA("SpecialMesh") then
 			child.VertexColor = Vector3.new(color.R, color.G, color.B)
+			if forceSolidColor and child.TextureId ~= "" then
+				child.TextureId = ""
+			end
 			local maxScale = math.max(child.Scale.X, child.Scale.Y, child.Scale.Z)
 			if maxScale > 4 then
 				child.Scale = child.Scale * (2.5 / maxScale)
 			end
+		elseif forceSolidColor and (child:IsA("Decal") or child:IsA("Texture")) then
+			child.Color3 = color
 		end
 	end
 end
@@ -296,7 +312,7 @@ local function getOrCreateArrow(saved, key, color)
 		setArrowTransparency(arrow, 0)
 		saved[key] = arrow
 	end
-	setArrowColor(arrow, color)
+	setArrowColor(arrow, color, key == "ArrowCadence" or key == "ArrowAltar")
 	return arrow
 end
 
@@ -446,6 +462,73 @@ function Logic.clearVisuals(gc, keepArrows)
 	end
 end
 
+local function isVisibleNativePart(instance)
+	if instance:IsA("BasePart") then
+		return not string.find(instance.Name, "NULLSCAPE_") and instance.Transparency < 0.99
+	elseif instance:IsA("Model") then
+		if string.find(instance.Name, "NULLSCAPE_") then
+			return false
+		end
+		for _, child in ipairs(instance:GetDescendants()) do
+			if child:IsA("BasePart") and child.Transparency < 0.99 then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function isNativeGiftRadarActive()
+	local giftArrow = workspace:FindFirstChild("GiftArrow")
+	if giftArrow and giftArrow:IsA("BasePart") then
+		return giftArrow.CFrame.Position.Y < 1e10
+	end
+	return false
+end
+
+local function isNativeCadenceRadarActive()
+	local arrowsFolder = workspace:FindFirstChild("Arrows")
+	local cadenceArrow = arrowsFolder and arrowsFolder:FindFirstChild("CadenceArrow")
+	if cadenceArrow and cadenceArrow:IsA("BasePart") then
+		return cadenceArrow.CFrame.Position.Y < 500000 and cadenceArrow.Transparency < 0.99
+	end
+	return false
+end
+
+local function isNativeAltarRadarActive()
+	local arrowsFolder = workspace:FindFirstChild("Arrows")
+	if not arrowsFolder then
+		return false
+	end
+
+	for _, child in ipairs(arrowsFolder:GetChildren()) do
+		if
+			child.Name ~= "CadenceArrow"
+			and child.Name ~= "Template"
+			and not string.find(child.Name, "NULLSCAPE_")
+			and isVisibleNativePart(child)
+		then
+			return true
+		end
+	end
+
+	return false
+end
+
+local function shouldUseNativeRadar(controller, kind)
+	if controller and controller.UseNativeRadarWhenAvailable == false then
+		return false
+	end
+	if kind == "Gift" then
+		return isNativeGiftRadarActive()
+	elseif kind == "Cadence" then
+		return isNativeCadenceRadarActive()
+	elseif kind == "Altar" then
+		return isNativeAltarRadarActive()
+	end
+	return false
+end
+
 -- Vòng lặp cập nhật khoảng cách, sắp xếp độ ưu tiên và chuyển đổi visual styles (chạy cực nhanh)
 function Logic.updateESPStyles(controller, gc, hrp)
 	local saved = gc.SavedVisuals
@@ -478,9 +561,13 @@ function Logic.updateESPStyles(controller, gc, hrp)
 		end
 	end
 
-	local gifts = controller.GiftESPEnabled and (controller.ActiveGifts or {}) or {}
-	local instruments = controller.CadenceESPEnabled and (controller.ActiveInstruments or {}) or {}
-	local altars = controller.AltarESPEnabled and (controller.ActiveAltars or {}) or {}
+	local nativeGiftRadar = shouldUseNativeRadar(controller, "Gift")
+	local nativeCadenceRadar = shouldUseNativeRadar(controller, "Cadence")
+	local nativeAltarRadar = shouldUseNativeRadar(controller, "Altar")
+
+	local gifts = controller.GiftESPEnabled and not nativeGiftRadar and (controller.ActiveGifts or {}) or {}
+	local instruments = controller.CadenceESPEnabled and not nativeCadenceRadar and (controller.ActiveInstruments or {}) or {}
+	local altars = controller.AltarESPEnabled and not nativeAltarRadar and (controller.ActiveAltars or {}) or {}
 
 	local validGifts = {}
 	local validInstruments = {}
@@ -849,7 +936,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 			if dist < shortestAltarDist then
 				shortestAltarDist = dist
 				nearestAltarPos = t.part.Position
-				nearestAltarColor = t.color
+				nearestAltarColor = RADAR_ARROW_COLORS.Altar
 			end
 		end
 	end
@@ -870,7 +957,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	end
 
 	if controller.CadenceESPEnabled and nearestCadencePos then
-		getOrCreateArrow(saved, "ArrowCadence", nearestCadenceColor)
+		getOrCreateArrow(saved, "ArrowCadence", RADAR_ARROW_COLORS.Cadence)
 	else
 		if saved.ArrowCadence then
 			pcall(function()
@@ -881,7 +968,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	end
 
 	if controller.AltarESPEnabled and nearestAltarPos then
-		getOrCreateArrow(saved, "ArrowAltar", nearestAltarColor)
+		getOrCreateArrow(saved, "ArrowAltar", RADAR_ARROW_COLORS.Altar)
 	else
 		if saved.ArrowAltar then
 			pcall(function()
@@ -890,14 +977,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
 			saved.ArrowAltar = nil
 		end
 	end
-end
-
-local function isGameGiftArrowActive()
-	local giftArrow = workspace:FindFirstChild("GiftArrow")
-	if giftArrow and giftArrow:IsA("BasePart") then
-		return giftArrow.CFrame.Position.Y < 1e10
-	end
-	return false
 end
 
 -- Cập nhật chuyển động thời gian thực của các mũi tên và Ping
@@ -917,11 +996,14 @@ function Logic.updateRender(controller, gc, hrp)
 	local nearestGiftColor = saved.NearestGiftColor or ESPColors.Gift
 	local nearestGiftDist = saved.NearestGiftDist or math.huge
 	local nearestCadencePos = saved.NearestCadencePos
-	local nearestCadenceColor = saved.NearestCadenceColor or ESPColors.Cadence
+	local nearestCadenceColor = RADAR_ARROW_COLORS.Cadence
 	local nearestCadenceDist = saved.NearestCadenceDist or math.huge
 	local nearestAltarPos = saved.NearestAltarPos
-	local nearestAltarColor = saved.NearestAltarColor or ESPColors.Altar.Unknown
+	local nearestAltarColor = RADAR_ARROW_COLORS.Altar
 	local nearestAltarDist = saved.NearestAltarDist or math.huge
+	local nativeGiftRadar = shouldUseNativeRadar(controller, "Gift")
+	local nativeCadenceRadar = shouldUseNativeRadar(controller, "Cadence")
+	local nativeAltarRadar = shouldUseNativeRadar(controller, "Altar")
 
 	-- Xác định độ cao đầu (Head) của người chơi
 	local char = hrp.Parent
@@ -931,7 +1013,7 @@ function Logic.updateRender(controller, gc, hrp)
 	-- 2. Cập nhật hiển thị và hướng xoay cho Mũi tên Hộp quà (Trắng / Vàng / Đỏ)
 	local arrowGift = saved.ArrowGift
 	if arrowGift and arrowGift.Parent then
-		if nearestGiftPos and nearestGiftDist > 3.5 and not isGameGiftArrowActive() then
+		if nearestGiftPos and nearestGiftDist > 3.5 and not nativeGiftRadar then
 			setArrowTransparency(arrowGift, 0)
 			setArrowColor(arrowGift, nearestGiftColor)
 
@@ -955,9 +1037,9 @@ function Logic.updateRender(controller, gc, hrp)
 	-- 3. Cập nhật hiển thị và hướng xoay cho Mũi tên Nhạc cụ (Đỏ - Cadence)
 	local arrowCadence = saved.ArrowCadence
 	if arrowCadence and arrowCadence.Parent then
-		if nearestCadencePos and nearestCadenceDist > 3.5 then
+		if nearestCadencePos and nearestCadenceDist > 3.5 and not nativeCadenceRadar then
 			setArrowTransparency(arrowCadence, 0)
-			setArrowColor(arrowCadence, nearestCadenceColor)
+			setArrowColor(arrowCadence, nearestCadenceColor, true)
 
 			local dir = nearestCadencePos - arrowPos
 			local targetRot = CFrame.lookAt(Vector3.zero, dir)
@@ -979,9 +1061,9 @@ function Logic.updateRender(controller, gc, hrp)
 	-- 4. Cập nhật hiển thị và hướng xoay cho Mũi tên Đàn tế (Màu tương ứng của Altar)
 	local arrowAltar = saved.ArrowAltar
 	if arrowAltar and arrowAltar.Parent then
-		if nearestAltarPos and nearestAltarDist > 3.5 then
+		if nearestAltarPos and nearestAltarDist > 3.5 and not nativeAltarRadar then
 			setArrowTransparency(arrowAltar, 0)
-			setArrowColor(arrowAltar, nearestAltarColor)
+			setArrowColor(arrowAltar, nearestAltarColor, true)
 
 			local dir = nearestAltarPos - arrowPos
 			local targetRot = CFrame.lookAt(Vector3.zero, dir)
