@@ -1,8 +1,30 @@
 -- [[
 --  NULLSCAPE - Anti-Tripmine Immunity & Defuse Kits Logic
---  Vai trò: Chuyên phụ trách việc bypass nổ mìn Tripmine:
---  - Hook chặn RemoteEvent gửi tín hiệu nổ lên server từ phía Client thông qua hệ thống Single-dispatch.
---  - Ghi đè thuộc tính CanTouch và CanCollide của mìn về false để triệt tiêu va chạm vật lý trên Client.
+--
+--  3 CHẾ ĐỘ:
+--  ─────────────────────────────────────────────────────────────────────
+--  "Passthrough"  – Đi xuyên qua mìn mà không nổ ngay. Sau khi đi qua
+--                   một khoảng cách (DetonationDistance), mìn mới nổ.
+--                   Cơ chế: Duy trì TRIP_IFRAMES khi đang đứng gần mìn
+--                   (< 3 studs). Khi đi ra đủ xa → remove iframes → mìn
+--                   sẽ tự trigger bình thường nếu player quay lại trong
+--                   2.25 studs, hoặc force Collect() từ xa.
+--
+--  "PreDetonate"  – Kích hoạt mìn sớm từ khoảng cách an toàn trước khi
+--                   chạm vào. Player chưa cần bước vào vùng nguy hiểm.
+--                   Cơ chế: Duy trì TRIP_IFRAMES để ngăn trigger tự nhiên.
+--                   Khi player tiếp cận <= DetonationDistance studs → gọi
+--                   gift:Collect() trực tiếp (player đang đủ xa để không
+--                   nhận blast damage).
+--
+--  "Barrier"      – Đi xuyên mìn hoàn toàn, không bao giờ nổ.
+--                   Cơ chế: Duy trì TRIP_IFRAMES vĩnh viễn.
+--  ─────────────────────────────────────────────────────────────────────
+--
+--  Tại sao dùng TRIP_IFRAMES?
+--  Game kiểm tra LocalPlayer:FindFirstChild("TRIP_IFRAMES") trong UpdateGifts
+--  (GiftClientHandler, dòng 467). Nếu tìm thấy → bán kính trigger = -1
+--  → không bao giờ kích hoạt mìn phía client.
 -- ]]
 
 local Barrier = {}
@@ -11,293 +33,273 @@ local LocalPlayer = Players.LocalPlayer
 
 local activeController = nil
 
--- Đảm bảo _NULLSCAPE_Globals tồn tại
-getgenv()._NULLSCAPE_Globals = getgenv()._NULLSCAPE_Globals or {}
+-- ─────────────────────────────────────────────────────────────────────
+-- TRIP_IFRAMES helper
+-- ─────────────────────────────────────────────────────────────────────
+local iframeObject = nil
 
-local function hookRemote()
-    if getgenv()._NULLSCAPE_Globals.GiftCollectedHooked then return end
-    
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local GiftCollected = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("GiftCollected")
-    if GiftCollected then
-        local oldFireServer
-        oldFireServer = hookfunction(GiftCollected.FireServer, function(self, gift, range)
-            local dispatcher = getgenv()._NULLSCAPE_Globals.handleGiftCollectedCall
-            if dispatcher then
-                local success, shouldOverride = pcall(dispatcher, self, gift, range)
-                if success and shouldOverride then
-                    return -- Chặn đứng remote nổ mìn
-                end
-            end
-            return oldFireServer(self, gift, range)
-        end)
-        getgenv()._NULLSCAPE_Globals.OriginalGiftCollectedFireServer = oldFireServer
-        getgenv()._NULLSCAPE_Globals.GiftCollectedHooked = true
-        print("[NULLSCAPE Defuse] Đã hook thành công GiftCollected RemoteEvent")
+local function hasIframes()
+    return iframeObject ~= nil and iframeObject.Parent ~= nil
+end
+
+local function addIframes()
+    if hasIframes() then return end
+    local obj = Instance.new("BoolValue")
+    obj.Name = "TRIP_IFRAMES"
+    obj.Parent = LocalPlayer
+    iframeObject = obj
+end
+
+local function removeIframes()
+    if iframeObject then
+        pcall(function() iframeObject:Destroy() end)
+        iframeObject = nil
+    end
+    -- Xóa luôn bất kỳ object nào game tạo
+    local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
+    if existing and existing ~= iframeObject then
+        pcall(function() existing:Destroy() end)
     end
 end
 
--- Đăng ký dispatcher toàn cục
-getgenv()._NULLSCAPE_Globals.handleGiftCollectedCall = function(self, gift, range)
-    if activeController and gift and gift:IsDescendantOf(workspace) then
-        local giftType = gift:GetAttribute("GiftType")
-        local giftName = gift.Name:lower()
-        local isMine = (giftType and string.find(giftType:lower(), "tripmine")) or string.find(giftName, "tripmine")
-        if isMine then
-            -- Nếu mìn đã được kích nổ chủ động hoặc tháo gỡ thành công từ trước, chặn cuộc gọi từ game
-            if gift:GetAttribute("Detonated") or gift:GetAttribute("Defused") then
-                return true
+-- ─────────────────────────────────────────────────────────────────────
+-- Lấy GiftClientHandler từ game
+-- ─────────────────────────────────────────────────────────────────────
+local cachedGCH = nil
+local function getGiftClientHandler()
+    if cachedGCH then return cachedGCH end
+    local ok, result = pcall(function()
+        return require(game:GetService("ReplicatedFirst").ClientModules.GiftClient.GiftClientHandler)
+    end)
+    if ok and result then
+        cachedGCH = result
+        return result
+    end
+    return nil
+end
+
+-- ─────────────────────────────────────────────────────────────────────
+-- State tracking
+-- ─────────────────────────────────────────────────────────────────────
+-- processedMines[giftId] = "passthrough_tracking" | "predetonate_done" | "passthrough_done"
+-- passthroughState[giftId] = "inside" | "exited"
+local processedMines = {}
+local passthroughState = {}
+
+local function clearMineState(giftId)
+    processedMines[giftId] = nil
+    processedMines["__dist_" .. giftId] = nil
+    passthroughState[giftId] = nil
+end
+
+-- ─────────────────────────────────────────────────────────────────────
+-- Watcher: vòng lặp chính phát hiện và xử lý tripmines
+-- ─────────────────────────────────────────────────────────────────────
+local watcherRunning = false
+
+local function startWatcher()
+    if watcherRunning then return end
+    watcherRunning = true
+
+    task.spawn(function()
+        while true do
+            task.wait(0.05) -- 20 Hz
+
+            if not activeController or not activeController.TripmineBarrierEnabled then
+                -- Không hoạt động: đảm bảo iframes được dọn
+                if hasIframes() then removeIframes() end
+                continue
             end
 
-            if activeController.TripmineBarrierEnabled then
-                local mode = activeController.TripmineMode or "Delayed"
-                if mode == "Delayed" then
-                    -- Chặn remote tức thời và nổ sau khi chạy ra khoảng cách an toàn
-                    task.spawn(function()
-                        local char = LocalPlayer.Character
-                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                        if hrp then
-                            local baseDist = activeController.TripmineDetonationDistance or 15
-                            local jitter = activeController.TripmineDetonationJitter or 2
-                            local targetDist = baseDist
-                            if jitter > 0 then
-                                targetDist = baseDist + math.random(-jitter, jitter)
-                            end
-                            
-                            local startTime = os.clock()
-                            while gift and gift.Parent and (os.clock() - startTime < 3.0) do
-                                local diff = hrp.Position - gift.Position
-                                if diff.Magnitude >= targetDist then
+            local mode = activeController.TripmineMode or "Passthrough"
+
+            -- Barrier mode: chỉ cần duy trì iframes, không cần scan
+            if mode == "Barrier" then
+                addIframes()
+                continue
+            end
+
+            -- Các mode khác cần scan Gifts
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then
+                addIframes() -- giữ iframes khi không có character
+                continue
+            end
+
+            local GCH = getGiftClientHandler()
+            if not GCH or not GCH.Gifts then
+                addIframes()
+                continue
+            end
+
+            local hrpPos = hrp.Position
+            local baseDist = activeController.TripmineDetonationDistance or 15
+            local jitter = activeController.TripmineDetonationJitter or 2
+            local Gifts = GCH.Gifts
+
+            -- ── Dọn processedMines cho gifts đã biến mất ──────────────
+            for id, _ in pairs(processedMines) do
+                local idStr = tostring(id)
+                if idStr:sub(1, 7) == "__dist_" then continue end
+                local numId = tonumber(id)
+                if numId and not Gifts[numId] then
+                    clearMineState(numId)
+                end
+            end
+
+            -- ── Scan từng tripmine ─────────────────────────────────────
+            for giftId, gift in pairs(Gifts) do
+                if not gift.Tripmine or gift.Collected then
+                    if passthroughState[giftId] then
+                        clearMineState(giftId)
+                    end
+                    continue
+                end
+
+                local giftPos = gift.Position
+                if not giftPos then continue end
+                local dist = (hrpPos - giftPos).Magnitude
+
+                -- ── CHẾ ĐỘ PASSTHROUGH ─────────────────────────────────
+                if mode == "Passthrough" then
+                    local state = passthroughState[giftId]
+
+                    if not state then
+                        -- Chưa tracking: player vừa vào gần mìn
+                        if dist < 6 then
+                            passthroughState[giftId] = "inside"
+                            addIframes()
+                            -- Tính khoảng cách nổ sau khi đi ra
+                            local targetDist = baseDist + (jitter > 0 and math.random(-jitter, jitter) or 0)
+                            processedMines["__dist_" .. giftId] = math.max(targetDist, 6)
+                            print("[NULLSCAPE] Passthrough: đang xuyên mìn", giftId)
+                        end
+
+                    elseif state == "inside" then
+                        -- Đang ở trong vùng mìn với iframes
+                        -- Kiểm tra nếu đã đi ra đủ xa
+                        local targetDist = processedMines["__dist_" .. giftId] or baseDist
+                        if dist >= targetDist then
+                            passthroughState[giftId] = "exited"
+                            print("[NULLSCAPE] Passthrough: đã đi ra", math.round(dist), "studs, chuẩn bị nổ mìn", giftId)
+
+                            -- Kiểm tra còn mìn nào khác đang "inside" không
+                            local anyInside = false
+                            for id2, s2 in pairs(passthroughState) do
+                                if id2 ~= giftId and s2 == "inside" then
+                                    anyInside = true
                                     break
                                 end
-                                task.wait(0.1)
                             end
-                            
-                            if gift and gift.Parent then
-                                local orig = getgenv()._NULLSCAPE_Globals.OriginalGiftCollectedFireServer
-                                if orig then
-                                    orig(self, gift, range)
-                                else
-                                    self:FireServer(gift, range)
+
+                            -- Nếu không còn mìn nào đang "inside" → có thể remove iframes
+                            if not anyInside then
+                                removeIframes()
+                            end
+
+                            -- Force collect mìn này (nổ từ vị trí an toàn)
+                            task.spawn(function()
+                                task.wait(0.05) -- 1 frame delay
+                                if gift and not gift.Collected then
+                                    local ok = pcall(function() gift:Collect(false, true, 0) end)
+                                    if ok then
+                                        print("[NULLSCAPE] Passthrough: đã kích nổ mìn", giftId, "tại", math.round(dist), "studs")
+                                    end
+                                end
+                                clearMineState(giftId)
+                            end)
+                        end
+
+                    elseif state == "exited" then
+                        -- Đã xử lý, chờ dọn
+                    end
+
+                    -- Đảm bảo iframes ON khi bất kỳ mìn nào đang ở "inside"
+                    local anyInside = false
+                    for _, s in pairs(passthroughState) do
+                        if s == "inside" then
+                            anyInside = true
+                            break
+                        end
+                    end
+                    if anyInside then
+                        addIframes()
+                    end
+
+                -- ── CHẾ ĐỘ PREDETONATE ─────────────────────────────────
+                elseif mode == "PreDetonate" then
+                    -- Luôn duy trì iframes để ngăn trigger tự nhiên
+                    addIframes()
+
+                    if processedMines[giftId] then continue end
+
+                    -- Xác định khoảng cách kích nổ cho mìn này
+                    if not processedMines["__dist_" .. giftId] then
+                        local targetDist = baseDist + (jitter > 0 and math.random(-jitter, jitter) or 0)
+                        processedMines["__dist_" .. giftId] = math.max(targetDist, 5)
+                    end
+
+                    local targetDist = processedMines["__dist_" .. giftId]
+
+                    -- Khi player tiếp cận đủ gần để PreDetonate
+                    if dist <= targetDist then
+                        processedMines[giftId] = true
+
+                        local capturedDist = dist
+                        task.spawn(function()
+                            if gift and not gift.Collected then
+                                local ok = pcall(function() gift:Collect(false, true, 0) end)
+                                if ok then
+                                    print("[NULLSCAPE] PreDetonate: kích nổ mìn", giftId, "tại", math.round(capturedDist), "studs")
                                 end
                             end
-                        end
-                    end)
-                    return true -- Chặn cuộc gọi gốc tức thời
-                else
-                    -- Chế độ Barrier: Chặn hoàn toàn nổ mìn
-                    return true
+                            processedMines["__dist_" .. giftId] = nil
+                        end)
+                    end
                 end
-            elseif activeController.SimulateDefuseKit then
-                -- Check xem mìn đã được xử lý defuse trước đó chưa
-                if gift:GetAttribute("Defused") then
-                    return true
-                elseif gift:GetAttribute("DefuseFailed") then
-                    return false
+            end
+
+            -- Đảm bảo iframes OFF khi không có mìn nào "inside" (Passthrough)
+            if mode == "Passthrough" then
+                local anyInside = false
+                for _, s in pairs(passthroughState) do
+                    if s == "inside" then
+                        anyInside = true
+                        break
+                    end
                 end
-
-                -- Thực hiện roll tỷ lệ thành công (20% * Stack)
-                local stack = activeController.DefuseKitStack or 3
-                local chance = stack * 0.20
-                local roll = math.random()
-                if roll <= chance then
-                    -- Defuse thành công!
-                    gift:SetAttribute("Defused", true)
-
-                    -- Phát âm thanh cắt dây
-                    local sound = Instance.new("Sound")
-                    sound.SoundId = "rbxassetid://118717483906381"
-                    sound.Volume = 1.0
-                    sound.Parent = game:GetService("SoundService")
-                    sound:Play()
-                    game:GetService("Debris"):AddItem(sound, 3)
-
-                    -- Vô hiệu hóa va chạm và cảm ứng của mìn locally
-                    pcall(function()
-                        if gift:IsA("BasePart") then
-                            gift.Transparency = 1
-                            gift.CanCollide = false
-                            gift.CanTouch = false
-                        end
-                        for _, child in ipairs(gift:GetDescendants()) do
-                            if child:IsA("BasePart") then
-                                child.Transparency = 1
-                                child.CanCollide = false
-                                child.CanTouch = false
-                            elseif child:IsA("Texture") or child:IsA("Decal") then
-                                child.Enabled = false
-                            end
-                        end
-                    end)
-
-                    return true
-                else
-                    -- Defuse thất bại -> Cho nổ mìn bình thường
-                    gift:SetAttribute("DefuseFailed", true)
-                    return false
+                if not anyInside and hasIframes() then
+                    removeIframes()
                 end
             end
         end
-    end
-    return false
+    end)
 end
 
--- Tự động thực hiện hook khi nạp file nếu môi trường hỗ trợ
-if typeof(hookfunction) == "function" then
-    pcall(hookRemote)
-end
-
+-- ─────────────────────────────────────────────────────────────────────
+-- Barrier.update(controller) — gọi từ executor
+-- ─────────────────────────────────────────────────────────────────────
 function Barrier.update(controller, gc)
     activeController = controller
-    
-    local enabled = controller.TripmineBarrierEnabled
-    if not enabled then return end
-    
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-    
-    local activeGifts = controller.ActiveGifts or {}
-    local hrpPos = hrp.Position
-    local mode = controller.TripmineMode or "Delayed"
-    
-    if mode == "Delayed" then
-        -- Chế độ Delayed: Chủ động kích nổ mìn từ xa khi người chơi lại gần khoảng cách an toàn
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local GiftCollected = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("GiftCollected")
-        if not GiftCollected then return end
-        
-        local baseDist = controller.TripmineDetonationDistance or 15
-        local jitter = controller.TripmineDetonationJitter or 2
-        
-        for _, g in ipairs(activeGifts) do
-            if g.type == "Tripmine" or g.type == "GoldenTripmine" then
-                -- Giải quyết realPart và realModel từ đối tượng rawObj nếu có
-                local realPart = g.part
-                local realModel = g.model
-                if g.rawObj and g.rawObj.Model then
-                    realModel = g.rawObj.Model
-                    if realModel:IsA("Model") then
-                        realPart = realModel.PrimaryPart or realModel:FindFirstChild("HumanoidRootPart") or realModel:FindFirstChildWhichIsA("BasePart") or realModel
-                    else
-                        realPart = realModel
-                    end
-                end
-                
-                if realPart and realPart.Parent and realPart:IsDescendantOf(workspace) then
-                    local isDetonated = realPart:GetAttribute("Detonated")
-                    local isDefused = realPart:GetAttribute("Defused")
-                    
-                    if not isDetonated and not isDefused then
-                        local pos = realPart:IsA("BasePart") and realPart.Position or (g.part and g.part:IsA("BasePart") and g.part.Position)
-                        if pos then
-                            local dist = (hrpPos - pos).Magnitude
-                            
-                            local targetDist: number = baseDist
-                            if jitter > 0 then
-                                local detDist = realPart:GetAttribute("DetonationDist")
-                                if typeof(detDist) == "number" then
-                                    targetDist = detDist
-                                else
-                                    local randomDist = baseDist + math.random(-jitter, jitter)
-                                    realPart:SetAttribute("DetonationDist", randomDist)
-                                    targetDist = randomDist
-                                end
-                            end
-                            
-                            -- Kích nổ từ xa khi ở trong khoảng cách an toàn nhưng phải lớn hơn 4.5 studs để tránh nổ sát người
-                            if dist <= targetDist and dist > 4.5 then
-                                realPart:SetAttribute("Detonated", true)
-                                
-                                -- Ẩn locally để tránh hiển thị ESP và giảm tải đồ họa trên client
-                                pcall(function()
-                                    if realPart:IsA("BasePart") then
-                                        realPart.Transparency = 1
-                                        realPart.CanCollide = false
-                                        realPart.CanTouch = false
-                                    end
-                                    if realModel then
-                                        if realModel:IsA("BasePart") then
-                                            realModel.Transparency = 1
-                                            realModel.CanCollide = false
-                                            realModel.CanTouch = false
-                                        end
-                                        for _, child in ipairs(realModel:GetDescendants()) do
-                                            if child:IsA("BasePart") then
-                                                child.Transparency = 1
-                                                child.CanCollide = false
-                                                child.CanTouch = false
-                                            elseif child:IsA("Texture") or child:IsA("Decal") then
-                                                child.Enabled = false
-                                            end
-                                        end
-                                    end
-                                end)
-                                
-                                task.spawn(function()
-                                    local orig = getgenv()._NULLSCAPE_Globals.OriginalGiftCollectedFireServer
-                                    if orig then
-                                        pcall(orig, GiftCollected, realPart, 30)
-                                    end
-                                end)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    elseif mode == "Barrier" then
-        -- Chỉ tắt va chạm vật lý mìn khi ở chế độ Barrier (Đi xuyên)
-        for _, g in ipairs(activeGifts) do
-            if g.type == "Tripmine" or g.type == "GoldenTripmine" then
-                -- Giải quyết realPart và realModel từ đối tượng rawObj nếu có
-                local realPart = g.part
-                local realModel = g.model
-                if g.rawObj and g.rawObj.Model then
-                    realModel = g.rawObj.Model
-                    if realModel:IsA("Model") then
-                        realPart = realModel.PrimaryPart or realModel:FindFirstChild("HumanoidRootPart") or realModel:FindFirstChildWhichIsA("BasePart") or realModel
-                    else
-                        realPart = realModel
-                    end
-                end
-                
-                if realPart and realPart.Parent and realPart:IsDescendantOf(workspace) then
-                    -- Vô hiệu hóa va chạm và cảm ứng của Part chính
-                    if realPart:IsA("BasePart") then
-                        if realPart.CanCollide ~= false then
-                            pcall(function() realPart.CanCollide = false end)
-                        end
-                        if realPart.CanTouch ~= false then
-                            pcall(function() realPart.CanTouch = false end)
-                        end
-                    end
-                    
-                    -- Vô hiệu hóa va chạm của toàn bộ các bộ phận con của mìn (nếu là Model)
-                    if realModel then
-                        if realModel:IsA("BasePart") then
-                            if realModel.CanCollide ~= false then
-                                pcall(function() realModel.CanCollide = false end)
-                            end
-                            if realModel.CanTouch ~= false then
-                                pcall(function() realModel.CanTouch = false end)
-                            end
-                        end
-                        for _, child in ipairs(realModel:GetDescendants()) do
-                            if child:IsA("BasePart") then
-                                if child.CanCollide ~= false then
-                                    pcall(function() child.CanCollide = false end)
-                                end
-                                if child.CanTouch ~= false then
-                                    pcall(function() child.CanTouch = false end)
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
+
+    if not controller.TripmineBarrierEnabled then
+        removeIframes()
+        -- Reset state khi tắt
+        table.clear(processedMines)
+        table.clear(passthroughState)
     end
+    -- Logic chính chạy trong watcher loop
 end
+
+-- ─────────────────────────────────────────────────────────────────────
+-- Init
+-- ─────────────────────────────────────────────────────────────────────
+function Barrier.Init()
+    startWatcher()
+    print("[NULLSCAPE Defuse] Module khởi tạo. Modes: Passthrough | PreDetonate | Barrier")
+end
+
+Barrier.Init()
 
 return Barrier

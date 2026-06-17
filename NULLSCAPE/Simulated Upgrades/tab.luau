@@ -144,8 +144,11 @@ return function(Client, Controller)
 
     Tab:CreateDropdown({
         Name = "Tripmine Bypass Mode",
-        Options = {"Delayed", "Barrier"},
-        CurrentOption = Controller.TripmineMode == "Barrier" and "Barrier" or "Delayed",
+        Info = "Passthrough: đi xuyên mìn, nổ sau delay. PreDetonate: kích nổ từ xa trước khi chạm. Barrier: đi xuyên không bao giờ nổ.",
+        Options = {"Passthrough", "PreDetonate", "Barrier"},
+        CurrentOption = (Controller.TripmineMode == "Barrier" and "Barrier")
+            or (Controller.TripmineMode == "PreDetonate" and "PreDetonate")
+            or "Passthrough",
         MultipleOptions = false,
         Flag = "TripmineModeDropdown",
         Callback = function(Option)
@@ -159,6 +162,7 @@ return function(Client, Controller)
 
     Tab:CreateSlider({
         Name = "Detonation Distance",
+        Info = "Passthrough: khoảng cách từ mìn để nổ sau khi đi qua. PreDetonate: khoảng cách để kích nổ sớm.",
         Range = {5, 30},
         CurrentValue = Controller.TripmineDetonationDistance or 15,
         Increment = 1,

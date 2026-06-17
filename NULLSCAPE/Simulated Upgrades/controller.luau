@@ -51,7 +51,7 @@ local Controller = {
 	SpeedBuffSelections = {},
 
 	TripmineBarrierEnabled = false,
-	TripmineMode = "Delayed", -- "Delayed" (Nổ trễ an toàn) hoặc "Barrier" (Đi xuyên mìn)
+	TripmineMode = "Passthrough", -- "Passthrough" (xuyên mìn, nổ sau) | "PreDetonate" (nổ sớm từ xa) | "Barrier" (xuyên, không nổ)
 	TripmineDetonationDistance = 15,
 	TripmineDetonationJitter = 2,
 	SimulateDefuseKit = false,
@@ -970,9 +970,9 @@ function Controller:SetTripmineBarrier(value)
 	self.TripmineBarrierEnabled = value
 end
 
--- Thiết lập chế độ chống mìn (Delayed / Barrier)
+-- Thiết lập chế độ chống mìn (Passthrough / PreDetonate / Barrier)
 function Controller:SetTripmineMode(value)
-	self.TripmineMode = value or "Delayed"
+	self.TripmineMode = value or "Passthrough"
 end
 
 -- Thiết lập khoảng cách kích nổ mìn cơ sở
