@@ -1,30 +1,25 @@
 -- [[
 --  NULLSCAPE - Anti-Tripmine Immunity & Defuse Kits Logic
 --
---  3 CHẾ ĐỘ:
---  ─────────────────────────────────────────────────────────────────────
---  "Passthrough"  – Đi xuyên qua mìn mà không nổ ngay. Sau khi đi qua
---                   một khoảng cách (DetonationDistance), mìn mới nổ.
---                   Cơ chế: Duy trì TRIP_IFRAMES khi đang đứng gần mìn
---                   (< 3 studs). Khi đi ra đủ xa → remove iframes → mìn
---                   sẽ tự trigger bình thường nếu player quay lại trong
---                   2.25 studs, hoặc force Collect() từ xa.
+--  3 CHẾ ĐỘ BẢO VỆ:
+--  ───────────────────────────────────────────────────────────────────────
+--  "Passthrough"  – Đi xuyên qua mìn (có iframes bảo vệ), sau khi ra ngoài
+--                   phạm vi an toàn (BlastSafeRadius) mới kích nổ sau lưng.
 --
---  "PreDetonate"  – Kích hoạt mìn sớm từ khoảng cách an toàn trước khi
---                   chạm vào. Player chưa cần bước vào vùng nguy hiểm.
---                   Cơ chế: Duy trì TRIP_IFRAMES để ngăn trigger tự nhiên.
---                   Khi player tiếp cận <= DetonationDistance studs → gọi
---                   gift:Collect() trực tiếp (player đang đủ xa để không
---                   nhận blast damage).
+--  "PreDetonate"  – Kích nổ mìn từ xa trước khi chạm. Chỉ nổ khi player
+--                   đang trong phạm vi DetonationDistance và đã ở khoảng cách
+--                   an toàn (BlastSafeRadius) để tránh tự sát.
 --
 --  "Barrier"      – Đi xuyên mìn hoàn toàn, không bao giờ nổ.
---                   Cơ chế: Duy trì TRIP_IFRAMES vĩnh viễn.
---  ─────────────────────────────────────────────────────────────────────
+--  ───────────────────────────────────────────────────────────────────────
 --
---  Tại sao dùng TRIP_IFRAMES?
---  Game kiểm tra LocalPlayer:FindFirstChild("TRIP_IFRAMES") trong UpdateGifts
---  (GiftClientHandler, dòng 467). Nếu tìm thấy → bán kính trigger = -1
---  → không bao giờ kích hoạt mìn phía client.
+--  Tối ưu hóa Iframes & Tránh tự sát do Latency:
+--  1. Giữ TRIP_IFRAMES liên tục trong suốt quá trình xử lý mìn (kể cả khi chờ nổ).
+--     Không tắt iframes trước khi gửi gói tin Collect để tránh bị nổ ngược do lag gói tin.
+--  2. Tốc độ kiểm tra khoảng cách an toàn nâng lên tần số cao (mỗi frame - task.wait())
+--     thay vì 0.05s để tránh việc di chuyển quá nhanh đâm vào vùng nổ.
+--  3. Tăng giới hạn cấu hình khoảng cách trong UI lên đến 50 studs để người chơi
+--     bù đắp ping cao hoặc tốc độ di chuyển cực nhanh.
 -- ]]
 
 local Barrier = {}
@@ -55,7 +50,7 @@ local function removeIframes()
         pcall(function() iframeObject:Destroy() end)
         iframeObject = nil
     end
-    -- Xóa luôn bất kỳ object nào game tạo
+    -- Xóa luôn bất kỳ object nào game tự tạo hoặc thừa
     local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
     if existing and existing ~= iframeObject then
         pcall(function() existing:Destroy() end)
@@ -81,7 +76,7 @@ end
 -- ─────────────────────────────────────────────────────────────────────
 -- State tracking
 -- ─────────────────────────────────────────────────────────────────────
--- processedMines[giftId] = "passthrough_tracking" | "predetonate_done" | "passthrough_done"
+-- processedMines[giftId] = true | "__dist_"..giftId = targetDist
 -- passthroughState[giftId] = "inside" | "exited"
 local processedMines = {}
 local passthroughState = {}
@@ -103,17 +98,17 @@ local function startWatcher()
 
     task.spawn(function()
         while true do
-            task.wait(0.05) -- 20 Hz
+            task.wait(0.05) -- 20 Hz scan các thực thể xung quanh
 
             if not activeController or not activeController.TripmineBarrierEnabled then
-                -- Không hoạt động: đảm bảo iframes được dọn
+                -- Không hoạt động: đảm bảo dọn sạch iframes
                 if hasIframes() then removeIframes() end
                 continue
             end
 
             local mode = activeController.TripmineMode or "Passthrough"
 
-            -- Barrier mode: chỉ cần duy trì iframes, không cần scan
+            -- Barrier mode: chỉ cần duy trì iframes liên tục, không cần quét nổ
             if mode == "Barrier" then
                 addIframes()
                 continue
@@ -123,7 +118,7 @@ local function startWatcher()
             local char = LocalPlayer.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             if not hrp then
-                addIframes() -- giữ iframes khi không có character
+                addIframes() -- giữ iframes khi không có character để an toàn
                 continue
             end
 
@@ -136,9 +131,10 @@ local function startWatcher()
             local hrpPos = hrp.Position
             local baseDist = activeController.TripmineDetonationDistance or 15
             local jitter = activeController.TripmineDetonationJitter or 2
+            local safeRadius = activeController.TripmineBlastSafeRadius or 8
             local Gifts = GCH.Gifts
 
-            -- ── Dọn processedMines cho gifts đã biến mất ──────────────
+            -- ── Dọn dẹp trạng thái cho các mìn đã nổ/biến mất ──────────
             for id, _ in pairs(processedMines) do
                 local idStr = tostring(id)
                 if idStr:sub(1, 7) == "__dist_" then continue end
@@ -148,7 +144,7 @@ local function startWatcher()
                 end
             end
 
-            -- ── Scan từng tripmine ─────────────────────────────────────
+            -- ── Quét và xử lý từng Tripmine ────────────────────────────
             for giftId, gift in pairs(Gifts) do
                 if not gift.Tripmine or gift.Collected then
                     if passthroughState[giftId] then
@@ -166,75 +162,64 @@ local function startWatcher()
                     local state = passthroughState[giftId]
 
                     if not state then
-                        -- Chưa tracking: player vừa vào gần mìn
+                        -- Chưa theo dõi: Player bắt đầu đi xuyên qua mìn
                         if dist < 6 then
                             passthroughState[giftId] = "inside"
                             addIframes()
-                            -- Tính khoảng cách nổ sau khi đi ra
+                            -- Tính toán khoảng cách kích nổ sau khi đi xa ra ngoài
                             local targetDist = baseDist + (jitter > 0 and math.random(-jitter, jitter) or 0)
                             processedMines["__dist_" .. giftId] = math.max(targetDist, 6)
-                            print("[NULLSCAPE] Passthrough: đang xuyên mìn", giftId)
+                            print("[NULLSCAPE] Passthrough: đang đi xuyên mìn", giftId)
                         end
 
                     elseif state == "inside" then
-                        -- Đang ở trong vùng mìn với iframes
-                        -- Kiểm tra nếu đã đi ra đủ xa
+                        -- Đang ở trong vùng mìn với iframes bảo vệ
+                        -- Đợi cho đến khi đi ra ngoài khoảng cách kích nổ đã định
                         local targetDist = processedMines["__dist_" .. giftId] or baseDist
                         if dist >= targetDist then
                             passthroughState[giftId] = "exited"
-                            print("[NULLSCAPE] Passthrough: đã đi ra", math.round(dist), "studs, chuẩn bị nổ mìn", giftId)
+                            print("[NULLSCAPE] Passthrough: đã đi ra cách mìn", math.round(dist), "studs, chờ khoảng cách an toàn trước khi nổ...", giftId)
 
-                            -- Kiểm tra còn mìn nào khác đang "inside" không
-                            local anyInside = false
-                            for id2, s2 in pairs(passthroughState) do
-                                if id2 ~= giftId and s2 == "inside" then
-                                    anyInside = true
-                                    break
-                                end
-                            end
-
-                            -- Nếu không còn mìn nào đang "inside" → có thể remove iframes
-                            if not anyInside then
-                                removeIframes()
-                            end
-
-                            -- Force collect mìn này (nổ từ vị trí an toàn)
+                            -- Kích hoạt luồng chờ kích nổ an toàn
                             task.spawn(function()
-                                task.wait(0.05) -- 1 frame delay
-                                if gift and not gift.Collected then
-                                    local ok = pcall(function() gift:Collect(false, true, 0) end)
-                                    if ok then
-                                        print("[NULLSCAPE] Passthrough: đã kích nổ mìn", giftId, "tại", math.round(dist), "studs")
+                                local char2 = LocalPlayer.Character
+                                local hrp2 = char2 and char2:FindFirstChild("HumanoidRootPart")
+                                if hrp2 and gift and not gift.Collected then
+                                    -- Giữ iframes liên tục trong suốt quá trình chờ nổ
+                                    addIframes()
+                                    local timeout = 0
+                                    -- Sử dụng task.wait() (mỗi frame) thay vì 0.05s để chính xác tối đa khi di chuyển nhanh
+                                    while gift and not gift.Collected and timeout < 10 do
+                                        local currentDist = (hrp2.Position - gift.Position).Magnitude
+                                        if currentDist >= safeRadius then
+                                            break -- Đã ra ngoài tầm sát thương của vụ nổ
+                                        end
+                                        task.wait()
+                                        timeout = timeout + 0.015
+                                    end
+
+                                    -- Gọi thẳng Collect mà không tắt iframes nhằm tránh bị nổ ngược do lag gói tin
+                                    if gift and not gift.Collected then
+                                        local finalDist = (hrp2.Position - gift.Position).Magnitude
+                                        local ok = pcall(function() gift:Collect(false, true, 0) end)
+                                        if ok then
+                                            print("[NULLSCAPE] Passthrough: đã kích nổ mìn sau lưng", giftId, "tại khoảng cách", math.round(finalDist), "studs")
+                                        end
                                     end
                                 end
                                 clearMineState(giftId)
                             end)
                         end
-
-                    elseif state == "exited" then
-                        -- Đã xử lý, chờ dọn
-                    end
-
-                    -- Đảm bảo iframes ON khi bất kỳ mìn nào đang ở "inside"
-                    local anyInside = false
-                    for _, s in pairs(passthroughState) do
-                        if s == "inside" then
-                            anyInside = true
-                            break
-                        end
-                    end
-                    if anyInside then
-                        addIframes()
                     end
 
                 -- ── CHẾ ĐỘ PREDETONATE ─────────────────────────────────
                 elseif mode == "PreDetonate" then
-                    -- Luôn duy trì iframes để ngăn trigger tự nhiên
+                    -- Luôn duy trì iframes để tránh các mìn khác nổ tự phát
                     addIframes()
 
                     if processedMines[giftId] then continue end
 
-                    -- Xác định khoảng cách kích nổ cho mìn này
+                    -- Xác định khoảng cách kích nổ sớm cho quả mìn này
                     if not processedMines["__dist_" .. giftId] then
                         local targetDist = baseDist + (jitter > 0 and math.random(-jitter, jitter) or 0)
                         processedMines["__dist_" .. giftId] = math.max(targetDist, 5)
@@ -242,35 +227,51 @@ local function startWatcher()
 
                     local targetDist = processedMines["__dist_" .. giftId]
 
-                    -- Khi player tiếp cận đủ gần để PreDetonate
+                    -- Khi player đi vào vùng kích nổ sớm
                     if dist <= targetDist then
                         processedMines[giftId] = true
 
-                        local capturedDist = dist
+                        local capturedGift = gift
+                        local capturedId = giftId
                         task.spawn(function()
-                            if gift and not gift.Collected then
-                                local ok = pcall(function() gift:Collect(false, true, 0) end)
-                                if ok then
-                                    print("[NULLSCAPE] PreDetonate: kích nổ mìn", giftId, "tại", math.round(capturedDist), "studs")
+                            local char2 = LocalPlayer.Character
+                            local hrp2 = char2 and char2:FindFirstChild("HumanoidRootPart")
+                            if hrp2 and capturedGift and not capturedGift.Collected then
+                                -- Chờ cho đến khi chắc chắn ở ngoài tầm BlastSafeRadius
+                                local timeout = 0
+                                while capturedGift and not capturedGift.Collected and timeout < 10 do
+                                    local currentDist = (hrp2.Position - capturedGift.Position).Magnitude
+                                    if currentDist >= safeRadius then
+                                        break
+                                    end
+                                    task.wait()
+                                    timeout = timeout + 0.015
+                                end
+                                
+                                -- Không tắt iframes nữa để giữ an toàn tuyệt đối
+                                if capturedGift and not capturedGift.Collected then
+                                    local finalDist = hrp2 and (hrp2.Position - capturedGift.Position).Magnitude or 0
+                                    local ok = pcall(function() capturedGift:Collect(false, true, 0) end)
+                                    if ok then
+                                        print("[NULLSCAPE] PreDetonate: kích nổ mìn từ xa", capturedId, "tại khoảng cách", math.round(finalDist), "studs (safe:", safeRadius, ")")
+                                    end
                                 end
                             end
-                            processedMines["__dist_" .. giftId] = nil
+                            processedMines["__dist_" .. capturedId] = nil
                         end)
                     end
                 end
             end
 
-            -- Đảm bảo iframes OFF khi không có mìn nào "inside" (Passthrough)
+            -- ── Quản lý bật/tắt iframes chung cho chế độ Passthrough ───
             if mode == "Passthrough" then
-                local anyInside = false
-                for _, s in pairs(passthroughState) do
-                    if s == "inside" then
-                        anyInside = true
-                        break
+                local anyActive = (next(passthroughState) ~= nil)
+                if anyActive then
+                    addIframes()
+                else
+                    if hasIframes() then
+                        removeIframes()
                     end
-                end
-                if not anyInside and hasIframes() then
-                    removeIframes()
                 end
             end
         end
@@ -278,18 +279,17 @@ local function startWatcher()
 end
 
 -- ─────────────────────────────────────────────────────────────────────
--- Barrier.update(controller) — gọi từ executor
+-- Barrier.update(controller) — gọi định kỳ từ controller
 -- ─────────────────────────────────────────────────────────────────────
 function Barrier.update(controller, gc)
     activeController = controller
 
     if not controller.TripmineBarrierEnabled then
         removeIframes()
-        -- Reset state khi tắt
+        -- Reset trạng thái khi tắt bypass
         table.clear(processedMines)
         table.clear(passthroughState)
     end
-    -- Logic chính chạy trong watcher loop
 end
 
 -- ─────────────────────────────────────────────────────────────────────
@@ -297,7 +297,7 @@ end
 -- ─────────────────────────────────────────────────────────────────────
 function Barrier.Init()
     startWatcher()
-    print("[NULLSCAPE Defuse] Module khởi tạo. Modes: Passthrough | PreDetonate | Barrier")
+    print("[NULLSCAPE Defuse] Module khởi tạo thành công. Bảo vệ: Passthrough | PreDetonate | Barrier")
 end
 
 Barrier.Init()

@@ -54,6 +54,7 @@ local Controller = {
 	TripmineMode = "Passthrough", -- "Passthrough" (xuyên mìn, nổ sau) | "PreDetonate" (nổ sớm từ xa) | "Barrier" (xuyên, không nổ)
 	TripmineDetonationDistance = 15,
 	TripmineDetonationJitter = 2,
+	TripmineBlastSafeRadius = 8, -- Chỉ nổ khi dist > giá trị này (studs)
 	SimulateDefuseKit = false,
 	DefuseKitStack = 3,
 
@@ -983,6 +984,11 @@ end
 -- Thiết lập biên độ dao động khoảng cách kích nổ ngẫu nhiên
 function Controller:SetTripmineDetonationJitter(value)
 	self.TripmineDetonationJitter = value or 2
+end
+
+-- Thiết lập bán kính an toàn trước khi kích nổ mìn
+function Controller:SetTripmineBlastSafeRadius(value)
+	self.TripmineBlastSafeRadius = value or 8
 end
 
 -- Bật/tắt mô phỏng Defuse Kit

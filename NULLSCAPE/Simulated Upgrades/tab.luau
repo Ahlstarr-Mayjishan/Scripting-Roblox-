@@ -163,7 +163,7 @@ return function(Client, Controller)
     Tab:CreateSlider({
         Name = "Detonation Distance",
         Info = "Passthrough: khoảng cách từ mìn để nổ sau khi đi qua. PreDetonate: khoảng cách để kích nổ sớm.",
-        Range = {5, 30},
+        Range = {5, 50},
         CurrentValue = Controller.TripmineDetonationDistance or 15,
         Increment = 1,
         ValueName = "Studs",
@@ -182,6 +182,19 @@ return function(Client, Controller)
         Flag = "TripmineDetonationJitterSlider",
         Callback = function(Value)
             Controller:SetTripmineDetonationJitter(Value)
+        end
+    })
+
+    Tab:CreateSlider({
+        Name = "Blast Safe Radius",
+        Info = "Chỉ kích nổ mìn khi player đang cách mìn > giá trị này. Nếu quá gần, chờ cho đến khi đủ an toàn.",
+        Range = {4, 35},
+        CurrentValue = Controller.TripmineBlastSafeRadius or 8,
+        Increment = 1,
+        ValueName = "Studs",
+        Flag = "TripmineBlastSafeRadiusSlider",
+        Callback = function(Value)
+            Controller:SetTripmineBlastSafeRadius(Value)
         end
     })
 
