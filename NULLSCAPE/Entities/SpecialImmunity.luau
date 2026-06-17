@@ -6,11 +6,13 @@
 
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
 
 local Logic = {
     Connections = {},
     SavedVoidbreakerHitbox = nil,
     SavedGuardianHitbox = nil,
+    RazorbloomDisabled = setmetatable({}, { __mode = "k" }),
 }
 
 local SPECIAL_FLAGS = {
@@ -21,6 +23,7 @@ local SPECIAL_FLAGS = {
     Sigil = "SigilImmune",
     Slicer = "SlicerImmune",
     Voidbreaker = "VoidbreakerImmune",
+    Razorbloom = "RazorbloomImmune",
 }
 
 local function getController()
@@ -148,6 +151,58 @@ local function applyGuardianProjectileBypass()
     end
 end
 
+local function disableRazorbloom(razorbloom)
+    if not isEnabled("Razorbloom") then
+        return
+    end
+    if not (razorbloom and razorbloom.Parent) then
+        return
+    end
+    if Logic.RazorbloomDisabled[razorbloom] then
+        return
+    end
+
+    local bindable = razorbloom:FindFirstChild("ClientBindable")
+    if not (bindable and bindable:IsA("BindableEvent")) then
+        return
+    end
+
+    Logic.RazorbloomDisabled[razorbloom] = true
+    pcall(function()
+        bindable:Fire("Disable")
+    end)
+end
+
+local function applyRazorbloomBypass()
+    if not isEnabled("Razorbloom") then
+        return
+    end
+
+    local player = Players.LocalPlayer
+    local character = player and player.Character
+    local razorbloom = character and character:FindFirstChild("Razorbloom")
+    if razorbloom then
+        disableRazorbloom(razorbloom)
+    end
+end
+
+local function watchCharacter(character)
+    if not character then
+        return
+    end
+
+    local existing = character:FindFirstChild("Razorbloom")
+    if existing then
+        task.defer(disableRazorbloom, existing)
+    end
+
+    table.insert(Logic.Connections, character.ChildAdded:Connect(function(child)
+        if child.Name == "Razorbloom" then
+            task.defer(disableRazorbloom, child)
+        end
+    end))
+end
+
 function Logic.enable()
     if Logic.Enabled then
         return true
@@ -158,6 +213,7 @@ function Logic.enable()
         if anySpecialEnabled() then
             applyVoidbreakerHitboxBypass()
             applyGuardianProjectileBypass()
+            applyRazorbloomBypass()
         end
     end))
 
@@ -166,6 +222,14 @@ function Logic.enable()
             task.defer(applyVoidbreakerHitboxBypass)
         end
     end))
+
+    local player = Players.LocalPlayer
+    if player then
+        watchCharacter(player.Character)
+        table.insert(Logic.Connections, player.CharacterAdded:Connect(function(character)
+            task.defer(watchCharacter, character)
+        end))
+    end
 
     return true
 end
@@ -215,6 +279,7 @@ function Logic.disable()
     Logic.Enabled = false
     Logic.restoreVoidbreakerHitbox()
     Logic.restoreGuardianHitbox()
+    Logic.RazorbloomDisabled = setmetatable({}, { __mode = "k" })
 end
 
 function Logic.disableForType(entityName)

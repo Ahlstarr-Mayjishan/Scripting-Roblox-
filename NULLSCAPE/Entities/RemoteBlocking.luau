@@ -84,6 +84,12 @@ Logic.Config = {
         Remotes = { "Died" },
         Keywords = { "Voidbreaker" },
         LegitKeywords = { "Voidbreaker" }
+    },
+    ["Razorbloom"] = {
+        ControllerFlag = "RazorbloomImmune",
+        Remotes = { "ClientEvent" },
+        Keywords = { "Fail" },
+        LegitKeywords = { "Fail" }
     }
     -- Thêm cấu hình chặn Remote cho thực thể mới tại đây
 }

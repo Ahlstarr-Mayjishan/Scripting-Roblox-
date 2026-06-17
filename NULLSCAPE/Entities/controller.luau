@@ -33,12 +33,17 @@ local Controller = {
 	SigilImmune = false,
 	SlicerImmune = false,
 	VoidbreakerImmune = false,
+	RazorbloomImmune = false,
+	CadenceImmune = false,
 	SpringerImmunityMode = "Legit",
 	Destroyed = false,
 
 	EnemiesFolder = nil,
 	PermanentConnections = {},
 	StartSkinwalkerEvasion = nil,
+	CadenceUI = nil,
+	CadenceStatusLabel = nil,
+	CadenceUIFrame = nil,
 }
 GC.Controller = Controller
 
@@ -59,6 +64,74 @@ end
 
 local function debugPrint(...)
 	warn("[DEBUG NULLSCAPE Controller]", ...)
+end
+
+local function createCadenceUI()
+	if Controller.CadenceUI then
+		return
+	end
+
+	local ScreenGui = Instance.new("ScreenGui")
+	ScreenGui.Name = "CadenceStatusGui"
+	ScreenGui.ResetOnSpawn = false
+	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	local CoreGui = game:GetService("CoreGui")
+	local PlayerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+	
+	local parent = CoreGui
+	local success, _ = pcall(function()
+		ScreenGui.Parent = parent
+	end)
+	if not success then
+		ScreenGui.Parent = PlayerGui
+	end
+
+	local Frame = Instance.new("Frame")
+	Frame.Name = "MainFrame"
+	Frame.Size = UDim2.new(0, 220, 0, 80)
+	Frame.Position = UDim2.new(0.5, -110, 0.1, 0)
+	Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	Frame.BackgroundTransparency = 0.2
+	Frame.BorderSizePixel = 0
+	Frame.Active = true
+	Frame.Draggable = true
+	Frame.Parent = ScreenGui
+
+	local UICorner = Instance.new("UICorner")
+	UICorner.CornerRadius = UDim.new(0, 10)
+	UICorner.Parent = Frame
+
+	local UIStroke = Instance.new("UIStroke")
+	UIStroke.Color = Color3.fromRGB(80, 80, 80)
+	UIStroke.Thickness = 1.5
+	UIStroke.Parent = Frame
+
+	local TitleLabel = Instance.new("TextLabel")
+	TitleLabel.Name = "TitleLabel"
+	TitleLabel.Size = UDim2.new(1, 0, 0.4, 0)
+	TitleLabel.Position = UDim2.new(0, 0, 0.05, 0)
+	TitleLabel.BackgroundTransparency = 1
+	TitleLabel.Text = "🎵 CADENCE STATUS"
+	TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	TitleLabel.TextSize = 13
+	TitleLabel.Font = Enum.Font.GothamBold
+	TitleLabel.Parent = Frame
+
+	local StatusLabel = Instance.new("TextLabel")
+	StatusLabel.Name = "StatusLabel"
+	StatusLabel.Size = UDim2.new(1, 0, 0.5, 0)
+	StatusLabel.Position = UDim2.new(0, 0, 0.45, 0)
+	StatusLabel.BackgroundTransparency = 1
+	StatusLabel.Text = "Not Active"
+	StatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+	StatusLabel.TextSize = 16
+	StatusLabel.Font = Enum.Font.GothamMedium
+	StatusLabel.Parent = Frame
+
+	Controller.CadenceUI = ScreenGui
+	Controller.CadenceStatusLabel = StatusLabel
+	Controller.CadenceUIFrame = Frame
 end
 
 local inLobby = not isInMatch() -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
@@ -95,6 +168,15 @@ function Controller:CleanUp()
 	GC.cleanAll()
 	self.EnemiesFolder = nil
 
+	if self.CadenceUI then
+		pcall(function()
+			self.CadenceUI:Destroy()
+		end)
+		self.CadenceUI = nil
+		self.CadenceStatusLabel = nil
+		self.CadenceUIFrame = nil
+	end
+
 	-- Nếu bị hủy hoàn toàn (Destroyed = true), giải phóng các kết nối vĩnh viễn
 	if self.Destroyed and self.PermanentConnections then
 		for _, conn in ipairs(self.PermanentConnections) do
@@ -118,6 +200,7 @@ local SPECIAL_IMMUNITY_FLAGS = {
 	Sigil = "SigilImmune",
 	Slicer = "SlicerImmune",
 	Voidbreaker = "VoidbreakerImmune",
+	Razorbloom = "RazorbloomImmune",
 }
 
 local function isSpecialImmunityEntity(entityName)
@@ -230,6 +313,8 @@ function Controller:SetImmunity(entityName, value)
 				accessibilityController:updateSpringerAutoJumpState()
 			end)
 		end
+	elseif entityName == "Cadence" then
+		self.CadenceImmune = value
 	elseif isSpecialImmunityEntity(entityName) then
 		self[SPECIAL_IMMUNITY_FLAGS[entityName]] = value == true
 		if value then
@@ -302,6 +387,7 @@ function Controller:SetImmunity(entityName, value)
 			or entityName == "Tele"
 			or entityName == "ShadowGuardian"
 			or entityName == "Sigil"
+			or entityName == "Cadence"
 		then
 			Executor.disableImmunityForType(GC, entityName)
 		elseif entityName == "Skinwalker" then
@@ -453,6 +539,76 @@ local function processEntity(enemy)
 				HuskEvasion.enableHuskImmunity(GC, enemy)
 			end
 		end
+
+		-- ── Cadence Status UI Hook ─────────────────────────────
+		if string.find(name, "Cadence") then
+			createCadenceUI()
+			if Controller.CadenceStatusLabel then
+				Controller.CadenceStatusLabel.Text = "Stage 1"
+				Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(80, 200, 255)
+			end
+
+			local clientEvent = enemy:WaitForChild("ClientEvent", 5)
+			if clientEvent and clientEvent:IsA("RemoteEvent") then
+				local cadenceConn = clientEvent.OnClientEvent:Connect(function(p1, p2)
+					if p1 == "Stage" then
+						local stageNum = p2.Stage
+						if Controller.CadenceStatusLabel then
+							Controller.CadenceStatusLabel.Text = "Stage " .. tostring(stageNum)
+							if stageNum == 2 then
+								Controller.CadenceStatusLabel.Text = "Phase 2 (Stage 2)"
+								Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(255, 170, 0)
+								pcall(function()
+									local ts = game:GetService("TweenService")
+									Controller.CadenceStatusLabel.TextSize = 20
+									ts:Create(Controller.CadenceStatusLabel, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+										TextSize = 16
+									}):Play()
+									if Controller.CadenceUIFrame then
+										local stroke = Controller.CadenceUIFrame:FindFirstChildOfClass("UIStroke")
+										if stroke then
+											stroke.Color = Color3.fromRGB(255, 170, 0)
+											ts:Create(stroke, TweenInfo.new(1, Enum.EasingStyle.Linear), {
+												Color = Color3.fromRGB(80, 80, 80)
+											}):Play()
+										end
+									end
+								end)
+							elseif stageNum == 3 then
+								Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(255, 80, 0)
+							elseif stageNum == 4 then
+								Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+							else
+								Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(80, 200, 255)
+							end
+						end
+					elseif p1 == "Chase" then
+						if Controller.CadenceStatusLabel then
+							Controller.CadenceStatusLabel.Text = "⚠️ CHASE ACTIVE ⚠️"
+							Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
+							pcall(function()
+								local ts = game:GetService("TweenService")
+								if Controller.CadenceUIFrame then
+									local stroke = Controller.CadenceUIFrame:FindFirstChildOfClass("UIStroke")
+									if stroke then
+										stroke.Color = Color3.fromRGB(255, 50, 50)
+										ts:Create(stroke, TweenInfo.new(1, Enum.EasingStyle.Linear), {
+											Color = Color3.fromRGB(80, 80, 80)
+										}):Play()
+									end
+								end
+							end)
+						end
+					elseif p1 == "ElasticStop" then
+						if Controller.CadenceStatusLabel then
+							Controller.CadenceStatusLabel.Text = "Stopped"
+							Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+						end
+					end
+				end)
+				GC.registerEntityConnection(enemy, cadenceConn)
+			end
+		end
 	end
 
 	-- Đăng ký sự kiện lắng nghe đổi tên của thực thể (Phòng hờ game đổi tên trễ sau khi spawn)
@@ -507,6 +663,12 @@ local function removeEntity(enemy)
 	for part, data in pairs(disabledShockwaves) do
 		if data.enemy == enemy then
 			restoreShockwave(part)
+		end
+	end
+	if string.find(enemy.Name, "Cadence") then
+		if Controller.CadenceStatusLabel then
+			Controller.CadenceStatusLabel.Text = "Not Active"
+			Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
 		end
 	end
 end

@@ -86,6 +86,15 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateToggle({
+		Name = "Cadence",
+		CurrentValue = Controller.CadenceImmune,
+		Flag = "ImmunityCadenceToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Cadence", Value)
+		end,
+	})
+
 	Tab:CreateSection("Entities - Special Immunity")
 
 	Tab:CreateToggle({
@@ -148,6 +157,15 @@ return function(Client, Controller)
 		Flag = "ImmunityVoidbreakerToggle",
 		Callback = function(Value)
 			Controller:SetImmunity("Voidbreaker", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Razorbloom Phase",
+		CurrentValue = Controller.RazorbloomImmune,
+		Flag = "ImmunityRazorbloomToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Razorbloom", Value)
 		end,
 	})
 

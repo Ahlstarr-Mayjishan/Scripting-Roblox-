@@ -76,6 +76,8 @@ pcall(function()
             ImmunitySigilToggle = false,
             ImmunitySlicerToggle = false,
             ImmunityVoidbreakerToggle = false,
+            ImmunityRazorbloomToggle = false,
+            ImmunityCadenceToggle = false,
             SpringerAutoJumpToggle = false,
             GrapplerStaminaModeDropdown = "Off",
             RailAssistSuiteToggle = false,
