@@ -144,7 +144,7 @@ return function(Client, Controller)
 
     Tab:CreateDropdown({
         Name = "Tripmine Bypass Mode",
-        Info = "Passthrough: đi xuyên mìn, nổ sau delay. PreDetonate: kích nổ từ xa trước khi chạm. Barrier: đi xuyên không bao giờ nổ.",
+        Info = "Passthrough: đi xuyên mìn bằng iframes. PreDetonate: theo dõi vùng nguy hiểm nhưng không gửi nổ chủ động. Barrier: chỉ giữ iframes.",
         Options = {"Passthrough", "PreDetonate", "Barrier"},
         CurrentOption = (Controller.TripmineMode == "Barrier" and "Barrier")
             or (Controller.TripmineMode == "PreDetonate" and "PreDetonate")
@@ -182,19 +182,6 @@ return function(Client, Controller)
         Flag = "TripmineDetonationJitterSlider",
         Callback = function(Value)
             Controller:SetTripmineDetonationJitter(Value)
-        end
-    })
-
-    Tab:CreateSlider({
-        Name = "Blast Safe Radius",
-        Info = "Chỉ kích nổ mìn khi player đang cách mìn > giá trị này. Nếu quá gần, chờ cho đến khi đủ an toàn.",
-        Range = {4, 35},
-        CurrentValue = Controller.TripmineBlastSafeRadius or 8,
-        Increment = 1,
-        ValueName = "Studs",
-        Flag = "TripmineBlastSafeRadiusSlider",
-        Callback = function(Value)
-            Controller:SetTripmineBlastSafeRadius(Value)
         end
     })
 

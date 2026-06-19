@@ -54,7 +54,7 @@ local Controller = {
 	TripmineMode = "Passthrough", -- "Passthrough" (xuyên mìn, nổ sau) | "PreDetonate" (nổ sớm từ xa) | "Barrier" (xuyên, không nổ)
 	TripmineDetonationDistance = 15,
 	TripmineDetonationJitter = 2,
-	TripmineBlastSafeRadius = 8, -- Chỉ nổ khi dist > giá trị này (studs)
+	TripmineBlastSafeRadius = 8, -- Legacy: active tripmine detonation is disabled by Defuse Kits
 	SimulateDefuseKit = false,
 	DefuseKitStack = 3,
 

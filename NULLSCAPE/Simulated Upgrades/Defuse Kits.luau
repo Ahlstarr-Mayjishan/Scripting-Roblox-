@@ -80,101 +80,22 @@ end
 -- passthroughState[giftId] = "inside" | "exited"
 local processedMines = {}
 local passthroughState = {}
-local pendingDetonations = {}
+local blockedDetonationLogs = {}
 
 local function clearMineState(giftId)
     processedMines[giftId] = nil
     processedMines["__dist_" .. giftId] = nil
     passthroughState[giftId] = nil
-    pendingDetonations[giftId] = nil
 end
 
-local function getEffectiveSafeRadius(gift, configuredRadius)
-    local sizeValue = gift and gift.Size
-    local size = if type(sizeValue) == "number" then sizeValue else 1
-    return math.max(configuredRadius or 8, 18, size * 10)
-end
-
-local function getGiftDistance(hrp, gift)
-    if not (hrp and gift and gift.Position) then
-        return math.huge
-    end
-    return (hrp.Position - gift.Position).Magnitude
-end
-
-local function waitUntilTripmineSafe(hrp, gift, configuredRadius, timeoutSeconds)
-    local startedAt = os.clock()
-    local effectiveSafeRadius = getEffectiveSafeRadius(gift, configuredRadius)
-
-    while gift and not gift.Collected and os.clock() - startedAt < (timeoutSeconds or 10) do
-        local currentDist = getGiftDistance(hrp, gift)
-        if currentDist >= effectiveSafeRadius then
-            return true, currentDist, effectiveSafeRadius
-        end
-        addIframes()
-        task.wait()
-    end
-
-    return false, getGiftDistance(hrp, gift), effectiveSafeRadius
-end
-
-local function safeCollectTripmine(gift, giftId, hrp, configuredRadius, reason)
-    if not (gift and not gift.Collected) then
-        return false
-    end
-
-    local effectiveSafeRadius = getEffectiveSafeRadius(gift, configuredRadius)
-    local currentDist = getGiftDistance(hrp, gift)
-    if currentDist < effectiveSafeRadius then
-        return false, currentDist, effectiveSafeRadius
-    end
-
-    addIframes()
-    local ok = pcall(function()
-        gift:Collect(false, true, 0)
-    end)
-    if ok then
-        processedMines[giftId] = true
-        print("[NULLSCAPE] " .. reason .. ": tripmine detonated", giftId, "at", math.round(currentDist), "studs (safe:", math.round(effectiveSafeRadius), ")")
-    end
-    return ok, currentDist, effectiveSafeRadius
-end
-
-local function queueSafeDetonation(giftId, gift, safeRadius, reason)
-    if pendingDetonations[giftId] then
+local function logBlockedDetonation(giftId, reason, dist)
+    local key = reason .. ":" .. tostring(giftId)
+    if blockedDetonationLogs[key] then
         return
     end
 
-    pendingDetonations[giftId] = true
-    task.spawn(function()
-        while activeController and activeController.TripmineBarrierEnabled and gift and not gift.Collected do
-            if (activeController.TripmineMode or "Passthrough") == "Barrier" then
-                break
-            end
-
-            addIframes()
-
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then
-                task.wait()
-                continue
-            end
-
-            local isSafe = waitUntilTripmineSafe(hrp, gift, safeRadius, 0.35)
-            if isSafe then
-                safeCollectTripmine(gift, giftId, hrp, safeRadius, reason)
-                break
-            end
-
-            task.wait()
-        end
-
-        pendingDetonations[giftId] = nil
-        if gift and gift.Collected then
-            clearMineState(giftId)
-        end
-    end)
+    blockedDetonationLogs[key] = true
+    print("[NULLSCAPE] " .. reason .. ": tripmine active detonation blocked", giftId, "at", math.round(dist), "studs")
 end
 
 -- ─────────────────────────────────────────────────────────────────────
@@ -202,7 +123,6 @@ local function startWatcher()
             -- Barrier mode: chỉ cần duy trì iframes liên tục, không cần quét nổ
             if mode == "Barrier" then
                 table.clear(passthroughState)
-                table.clear(pendingDetonations)
                 continue
             end
 
@@ -223,7 +143,6 @@ local function startWatcher()
             local hrpPos = hrp.Position
             local baseDist = activeController.TripmineDetonationDistance or 15
             local jitter = activeController.TripmineDetonationJitter or 2
-            local safeRadius = activeController.TripmineBlastSafeRadius or 8
             local Gifts = GCH.Gifts
 
             -- ── Dọn dẹp trạng thái cho các mìn đã nổ/biến mất ──────────
@@ -272,13 +191,14 @@ local function startWatcher()
                             passthroughState[giftId] = "exited"
                             print("[NULLSCAPE] Passthrough: đã đi ra cách mìn", math.round(dist), "studs, chờ khoảng cách an toàn trước khi nổ...", giftId)
 
-                            queueSafeDetonation(giftId, gift, safeRadius, "Passthrough")
+                            logBlockedDetonation(giftId, "Passthrough", dist)
+                            clearMineState(giftId)
                         end
                     end
 
                 -- ── CHẾ ĐỘ PREDETONATE ─────────────────────────────────
                 elseif mode == "PreDetonate" then
-                    if processedMines[giftId] or pendingDetonations[giftId] then continue end
+                    if processedMines[giftId] then continue end
 
                     -- Xác định khoảng cách kích nổ sớm cho quả mìn này
                     if not processedMines["__dist_" .. giftId] then
@@ -290,7 +210,8 @@ local function startWatcher()
 
                     -- Khi player đi vào vùng kích nổ sớm
                     if dist <= targetDist then
-                        queueSafeDetonation(giftId, gift, safeRadius, "PreDetonate")
+                        processedMines[giftId] = true
+                        logBlockedDetonation(giftId, "PreDetonate", dist)
                     end
                 end
             end
@@ -310,7 +231,7 @@ function Barrier.update(controller, gc)
         -- Reset trạng thái khi tắt bypass
         table.clear(processedMines)
         table.clear(passthroughState)
-        table.clear(pendingDetonations)
+        table.clear(blockedDetonationLogs)
     end
 end
 
