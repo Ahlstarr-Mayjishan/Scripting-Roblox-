@@ -384,6 +384,159 @@ local function isInstrumentValid(t)
 	return true
 end
 
+local function updateNativeEnemyESPState(controller)
+	local upgradesFolder = game.ReplicatedStorage:FindFirstChild("UpgradeFolder") 
+		and game.ReplicatedStorage.UpgradeFolder:FindFirstChild("Upgrades")
+	
+	local shouldEnableNative = controller.EnemyESPEnabled and controller.ESPStyle == "Box"
+	
+	if shouldEnableNative then
+		-- 1. Kích hoạt simulated upgrade trong ReplicatedStorage để native spriteManager tự vẽ các enemy mới
+		if upgradesFolder then
+			if not upgradesFolder:FindFirstChild("EnemyOnTop") then
+				local simulated = Instance.new("Folder")
+				simulated.Name = "EnemyOnTop"
+				simulated.Parent = upgradesFolder
+			end
+		end
+		
+		-- 2. Thử tìm native ESP template để vẽ cho các enemy hiện tại
+		local espTemplate = nil
+		local playerScripts = game.Players.LocalPlayer:FindFirstChild("PlayerScripts")
+		local spriteManager = playerScripts and playerScripts:FindFirstChild("spriteManager")
+		if spriteManager then
+			espTemplate = spriteManager:FindFirstChild("ESP") or spriteManager:FindFirstChild("ESPCrayon")
+		end
+		if not espTemplate then
+			local starterPlayerScripts = game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts")
+			spriteManager = starterPlayerScripts and starterPlayerScripts:FindFirstChild("spriteManager")
+			espTemplate = spriteManager and (spriteManager:FindFirstChild("ESP") or spriteManager:FindFirstChild("ESPCrayon"))
+		end
+		
+		-- 3. Quét tất cả enemy hiện có
+		local enemyFolder = workspace:FindFirstChild("Enemies")
+		if enemyFolder then
+			for _, enemy in ipairs(enemyFolder:GetChildren()) do
+				local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("Head") or enemy:FindFirstChildWhichIsA("BasePart")
+				if head then
+					-- Nếu đã có custom box của chúng ta vẽ, hoặc đã có native ESP rồi thì bỏ qua
+					if enemy:FindFirstChild("ESP") or enemy:FindFirstChild("ESPCrayon") or enemy:FindFirstChild("NULLSCAPE_CustomBoxESP") then
+						continue
+					end
+					
+					if espTemplate then
+						local clone = espTemplate:Clone()
+						clone.Adornee = enemy
+						clone.Enabled = true
+						pcall(function()
+							clone.Size = head.Size
+						end)
+						
+						local nameLower = enemy.Name:lower()
+						local dispName = nameLower
+						if nameLower == "shadowguardian" then
+							dispName = "voidboundguardian"
+						elseif nameLower == "shadowbaby" then
+							dispName = "voidboundbaby"
+						elseif nameLower == "skinwalker" then
+							dispName = "husk"
+						elseif nameLower == "mirage" then
+							dispName = "???"
+						end
+						
+						pcall(function()
+							if clone:FindFirstChild("Label") then
+								clone.Label.Text = dispName
+							elseif clone:IsA("TextLabel") then
+								clone.Text = dispName
+							elseif clone:IsA("BillboardGui") then
+								local label = clone:FindFirstChildWhichIsA("TextLabel")
+								if label then
+									label.Text = dispName
+								end
+							end
+						end)
+						
+						clone.Parent = enemy
+					else
+						-- Fallback: Tự vẽ box 3D SelectionBox + BillboardGui cực đẹp
+						local folder = Instance.new("Folder")
+						folder.Name = "NULLSCAPE_CustomBoxESP"
+						
+						local box = Instance.new("SelectionBox")
+						box.Name = "Box"
+						box.Adornee = enemy
+						box.Color3 = Color3.fromRGB(0, 255, 0) -- Xanh lá cho enemy
+						box.LineThickness = 0.05
+						box.AlwaysOnTop = true
+						box.Parent = folder
+						
+						local billboard = Instance.new("BillboardGui")
+						billboard.Name = "LabelGui"
+						billboard.Adornee = head
+						billboard.Size = UDim2.fromScale(8, 3)
+						billboard.AlwaysOnTop = true
+						billboard.StudsOffset = Vector3.new(0, -2.5, 0)
+						
+						local label = Instance.new("TextLabel")
+						label.Name = "Label"
+						label.Size = UDim2.fromScale(1, 1)
+						label.BackgroundTransparency = 1
+						label.TextColor3 = Color3.fromRGB(0, 255, 0)
+						label.TextSize = 13
+						label.Font = Enum.Font.RobotoMono
+						label.TextXAlignment = Enum.TextXAlignment.Right
+						label.TextYAlignment = Enum.TextYAlignment.Bottom
+						
+						local nameLower = enemy.Name:lower()
+						local dispName = nameLower
+						if nameLower == "shadowguardian" then
+							dispName = "voidboundguardian"
+						elseif nameLower == "shadowbaby" then
+							dispName = "voidboundbaby"
+						elseif nameLower == "skinwalker" then
+							dispName = "husk"
+						elseif nameLower == "mirage" then
+							dispName = "???"
+						end
+						label.Text = dispName
+						label.TextStrokeTransparency = 0.5
+						label.TextStrokeColor3 = Color3.new(0, 0, 0)
+						label.Parent = billboard
+						
+						billboard.Parent = folder
+						folder.Parent = enemy
+					end
+				end
+			end
+		end
+	else
+		-- Dọn dẹp simulated upgrade và các visual đã vẽ
+		if upgradesFolder then
+			local simulated = upgradesFolder:FindFirstChild("EnemyOnTop")
+			if simulated then
+				pcall(function()
+					simulated:Destroy()
+				end)
+			end
+		end
+		
+		local enemyFolder = workspace:FindFirstChild("Enemies")
+		if enemyFolder then
+			for _, enemy in ipairs(enemyFolder:GetChildren()) do
+				for _, name in ipairs({"ESP", "ESPCrayon", "NULLSCAPE_CustomBoxESP"}) do
+					local child = enemy:FindFirstChild(name)
+					if child then
+						pcall(function()
+							child:Destroy()
+						end)
+					end
+				end
+			end
+		end
+	end
+end
+
 local function isAltarValid(t)
 	local part = t.part
 	if not part or not part.Parent or not part:IsDescendantOf(workspace) then
@@ -394,6 +547,9 @@ end
 
 -- Dọn dẹp toàn bộ Highlight, Beam, Dot và các đối tượng lưu đệm
 function Logic.clearVisuals(gc, keepArrows)
+	-- Dọn dẹp native enemy ESP
+	pcall(updateNativeEnemyESPState, { EnemyESPEnabled = false, ESPStyle = "None" })
+
 	local saved = gc.SavedVisuals
 	if not saved then
 		return
@@ -404,6 +560,11 @@ function Logic.clearVisuals(gc, keepArrows)
 			if cached.Dot then
 				pcall(function()
 					cached.Dot:Destroy()
+				end)
+			end
+			if cached.Box then
+				pcall(function()
+					cached.Box:Destroy()
 				end)
 			end
 		end
@@ -515,12 +676,36 @@ local function isNativeAltarRadarActive()
 	return false
 end
 
+local function isNativeGiftHighlightEnabled()
+	local origFn = getgenv()._NULLSCAPE_Globals
+		and getgenv()._NULLSCAPE_Globals.OriginalIsUpgradeEnabled
+	if not origFn then
+		return false
+	end
+	local ok, result = pcall(origFn, "HighlightGifts")
+	return ok and result == true
+end
+
+local function isNativeTripmineHighlightEnabled()
+	local origFn = getgenv()._NULLSCAPE_Globals
+		and getgenv()._NULLSCAPE_Globals.OriginalIsUpgradeEnabled
+	if not origFn then
+		return false
+	end
+	local ok, result = pcall(origFn, "HighlightTripmines")
+	return ok and result == true
+end
+
 local function shouldUseNativeRadar(controller, kind)
 	if controller and controller.UseNativeRadarWhenAvailable == false then
 		return false
 	end
 	if kind == "Gift" then
-		return isNativeGiftRadarActive()
+		-- Chỉ nhường cho radar gốc nếu người chơi thật sự có nâng cấp HighlightGifts.
+		-- Nếu chỉ là kích hoạt radar 20% (chỉ highlight 1 quà), ta không nhường để giữ nguyên ESP vẽ tất cả quà.
+		return isNativeGiftRadarActive() and isNativeGiftHighlightEnabled()
+	elseif kind == "Tripmine" then
+		return isNativeTripmineHighlightEnabled()
 	elseif kind == "Cadence" then
 		return isNativeCadenceRadarActive()
 	elseif kind == "Altar" then
@@ -531,6 +716,9 @@ end
 
 -- Vòng lặp cập nhật khoảng cách, sắp xếp độ ưu tiên và chuyển đổi visual styles (chạy cực nhanh)
 function Logic.updateESPStyles(controller, gc, hrp)
+	-- Cập nhật trạng thái native enemy ESP
+	pcall(updateNativeEnemyESPState, controller)
+
 	local saved = gc.SavedVisuals
 	if not saved.ActiveTargets then
 		saved.ActiveTargets = {}
@@ -562,10 +750,10 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	end
 
 	local nativeGiftRadar = shouldUseNativeRadar(controller, "Gift")
+	local nativeTripmineRadar = shouldUseNativeRadar(controller, "Tripmine")
 	local nativeCadenceRadar = shouldUseNativeRadar(controller, "Cadence")
 	local nativeAltarRadar = shouldUseNativeRadar(controller, "Altar")
 
-	local gifts = controller.GiftESPEnabled and not nativeGiftRadar and (controller.ActiveGifts or {}) or {}
 	local instruments = controller.CadenceESPEnabled and not nativeCadenceRadar and (controller.ActiveInstruments or {}) or {}
 	local altars = controller.AltarESPEnabled and not nativeAltarRadar and (controller.ActiveAltars or {}) or {}
 
@@ -576,11 +764,22 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	local validEnemies = {}
 
 	-- Lọc các target hợp lệ và cập nhật khoảng cách (Dùng Vector3 thuần từ RAM để tối ưu hiệu năng cực hạn)
-	for _, t in ipairs(gifts) do
+	local rawGifts = controller.ActiveGifts or {}
+	for _, t in ipairs(rawGifts) do
 		if isGiftValid(t) then
-			local pos = (t.rawObj and t.rawObj.Position) or t.part.Position
-			t.distance = (hrp.Position - pos).Magnitude
-			table.insert(validGifts, t)
+			local isTripmine = t.type == "Tripmine" or t.type == "GoldenTripmine" or t.type == "GoldenTripmines"
+			local shouldShow = false
+			if isTripmine then
+				shouldShow = controller.TripmineESPEnabled and not nativeTripmineRadar
+			else
+				shouldShow = controller.GiftESPEnabled and not nativeGiftRadar
+			end
+
+			if shouldShow then
+				local pos = (t.rawObj and t.rawObj.Position) or t.part.Position
+				t.distance = (hrp.Position - pos).Magnitude
+				table.insert(validGifts, t)
+			end
 		end
 	end
 
@@ -613,17 +812,18 @@ function Logic.updateESPStyles(controller, gc, hrp)
 		local enemyFolder = workspace:FindFirstChild("Enemies")
 		if enemyFolder then
 			for _, enemyModel in ipairs(enemyFolder:GetChildren()) do
-				if enemyModel:IsA("Model") then
-					local enemyHRP = enemyModel:FindFirstChild("HumanoidRootPart") or enemyModel.PrimaryPart
-					if enemyHRP then
-						local dist = (hrp.Position - enemyHRP.Position).Magnitude
-						table.insert(validEnemies, {
-							part = enemyHRP,
-							model = enemyModel,
-							color = controller.EnemyESPColor or Color3.fromRGB(255, 128, 0),
-							distance = dist,
-						})
-					end
+				local enemyHRP = enemyModel:IsA("BasePart") and enemyModel
+					or enemyModel:FindFirstChild("HumanoidRootPart")
+					or enemyModel.PrimaryPart
+					or enemyModel:FindFirstChildWhichIsA("BasePart")
+				if enemyHRP and enemyModel.Parent then
+					local dist = (hrp.Position - enemyHRP.Position).Magnitude
+					table.insert(validEnemies, {
+						part = enemyHRP,
+						model = enemyModel,
+						color = controller.EnemyESPColor or Color3.fromRGB(255, 128, 0),
+						distance = dist,
+					})
 				end
 			end
 		end
@@ -673,6 +873,13 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				Color = t.color,
 				ParentObject = t.part,
 			}
+		elseif controller.ESPStyle == "Box" then
+			currentTargets[t.part] = {
+				Style = "Box",
+				Color = t.color,
+				ParentObject = t.part,
+				Text = t.altarName or "Altar",
+			}
 		end
 	end
 
@@ -685,6 +892,13 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				Style = "Dot",
 				Color = t.color,
 				ParentObject = t.part,
+			}
+		elseif controller.ESPStyle == "Box" then
+			currentTargets[t.part] = {
+				Style = "Box",
+				Color = t.color,
+				ParentObject = t.part,
+				Text = t.part.Name or "Instrument",
 			}
 		end
 	end
@@ -717,11 +931,20 @@ function Logic.updateESPStyles(controller, gc, hrp)
 		elseif isGolden then
 			-- Quà vàng/Mìn vàng luôn vẽ chấm Dot để không chiếm dụng Highlight pool (Giới hạn 1200 studs để tối ưu hiệu năng)
 			if actualPart and t.distance <= 1200 then
-				currentTargets[actualPart] = {
-					Style = "Dot",
-					Color = t.color,
-					ParentObject = actualPart,
-				}
+				if controller.ESPStyle == "Box" then
+					currentTargets[actualPart] = {
+						Style = "Box",
+						Color = t.color,
+						ParentObject = actualPart,
+						Text = "Golden Gift",
+					}
+				else
+					currentTargets[actualPart] = {
+						Style = "Dot",
+						Color = t.color,
+						ParentObject = actualPart,
+					}
+				end
 			end
 		else
 			if controller.ESPStyle == "Highlight" or controller.ESPStyle == "Ping" then
@@ -733,11 +956,20 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				})
 			else
 				if actualPart and t.distance <= 1200 then
-					currentTargets[actualPart] = {
-						Style = "Dot",
-						Color = t.color,
-						ParentObject = actualPart,
-					}
+					if controller.ESPStyle == "Box" then
+						currentTargets[actualPart] = {
+							Style = "Box",
+							Color = t.color,
+							ParentObject = actualPart,
+							Text = "Gift",
+						}
+					else
+						currentTargets[actualPart] = {
+							Style = "Dot",
+							Color = t.color,
+							ParentObject = actualPart,
+						}
+					end
 				end
 			end
 		end
@@ -752,6 +984,13 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				Style = "Dot",
 				Color = t.color,
 				ParentObject = t.part,
+			}
+		elseif controller.ESPStyle == "Box" then
+			currentTargets[t.part] = {
+				Style = "Box",
+				Color = t.color,
+				ParentObject = t.part,
+				Text = t.model.Name,
 			}
 		end
 	end
@@ -872,12 +1111,13 @@ function Logic.updateESPStyles(controller, gc, hrp)
 		end
 	end
 
-	-- 2. Tạo hoặc cập nhật BillboardGui (Dot/Ping)
+	-- 2. Tạo hoặc cập nhật BillboardGui/Box (Dot/Ping/Box)
 	for targetPart, current in pairs(currentTargets) do
 		local cached = saved.ActiveTargets[targetPart]
 
 		if not cached or cached.Style ~= current.Style then
 			local oldDot = cached and cached.Dot
+			local oldBox = cached and cached.Box
 
 			local newCache = {
 				Style = current.Style,
@@ -885,11 +1125,17 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				LastSeen = scanTime,
 				Dot = nil,
 				Frame = nil,
+				Box = nil,
 			}
 			saved.ActiveTargets[targetPart] = newCache
 			if oldDot then
 				pcall(function()
 					oldDot:Destroy()
+				end)
+			end
+			if oldBox then
+				pcall(function()
+					oldBox:Destroy()
 				end)
 			end
 
@@ -918,6 +1164,44 @@ function Logic.updateESPStyles(controller, gc, hrp)
 					billboard.Parent = current.ParentObject
 					newCache.Dot = billboard
 					newCache.Frame = frame
+				elseif current.Style == "Box" then
+					local folder = Instance.new("Folder")
+					folder.Name = "NULLSCAPE_ESP_Box"
+					
+					-- SelectionBox vẽ khung viền rỗng màu sắc tương ứng
+					local box = Instance.new("SelectionBox")
+					box.Name = "Box"
+					box.Adornee = targetPart.Parent:IsA("Model") and targetPart.Parent or targetPart
+					box.Color3 = current.Color
+					box.LineThickness = 0.04
+					box.AlwaysOnTop = true
+					box.Parent = folder
+					
+					-- BillboardGui vẽ nhãn tên ở góc dưới cùng bên phải
+					local billboard = Instance.new("BillboardGui")
+					billboard.Name = "LabelGui"
+					billboard.Adornee = targetPart
+					billboard.Size = UDim2.fromScale(6, 2)
+					billboard.AlwaysOnTop = true
+					billboard.StudsOffset = Vector3.new(0, -1.8, 0)
+					
+					local label = Instance.new("TextLabel")
+					label.Name = "Label"
+					label.Size = UDim2.fromScale(1, 1)
+					label.BackgroundTransparency = 1
+					label.TextColor3 = current.Color
+					label.TextSize = 12
+					label.Font = Enum.Font.RobotoMono
+					label.TextXAlignment = Enum.TextXAlignment.Right
+					label.TextYAlignment = Enum.TextYAlignment.Bottom
+					label.Text = current.Text or ""
+					label.TextStrokeTransparency = 0.5
+					label.TextStrokeColor3 = Color3.new(0, 0, 0)
+					label.Parent = billboard
+					
+					billboard.Parent = folder
+					folder.Parent = targetPart
+					newCache.Box = folder
 				else
 					local billboard = Instance.new("BillboardGui")
 					billboard.Name = "NULLSCAPE_ESP_Dot"
@@ -944,18 +1228,39 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				if frame.BackgroundColor3 ~= current.Color then
 					frame.BackgroundColor3 = current.Color
 				end
+			elseif cached.Box then
+				-- Cập nhật màu sắc và nội dung nếu thay đổi
+				local box = cached.Box:FindFirstChild("Box")
+				if box and box.Color3 ~= current.Color then
+					box.Color3 = current.Color
+				end
+				local billboard = cached.Box:FindFirstChild("LabelGui")
+				local label = billboard and billboard:FindFirstChild("Label")
+				if label then
+					if label.TextColor3 ~= current.Color then
+						label.TextColor3 = current.Color
+					end
+					if label.Text ~= (current.Text or "") then
+						label.Text = current.Text or ""
+					end
+				end
 			else
 				saved.ActiveTargets[targetPart] = nil
 			end
 		end
 	end
 
-	-- 3. Xóa các BillboardGui (Dot/Ping) bị bỏ quên
+	-- 3. Xóa các BillboardGui (Dot/Ping/Box) bị bỏ quên
 	for targetPart, cached in pairs(saved.ActiveTargets) do
 		if cached.LastSeen ~= scanTime then
 			if cached.Dot then
 				pcall(function()
 					cached.Dot:Destroy()
+				end)
+			end
+			if cached.Box then
+				pcall(function()
+					cached.Box:Destroy()
 				end)
 			end
 			saved.ActiveTargets[targetPart] = nil
@@ -1308,18 +1613,11 @@ function Logic.pulseEnemyESP(hrp, color)
 	end
 
 	for _, enemyModel in ipairs(enemyFolder:GetChildren()) do
-		if not enemyModel:IsA("Model") then
-			continue
-		end
-
-		-- Check có Humanoid không (để xác định là enemy thật)
-		local humanoid = enemyModel:FindFirstChildWhichIsA("Humanoid")
-		if not humanoid then
-			continue
-		end
-
-		local enemyHRP = enemyModel:FindFirstChild("HumanoidRootPart")
+		-- Hỗ trợ cực kỳ mạnh mẽ cả Model và BasePart lẻ làm kẻ địch
+		local enemyHRP = enemyModel:IsA("BasePart") and enemyModel
+			or enemyModel:FindFirstChild("HumanoidRootPart")
 			or enemyModel.PrimaryPart
+			or enemyModel:FindFirstChildWhichIsA("BasePart")
 		if not enemyHRP then
 			continue
 		end

@@ -22,7 +22,7 @@ return function(Client, Controller)
     local isSettingESP = false
     ESPSelection = Tab:CreateDropdown({
         Name = "ESP types",
-        Options = {"Gift", "Cadence", "Altar", "Player", "Enemy"},
+        Options = {"Gift", "Tripmine", "Cadence", "Altar", "Player", "Enemy"},
         CurrentOption = {},
         MultipleOptions = true,
         Flag = "ESPSelectionDropdown",
@@ -31,12 +31,14 @@ return function(Client, Controller)
                 SelectedOptions = {}
             end
             local giftSelected = table.find(SelectedOptions, "Gift") ~= nil
+            local tripmineSelected = table.find(SelectedOptions, "Tripmine") ~= nil
             local cadenceSelected = table.find(SelectedOptions, "Cadence") ~= nil
             local altarSelected = table.find(SelectedOptions, "Altar") ~= nil
             local playerSelected = table.find(SelectedOptions, "Player") ~= nil
             local enemySelected = table.find(SelectedOptions, "Enemy") ~= nil
             
             Controller:SetGiftESP(giftSelected)
+            Controller:SetTripmineESP(tripmineSelected)
             Controller:SetCadenceESP(cadenceSelected)
             Controller:SetAltarESP(altarSelected)
             -- Player/Enemy dùng cơ chế highlight tạm thời 8s của game gốc
@@ -56,8 +58,8 @@ return function(Client, Controller)
     
     Tab:CreateDropdown({
         Name = "ESP Style",
-        Options = {"Highlight", "Dot", "Ping"},
-        CurrentOption = Controller.ESPStyle == "Highlight" and "Highlight" or (Controller.ESPStyle == "Ping" and "Ping" or "Dot"),
+        Options = {"Highlight", "Dot", "Ping", "Box"},
+        CurrentOption = Controller.ESPStyle == "Highlight" and "Highlight" or (Controller.ESPStyle == "Ping" and "Ping" or (Controller.ESPStyle == "Box" and "Box" or "Dot")),
         MultipleOptions = false,
         Flag = "ESPStyleDropdown",
         Callback = function(Option)
@@ -71,6 +73,8 @@ return function(Client, Controller)
                 Controller:SetESPStyle("Dot")
             elseif selectedStyle == "Ping" then
                 Controller:SetESPStyle("Ping")
+            elseif selectedStyle == "Box" then
+                Controller:SetESPStyle("Box")
             end
         end
     })

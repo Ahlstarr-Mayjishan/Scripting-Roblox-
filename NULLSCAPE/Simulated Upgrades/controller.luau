@@ -27,6 +27,7 @@ local SpeedBuffs = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Speed Buff
 local Controller = {
 	RadarEnabled = false,
 	GiftESPEnabled = false,
+	TripmineESPEnabled = false,
 	CadenceESPEnabled = false,
 	AltarESPEnabled = false,
 	AltarFilter = { "All" },
@@ -130,13 +131,16 @@ local function checkActiveState()
 		return false
 	end
 
-	if Controller.GiftESPEnabled and #Controller.ActiveGifts > 0 then
+	if (Controller.GiftESPEnabled or Controller.TripmineESPEnabled) and #Controller.ActiveGifts > 0 then
 		return true
 	end
 	if Controller.CadenceESPEnabled and #Controller.ActiveInstruments > 0 then
 		return true
 	end
 	if Controller.AltarESPEnabled and #Controller.ActiveAltars > 0 then
+		return true
+	end
+	if Controller.PlayerESPEnabled or Controller.EnemyESPEnabled then
 		return true
 	end
 
@@ -453,21 +457,6 @@ local function observeItemPools(folder)
 	table.insert(folderConnections, removedConn)
 end
 
-local function observeEnemies(folder)
-	for _, obj in ipairs(folder:GetDescendants()) do
-		registerInstrument(obj)
-	end
-
-	local addedConn = folder.DescendantAdded:Connect(function(obj)
-		registerInstrument(obj)
-	end)
-	table.insert(folderConnections, addedConn)
-
-	local removedConn = folder.DescendantRemoving:Connect(function(obj)
-		unregisterInstrument(obj)
-	end)
-	table.insert(folderConnections, removedConn)
-end
 
 
 local function startObservingFolders()
@@ -530,9 +519,7 @@ local function startObservingFolders()
 	local function checkAndObserve(child)
 		if child.Name == "Item_Pools" then
 			observeItemPools(child)
-		elseif child.Name == "Enemies" then
-			observeEnemies(child)
-		elseif child.Name ~= "CurrentRooms" then
+		elseif child.Name ~= "Enemies" and child.Name ~= "CurrentRooms" then
 			-- Đề phòng Gift hoặc nhạc cụ spawn trực tiếp ngoài workspace
 			registerGift(child)
 			registerInstrument(child)
@@ -551,11 +538,6 @@ local function startObservingFolders()
 	local itemPools = workspace:FindFirstChild("Item_Pools")
 	if itemPools then
 		observeItemPools(itemPools)
-	end
-
-	local enemies = workspace:FindFirstChild("Enemies")
-	if enemies then
-		observeEnemies(enemies)
 	end
 end
 
@@ -706,7 +688,7 @@ startRadarPulseLoop = function()
 
 		doPulseNow()
 
-		while not Controller.Destroyed and (Controller.RadarEnabled or Controller.AltarESPEnabled or Controller.CadenceESPEnabled or Controller.GiftESPEnabled) do
+		while not Controller.Destroyed and (Controller.RadarEnabled or Controller.AltarESPEnabled or Controller.CadenceESPEnabled or Controller.GiftESPEnabled or Controller.TripmineESPEnabled) do
 			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
 				break
 			end
@@ -830,6 +812,12 @@ end
 -- Bật/tắt định vị hộp quà
 function Controller:SetGiftESP(value)
 	self.GiftESPEnabled = value
+	triggerInstantUpdate()
+end
+
+-- Bật/tắt định vị bẫy mìn Tripmine
+function Controller:SetTripmineESP(value)
+	self.TripmineESPEnabled = value
 	triggerInstantUpdate()
 end
 
@@ -1265,7 +1253,7 @@ local function startGiftPoolObserver()
 				safeControllerCleanUp()
 				break
 			end
-			if Controller.RadarEnabled and Controller.GiftESPEnabled then
+			if Controller.RadarEnabled and (Controller.GiftESPEnabled or Controller.TripmineESPEnabled) then
 				local poolGifts = scanActiveGiftsFromPools()
 
 				-- Hợp nhất dữ liệu quét pool với ActiveGifts hiện tại (tránh trùng lặp)
@@ -1318,6 +1306,7 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local isRadarPlayer = false
 	local isRadarAltars = false
 	local isRadarInstruments = false
+	local isHighlightTripmines = false
 	for _, v in ipairs(args) do
 		if v == "DefuseKit" or v == "Defuse Kit" then
 			isDefuse = true
@@ -1335,6 +1324,8 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 			isRadarAltars = true
 		elseif v == "RadarInstruments" then
 			isRadarInstruments = true
+		elseif v == "HighlightTripmines" then
+			isHighlightTripmines = true
 		end
 	end
 	if isDefuse and Controller.SimulateDefuseKit then
@@ -1353,6 +1344,9 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 		return true, true
 	end
 	if isRadarPlayer and Controller.RadarEnabled then
+		return true, true
+	end
+	if isHighlightTripmines and Controller.TripmineESPEnabled then
 		return true, true
 	end
 	if isRadarAltars or isRadarInstruments then
