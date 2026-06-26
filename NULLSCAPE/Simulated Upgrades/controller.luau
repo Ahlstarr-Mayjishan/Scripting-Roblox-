@@ -905,6 +905,9 @@ function Controller:SetESPStyle(style)
 		Executor.clearVisuals(GC, true)
 	end)
 	triggerInstantUpdate()
+	if self.ESPStyle == "Ping" and (self.PlayerESPEnabled or self.EnemyESPEnabled) then
+		startPlayerEnemyESPLoop()
+	end
 end
 
 -- Bật/tắt ESP cho Player khác
@@ -919,7 +922,7 @@ local function startPlayerEnemyESPLoop()
 		-- Chạy ngay lần đầu (không chờ 12s)
 		local char0 = LocalPlayer.Character
 		local hrp0 = char0 and char0:FindFirstChild("HumanoidRootPart")
-		if hrp0 then
+		if hrp0 and Controller.ESPStyle == "Ping" then
 			if Controller.PlayerESPEnabled then
 				pcall(Logic.pulsePlayerESP, hrp0, Controller.PlayerESPColor)
 			end
@@ -928,7 +931,7 @@ local function startPlayerEnemyESPLoop()
 			end
 		end
 
-		while not Controller.Destroyed and (Controller.PlayerESPEnabled or Controller.EnemyESPEnabled) do
+		while not Controller.Destroyed and (Controller.PlayerESPEnabled or Controller.EnemyESPEnabled) and Controller.ESPStyle == "Ping" do
 			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
 				break
 			end
@@ -936,7 +939,7 @@ local function startPlayerEnemyESPLoop()
 			-- Chờ 12 giây như game gốc (interval của RadarSlop)
 			task.wait(12)
 
-			if Controller.Destroyed then
+			if Controller.Destroyed or Controller.ESPStyle ~= "Ping" then
 				break
 			end
 
@@ -969,7 +972,8 @@ function Controller:SetPlayerESP(value, color)
 	if color then
 		self.PlayerESPColor = color
 	end
-	if value then
+	triggerInstantUpdate()
+	if value and self.ESPStyle == "Ping" then
 		startPlayerEnemyESPLoop()
 	end
 end
@@ -979,7 +983,8 @@ function Controller:SetEnemyESP(value, color)
 	if color then
 		self.EnemyESPColor = color
 	end
-	if value then
+	triggerInstantUpdate()
+	if value and self.ESPStyle == "Ping" then
 		startPlayerEnemyESPLoop()
 	end
 end

@@ -572,6 +572,8 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	local validGifts = {}
 	local validInstruments = {}
 	local validAltars = {}
+	local validPlayers = {}
+	local validEnemies = {}
 
 	-- Lọc các target hợp lệ và cập nhật khoảng cách (Dùng Vector3 thuần từ RAM để tối ưu hiệu năng cực hạn)
 	for _, t in ipairs(gifts) do
@@ -579,6 +581,51 @@ function Logic.updateESPStyles(controller, gc, hrp)
 			local pos = (t.rawObj and t.rawObj.Position) or t.part.Position
 			t.distance = (hrp.Position - pos).Magnitude
 			table.insert(validGifts, t)
+		end
+	end
+
+	-- Lấy danh sách người chơi khác để vẽ ESP liên tục thời gian thực (chỉ chạy khi style không phải là Ping)
+	if controller.PlayerESPEnabled and controller.ESPStyle ~= "Ping" then
+		local Players_ = game:GetService("Players")
+		local LocalPlayer_ = Players_.LocalPlayer
+		for _, player in ipairs(Players_:GetPlayers()) do
+			if player ~= LocalPlayer_ then
+				local character = player.Character
+				local charHRP = character and character:FindFirstChild("HumanoidRootPart")
+				if charHRP and character.Parent then
+					local dist = (hrp.Position - charHRP.Position).Magnitude
+					local humanoid = character:FindFirstChildOfClass("Humanoid")
+					local isDead = humanoid and humanoid:GetState() == Enum.HumanoidStateType.Dead or false
+					table.insert(validPlayers, {
+						part = charHRP,
+						model = character,
+						color = isDead and Color3.new(1, 0, 0) or (controller.PlayerESPColor or Color3.fromRGB(255, 255, 255)),
+						distance = dist,
+						isDead = isDead,
+					})
+				end
+			end
+		end
+	end
+
+	-- Lấy danh sách kẻ địch để vẽ ESP liên tục thời gian thực (chỉ chạy khi style không phải là Ping)
+	if controller.EnemyESPEnabled and controller.ESPStyle ~= "Ping" then
+		local enemyFolder = workspace:FindFirstChild("Enemies")
+		if enemyFolder then
+			for _, enemyModel in ipairs(enemyFolder:GetChildren()) do
+				if enemyModel:IsA("Model") then
+					local enemyHRP = enemyModel:FindFirstChild("HumanoidRootPart") or enemyModel.PrimaryPart
+					if enemyHRP then
+						local dist = (hrp.Position - enemyHRP.Position).Magnitude
+						table.insert(validEnemies, {
+							part = enemyHRP,
+							model = enemyModel,
+							color = controller.EnemyESPColor or Color3.fromRGB(255, 128, 0),
+							distance = dist,
+						})
+					end
+				end
+			end
 		end
 	end
 
@@ -620,10 +667,9 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	for _, t in ipairs(validAltars) do
 		if controller.ESPStyle == "Highlight" then
 			table.insert(highlightTargets, t)
-		else
-			local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
+		elseif controller.ESPStyle == "Dot" then
 			currentTargets[t.part] = {
-				Style = style,
+				Style = "Dot",
 				Color = t.color,
 				ParentObject = t.part,
 			}
@@ -634,10 +680,9 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	for _, t in ipairs(validInstruments) do
 		if controller.ESPStyle == "Highlight" then
 			table.insert(highlightTargets, t)
-		else
-			local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
+		elseif controller.ESPStyle == "Dot" then
 			currentTargets[t.part] = {
-				Style = style,
+				Style = "Dot",
 				Color = t.color,
 				ParentObject = t.part,
 			}
@@ -679,7 +724,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				}
 			end
 		else
-			if controller.ESPStyle == "Highlight" then
+			if controller.ESPStyle == "Highlight" or controller.ESPStyle == "Ping" then
 				table.insert(highlightTargets, {
 					distance = t.distance,
 					part = actualPart or highlightObject,
@@ -687,15 +732,40 @@ function Logic.updateESPStyles(controller, gc, hrp)
 					color = t.color,
 				})
 			else
-				local style = controller.ESPStyle == "Ping" and "Ping" or "Dot"
 				if actualPart and t.distance <= 1200 then
 					currentTargets[actualPart] = {
-						Style = style,
+						Style = "Dot",
 						Color = t.color,
 						ParentObject = actualPart,
 					}
 				end
 			end
+		end
+	end
+
+	-- Phân loại: Người chơi khác (Chỉ vẽ liên tục khi style không phải là Ping)
+	for _, t in ipairs(validPlayers) do
+		if controller.ESPStyle == "Highlight" then
+			table.insert(highlightTargets, t)
+		elseif controller.ESPStyle == "Dot" then
+			currentTargets[t.part] = {
+				Style = "Dot",
+				Color = t.color,
+				ParentObject = t.part,
+			}
+		end
+	end
+
+	-- Phân loại: Kẻ địch (Chỉ vẽ liên tục khi style không phải là Ping)
+	for _, t in ipairs(validEnemies) do
+		if controller.ESPStyle == "Highlight" then
+			table.insert(highlightTargets, t)
+		elseif controller.ESPStyle == "Dot" then
+			currentTargets[t.part] = {
+				Style = "Dot",
+				Color = t.color,
+				ParentObject = t.part,
+			}
 		end
 	end
 
@@ -851,19 +921,15 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				else
 					local billboard = Instance.new("BillboardGui")
 					billboard.Name = "NULLSCAPE_ESP_Dot"
-					billboard.Size = UDim2.fromOffset(8, 8)
+					-- Chấm nhỏ 2x2 ở giữa trung tâm hộp quà/thực thể
+					billboard.Size = UDim2.fromOffset(2, 2)
 					billboard.AlwaysOnTop = true
-					-- Nổi lên 2 studs để không chìm trong mesh
-					billboard.StudsOffset = Vector3.new(0, 2, 0)
+					billboard.StudsOffset = Vector3.new(0, 0, 0)
 
 					local frame = Instance.new("Frame")
 					frame.Size = UDim2.fromScale(1, 1)
 					frame.BackgroundColor3 = current.Color
 					frame.BorderSizePixel = 0
-
-					local uiCorner = Instance.new("UICorner")
-					uiCorner.CornerRadius = UDim.new(1, 0)
-					uiCorner.Parent = frame
 
 					frame.Parent = billboard
 					billboard.Parent = current.ParentObject
@@ -1211,6 +1277,15 @@ function Logic.pulsePlayerESP(hrp, color)
 			local delayTime = dist / 1024
 			task.delay(delayTime, function()
 				spawnCharacterHighlight(character, outlineColor)
+				pcall(function()
+					local sfx = game:GetService("SoundService"):FindFirstChild("SFXFolder")
+					local sound = sfx and sfx:FindFirstChild("Radar_Player")
+					if sound then
+						local rand = Random.new()
+						sound.PlaybackSpeed = rand:NextNumber(0.9, 1.1)
+						sound:Play()
+					end
+				end)
 			end)
 		end
 	end
@@ -1255,6 +1330,15 @@ function Logic.pulseEnemyESP(hrp, color)
 			local delayTime = dist / 1024
 			task.delay(delayTime, function()
 				spawnCharacterHighlight(enemyModel, outlineColor)
+				pcall(function()
+					local sfx = game:GetService("SoundService"):FindFirstChild("SFXFolder")
+					local sound = sfx and sfx:FindFirstChild("Radar_Player")
+					if sound then
+						local rand = Random.new()
+						sound.PlaybackSpeed = rand:NextNumber(0.9, 1.1)
+						sound:Play()
+					end
+				end)
 			end)
 		end
 	end
@@ -1278,94 +1362,118 @@ end
 --   v13.Outline   → shrink + fade trong 10s (linear)
 --   Debris:AddItem(v13, 10.1)
 -- pingType: "Altar" | "Cadence" | "Gift", pingColor: Color3
+local function getOriginalTemplate(name)
+	local localPlayer = game:GetService("Players").LocalPlayer
+	local searchRoots = {
+		localPlayer:FindFirstChild("PlayerGui"),
+		localPlayer:FindFirstChild("PlayerScripts"),
+	}
+	if localPlayer.Character then
+		table.insert(searchRoots, localPlayer.Character)
+	end
+	
+	for _, root in ipairs(searchRoots) do
+		if root then
+			for _, desc in ipairs(root:GetDescendants()) do
+				if desc.Name == "Radar" and (desc:IsA("LocalScript") or desc:IsA("ModuleScript")) then
+					local t = desc:FindFirstChild(name)
+					if t and (t:IsA("BillboardGui") or t:IsA("ScreenGui")) then
+						return t
+					end
+				end
+			end
+		end
+	end
+
+	for _, root in ipairs(searchRoots) do
+		if root then
+			for _, desc in ipairs(root:GetDescendants()) do
+				if desc.Name == name and (desc:IsA("BillboardGui") or desc:IsA("ScreenGui")) then
+					return desc
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
+-- pingType: "Altar" | "Cadence" | "Gift", pingColor: Color3
 local function createPingEffect(part, pingColor, pingType)
 	if not part or not part.Parent then
 		return
 	end
 
-	local TweenService_ = game:GetService("TweenService")
-	local Debris_ = game:GetService("Debris")
-
-	-- BillboardGui cố định — không tween bản thân billboard (khác implementation cũ)
-	local billboard = Instance.new("BillboardGui")
-	billboard.Name = "NULLSCAPE_RadarPing"
-	billboard.AlwaysOnTop = true
-	billboard.StudsOffset = Vector3.new(0, 3, 0)
-	-- Size cố định như game gốc (chỉ các con bên trong mới tween)
-	billboard.Size = UDim2.fromScale(2, 2)
-	billboard.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-	-- Lớp 1: Tweened — ImageLabel pulse nhanh ra 12×12 scale trong 1s rồi fade
-	-- (giống v13.Tweened trong game gốc)
-	local tweened = Instance.new("ImageLabel")
-	tweened.Name = "Tweened"
-	tweened.BackgroundTransparency = 1
-	tweened.Size = UDim2.fromScale(0, 0)    -- bắt đầu từ 0
-	tweened.AnchorPoint = Vector2.new(0.5, 0.5)
-	tweened.Position = UDim2.fromScale(0.5, 0.5)
-	tweened.Image = "rbxassetid://4965945816" -- circle outline
-	tweened.ImageColor3 = pingColor
-	tweened.ImageTransparency = 0
-	tweened.Parent = billboard
-
-	-- Lớp 2: ImageLabel — chứa biểu tượng của ping, shrink+fade 10s
-	-- (giống v13.ImageLabel trong game gốc)
-	local imageLabel = Instance.new("ImageLabel")
-	imageLabel.Name = "ImageLabel"
-	imageLabel.BackgroundTransparency = 1
-	imageLabel.Size = UDim2.fromScale(1, 1)
-	imageLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-	imageLabel.Position = UDim2.fromScale(0.5, 0.5)
-	-- Altar dùng icon khác màu, Cadence dùng note icon, Gift dùng star
-	if pingType == "Altar" then
-		imageLabel.Image = "rbxassetid://4965945816"
-	elseif pingType == "Cadence" then
-		imageLabel.Image = "rbxassetid://4965945816" -- fallback circle (game dùng note icon )
-	else
-		imageLabel.Image = "rbxassetid://4965945816" -- fallback circle
+	-- Game gốc chỉ có hiệu ứng radar ping cho Altar và Cadence
+	if pingType ~= "Altar" and pingType ~= "Cadence" then
+		return
 	end
-	imageLabel.ImageColor3 = pingColor
-	imageLabel.ImageTransparency = 0
-	imageLabel.Parent = billboard
 
-	-- Lớb 3: Outline — viền ngoài, shrink+fade 10s
-	-- (giống v13.Outline trong game gốc)
-	local outline = Instance.new("ImageLabel")
-	outline.Name = "Outline"
-	outline.BackgroundTransparency = 1
-	outline.Size = UDim2.fromScale(1.2, 1.2) -- hơi to hơn ImageLabel
-	outline.AnchorPoint = Vector2.new(0.5, 0.5)
-	outline.Position = UDim2.fromScale(0.5, 0.5)
-	outline.Image = "rbxassetid://4965945816"
-	outline.ImageColor3 = pingColor
-	outline.ImageTransparency = 0.4 -- hơi trong hơn lớbp chính
-	outline.Parent = billboard
+	local templateName = pingType .. "Ping"
+	local originalTemplate = getOriginalTemplate(templateName)
 
-	billboard.Parent = part
+	if originalTemplate then
+		local billboard = originalTemplate:Clone()
+		billboard.Name = "NULLSCAPE_RadarPing"
+		billboard.Parent = part
+		billboard.Enabled = true
 
-	-- Phase 1: Tweened pulse nhanh ra scale 12x12 trong 1s (giống game gốc)
-	TweenService_:Create(
-		tweened,
-		TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Size = UDim2.fromScale(12, 12), ImageTransparency = 1 }
-	):Play()
+		local TweenService_ = game:GetService("TweenService")
+		local Debris_ = game:GetService("Debris")
 
-	-- Phase 2: ImageLabel shrink + fade trong 10s (giống game gốc đúng → Linear)
-	TweenService_:Create(
-		imageLabel,
-		TweenInfo.new(10, Enum.EasingStyle.Linear),
-		{ ImageTransparency = 1, Size = UDim2.fromScale(0, 0) }
-	):Play()
+		local tweened = billboard:FindFirstChild("Tweened")
+		local imageLabel = billboard:FindFirstChild("ImageLabel")
+		local outline = billboard:FindFirstChild("Outline")
 
-	-- Phase 3: Outline shrink + fade trong 10s
-	TweenService_:Create(
-		outline,
-		TweenInfo.new(10, Enum.EasingStyle.Linear),
-		{ ImageTransparency = 1, Size = UDim2.fromScale(0, 0) }
-	):Play()
+		-- Đồng bộ các hiệu ứng Tween chính xác như game gốc
+		if tweened and tweened:IsA("ImageLabel") then
+			tweened.ImageColor3 = pingColor
+			TweenService_:Create(
+				tweened,
+				TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Size = UDim2.fromScale(12, 12), ImageTransparency = 1 }
+			):Play()
+		end
 
-	-- Debris tự dọn sau 10.1s (giống game gốc Debris:AddItem(v13, 10.1))
-	Debris_:AddItem(billboard, 10.1)
+		if imageLabel and imageLabel:IsA("ImageLabel") then
+			imageLabel.ImageColor3 = pingColor
+			TweenService_:Create(
+				imageLabel,
+				TweenInfo.new(10, Enum.EasingStyle.Linear),
+				{ ImageTransparency = 1, Size = UDim2.fromScale(0, 0) }
+			):Play()
+		end
+
+		if outline and outline:IsA("ImageLabel") then
+			outline.ImageColor3 = pingColor
+			TweenService_:Create(
+				outline,
+				TweenInfo.new(10, Enum.EasingStyle.Linear),
+				{ ImageTransparency = 1, Size = UDim2.fromScale(0, 0) }
+			):Play()
+		end
+
+		Debris_:AddItem(billboard, 10.1)
+
+		pcall(function()
+			local sfx = game:GetService("SoundService"):FindFirstChild("SFXFolder")
+			if pingType == "Altar" then
+				local sound = sfx and sfx:FindFirstChild("Radar_Altar")
+				if sound then
+					local rand = Random.new()
+					sound.PlaybackSpeed = rand:NextNumber(0.97, 1.03)
+					sound:Play()
+				end
+			elseif pingType == "Cadence" then
+				local sound = sfx and sfx:FindFirstChild("Radar_Instruments")
+				if sound then
+					local rand = Random.new()
+					sound.PlaybackSpeed = rand:NextNumber(1.95, 2.05)
+					sound:Play()
+				end
+			end
+		end)
+	end
 end
 
 -- API công khai: gọi từ Controller mỗi 12 giây để trigger pulse radar
