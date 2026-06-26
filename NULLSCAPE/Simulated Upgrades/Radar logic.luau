@@ -384,200 +384,30 @@ local function isInstrumentValid(t)
 	return true
 end
 
-local function updateNativeEnemyESPState(controller)
+local function updateNativeEnemyESPState(_controller)
 	local upgradesFolder = game.ReplicatedStorage:FindFirstChild("UpgradeFolder") 
 		and game.ReplicatedStorage.UpgradeFolder:FindFirstChild("Upgrades")
 	
-	local shouldEnableNative = controller.EnemyESPEnabled and controller.ESPStyle == "Box"
+	-- Dọn dẹp simulated upgrade EnemyOnTop để tránh script gốc tự vẽ đè hộp nhỏ lên đầu
+	if upgradesFolder then
+		local simulated = upgradesFolder:FindFirstChild("EnemyOnTop")
+		if simulated then
+			pcall(function()
+				simulated:Destroy()
+			end)
+		end
+	end
 	
-	if shouldEnableNative then
-		-- 1. Kích hoạt simulated upgrade trong ReplicatedStorage để native spriteManager tự vẽ các enemy mới
-		if upgradesFolder then
-			if not upgradesFolder:FindFirstChild("EnemyOnTop") then
-				local simulated = Instance.new("Folder")
-				simulated.Name = "EnemyOnTop"
-				simulated.Parent = upgradesFolder
-			end
-		end
-		
-		-- 2. Thử tìm native ESP template để vẽ cho các enemy hiện tại
-		local espTemplate = nil
-		local playerScripts = game.Players.LocalPlayer:FindFirstChild("PlayerScripts")
-		local spriteManager = playerScripts and playerScripts:FindFirstChild("spriteManager")
-		if spriteManager then
-			espTemplate = spriteManager:FindFirstChild("ESP") or spriteManager:FindFirstChild("ESPCrayon")
-		end
-		if not espTemplate then
-			local starterPlayerScripts = game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts")
-			spriteManager = starterPlayerScripts and starterPlayerScripts:FindFirstChild("spriteManager")
-			espTemplate = spriteManager and (spriteManager:FindFirstChild("ESP") or spriteManager:FindFirstChild("ESPCrayon"))
-		end
-		
-		-- 3. Quét tất cả enemy hiện có
-		local enemyFolder = workspace:FindFirstChild("Enemies")
-		if enemyFolder then
-			for _, enemy in ipairs(enemyFolder:GetChildren()) do
-				local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("Head") 
-					or (enemy:IsA("BasePart") and enemy) 
-					or enemy:FindFirstChildWhichIsA("BasePart")
-					
-				if head then
-					-- Đệ phòng trường hợp đã có native ESP hoặc ESPCrayon nhưng bị lỗi gán Adornee cho Model (làm nó bị nil/ẩn)
-					local existing = enemy:FindFirstChild("ESP") or enemy:FindFirstChild("ESPCrayon")
-					if existing then
-						local hasValidAdornee = false
-						pcall(function()
-							hasValidAdornee = existing.Adornee ~= nil
-						end)
-						if not hasValidAdornee then
-							-- Sửa lỗi gán Adornee sang BasePart (head)
-							pcall(function()
-								existing.Adornee = head
-							end)
-							pcall(function()
-								existing.Visible = true
-							end)
-							pcall(function()
-								existing.Enabled = true
-							end)
-						end
-						continue
-					end
-					
-					-- Nếu đã có custom box của chúng ta vẽ thì bỏ qua
-					if enemy:FindFirstChild("NULLSCAPE_CustomBoxESP") then
-						continue
-					end
-					
-					if espTemplate then
-						local clone = espTemplate:Clone()
-						local successAdornee = pcall(function()
-							clone.Adornee = enemy
-						end)
-						
-						-- Nếu clone không phải là SelectionBox/Highlight (yêu cầu Adornee là BasePart) hoặc gán bị lỗi/nil
-						if not successAdornee or not clone.Adornee or (clone.Adornee:IsA("Model") and not clone:IsA("SelectionBox") and not clone:IsA("Highlight")) then
-							pcall(function()
-								clone.Adornee = head
-							end)
-						end
-						
-						pcall(function()
-							clone.Enabled = true
-						end)
-						pcall(function()
-							clone.Visible = true
-						end)
-						
-						pcall(function()
-							if clone:IsA("BoxHandleAdornment") or not enemy:IsA("Model") then
-								clone.Size = head.Size
-							else
-								clone.Size = enemy:GetExtentsSize()
-							end
-						end)
-						
-						local nameLower = enemy.Name:lower()
-						local dispName = nameLower
-						if nameLower == "shadowguardian" then
-							dispName = "voidboundguardian"
-						elseif nameLower == "shadowbaby" then
-							dispName = "voidboundbaby"
-						elseif nameLower == "skinwalker" then
-							dispName = "husk"
-						elseif nameLower == "mirage" then
-							dispName = "???"
-						end
-						
-						pcall(function()
-							if clone:FindFirstChild("Label") then
-								clone.Label.Text = dispName
-							elseif clone:IsA("TextLabel") then
-								clone.Text = dispName
-							elseif clone:IsA("BillboardGui") then
-								local label = clone:FindFirstChildWhichIsA("TextLabel")
-								if label then
-									label.Text = dispName
-								end
-							end
-						end)
-						
-						pcall(function()
-							clone.Parent = enemy
-						end)
-					else
-						-- Fallback: Tự vẽ box 3D SelectionBox + BillboardGui cực đẹp
-						local folder = Instance.new("Folder")
-						folder.Name = "NULLSCAPE_CustomBoxESP"
-						
-						local box = Instance.new("SelectionBox")
-						box.Name = "Box"
-						box.Adornee = enemy
-						box.Color3 = Color3.fromRGB(0, 255, 0) -- Xanh lá cho enemy
-						box.LineThickness = 0.05
-						box.AlwaysOnTop = true
-						box.Parent = folder
-						
-						local billboard = Instance.new("BillboardGui")
-						billboard.Name = "LabelGui"
-						billboard.Adornee = head
-						billboard.Size = UDim2.fromScale(8, 3)
-						billboard.AlwaysOnTop = true
-						billboard.StudsOffset = Vector3.new(0, -2.5, 0)
-						
-						local label = Instance.new("TextLabel")
-						label.Name = "Label"
-						label.Size = UDim2.fromScale(1, 1)
-						label.BackgroundTransparency = 1
-						label.TextColor3 = Color3.fromRGB(0, 255, 0)
-						label.TextSize = 13
-						label.Font = Enum.Font.RobotoMono
-						label.TextXAlignment = Enum.TextXAlignment.Right
-						label.TextYAlignment = Enum.TextYAlignment.Bottom
-						
-						local nameLower = enemy.Name:lower()
-						local dispName = nameLower
-						if nameLower == "shadowguardian" then
-							dispName = "voidboundguardian"
-						elseif nameLower == "shadowbaby" then
-							dispName = "voidboundbaby"
-						elseif nameLower == "skinwalker" then
-							dispName = "husk"
-						elseif nameLower == "mirage" then
-							dispName = "???"
-						end
-						label.Text = dispName
-						label.TextStrokeTransparency = 0.5
-						label.TextStrokeColor3 = Color3.new(0, 0, 0)
-						label.Parent = billboard
-						
-						billboard.Parent = folder
-						folder.Parent = enemy
-					end
-				end
-			end
-		end
-	else
-		-- Dọn dẹp simulated upgrade và các visual đã vẽ
-		if upgradesFolder then
-			local simulated = upgradesFolder:FindFirstChild("EnemyOnTop")
-			if simulated then
-				pcall(function()
-					simulated:Destroy()
-				end)
-			end
-		end
-		
-		local enemyFolder = workspace:FindFirstChild("Enemies")
-		if enemyFolder then
-			for _, enemy in ipairs(enemyFolder:GetChildren()) do
-				for _, name in ipairs({"ESP", "ESPCrayon", "NULLSCAPE_CustomBoxESP"}) do
-					local child = enemy:FindFirstChild(name)
-					if child then
-						pcall(function()
-							child:Destroy()
-						end)
-					end
+	-- Dọn dẹp các đối tượng native ESP/ESPCrayon của game để tránh xung đột với custom Box ESP của ta
+	local enemyFolder = workspace:FindFirstChild("Enemies")
+	if enemyFolder then
+		for _, enemy in ipairs(enemyFolder:GetChildren()) do
+			for _, name in ipairs({"ESP", "ESPCrayon", "NULLSCAPE_CustomBoxESP"}) do
+				local child = enemy:FindFirstChild(name)
+				if child then
+					pcall(function()
+						child:Destroy()
+					end)
 				end
 			end
 		end
@@ -1052,6 +882,25 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				Color = t.color,
 				ParentObject = t.part,
 			}
+		elseif controller.ESPStyle == "Box" then
+			local nameLower = t.model.Name:lower()
+			local dispName = nameLower
+			if nameLower == "shadowguardian" then
+				dispName = "voidboundguardian"
+			elseif nameLower == "shadowbaby" then
+				dispName = "voidboundbaby"
+			elseif nameLower == "skinwalker" then
+				dispName = "husk"
+			elseif nameLower == "mirage" then
+				dispName = "???"
+			end
+			
+			currentTargets[t.part] = {
+				Style = "Box",
+				Color = Color3.fromRGB(0, 255, 0), -- Màu xanh lá cho kẻ địch
+				ParentObject = t.part,
+				Text = dispName,
+			}
 		end
 	end
 
@@ -1218,11 +1067,23 @@ function Logic.updateESPStyles(controller, gc, hrp)
 					-- SelectionBox vẽ khung viền rỗng màu sắc tương ứng
 					local box = Instance.new("SelectionBox")
 					box.Name = "Box"
-					box.Adornee = targetPart.Parent:IsA("Model") and targetPart.Parent or targetPart
+					local adornTarget = targetPart.Parent:IsA("Model") and targetPart.Parent or targetPart
+					box.Adornee = adornTarget
 					box.Color3 = current.Color
 					box.LineThickness = 0.04
 					box.AlwaysOnTop = true
 					box.Parent = folder
+					
+					-- Tính toán chiều cao thực tế của đối tượng để căn lề Billboard nhãn tên ở góc dưới cùng bên phải
+					local sizeY = 4.0 -- Giá trị mặc định an toàn
+					pcall(function()
+						if adornTarget:IsA("Model") then
+							local _, size = adornTarget:GetBoundingBox()
+							sizeY = size.Y
+						else
+							sizeY = adornTarget.Size.Y
+						end
+					end)
 					
 					-- BillboardGui vẽ nhãn tên ở góc dưới cùng bên phải
 					local billboard = Instance.new("BillboardGui")
@@ -1230,7 +1091,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 					billboard.Adornee = targetPart
 					billboard.Size = UDim2.fromScale(6, 2)
 					billboard.AlwaysOnTop = true
-					billboard.StudsOffset = Vector3.new(0, -1.8, 0)
+					billboard.StudsOffset = Vector3.new(0, -(sizeY / 2) - 0.2, 0)
 					
 					local label = Instance.new("TextLabel")
 					label.Name = "Label"
