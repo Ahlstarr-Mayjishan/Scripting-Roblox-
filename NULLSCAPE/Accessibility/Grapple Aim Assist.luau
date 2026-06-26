@@ -47,6 +47,7 @@ local Logic = {
     LastPanicWatchdogAt = 0,
     LastPanicDangerEvalAt = 0,
     LastPanicDangerValue = false,
+    EmergencyRescueLockUntil = 0,
     LastSharkTailAssistAt = 0,
     LastSharkTailEvalAt = 0,
     NextSharkTailEvalDelay = 0.08,
@@ -110,6 +111,7 @@ local CFG = {
     AUTO_RESCUE_COOLDOWN = 0.45,
     AUTO_RESCUE_WINDOW = 0.3,
     PANIC_RESCUE_COOLDOWN = 0.16,
+    EMERGENCY_RESCUE_RECAST_LOCK = 0.55,
     PANIC_RESCUE_WINDOW = 0.55,
     PANIC_RESCUE_GROUND_CHECK_HEIGHT = 10,
     PANIC_RESCUE_GROUND_CHECK_DEPTH = 90,
@@ -121,6 +123,13 @@ local CFG = {
     PANIC_STABILIZE_CLAMP = 128,
     PANIC_TARGET_UPWARD_WEIGHT = -0.22,
     PANIC_TARGET_FALL_ALIGNMENT_WEIGHT = 38,
+    PANIC_BELL_NEAR_DISTANCE = 65,
+    PANIC_JUMPPAD_NEAR_DISTANCE = 55,
+    PANIC_GRAPPLEPOINT_NEAR_DISTANCE = 70,
+    EMERGENCY_SMART_AUTO_THRESHOLD = 72,
+    EMERGENCY_AUTO_THRESHOLD = 52,
+    EMERGENCY_ACTIVE_INPUT_PENALTY = 22,
+    EMERGENCY_NO_INPUT_BONUS = 10,
     PANIC_WATCHDOG_INTERVAL = 0.08,
     PANIC_DANGER_EVAL_INTERVAL = 0.08,
     PANIC_RESCUE_LOOKAHEADS = {
@@ -146,6 +155,10 @@ local CFG = {
     SHARK_TAIL_STABILIZE_UP_SPEED = 96,
     SHARK_TAIL_STABILIZE_UP_CLAMP = 74,
     SHARK_TAIL_LOW_CEILING_PENALTY = 35,
+    SHARK_TAIL_TURN_DOT = 0.72,
+    SHARK_TAIL_CRUISE_DOT = 0.9,
+    SHARK_TAIL_TURN_BONUS = 28,
+    SHARK_TAIL_CRUISE_PENALTY = 24,
     CURSOR_INTENT_SCREEN_WEIGHT = 1000,
     CURSOR_INTENT_DISTANCE_WEIGHT = 0.015,
     CURSOR_INTENT_PREFERRED_BONUS = -4,
@@ -182,6 +195,10 @@ local CFG = {
     SMART_REEL_LOW_ARC_HEIGHT = 16,
     SMART_REEL_LOW_ARC_UP_SPEED = 42,
     SMART_REEL_OVERSHOOT_LOOKAHEAD = 0.18,
+    SMART_REEL_ROUTE_LOOKAHEAD = 0.28,
+    SMART_REEL_GOOD_ROUTE_BONUS = 18,
+    SMART_REEL_PLAYER_CONTROL_PENALTY = 24,
+    SMART_REEL_BAD_INPUT_PENALTY = 34,
     SMART_REEL_AUTO_MIN_DOT = -0.2,
     SMART_REEL_MANUAL_MIN_DOT = -0.55,
 }
@@ -273,6 +290,18 @@ end
 local function isEmergencyProtectionEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleEmergencyProtectionEnabled == true
+end
+
+local function getEmergencyProtectionMode()
+    local controller = getController()
+    local mode = tostring(controller and controller.GrappleEmergencyProtectionMode or "Manual")
+    if mode == "Smart Auto" then
+        return "Smart Auto"
+    end
+    if mode == "Automatic" then
+        return "Automatic"
+    end
+    return "Manual"
 end
 
 local function getEmergencySpeedThreshold()
@@ -568,6 +597,26 @@ local function isAwaitingAdaptAttach(grapple)
     end
 
     return time() <= (Logic.AdaptAwaitingAttachUntil or 0)
+end
+
+local function isEmergencyRescueRecastBlocked(grapple)
+    if time() <= (Logic.EmergencyRescueLockUntil or 0) then
+        return true
+    end
+
+    local movement = grapple and grapple.Movement
+    if movement and (movement.grappling == true or grapple.jumpPadReel == true or isAwaitingAdaptAttach(grapple)) then
+        return true
+    end
+
+    return false
+end
+
+local function markEmergencyRescuePulse()
+    Logic.EmergencyRescueLockUntil = math.max(
+        Logic.EmergencyRescueLockUntil or 0,
+        time() + CFG.EMERGENCY_RESCUE_RECAST_LOCK
+    )
 end
 
 local function getAdaptHorizontalSpeed(grapple)
@@ -965,16 +1014,16 @@ local function hasFloorBelow(position, params)
     return hit ~= nil
 end
 
-local function isProjectedPathUnsafe(grapple)
+local function getProjectedUnsafeSampleCount(grapple)
     local rootPart = grapple and grapple.RootPart
     local velocity = rootPart and rootPart.Velocity
     if not (rootPart and velocity) then
-        return false
+        return 0, false
     end
 
     local fallenHeight = tonumber(Workspace.FallenPartsDestroyHeight)
     if fallenHeight and rootPart.Position.Y <= fallenHeight + 45 then
-        return true
+        return #CFG.PANIC_RESCUE_LOOKAHEADS, true
     end
 
     local unsafeSamples = 0
@@ -986,6 +1035,14 @@ local function isProjectedPathUnsafe(grapple)
         end
     end
 
+    return unsafeSamples, false
+end
+
+local function isProjectedPathUnsafe(grapple)
+    local unsafeSamples, nearVoidKillPlane = getProjectedUnsafeSampleCount(grapple)
+    if nearVoidKillPlane then
+        return true
+    end
     return unsafeSamples >= 2
 end
 
@@ -1707,15 +1764,34 @@ local function getAssistLockBonus(candidateInstance)
     return 0
 end
 
-local function getPanicTargetPriority(targetName)
-    if targetName == "TriaOrb" then
-        return 0
-    elseif targetName == "Bell" then
-        return 80
+local function isRescueTargetName(targetName)
+    return targetName == "Bell"
+        or targetName == "JumpPad"
+        or targetName == "TriaOrb"
+        or targetName == "GrapplePoint"
+end
+
+local function getPanicTargetPriority(targetName, distance, verticalOffset)
+    distance = tonumber(distance) or math.huge
+    verticalOffset = tonumber(verticalOffset) or 0
+
+    if targetName == "Bell" then
+        if distance <= CFG.PANIC_BELL_NEAR_DISTANCE then
+            return -140
+        end
+        return 35
     elseif targetName == "JumpPad" then
-        return 140
+        if distance <= CFG.PANIC_JUMPPAD_NEAR_DISTANCE and verticalOffset >= -12 then
+            return -45
+        end
+        return 95
+    elseif targetName == "TriaOrb" then
+        return 0
     elseif targetName == "GrapplePoint" then
-        return 210
+        if distance <= CFG.PANIC_GRAPPLEPOINT_NEAR_DISTANCE and verticalOffset >= -18 then
+            return 65
+        end
+        return 185
     end
 
     return 500
@@ -1736,11 +1812,12 @@ local function getPanicRescueScore(grapple, candidate, position, distance, scree
         fallAlignmentPenalty = math.clamp((targetDirection:Dot(fallDirection) + 1) * 0.5, 0, 1) * CFG.PANIC_TARGET_FALL_ALIGNMENT_WEIGHT
     end
 
-    local upwardScore = math.clamp(position.Y - rootPart.Position.Y, -35, 80) * CFG.PANIC_TARGET_UPWARD_WEIGHT
+    local verticalOffset = position.Y - rootPart.Position.Y
+    local upwardScore = math.clamp(verticalOffset, -35, 80) * CFG.PANIC_TARGET_UPWARD_WEIGHT
     local distanceScore = distance * 0.018
     local screenRescueScore = screenScore * 45
 
-    return getPanicTargetPriority(candidate.Name)
+    return getPanicTargetPriority(candidate.Name, distance, verticalOffset)
         + distanceScore
         + screenRescueScore
         + fallAlignmentPenalty
@@ -1758,7 +1835,7 @@ end
 
 local function getEffectivePreferredTarget(grapple, preferredName)
     if isAutoRescueWindowActive() and isEmergencyAssistDanger(grapple) then
-        return "TriaOrb"
+        return preferredName
     end
 
     return preferredName
@@ -1858,14 +1935,10 @@ local function scanNamedTargets(grapple, options)
                         else
                             local priorityScore = candidate.Name == preferredName and 0 or 1000
                             local score
-                            if driveMode and not emergencyBrakeMode then
+                            if (driveMode and not emergencyBrakeMode) or panicMode or emergencyBrakeMode then
                                 priorityScore = 0
-                            elseif panicMode then
-                                priorityScore = getPanicTargetPriority(candidate.Name)
                             elseif rescueMode then
                                 priorityScore = rescuePriority[candidate.Name] or 1000
-                            elseif emergencyBrakeMode then
-                                priorityScore = candidate.Name == "TriaOrb" and 0 or 5000
                             elseif rangeMode == "Closest To Cursor" then
                                 priorityScore = candidate.Name == preferredName and CFG.CURSOR_INTENT_PREFERRED_BONUS or 0
                                 if candidate.Name ~= "GrapplePoint" and screenScore <= CFG.CURSOR_SPECIAL_FOCUS_LIMIT then
@@ -1893,7 +1966,7 @@ local function scanNamedTargets(grapple, options)
                                     + specialBonus
                                     + wrongAnchorPenalty * 0.35
                                     + lockBonus
-                            elseif panicMode then
+                            elseif panicMode or emergencyBrakeMode then
                                 score = getPanicRescueScore(grapple, candidate, position, distance, screenScore)
                                     + lockBonus
                             elseif rangeMode == "Closest To Cursor" and not rescueMode and not emergencyBrakeMode then
@@ -2172,8 +2245,91 @@ function hasAdaptDriveTarget(grapple)
     return scanNamedTargets(grapple, driveOptions) ~= nil
 end
 
+local function getEmergencyAutoConfidence(grapple, rescueResult)
+    local rootPart = grapple and grapple.RootPart
+    local movement = grapple and grapple.Movement
+    local velocity = rootPart and rootPart.Velocity
+    if not (rootPart and movement and velocity) then
+        return 0, "NoState"
+    end
+
+    local horizontalSpeed = getHorizontalVelocity(rootPart).Magnitude
+    local fallSpeed = math.max(-velocity.Y, 0)
+    local unsafeSamples, nearVoidKillPlane = getProjectedUnsafeSampleCount(grapple)
+    local score = 0
+    local reason = "SmartAuto"
+
+    if nearVoidKillPlane then
+        score = score + 48
+        reason = "KillPlane"
+    end
+    score = score + unsafeSamples * 18
+    score = score + math.clamp((horizontalSpeed - CFG.AUTO_RESCUE_SPEED) / 120, 0, 1) * 24
+    score = score + math.clamp((fallSpeed - getEmergencyFallThreshold()) / 120, 0, 1) * 34
+
+    local inputDirection = getAssistFlatUnit(movement.PlayerMoveDirection)
+    local velocityDirection = getAssistFlatUnit(velocity)
+    if inputDirection and velocityDirection and not isPanicPressureActive() then
+        local controlDot = inputDirection:Dot(velocityDirection)
+        if controlDot > 0.2 then
+            score = score - CFG.EMERGENCY_ACTIVE_INPUT_PENALTY * math.clamp(controlDot, 0, 1)
+            reason = "PlayerSteering"
+        elseif controlDot < -0.25 then
+            score = score - CFG.EMERGENCY_ACTIVE_INPUT_PENALTY * 0.5
+            reason = "PlayerBraking"
+        end
+    elseif not inputDirection then
+        score = score + CFG.EMERGENCY_NO_INPUT_BONUS
+    end
+
+    if isPanicPressureActive() then
+        score = score + 30
+        reason = "PanicInput"
+    end
+
+    local instance = rescueResult and rescueResult.Instance
+    if instance and isRescueTargetName(instance.Name) then
+        local distance = (rescueResult.Position - rootPart.Position).Magnitude
+        if instance.Name == "Bell" then
+            score = score + (distance <= CFG.PANIC_BELL_NEAR_DISTANCE and 24 or 12)
+        elseif instance.Name == "JumpPad" then
+            score = score + (distance <= CFG.PANIC_JUMPPAD_NEAR_DISTANCE and 18 or 8)
+        elseif instance.Name == "TriaOrb" then
+            score = score + 14
+        elseif instance.Name == "GrapplePoint" then
+            score = score + 6
+        end
+    else
+        score = score - 36
+        reason = "NoRescueTarget"
+    end
+
+    return score, reason
+end
+
+local function canAutoEmergencyRescue(grapple, rescueResult)
+    local mode = getEmergencyProtectionMode()
+    if mode == "Manual" then
+        return false
+    end
+
+    local score, reason = getEmergencyAutoConfidence(grapple, rescueResult)
+    local threshold = mode == "Smart Auto" and CFG.EMERGENCY_SMART_AUTO_THRESHOLD or CFG.EMERGENCY_AUTO_THRESHOLD
+    Logic.LastAssistDebug = {
+        Reason = "Emergency" .. tostring(mode),
+        Score = score,
+        Threshold = threshold,
+        Detail = reason,
+    }
+
+    return score >= threshold
+end
+
 local function tryAutoMomentumRescue(grapple)
     if not (isRescueEnabled() and isEmergencyProtectionEnabled() and isHighMomentumDanger(grapple)) then
+        return false
+    end
+    if getEmergencyProtectionMode() == "Manual" then
         return false
     end
 
@@ -2181,7 +2337,7 @@ local function tryAutoMomentumRescue(grapple)
     if not (grapple and movement and grapple.specialHeld and isInAir(grapple)) then
         return false
     end
-    if movement.grappling or grapple.jumpPadReel then
+    if isEmergencyRescueRecastBlocked(grapple) then
         return false
     end
     if time() - Logic.LastAutoRescuePulseAt < CFG.AUTO_RESCUE_COOLDOWN then
@@ -2190,12 +2346,20 @@ local function tryAutoMomentumRescue(grapple)
 
     armAutoRescueWindow()
     local previewResult = scanNamedTargets(grapple)
-    if not (previewResult and previewResult.Instance and previewResult.Instance.Name == "TriaOrb") then
+    if not (previewResult and previewResult.Instance and isRescueTargetName(previewResult.Instance.Name)) then
+        return false
+    end
+    if not canAutoEmergencyRescue(grapple, previewResult) then
         return false
     end
 
     Logic.LastAutoRescuePulseAt = time()
-    return pulseSpecialAction(grapple)
+    if pulseSpecialAction(grapple) then
+        markEmergencyRescuePulse()
+        return true
+    end
+
+    return false
 end
 
 local function tryPanicRescue(grapple)
@@ -2207,13 +2371,17 @@ local function tryPanicRescue(grapple)
     if not (grapple and movement and isInAir(grapple)) then
         return false
     end
-    if movement.grappling or grapple.jumpPadReel or isAwaitingAdaptAttach(grapple) then
+    if isEmergencyRescueRecastBlocked(grapple) then
         return false
     end
     if time() - Logic.LastPanicRescuePulseAt < CFG.PANIC_RESCUE_COOLDOWN then
         return false
     end
     if not getCachedPanicRescueDanger(grapple) then
+        return false
+    end
+    local emergencyMode = getEmergencyProtectionMode()
+    if emergencyMode == "Manual" and not isPanicPressureActive() then
         return false
     end
 
@@ -2224,12 +2392,16 @@ local function tryPanicRescue(grapple)
     end
 
     local instance = previewResult.Instance
-    if not (instance and (instance.Name == "TriaOrb" or instance.Name == "Bell" or instance.Name == "GrapplePoint" or instance.Name == "JumpPad")) then
+    if not (instance and isRescueTargetName(instance.Name)) then
+        return false
+    end
+    if emergencyMode ~= "Manual" and not canAutoEmergencyRescue(grapple, previewResult) then
         return false
     end
 
     Logic.LastPanicRescuePulseAt = time()
     if pulseSpecialAction(grapple) then
+        markEmergencyRescuePulse()
         Logic.PanicStabilizeUntil = time() + CFG.PANIC_STABILIZE_WINDOW
         markGrappleBonkGrace(grapple, CFG.PANIC_STABILIZE_WINDOW)
         return true
@@ -2511,7 +2683,25 @@ local function getSharkTailScore(grapple)
 
     local emergencyScore = emergency and 100 or 0
     local launchPenalty = getSharkTailOverpopPenalty(grapple, emergency, hasInput)
-    local score = 35 + intentScore * 0.25 + flowScore * 0.2 + riskScore * 0.1 + emergencyScore * 0.1 - launchPenalty
+    local vectorChangeScore = 0
+    if hasInput and velocityDirection then
+        if velocityDot <= CFG.SHARK_TAIL_TURN_DOT then
+            vectorChangeScore = vectorChangeScore
+                + math.clamp((CFG.SHARK_TAIL_TURN_DOT - velocityDot) / 1.2, 0, 1) * CFG.SHARK_TAIL_TURN_BONUS
+        elseif velocityDot >= CFG.SHARK_TAIL_CRUISE_DOT and not emergency then
+            vectorChangeScore = vectorChangeScore - CFG.SHARK_TAIL_CRUISE_PENALTY
+        end
+    elseif not emergency then
+        vectorChangeScore = vectorChangeScore - 12
+    end
+
+    local score = 35
+        + intentScore * 0.22
+        + flowScore * 0.18
+        + riskScore * 0.1
+        + emergencyScore * 0.12
+        + vectorChangeScore
+        - launchPenalty
     return math.clamp(score, 0, 100), emergency
 end
 
@@ -2718,6 +2908,9 @@ local function getSmartReelScore(grapple, manual)
     if not manual and not panic and attachAge < CFG.SMART_REEL_MIN_ATTACH_TIME then
         return 0, "CommitDelay", state
     end
+    if not manual and not panic and time() - (Logic.LastSharkTailAssistAt or 0) < CFG.SHARK_TAIL_CHAIN_GRACE then
+        return 0, "SharkTailChainGuard", state
+    end
 
     local minDot = manual and CFG.SMART_REEL_MANUAL_MIN_DOT or CFG.SMART_REEL_AUTO_MIN_DOT
     if not panic and flatVelocityDot < minDot and inputDot < 0.35 then
@@ -2743,12 +2936,30 @@ local function getSmartReelScore(grapple, manual)
 
     if inputDirection then
         score = score + math.clamp((inputDot + 1) * 0.5, 0, 1) * 12
+        if not manual and not panic then
+            if inputDot < -0.15 then
+                score = score - CFG.SMART_REEL_BAD_INPUT_PENALTY
+                reason = "InputBrakeGuard"
+            elseif inputDot > 0.45 and flatVelocityDot > 0.25 then
+                score = score - CFG.SMART_REEL_PLAYER_CONTROL_PENALTY
+                reason = "PlayerControlGuard"
+            end
+        end
     end
 
     local projectedDistance = (state.TargetPosition - (rootPart.Position + velocity * CFG.SMART_REEL_OVERSHOOT_LOOKAHEAD)).Magnitude
+    local routeProjectedDistance = (state.TargetPosition - (rootPart.Position + velocity * CFG.SMART_REEL_ROUTE_LOOKAHEAD)).Magnitude
+    local routeGain = state.Distance - routeProjectedDistance
+    if routeGain > 0 and state.Distance > CFG.SMART_REEL_EXIT_DISTANCE then
+        score = score + math.clamp(routeGain / math.max(state.Distance, 1), 0, 1) * CFG.SMART_REEL_GOOD_ROUTE_BONUS
+    end
+
     if projectedDistance > state.Distance and state.Distance <= CFG.SMART_REEL_EXIT_DISTANCE + horizontalSpeed * 0.045 then
         score = score - 42
         reason = "OvershootGuard"
+    elseif not manual and not panic and routeGain > state.Distance * 0.18 and flatVelocityDot > 0.35 and inputDot > 0.2 then
+        score = score - 28
+        reason = "NaturalRouteGuard"
     elseif horizontalSpeed >= CFG.SMART_REEL_HIGH_SPEED and velocityDot > 0.2 and state.Distance > CFG.SMART_REEL_EXIT_DISTANCE then
         score = score + 12
         reason = "BrakeReel"
@@ -3273,6 +3484,7 @@ function Logic.disable()
     Logic.LastPanicWatchdogAt = 0
     Logic.LastPanicDangerEvalAt = 0
     Logic.LastPanicDangerValue = false
+    Logic.EmergencyRescueLockUntil = 0
     Logic.LastAssistTargetInstance = nil
     Logic.LastAssistTargetAt = 0
     Logic.LastAssistDebug = nil

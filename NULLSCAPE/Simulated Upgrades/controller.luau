@@ -9,7 +9,6 @@
 -- ]]
 
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local CollectionService = game:GetService("CollectionService")
@@ -120,14 +119,17 @@ local matchLoopsActive = false
 local folderConnections = {}
 
 -- Forward references cho việc quản lý các loop
-local startMatchLoops, startRenderStepped, stopRenderStepped, startRadarPulseLoop
+local startMatchLoops, stopRenderStepped
 local triggerInstantUpdate
 -- Forward reference cho unregisterInstrument (dùng trong registerInstrument callback)
 local unregisterInstrument
 local unregisterAltar
 
 local function isFeatureSimulating(featureKey)
-	return Logic.canSimulateFeature(Controller, featureKey)
+	if Controller.RadarEnabled ~= true then
+		return false
+	end
+	return Logic.isSimulationToggleOn(Controller, featureKey)
 end
 
 -- Kiểm tra xem có mục tiêu hợp lệ nào được bật hay không
@@ -150,19 +152,16 @@ local function checkActiveState()
 	return false
 end
 
-local function applySimulationToggle(_featureKey, fieldName, value)
+local function setFeatureToggle(fieldName, value)
 	Controller[fieldName] = value == true
-	if value then
-		Logic.syncSimulatedUpgradeHud(Controller)
-	end
-	return true
+	Logic.syncSimulatedUpgradeHud(Controller)
+	triggerInstantUpdate()
 end
 
 -- Điều phối trạng thái chạy/dừng của các loop và render
 local function updateRunningState()
 	if checkActiveState() then
 		startMatchLoops()
-		startRenderStepped()
 	else
 		stopRenderStepped()
 	end
@@ -553,40 +552,7 @@ local function startObservingFolders()
 end
 
 -- RenderStepped connection management
-local renderConn = nil
-
 stopRenderStepped = function()
-	if renderConn then
-		renderConn:Disconnect()
-		renderConn = nil
-	end
-end
-
-startRenderStepped = function()
-	if renderConn then
-		return
-	end
-	renderConn = RunService.RenderStepped:Connect(function()
-		if Controller.Destroyed then
-			stopRenderStepped()
-			return
-		end
-		if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
-			safeControllerCleanUp()
-			stopRenderStepped()
-			return
-		end
-		if not checkActiveState() then
-			stopRenderStepped()
-			return
-		end
-
-		local char = LocalPlayer.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		pcall(function()
-			Executor.updateRender(Controller, GC, hrp)
-		end)
-	end)
 end
 
 -- Vòng lặp cập nhật styles hiển thị (Dot <-> Highlight) cực nhanh mỗi 0.15 giây
@@ -618,99 +584,6 @@ startMatchLoops = function()
 		end)
 	end)
 
-	-- Khởi động vòng lặp radar pulse 12s cùng lúc
-	startRadarPulseLoop()
-end
-
--- =============================================================================
--- RADAR PULSE LOOP — Phỏng theo vòng while-wait(12) trong RadarSlop của game gốc:
---   while task.wait(12) do
---     if IsUpgradeEnabled("RadarAltars") then task.spawn(f3) end
---     if IsUpgradeEnabled("RadarInstruments") then task.spawn(f4) end
---   end
--- Mỗi loại (Altar/Cadence/Gift) spawn task riêng để không block nhau.
--- =============================================================================
-local radarPulseLoopActive = false
-startRadarPulseLoop = function()
-	if radarPulseLoopActive then
-		return
-	end
-	radarPulseLoopActive = true
-
-	task.spawn(function()
-		-- Pulse ngay lần đầu (không chờ 12s)
-		local function doPulseNow()
-			local char = LocalPlayer.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if not hrp then return end
-
-			-- f3: Altar ping (giống game gốc RadarSlop f3 — AltarPing clone)
-			if isFeatureSimulating("Altar") and #Controller.ActiveAltars > 0 then
-				task.spawn(function()
-					local targets = {}
-					for _, a in ipairs(Controller.ActiveAltars) do
-						if a.part and a.part.Parent then
-							table.insert(targets, {
-								part = a.part,
-								color = a.color,
-								pingType = "Altar",
-							})
-						end
-					end
-					pcall(Logic.triggerPulseRadar, targets, hrp)
-				end)
-			end
-
-			-- f4: Cadence ping (giống game gốc RadarSlop f4 — CadencePing clone)
-			if isFeatureSimulating("Cadence") and #Controller.ActiveInstruments > 0 then
-				task.spawn(function()
-					local targets = {}
-					for _, inst in ipairs(Controller.ActiveInstruments) do
-						if inst.part and inst.part.Parent then
-							table.insert(targets, {
-								part = inst.part,
-								color = inst.color,
-								pingType = "Cadence",
-							})
-						end
-					end
-					pcall(Logic.triggerPulseRadar, targets, hrp)
-				end)
-			end
-
-			-- Gift ping (không có trong game gốc nhưng bổ sung thêm nhất quán)
-			if isFeatureSimulating("Gift") and #Controller.ActiveGifts > 0 then
-				task.spawn(function()
-					local targets = {}
-					for _, g in ipairs(Controller.ActiveGifts) do
-						local part = g.part
-						if part and part.Parent and g.type and not string.find(g.type:lower(), "tripmine") then
-							table.insert(targets, {
-								part = part,
-								color = g.color,
-								pingType = "Gift",
-							})
-						end
-					end
-					pcall(Logic.triggerPulseRadar, targets, hrp)
-				end)
-			end
-		end
-
-		doPulseNow()
-
-		while not Controller.Destroyed and checkActiveState() do
-			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
-				break
-			end
-			-- Chờ 12 giây — giống game gốc while task.wait(12)
-			task.wait(12)
-			if Controller.Destroyed then break end
-			doPulseNow()
-		end
-
-		radarPulseLoopActive = false
-	end)
 end
 
 
@@ -823,34 +696,22 @@ end
 
 -- Bật/tắt định vị hộp quà
 function Controller:SetGiftESP(value)
-	if not applySimulationToggle("Gift", "GiftESPEnabled", value) then
-		return
-	end
-	triggerInstantUpdate()
+	setFeatureToggle("GiftESPEnabled", value)
 end
 
 -- Bật/tắt định vị bẫy mìn Tripmine
 function Controller:SetTripmineESP(value)
-	if not applySimulationToggle("Tripmine", "TripmineESPEnabled", value) then
-		return
-	end
-	triggerInstantUpdate()
+	setFeatureToggle("TripmineESPEnabled", value)
 end
 
 -- Bật/tắt định vị nhạc cụ Cadence
 function Controller:SetCadenceESP(value)
-	if not applySimulationToggle("Cadence", "CadenceESPEnabled", value) then
-		return
-	end
-	triggerInstantUpdate()
+	setFeatureToggle("CadenceESPEnabled", value)
 end
 
 -- Bật/tắt định vị Đàn tế (Altar)
 function Controller:SetAltarESP(value)
-	if not applySimulationToggle("Altar", "AltarESPEnabled", value) then
-		return
-	end
-	triggerInstantUpdate()
+	setFeatureToggle("AltarESPEnabled", value)
 end
 
 -- Bộ lọc loại Altar (Hỗ trợ multi-select table)
@@ -870,86 +731,25 @@ function Controller:SetESPStyle(style)
 		Executor.clearVisuals(GC, true)
 	end)
 	triggerInstantUpdate()
-	if self.ESPStyle == "Ping" and (self.PlayerESPEnabled or self.EnemyESPEnabled) then
-		startPlayerEnemyESPLoop()
-	end
 end
 
 -- Bật/tắt ESP cho Player khác
--- Khi native RadarPlayer upgrade thật kích hoạt → Logic.pulsePlayerESP trả về false → loop tự dừng
-local playerEnemyESPLoopActive = false
-local function startPlayerEnemyESPLoop()
-	if playerEnemyESPLoopActive then
-		return
-	end
-	playerEnemyESPLoopActive = true
-	task.spawn(function()
-		-- Chạy ngay lần đầu (không chờ 12s)
-		local char0 = LocalPlayer.Character
-		local hrp0 = char0 and char0:FindFirstChild("HumanoidRootPart")
-		if hrp0 and Controller.ESPStyle == "Ping" then
-			if isFeatureSimulating("Player") then
-				pcall(Logic.pulsePlayerESP, hrp0, Controller.PlayerESPColor)
-			end
-			if isFeatureSimulating("Enemy") then
-				pcall(Logic.pulseEnemyESP, hrp0, Controller.EnemyESPColor)
-			end
-		end
-
-		while not Controller.Destroyed and (isFeatureSimulating("Player") or isFeatureSimulating("Enemy")) and Controller.ESPStyle == "Ping" do
-			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
-				break
-			end
-
-			-- Chờ 12 giây như game gốc (interval của RadarSlop)
-			task.wait(12)
-
-			if Controller.Destroyed or Controller.ESPStyle ~= "Ping" then
-				break
-			end
-
-			local char = LocalPlayer.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if not hrp then
-				continue
-			end
-
-			if isFeatureSimulating("Player") then
-				pcall(Logic.pulsePlayerESP, hrp, Controller.PlayerESPColor)
-			end
-
-			if isFeatureSimulating("Enemy") then
-				pcall(Logic.pulseEnemyESP, hrp, Controller.EnemyESPColor)
-			end
-		end
-		playerEnemyESPLoopActive = false
-	end)
-end
-
 function Controller:SetPlayerESP(value, color)
-	if not applySimulationToggle("Player", "PlayerESPEnabled", value) then
-		return
-	end
+	Controller.PlayerESPEnabled = value == true
 	if color then
 		self.PlayerESPColor = color
 	end
+	Logic.syncSimulatedUpgradeHud(self)
 	triggerInstantUpdate()
-	if value and self.ESPStyle == "Ping" then
-		startPlayerEnemyESPLoop()
-	end
 end
 
 function Controller:SetEnemyESP(value, color)
-	if not applySimulationToggle("Enemy", "EnemyESPEnabled", value) then
-		return
-	end
+	Controller.EnemyESPEnabled = value == true
 	if color then
 		self.EnemyESPColor = color
 	end
+	Logic.syncSimulatedUpgradeHud(self)
 	triggerInstantUpdate()
-	if value and self.ESPStyle == "Ping" then
-		startPlayerEnemyESPLoop()
-	end
 end
 
 -- Bật/tắt Auto Collect

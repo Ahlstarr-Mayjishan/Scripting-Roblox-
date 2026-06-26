@@ -245,6 +245,22 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateDropdown({
+		Name = "Emergency Rescue Mode",
+		Info = "Manual needs repeated panic Grapple inputs. Smart Auto reads fall path, input control, speed, and rescue target quality. Automatic uses the same checks with a lower threshold.",
+		Options = { "Manual", "Smart Auto", "Automatic" },
+		CurrentOption = Controller.GrappleEmergencyProtectionMode or "Manual",
+		MultipleOptions = false,
+		Flag = "GrappleEmergencyProtectionModeDropdown",
+		Callback = function(Option)
+			local selected = Option
+			if typeof(Option) == "table" then
+				selected = Option[1]
+			end
+			Controller:SetGrappleEmergencyProtectionMode(selected)
+		end,
+	})
+
 	Tab:CreateSlider({
 		Name = "Emergency Speed Threshold",
 		Info = "Horizontal speed required before emergency protection can react. Higher = fewer false saves during normal fast movement.",

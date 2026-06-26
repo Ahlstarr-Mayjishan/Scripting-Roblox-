@@ -19,11 +19,6 @@ function Executor.updateESPStyles(controller, gc, hrp)
     Logic.updateESPStyles(controller, gc, hrp)
 end
 
--- Thực thi cập nhật render thời gian thực của mũi tên/ping
-function Executor.updateRender(controller, gc, hrp)
-    Logic.updateRender(controller, gc, hrp)
-end
-
 -- Thực thi tự động hút quà (Magnet Bypass)
 function Executor.updateMagnet(controller, hrp)
     Magnet.update(controller, hrp)

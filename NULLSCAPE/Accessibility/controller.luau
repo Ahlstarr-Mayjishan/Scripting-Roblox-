@@ -75,6 +75,7 @@ local Controller = {
 	GrappleAimAssistEnabled = false,
 	GrappleRescueAssistEnabled = false,
 	GrappleEmergencyProtectionEnabled = false,
+	GrappleEmergencyProtectionMode = "Manual",
 	GrappleEmergencySpeedThreshold = 220,
 	GrappleEmergencyFallThreshold = 125,
 	GrappleAimAssistTargetPriority = "GrapplePoint",
@@ -368,6 +369,20 @@ function Controller:SetGrappleEmergencyProtection(value)
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleEmergencyProtectionEnabled = false
 	end
+end
+
+function Controller:SetGrappleEmergencyProtectionMode(mode)
+	local selected = mode
+	if typeof(selected) == "table" then
+		selected = selected[1]
+	end
+	selected = tostring(selected or "Manual")
+
+	if selected ~= "Manual" and selected ~= "Smart Auto" and selected ~= "Automatic" then
+		selected = "Manual"
+	end
+
+	self.GrappleEmergencyProtectionMode = selected
 end
 
 function Controller:SetGrappleEmergencySpeedThreshold(value)

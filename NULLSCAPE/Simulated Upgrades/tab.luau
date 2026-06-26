@@ -42,7 +42,6 @@ return function(Client, Controller)
 			Controller:SetCadenceESP(cadenceSelected)
 			Controller:SetAltarESP(altarSelected)
 			-- Player/Enemy dùng cơ chế highlight tạm thời 8s của game gốc
-			-- Tự thả ra khi native RadarPlayer upgrade có hiệu lực thật
 			Controller:SetPlayerESP(playerSelected)
 			Controller:SetEnemyESP(enemySelected)
 
