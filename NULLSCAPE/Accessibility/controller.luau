@@ -79,6 +79,7 @@ local Controller = {
 	GrappleEmergencyFallThreshold = 125,
 	GrappleAimAssistTargetPriority = "GrapplePoint",
 	GrappleAimAssistRangePriority = "Nearest",
+	GrappleAimAssistStrength = "Balanced",
 	GrappleAntiBonkEnabled = false,
 	GrappleSmartReelEnabled = false,
 	GrappleSmartReelMode = "Manual",
@@ -513,6 +514,20 @@ function Controller:SetGrappleAimAssistRangePriority(option)
 	end
 
 	self.GrappleAimAssistRangePriority = selected
+end
+
+function Controller:SetGrappleAimAssistStrength(option)
+	local selected = option
+	if typeof(selected) == "table" then
+		selected = selected[1]
+	end
+	selected = tostring(selected or "Balanced")
+
+	if selected ~= "Light" and selected ~= "Balanced" and selected ~= "Strong" and selected ~= "Motor Accessibility" then
+		selected = "Balanced"
+	end
+
+	self.GrappleAimAssistStrength = selected
 end
 
 local function handleSpringerShockwave(enemy, child)

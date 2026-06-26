@@ -199,11 +199,27 @@ return function(Client, Controller)
 
 	Tab:CreateToggle({
 		Name = "Grapple Aim Assist",
-		Info = "Only helps after the native cast misses or has no usable target. It scans visible safe GrapplePoint, JumpPad, Bell, or TriaOrb targets within normal range.",
+		Info = "Helps missed casts and can softly correct a valid cast when cursor, movement, and route confidence strongly agree on a better anchor.",
 		CurrentValue = Controller.GrappleAimAssistEnabled or false,
 		Flag = "GrappleAimAssistToggle",
 		Callback = function(Value)
 			Controller:SetGrappleAimAssist(Value)
+		end,
+	})
+
+	Tab:CreateDropdown({
+		Name = "Aim Assist Strength",
+		Info = "Controls how willing Grapple Aim Assist is to correct a usable but likely wrong cast. Light is subtle; Motor Accessibility is the most protective.",
+		Options = { "Light", "Balanced", "Strong", "Motor Accessibility" },
+		CurrentOption = Controller.GrappleAimAssistStrength or "Balanced",
+		MultipleOptions = false,
+		Flag = "GrappleAimAssistStrengthDropdown",
+		Callback = function(Option)
+			local selected = Option
+			if typeof(Option) == "table" then
+				selected = Option[1]
+			end
+			Controller:SetGrappleAimAssistStrength(selected)
 		end,
 	})
 

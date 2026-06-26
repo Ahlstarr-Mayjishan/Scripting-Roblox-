@@ -121,6 +121,7 @@ local folderConnections = {}
 
 -- Forward references cho việc quản lý các loop
 local startMatchLoops, startRenderStepped, stopRenderStepped, startRadarPulseLoop
+local triggerInstantUpdate
 -- Forward reference cho unregisterInstrument (dùng trong registerInstrument callback)
 local unregisterInstrument
 local unregisterAltar
@@ -149,24 +150,11 @@ local function checkActiveState()
 	return false
 end
 
-local function applySimulationToggle(featureKey, fieldName, value)
-	if value then
-		local ok, reason = Logic.canEnableSimulation(Controller, featureKey)
-		if not ok then
-			if reason == "index_not_owned" then
-				local cfg = Logic.getFeatureConfig(featureKey)
-				warn(string.format(
-					"[NULLSCAPE] %s chưa mua trong Index — không thể bật simulation.",
-					cfg and cfg.indexUpgrade or featureKey
-				))
-			elseif reason == "native_active" then
-				warn(string.format("[NULLSCAPE] Native %s đang active — simulation bị khóa.", featureKey))
-			end
-			return false
-		end
-	end
-
+local function applySimulationToggle(_featureKey, fieldName, value)
 	Controller[fieldName] = value == true
+	if value then
+		Logic.syncSimulatedUpgradeHud(Controller)
+	end
 	return true
 end
 
@@ -715,9 +703,6 @@ startRadarPulseLoop = function()
 			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
 				break
 			end
-			if Logic.syncNativeRelease(Controller) then
-				triggerInstantUpdate()
-			end
 			-- Chờ 12 giây — giống game gốc while task.wait(12)
 			task.wait(12)
 			if Controller.Destroyed then break end
@@ -813,7 +798,7 @@ local function setInLobby(val)
 end
 
 -- Hàm trigger cập nhật ESP tức thì khi thay đổi cấu hình
-local function triggerInstantUpdate()
+triggerInstantUpdate = function()
 	updateRunningState()
 	local char = LocalPlayer.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -832,6 +817,7 @@ function Controller:SetRadarEnabled(value)
 			Executor.clearVisuals(GC, false)
 		end)
 	end
+	Logic.syncSimulatedUpgradeHud(self)
 	triggerInstantUpdate()
 end
 
@@ -929,12 +915,7 @@ local function startPlayerEnemyESPLoop()
 			end
 
 			if isFeatureSimulating("Player") then
-				-- pulsePlayerESP trả về false = native upgrade đã kích hoạt → tự thả ra
-				local ok, released = pcall(Logic.pulsePlayerESP, hrp, Controller.PlayerESPColor)
-				if ok and released == false then
-					Controller.PlayerESPEnabled = false
-					print("[NULLSCAPE] Native RadarPlayer active → đã thả PlayerESP")
-				end
+				pcall(Logic.pulsePlayerESP, hrp, Controller.PlayerESPColor)
 			end
 
 			if isFeatureSimulating("Enemy") then
@@ -1514,8 +1495,12 @@ end
 getgenv()._NULLSCAPE_Globals.activeUpgradeController = Controller
 
 -- Khởi tạo ban đầu khi nạp script
-Logic.syncNativeRelease(Controller)
-Logic.bindUpgradeWatcher(Controller, triggerInstantUpdate)
+Logic.syncSimulatedUpgradeHud(Controller)
+Logic.bindUpgradeWatcher(Controller, function()
+	if triggerInstantUpdate then
+		triggerInstantUpdate()
+	end
+end)
 startObservingFolders()
 setupGiftClientHook()
 startGiftPoolObserver()

@@ -164,6 +164,11 @@ local CFG = {
     ASSIST_SPECIAL_TRIA_SPEED = 120,
     ASSIST_SPECIAL_BELL_FALL_SPEED = -45,
     ASSIST_SPECIAL_JUMPPAD_FALL_SPEED = -70,
+    SOFT_OVERRIDE_MIN_SCORE_GAP = 34,
+    SOFT_OVERRIDE_CURSOR_LIMIT = 0.18,
+    SOFT_OVERRIDE_ORIGINAL_BAD_CURSOR = 0.28,
+    SOFT_OVERRIDE_WRONG_ANCHOR_MIN = 34,
+    SOFT_OVERRIDE_SURFACE_PENALTY = 46,
     SMART_REEL_EVAL_INTERVAL = 0.06,
     SMART_REEL_AUTO_THRESHOLD = 62,
     SMART_REEL_MANUAL_THRESHOLD = 36,
@@ -1627,6 +1632,20 @@ local function getSpecialAnchorBonus(grapple, targetName, targetPosition)
     return 0
 end
 
+local function getAimAssistStrengthScale()
+    local controller = getController()
+    local value = tostring(controller and controller.GrappleAimAssistStrength or "Balanced")
+    if value == "Light" then
+        return 0.75
+    elseif value == "Strong" then
+        return 1.25
+    elseif value == "Motor Accessibility" then
+        return 1.6
+    end
+
+    return 1
+end
+
 local function getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
     local rootPart = grapple and grapple.RootPart
     local movement = grapple and grapple.Movement
@@ -1753,6 +1772,8 @@ local function scanNamedTargets(grapple, options)
     local rootPart = grapple and grapple.RootPart
 
     local driveMode = typeof(options) == "table" and options.driveMode == true
+    local returnDecision = typeof(options) == "table" and options.returnDecision == true
+    local fullScan = typeof(options) == "table" and options.fullScan == true
 
     local controller = getController()
     local preferredName = normalizeTargetPriority(controller and controller.GrappleAimAssistTargetPriority)
@@ -1785,8 +1806,11 @@ local function scanNamedTargets(grapple, options)
     local bestScore = math.huge
     local bestResult = nil
     local bestTargetInstance = nil
+    local bestTargetName = nil
+    local bestDistance = nil
+    local bestScreenScore = nil
     local bestReason = nil
-    local checks = (driveMode or emergencyBrakeMode or rangeMode == "Closest To Cursor")
+    local checks = (fullScan or driveMode or emergencyBrakeMode or rangeMode == "Closest To Cursor")
         and candidateCount
         or math.min(candidateCount, CFG.MAX_CANDIDATES_PER_CAST)
 
@@ -1898,6 +1922,9 @@ local function scanNamedTargets(grapple, options)
                                 bestScore = score
                                 bestResult = result
                                 bestTargetInstance = candidate.Instance
+                                bestTargetName = candidate.Name
+                                bestDistance = distance
+                                bestScreenScore = screenScore
                                 bestReason = rangeMode
                             end
                         end
@@ -1914,6 +1941,15 @@ local function scanNamedTargets(grapple, options)
         if result then
             rememberAssistTarget(instance, reason, 0)
         end
+        if returnDecision then
+            return result and {
+                Result = result,
+                Instance = instance,
+                Name = instance and instance.Name or nil,
+                Score = 0,
+                Reason = reason,
+            } or nil
+        end
         return result
     end
 
@@ -1928,6 +1964,18 @@ local function scanNamedTargets(grapple, options)
 
     if bestResult then
         rememberAssistTarget(bestTargetInstance, bestReason, bestScore)
+    end
+
+    if returnDecision then
+        return bestResult and {
+            Result = bestResult,
+            Instance = bestTargetInstance,
+            Name = bestTargetName,
+            Distance = bestDistance,
+            ScreenScore = bestScreenScore,
+            Score = bestScore,
+            Reason = bestReason,
+        } or nil
     end
 
     return bestResult
@@ -1968,6 +2016,155 @@ local function scanScreenSurface(grapple, options)
     end
 
     return nil
+end
+
+local function getResultTargetName(result)
+    local instance = result and result.Instance
+    local current = instance
+    while current do
+        if VALID_TARGETS[current.Name] then
+            return current.Name, current
+        end
+        current = current.Parent
+    end
+
+    return nil, instance
+end
+
+local function isSameAssistTarget(result, decision)
+    if not (result and decision and decision.Instance) then
+        return false
+    end
+
+    local instance = result.Instance
+    if instance == decision.Instance then
+        return true
+    end
+    if instance and instance:IsDescendantOf(decision.Instance) then
+        return true
+    end
+    if decision.Instance and decision.Instance:IsDescendantOf(instance) then
+        return true
+    end
+
+    return false
+end
+
+local function getDirectResultAssistScore(grapple, result)
+    local camera = Workspace.CurrentCamera
+    local rootPart = grapple and grapple.RootPart
+    if not (camera and rootPart and result and typeof(result.Position) == "Vector3") then
+        return math.huge, nil, 0, nil
+    end
+
+    local controller = getController()
+    local rangeMode = normalizeRangePriority(controller and controller.GrappleAimAssistRangePriority)
+    if shouldForceNearest(grapple) then
+        rangeMode = "Nearest"
+    end
+
+    local maxRange = getAssistRange(grapple, false)
+    local distance = (result.Position - rootPart.Position).Magnitude
+    if distance <= 0 or distance > maxRange then
+        return math.huge, nil, 0, nil
+    end
+
+    local screenAnchor = getScreenAnchor(camera, rangeMode)
+    local screenScore = getCameraScreenScore(camera, result.Position, screenAnchor)
+    if not screenScore then
+        return math.huge, nil, 0, nil
+    end
+
+    local inputDirection, velocityDirection = getAssistIntentDirections(grapple)
+    local targetName = getResultTargetName(result)
+    local distanceScore = rangeMode == "Farthest" and -distance or distance
+    if rangeMode == "Closest To Cursor" then
+        distanceScore = distance * CFG.CURSOR_INTENT_DISTANCE_WEIGHT
+    end
+
+    local staminaRatio = getStaminaRatio(grapple)
+    local staminaPenalty = isInfiniteStamina() and 0 or distance * (1 - staminaRatio) * 0.12
+    local intentPenalty = getAssistIntentPenalty(rootPart, result.Position, inputDirection, velocityDirection)
+    local routeBonus = getRouteAssistBonus(rootPart, result.Position)
+    local specialBonus = targetName and getSpecialAnchorBonus(grapple, targetName, result.Position) or 0
+    local wrongAnchorPenalty = getWrongAnchorPenalty(rootPart, result.Position, inputDirection, velocityDirection, false)
+    local surfacePenalty = targetName and 0 or CFG.SOFT_OVERRIDE_SURFACE_PENALTY
+
+    local score
+    if rangeMode == "Closest To Cursor" then
+        score = screenScore * CFG.CURSOR_INTENT_SCREEN_WEIGHT
+            + distanceScore
+            + staminaPenalty
+            + intentPenalty * 0.35
+            + routeBonus * 0.35
+            + specialBonus
+            + wrongAnchorPenalty * 0.4
+            + surfacePenalty
+    else
+        score = screenScore * 100
+            + distanceScore * 0.01
+            + staminaPenalty
+            + intentPenalty
+            + routeBonus
+            + specialBonus
+            + wrongAnchorPenalty
+            + surfacePenalty
+    end
+
+    return score, screenScore, wrongAnchorPenalty, targetName
+end
+
+local function getSoftOverrideResult(grapple, originalResult)
+    if not (isEnabled() and isUsableResult(grapple, originalResult)) then
+        return nil
+    end
+
+    local movement = grapple and grapple.Movement
+    if not (grapple and movement and grapple.specialHeld and not movement.grappling and isInAir(grapple)) then
+        return nil
+    end
+
+    local decision = scanNamedTargets(grapple, {
+        returnDecision = true,
+        fullScan = true,
+    })
+    if not (decision and decision.Result) then
+        return nil
+    end
+    if isSameAssistTarget(originalResult, decision) then
+        return nil
+    end
+
+    local originalScore, originalScreenScore, wrongAnchorPenalty, originalTargetName =
+        getDirectResultAssistScore(grapple, originalResult)
+    local decisionScore = tonumber(decision.Score) or math.huge
+    local decisionScreenScore = tonumber(decision.ScreenScore) or math.huge
+    local strengthScale = getAimAssistStrengthScale()
+    local requiredGap = CFG.SOFT_OVERRIDE_MIN_SCORE_GAP / strengthScale
+    local scoreGap = originalScore - decisionScore
+    if scoreGap < requiredGap then
+        return nil
+    end
+
+    local hasClearCursorIntent = decisionScreenScore <= CFG.SOFT_OVERRIDE_CURSOR_LIMIT * strengthScale
+    local originalLooksOffIntent = originalScreenScore == nil
+        or originalScreenScore >= CFG.SOFT_OVERRIDE_ORIGINAL_BAD_CURSOR / strengthScale
+        or wrongAnchorPenalty >= CFG.SOFT_OVERRIDE_WRONG_ANCHOR_MIN / strengthScale
+        or originalTargetName == nil
+
+    if not (hasClearCursorIntent or originalLooksOffIntent) then
+        return nil
+    end
+
+    Logic.LastAssistDebug = {
+        Reason = "SoftOverride",
+        Score = decisionScore,
+        OriginalScore = originalScore,
+        Gap = scoreGap,
+        Target = decision.Name,
+    }
+
+    return decision.Result
 end
 
 function hasAdaptDriveTarget(grapple)
@@ -2082,7 +2279,18 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
     notePanicInput(grapple)
     local result, direction = originalCast(grapple, forceRefresh, ...)
     local canAssist = isEnabled() or (isRescueEnabled() and isFallingFast(grapple))
-    if isUsableResult(grapple, result) or not canAssist then
+    if not canAssist then
+        return result, direction
+    end
+
+    if isUsableResult(grapple, result) then
+        local overrideResult = getSoftOverrideResult(grapple, result)
+        if overrideResult then
+            if overrideResult.Instance and overrideResult.Instance.Name == "Bell" then
+                holdBellBypass(overrideResult.Instance)
+            end
+            return overrideResult
+        end
         return result, direction
     end
 

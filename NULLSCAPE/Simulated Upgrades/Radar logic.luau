@@ -411,22 +411,9 @@ local function isEnemyValidForESP(enemy)
 end
 
 local function updateNativeEnemyESPState(controller)
-	local upgradesFolder = game.ReplicatedStorage:FindFirstChild("UpgradeFolder") 
-		and game.ReplicatedStorage.UpgradeFolder:FindFirstChild("Upgrades")
-	
 	local shouldEnableNative = canSimulate(controller, "Enemy")
-	
+
 	if shouldEnableNative then
-		-- 1. Kích hoạt simulated upgrade trong ReplicatedStorage để native spriteManager tự vẽ các enemy mới
-		if upgradesFolder then
-			if not upgradesFolder:FindFirstChild("EnemyOnTop") then
-				local simulated = Instance.new("IntValue")
-				simulated.Name = "EnemyOnTop"
-				simulated.Value = 1
-				simulated.Parent = upgradesFolder
-			end
-		end
-		
 		-- 2. Thử tìm native ESP template để tự vẽ cho các enemy hiện tại
 		local espTemplate = nil
 		local playerScripts = game.Players.LocalPlayer:FindFirstChild("PlayerScripts")
@@ -620,16 +607,7 @@ local function updateNativeEnemyESPState(controller)
 			end
 		end
 	else
-		-- Dọn dẹp simulated upgrade và các visual đã vẽ
-		if upgradesFolder then
-			local simulated = upgradesFolder:FindFirstChild("EnemyOnTop")
-			if simulated then
-				pcall(function()
-					simulated:Destroy()
-				end)
-			end
-		end
-		
+		-- Dọn dẹp các visual đã vẽ (icon HUD do syncSimulatedUpgradeHud quản lý)
 		local enemyFolder = workspace:FindFirstChild("Enemies")
 		if enemyFolder then
 			for _, enemy in ipairs(enemyFolder:GetChildren()) do
@@ -804,25 +782,14 @@ local function shouldUseNativeRadar(controller, kind)
 	if controller and controller.UseNativeRadarWhenAvailable == false then
 		return false
 	end
-	if Logic.shouldYieldToNative(controller, kind) then
-		return true
-	end
-	if kind == "Gift" then
-		-- Chỉ nhường cho radar gốc nếu người chơi thật sự có nâng cấp HighlightGifts.
-		-- Nếu chỉ là kích hoạt radar 20% (chỉ highlight 1 quà), ta không nhường để giữ nguyên ESP vẽ tất cả quà.
-		return isNativeGiftRadarActive() and isNativeGiftHighlightEnabled()
-	elseif kind == "Tripmine" then
-		return isNativeTripmineHighlightEnabled()
-	elseif kind == "Cadence" then
-		return isNativeCadenceRadarActive()
-	elseif kind == "Altar" then
-		return isNativeAltarRadarActive()
-	end
-	return false
+	-- Hook đã bật module game gốc khi toggle ON — NULLSCAPE không vẽ trùng ESP/pulse.
+	return Logic.isSimulationToggleOn(controller, kind)
 end
 
 -- Vòng lặp cập nhật khoảng cách, sắp xếp độ ưu tiên và chuyển đổi visual styles (chạy cực nhanh)
 function Logic.updateESPStyles(controller, gc, hrp)
+	Logic.syncSimulatedUpgradeHud(controller)
+
 	-- Cập nhật trạng thái native enemy ESP
 	pcall(updateNativeEnemyESPState, controller)
 
@@ -1493,15 +1460,10 @@ end
 -- API: Pulse ESP cho tất cả player khác trong phạm vi 1024 studs
 -- hrp: HumanoidRootPart của local player
 -- color: Color3 màu outline (mặc định trắng)
--- Trả về false nếu native RadarPlayer đang hoạt động (không cần làm gì thêm)
+-- Trả về true nếu đã pulse ít nhất một player
 function Logic.pulsePlayerESP(hrp, color)
 	if not hrp then
 		return false
-	end
-
-	-- Thả ra nếu native RadarPlayer upgrade đang hoạt động thật
-	if Logic.shouldYieldToNative(nil, "Player") then
-		return false -- "release": báo controller biết để dừng loop
 	end
 
 	local outlineColor = color or Color3.fromRGB(255, 255, 255)
@@ -1757,10 +1719,19 @@ function Logic.triggerPulseRadar(targets, hrp)
 end
 
 -- =============================================================================
--- HYBRID PERMISSIONS (C)
--- Simulation: Index owned + toggle ON + native chưa active.
--- Native active trong run → tự thả simulation.
+-- FULL CLIENT BYPASS
+-- Toggle ON → hook IsUpgradeEnabled + inject HUD icon cho toàn bộ module radar gốc.
+-- Không kiểm tra Index, không nhường native trong run.
 -- =============================================================================
+
+Logic.RADAR_UPGRADES = {
+	"HighlightGifts",
+	"HighlightTripmines",
+	"RadarInstruments",
+	"RadarAltars",
+	"RadarPlayer",
+	"EnemyOnTop",
+}
 
 Logic.FEATURES = {
 	Gift = {
@@ -1802,6 +1773,9 @@ for featureKey, cfg in pairs(Logic.FEATURES) do
 		UPGRADE_TO_FEATURE[cfg.indexUpgrade] = featureKey
 	end
 end
+
+local SIM_ATTR = "NULLSCAPE_Simulated"
+local hudWatcherBound = false
 
 local bestiaryHandler = nil
 
@@ -1866,10 +1840,116 @@ function Logic.isNativeUpgradeActive(upgradeName)
 	local upgrades = upgradeFolder and upgradeFolder:FindFirstChild("Upgrades")
 	local valueObj = upgrades and upgrades:FindFirstChild(upgradeName)
 	if valueObj and valueObj:IsA("IntValue") and valueObj.Value > 0 then
+		-- Bỏ qua IntValue do NULLSCAPE inject — tránh vòng lặp tự hủy/tạo lại icon HUD
+		if valueObj:GetAttribute(SIM_ATTR) then
+			return false
+		end
 		return true
 	end
 
 	return false
+end
+
+local function getUpgradesFolder()
+	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local upgradeFolder = ReplicatedStorage:FindFirstChild("UpgradeFolder")
+	return upgradeFolder and upgradeFolder:FindFirstChild("Upgrades")
+end
+
+local function collectDesiredSimulatedUpgrades(controller)
+	local desired = {}
+	if not controller then
+		return desired
+	end
+
+	for featureKey, cfg in pairs(Logic.FEATURES) do
+		if Logic.isSimulationToggleOn(controller, featureKey) then
+			desired[cfg.nativeUpgrade] = true
+		end
+	end
+
+	if controller.RadarEnabled then
+		desired.RadarPlayer = true
+	end
+
+	return desired
+end
+
+local function ensureSimulatedUpgradeInt(upgrades, upgradeName)
+	local existing = upgrades:FindFirstChild(upgradeName)
+	if existing then
+		if existing:GetAttribute(SIM_ATTR) then
+			if existing.Value ~= 1 then
+				existing.Value = 1
+			end
+			return existing
+		end
+		return nil
+	end
+
+	local simulated = Instance.new("IntValue")
+	simulated.Name = upgradeName
+	simulated.Value = 1
+	simulated:SetAttribute(SIM_ATTR, true)
+	simulated.Parent = upgrades
+	return simulated
+end
+
+local function removeSimulatedUpgradeInt(upgrades, upgradeName)
+	local existing = upgrades:FindFirstChild(upgradeName)
+	if existing and existing:GetAttribute(SIM_ATTR) then
+		pcall(function()
+			existing:Destroy()
+		end)
+	end
+end
+
+function Logic.syncSimulatedUpgradeHud(controller)
+	if not controller or controller.Destroyed then
+		return
+	end
+
+	local upgrades = getUpgradesFolder()
+	if not upgrades then
+		return
+	end
+
+	local desired = collectDesiredSimulatedUpgrades(controller)
+
+	for _, child in ipairs(upgrades:GetChildren()) do
+		if child:GetAttribute(SIM_ATTR) and not desired[child.Name] then
+			removeSimulatedUpgradeInt(upgrades, child.Name)
+		end
+	end
+
+	for upgradeName in pairs(desired) do
+		ensureSimulatedUpgradeInt(upgrades, upgradeName)
+	end
+end
+
+local function bindSimulatedUpgradeHudWatcher(controller)
+	if hudWatcherBound then
+		return
+	end
+
+	local upgrades = getUpgradesFolder()
+	if not upgrades then
+		task.defer(function()
+			bindSimulatedUpgradeHudWatcher(controller)
+		end)
+		return
+	end
+
+	hudWatcherBound = true
+	upgrades.ChildRemoved:Connect(function(child)
+		if child:GetAttribute(SIM_ATTR) then
+			task.defer(function()
+				if controller and not controller.Destroyed then
+					Logic.syncSimulatedUpgradeHud(controller)
+				end
+			end)
+		end
+	end)
 end
 
 function Logic.isSimulationToggleOn(controller, featureKey)
@@ -1880,54 +1960,18 @@ function Logic.isSimulationToggleOn(controller, featureKey)
 	return controller[cfg.toggle] == true
 end
 
-function Logic.shouldYieldToNative(_controller, featureKey)
-	local cfg = Logic.FEATURES[featureKey]
-	if not cfg then
-		return false
-	end
-	return Logic.isNativeUpgradeActive(cfg.nativeUpgrade)
-end
-
-function Logic.canSimulateFeature(controller, featureKey)
-	local cfg = Logic.FEATURES[featureKey]
-	if not cfg or not controller then
-		return false
-	end
-
-	if not Logic.isSimulationToggleOn(controller, featureKey) then
-		return false
-	end
-
-	if Logic.shouldYieldToNative(controller, featureKey) then
-		return false
-	end
-
-	local owned = Logic.isIndexUpgradeOwned(cfg.indexUpgrade)
-	if owned == true then
-		return true
-	end
-	if owned == nil then
-		return true
-	end
-
+function Logic.shouldYieldToNative(_controller, _featureKey)
 	return false
 end
 
-function Logic.canEnableSimulation(controller, featureKey)
-	local cfg = Logic.FEATURES[featureKey]
-	if not cfg then
+function Logic.canSimulateFeature(controller, featureKey)
+	return Logic.isSimulationToggleOn(controller, featureKey)
+end
+
+function Logic.canEnableSimulation(_controller, featureKey)
+	if not Logic.FEATURES[featureKey] then
 		return false, "unknown_feature"
 	end
-
-	if Logic.shouldYieldToNative(controller, featureKey) then
-		return false, "native_active"
-	end
-
-	local owned = Logic.isIndexUpgradeOwned(cfg.indexUpgrade)
-	if owned == false then
-		return false, "index_not_owned"
-	end
-
 	return true
 end
 
@@ -1939,28 +1983,19 @@ local function wantsRadarPlayerSimulation(controller)
 end
 
 function Logic.shouldSpoofUpgradeEnabled(controller, upgradeName)
+	if not controller then
+		return false
+	end
+
 	local featureKey = UPGRADE_TO_FEATURE[upgradeName]
-	if not featureKey then
-		if upgradeName == "RadarPlayer" and controller then
-			if Logic.shouldYieldToNative(controller, "Player") then
-				return false
-			end
-			local owned = Logic.isIndexUpgradeOwned("RadarPlayer")
-			if owned == false then
-				return false
-			end
-			if wantsRadarPlayerSimulation(controller) then
-				return true, true
-			end
+	if featureKey then
+		if Logic.isSimulationToggleOn(controller, featureKey) then
+			return true, true
 		end
 		return false
 	end
 
-	if Logic.shouldYieldToNative(controller, featureKey) then
-		return false
-	end
-
-	if Logic.canSimulateFeature(controller, featureKey) then
+	if upgradeName == "RadarPlayer" and wantsRadarPlayerSimulation(controller) then
 		return true, true
 	end
 
@@ -1975,28 +2010,13 @@ function Logic.shouldSpoofUpgradeStack(controller, upgradeName)
 	return false
 end
 
-function Logic.syncNativeRelease(controller)
-	if not controller or controller.Destroyed then
-		return false
-	end
-
-	local released = false
-	for featureKey, cfg in pairs(Logic.FEATURES) do
-		if Logic.shouldYieldToNative(controller, featureKey) and controller[cfg.toggle] then
-			controller[cfg.toggle] = false
-			released = true
-			print(string.format(
-				"[NULLSCAPE] Native %s active → released %s simulation",
-				cfg.nativeUpgrade,
-				featureKey
-			))
-		end
-	end
-
-	return released
+function Logic.syncNativeRelease(_controller)
+	return false
 end
 
 function Logic.bindUpgradeWatcher(controller, onChanged)
+	bindSimulatedUpgradeHudWatcher(controller)
+
 	task.spawn(function()
 		local ReplicatedFirst = game:GetService("ReplicatedFirst")
 		local clientModules = ReplicatedFirst:WaitForChild("ClientModules", 15)
@@ -2005,11 +2025,24 @@ function Logic.bindUpgradeWatcher(controller, onChanged)
 			local ok, UpgradeHandler = pcall(require, upgradeModule)
 			if ok and typeof(UpgradeHandler) == "table" and UpgradeHandler.UpgradesChanged then
 				UpgradeHandler.UpgradesChanged:Connect(function()
-					if Logic.syncNativeRelease(controller) and onChanged then
+					Logic.syncSimulatedUpgradeHud(controller)
+					if onChanged then
 						onChanged()
 					end
 				end)
 			end
+		end
+
+		local upgrades = getUpgradesFolder()
+		if upgrades then
+			upgrades.ChildAdded:Connect(function(child)
+				if child:GetAttribute(SIM_ATTR) then
+					return
+				end
+				task.defer(function()
+					Logic.syncSimulatedUpgradeHud(controller)
+				end)
+			end)
 		end
 
 		local handler = resolveBestiaryHandler()
