@@ -179,10 +179,11 @@ return function(Client, Controller)
 
 	Tab:CreateDropdown({
 		Name = "Charger Tripmine Mode",
-		Info = "Passthrough/PreDetonate da tach khoi Defuse Kits; dung cho tech Charger rieng.",
-		Options = { "Passthrough", "PreDetonate" },
-		CurrentOption = (Controller.ChargerTripmineMode == "PreDetonate" and "PreDetonate")
-			or "Passthrough",
+		Info = "Auto se chi kich khi dang lao vao/cua so gan; Passthrough va PreDetonate la mode thu cong.",
+		Options = { "Auto", "Passthrough", "PreDetonate" },
+		CurrentOption = (Controller.ChargerTripmineMode == "Passthrough" and "Passthrough")
+			or (Controller.ChargerTripmineMode == "PreDetonate" and "PreDetonate")
+			or "Auto",
 		MultipleOptions = false,
 		Flag = "ChargerTripmineModeDropdown",
 		Callback = function(Option)

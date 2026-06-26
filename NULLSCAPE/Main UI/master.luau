@@ -125,7 +125,7 @@ pcall(function()
 			AutoCollectModeDropdown = "Legit",
 			TripmineModeDropdown = "Blocker",
 			ChargerTripmineAssistToggle = false,
-			ChargerTripmineModeDropdown = "Passthrough",
+			ChargerTripmineModeDropdown = "Auto",
 			ChargerTripmineDistanceSlider = 15,
 			ChargerTripmineJitterSlider = 2,
 			GraceWingsToggle = false,

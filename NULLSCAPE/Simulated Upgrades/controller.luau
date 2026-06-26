@@ -56,7 +56,7 @@ local Controller = {
 	TripmineDetonationJitter = 2,
 	TripmineBlastSafeRadius = 8, -- Legacy: active tripmine detonation is disabled by Defuse Kits
 	ChargerTripmineAssistEnabled = false,
-	ChargerTripmineMode = "Passthrough",
+	ChargerTripmineMode = "Auto",
 	ChargerTripmineDistance = 15,
 	ChargerTripmineJitter = 2,
 	SimulateDefuseKit = false,
@@ -185,7 +185,13 @@ end
 
 -- Đăng ký các hàm helper để quan sát vật thể thời gian thực (Gift từ Module gốc của game)
 local function registerGiftObj(giftObj)
-	if not giftObj or giftObj.Collected then
+	if typeof(giftObj) ~= "table" then
+		return
+	end
+	if giftObj.Id == nil then
+		return
+	end
+	if giftObj.Collected then
 		return
 	end
 
@@ -942,7 +948,7 @@ function Controller:SetChargerTripmineAssist(value)
 end
 
 function Controller:SetChargerTripmineMode(value)
-	self.ChargerTripmineMode = value or "Passthrough"
+	self.ChargerTripmineMode = value or "Auto"
 end
 
 function Controller:SetChargerTripmineDistance(value)
@@ -1276,11 +1282,23 @@ local function setupGiftClientHook()
 
 				GiftClientHandler.new = function(...)
 					local orig = getgenv()._NULLSCAPE_Globals.OriginalGiftClientNew
-					local giftObj = orig(...)
+					if typeof(orig) ~= "function" then
+						return nil
+					end
+
+					local ok, giftObj = pcall(orig, ...)
+					if not ok then
+						warn("[NULLSCAPE Radar] GiftClientHandler.new original failed: " .. tostring(giftObj))
+						return nil
+					end
+
 					if giftObj then
 						local cb = getgenv()._NULLSCAPE_Globals.onGiftCreated
-						if cb then
-							pcall(cb, giftObj)
+						if typeof(cb) == "function" then
+							local cbOk, cbErr = pcall(cb, giftObj)
+							if not cbOk then
+								warn("[NULLSCAPE Radar] onGiftCreated failed: " .. tostring(cbErr))
+							end
 						end
 					end
 					return giftObj

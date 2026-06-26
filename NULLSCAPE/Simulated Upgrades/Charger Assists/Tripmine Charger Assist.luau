@@ -9,10 +9,16 @@
 local ChargerAssist = {}
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
 local PASSTHROUGH_MODE = "Passthrough"
 local PREDETONATE_MODE = "PreDetonate"
+local AUTO_MODE = "Auto"
+local COLLECT_COOLDOWN = 0.45
+local NEAR_PASS_DISTANCE = 6
+local AUTO_LOOKAHEAD_SECONDS = 0.55
+local AUTO_MIN_APPROACH_SPEED = 28
 
 local activeController = nil
 local watcherRunning = false
@@ -21,9 +27,10 @@ local iframeObject = nil
 local processedMines = {}
 local passthroughState = {}
 local logs = {}
+local lastCollectAt = {}
 
 local function isChargerAssistMode(mode)
-    return mode == PASSTHROUGH_MODE or mode == PREDETONATE_MODE
+    return mode == AUTO_MODE or mode == PASSTHROUGH_MODE or mode == PREDETONATE_MODE
 end
 
 local function hasIframes()
@@ -62,8 +69,16 @@ local function getGiftClientHandler()
         return cachedGCH
     end
 
+    local replicatedFirst = game:GetService("ReplicatedFirst")
+    local clientModules = replicatedFirst:FindFirstChild("ClientModules") or ReplicatedStorage:FindFirstChild("ClientModules")
+    local giftClient = clientModules and clientModules:FindFirstChild("GiftClient")
+    local handlerModule = giftClient and giftClient:FindFirstChild("GiftClientHandler")
+    if not handlerModule then
+        return nil
+    end
+
     local ok, result = pcall(function()
-        return require(game:GetService("ReplicatedFirst").ClientModules.GiftClient.GiftClientHandler)
+        return require(handlerModule)
     end)
     if ok and result then
         cachedGCH = result
@@ -77,12 +92,14 @@ local function clearMineState(giftId)
     processedMines[giftId] = nil
     processedMines["__dist_" .. giftId] = nil
     passthroughState[giftId] = nil
+    lastCollectAt[giftId] = nil
 end
 
 local function clearState()
     table.clear(processedMines)
     table.clear(passthroughState)
     table.clear(logs)
+    table.clear(lastCollectAt)
 end
 
 local function logOnce(giftId, reason, dist)
@@ -93,6 +110,72 @@ local function logOnce(giftId, reason, dist)
 
     logs[key] = true
     print("[NULLSCAPE Charger Assist] " .. reason, giftId, "at", math.round(dist), "studs")
+end
+
+local function getGiftPosition(gift)
+    local giftPos = gift and gift.Position
+    if typeof(giftPos) == "Vector3" then
+        return giftPos
+    end
+
+    local model = gift and gift.Model
+    if typeof(model) == "Instance" then
+        if model:IsA("BasePart") then
+            return model.Position
+        end
+
+        local part = model:FindFirstChildWhichIsA("BasePart", true)
+        if part then
+            return part.Position
+        end
+    end
+
+    return nil
+end
+
+local function getApproachInfo(hrp, giftPos, dist)
+    local velocity = hrp.AssemblyLinearVelocity or hrp.Velocity
+    local toMine = giftPos - hrp.Position
+    local dir = toMine.Magnitude > 0.05 and toMine.Unit or Vector3.new(0, 0, 0)
+    local approachSpeed = velocity:Dot(dir)
+    local timeToMine = if approachSpeed > 1 then dist / approachSpeed else math.huge
+
+    return approachSpeed, timeToMine
+end
+
+local function tryCollectTripmine(giftId, gift, reason, dist)
+    if not gift or gift.Collected or gift.Destroyed or gift.ClientCollected then
+        return false
+    end
+
+    local now = os.clock()
+    if lastCollectAt[giftId] and now - lastCollectAt[giftId] < COLLECT_COOLDOWN then
+        return false
+    end
+    lastCollectAt[giftId] = now
+
+    local ok = pcall(function()
+        gift:Collect(false, true, 0)
+    end)
+
+    if ok then
+        logOnce(giftId, reason, dist)
+    end
+
+    return ok
+end
+
+local function shouldAutoPredetonate(hrp, giftPos, dist, targetDist)
+    local approachSpeed, timeToMine = getApproachInfo(hrp, giftPos, dist)
+    if dist <= NEAR_PASS_DISTANCE then
+        return true
+    end
+
+    if dist <= targetDist and approachSpeed >= AUTO_MIN_APPROACH_SPEED then
+        return true
+    end
+
+    return timeToMine <= AUTO_LOOKAHEAD_SECONDS
 end
 
 local function startWatcher()
@@ -145,19 +228,19 @@ local function startWatcher()
                     continue
                 end
 
-                local giftPos = gift.Position
-                if typeof(giftPos) ~= "Vector3" then
+                local giftPos = getGiftPosition(gift)
+                if not giftPos then
                     continue
                 end
 
                 local dist = (hrpPos - giftPos).Magnitude
-                if mode == PASSTHROUGH_MODE then
+                if mode == PASSTHROUGH_MODE or mode == AUTO_MODE then
                     local state = passthroughState[giftId]
-                    if not state and dist < 6 then
+                    if not state and dist < NEAR_PASS_DISTANCE then
                         passthroughState[giftId] = "inside"
                         local targetDist = baseDist + (jitter > 0 and math.random(-jitter, jitter) or 0)
-                        processedMines["__dist_" .. giftId] = math.max(targetDist, 6)
-                        logOnce(giftId, "PassthroughEntered", dist)
+                        processedMines["__dist_" .. giftId] = math.max(targetDist, NEAR_PASS_DISTANCE)
+                        tryCollectTripmine(giftId, gift, "PassthroughEntered", dist)
                     elseif state == "inside" then
                         local targetDist = processedMines["__dist_" .. giftId] or baseDist
                         if dist >= targetDist then
@@ -165,7 +248,9 @@ local function startWatcher()
                             clearMineState(giftId)
                         end
                     end
-                elseif mode == PREDETONATE_MODE then
+                end
+
+                if mode == PREDETONATE_MODE or mode == AUTO_MODE then
                     if processedMines[giftId] then
                         continue
                     end
@@ -176,9 +261,21 @@ local function startWatcher()
                     end
 
                     local targetDist = processedMines["__dist_" .. giftId]
-                    if dist <= targetDist then
-                        processedMines[giftId] = true
-                        logOnce(giftId, "PreDetonateWindow", dist)
+                    local shouldCollect = dist <= targetDist
+                    if mode == AUTO_MODE then
+                        shouldCollect = shouldAutoPredetonate(hrp, giftPos, dist, targetDist)
+                    end
+
+                    if shouldCollect then
+                        local ok = tryCollectTripmine(
+                            giftId,
+                            gift,
+                            mode == AUTO_MODE and "AutoTripmineCollect" or "PreDetonateWindow",
+                            dist
+                        )
+                        if ok then
+                            processedMines[giftId] = true
+                        end
                     end
                 end
             end
@@ -197,7 +294,7 @@ end
 
 function ChargerAssist.Init()
     startWatcher()
-    print("[NULLSCAPE Charger Assist] Module ready. Modes: Passthrough | PreDetonate")
+    print("[NULLSCAPE Charger Assist] Module ready. Modes: Auto | Passthrough | PreDetonate")
 end
 
 ChargerAssist.Init()
