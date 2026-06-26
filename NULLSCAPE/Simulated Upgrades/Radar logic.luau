@@ -205,7 +205,7 @@ local function isSpringerEnemy(enemy)
 	return enemy.Name == "Springer" or enemy.Name == "BigSpringer"
 end
 
-local function findEnemyVisualPart(enemy)
+local function findEnemyVisualPart(enemy, hrp)
 	if not enemy or not enemy.Parent then
 		return nil
 	end
@@ -225,10 +225,46 @@ local function findEnemyVisualPart(enemy)
 	end
 
 	if enemy:IsA("Model") then
-		return enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+		if enemy.PrimaryPart then
+			return enemy.PrimaryPart
+		end
 	end
 
-	return enemy:FindFirstChildWhichIsA("BasePart", true)
+	local closestPart = nil
+	local closestDistance = math.huge
+	for _, descendant in ipairs(enemy:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			local distance = hrp and (hrp.Position - descendant.Position).Magnitude or 0
+			if distance < closestDistance then
+				closestDistance = distance
+				closestPart = descendant
+			end
+		end
+	end
+
+	return closestPart
+end
+
+local function isSafeEnemyVisualPart(part, hrp)
+	if not part or not part.Parent or not part:IsDescendantOf(workspace) then
+		return false
+	end
+
+	local pos = part.Position
+	if math.abs(pos.X) > 100000 or math.abs(pos.Y) > 100000 or math.abs(pos.Z) > 100000 then
+		return false
+	end
+
+	local size = part.Size
+	if size.X > 1000 or size.Y > 1000 or size.Z > 1000 then
+		return false
+	end
+
+	if hrp and (hrp.Position - pos).Magnitude > 5000 then
+		return false
+	end
+
+	return true
 end
 
 -- Dọn dẹp toàn bộ Highlight, Beam, Dot và các đối tượng lưu đệm
@@ -430,7 +466,7 @@ local function addCustomVisual(style, highlights, billboards, part, model, color
 	end
 end
 
-local function addSpringerEnemyFallback(controller, style, highlights, billboards)
+local function addSpringerEnemyFallback(controller, style, highlights, billboards, hrp)
 	if not canSimulate(controller, "Enemy") then
 		return
 	end
@@ -443,9 +479,9 @@ local function addSpringerEnemyFallback(controller, style, highlights, billboard
 	local color = controller.EnemyESPColor or Color3.fromRGB(255, 128, 0)
 	for _, enemy in ipairs(enemies:GetChildren()) do
 		if isSpringerEnemy(enemy) and not hasNativeEnemyESP(enemy) then
-			local part = findEnemyVisualPart(enemy)
-			if part then
-				addCustomVisual(style, highlights, billboards, part, enemy, color)
+			local part = findEnemyVisualPart(enemy, hrp)
+			if isSafeEnemyVisualPart(part, hrp) then
+				addCustomVisual(style, highlights, billboards, part, part, color)
 			end
 		end
 	end
@@ -534,7 +570,7 @@ local function updateCustomESPStyles(controller, gc, hrp)
 		end
 	end
 
-	addSpringerEnemyFallback(controller, style, highlights, billboards)
+	addSpringerEnemyFallback(controller, style, highlights, billboards, hrp)
 
 	applyCustomBillboards(saved, billboards)
 	applyCustomHighlights(saved, highlights)
