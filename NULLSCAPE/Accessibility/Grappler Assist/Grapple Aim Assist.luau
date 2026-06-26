@@ -13,6 +13,7 @@ local ClassProfiles = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Ass
 local EmergencyDecision = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/EmergencyDecision.luau")
 local TerrainSense = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TerrainSense.luau")
 local IntentModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/IntentModel.luau")
+local MapSense = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/MapSense.luau")
 
 local Logic = {
     Connections = {},
@@ -141,6 +142,13 @@ local CFG = {
     INTENT_CONTROL_SUPPRESS_DOT = 0.34,
     INTENT_REEL_SUPPRESS_PENALTY = 58,
     INTENT_JUMPPAD_SUPPRESS_PENALTY = 72,
+    MAP_ANCHOR_SCAN_INTERVAL = 1.2,
+    MAP_ANCHOR_SCAN_MAX_DESCENDANTS = 9000,
+    MAP_ANCHOR_MAX_CANDIDATES = 320,
+    MAP_ANCHOR_DISTANCE_WEIGHT = 0.03,
+    MAP_ANCHOR_SCREEN_WEIGHT = 36,
+    MAP_ANCHOR_UPWARD_BONUS = -62,
+    MAP_ANCHOR_LOW_PENALTY = 135,
     PANIC_RESCUE_GROUND_CHECK_HEIGHT = 10,
     PANIC_RESCUE_GROUND_CHECK_DEPTH = 90,
     PANIC_INPUT_WINDOW = 0.42,
@@ -1690,6 +1698,24 @@ end
 
 local isUsableResult
 
+local function getMapSenseDeps()
+    return {
+        CFG = CFG,
+        Workspace = Workspace,
+        VALID_TARGETS = VALID_TARGETS,
+        getTargetPart = getTargetPart,
+        getAssistRange = getAssistRange,
+        isLineClear = isLineClear,
+        isUsableResult = isUsableResult,
+        isPathSafeForHitbox = isPathSafeForHitbox,
+        now = time,
+    }
+end
+
+local function scanMapVoidAnchor(grapple, options)
+    return MapSense.findBestVoidAnchor(getMapSenseDeps(), grapple, options)
+end
+
 local function chooseRandomCandidate(validResults, preferredName)
     local preferred = {}
     for _, item in ipairs(validResults) do
@@ -2557,7 +2583,11 @@ local function tryPanicRescue(grapple)
     if voidDanger then
         markVoidRescueWindow()
     end
-    local previewResult = scanNamedTargets(grapple, { driveMode = true })
+    local previewResult
+    if voidDanger then
+        previewResult = scanMapVoidAnchor(grapple, { driveMode = true, returnDecision = true })
+    end
+    previewResult = previewResult or scanNamedTargets(grapple, { driveMode = true })
     if not previewResult and voidDanger then
         previewResult = scanScreenSurface(grapple, { driveMode = true, returnDecision = true })
     end
@@ -2654,7 +2684,11 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
     if Logic.AdaptDriveActive then
         assistedResult = scanNamedTargets(grapple, { driveMode = true })
     else
-        assistedResult = scanNamedTargets(grapple) or scanScreenSurface(grapple)
+        local mapResult
+        if isVoidRescueWindowActive() or isVoidRescueDanger(grapple) then
+            mapResult = scanMapVoidAnchor(grapple, { driveMode = true })
+        end
+        assistedResult = mapResult or scanNamedTargets(grapple) or scanScreenSurface(grapple)
     end
     if assistedResult then
         if hasClassCapability(grapple, "BellBypass") and assistedResult.Instance and assistedResult.Instance.Name == "Bell" then
@@ -3707,6 +3741,7 @@ function Logic.disable()
     Logic.NoCollisionMoveCastParams = nil
     clearInputConnections()
     clearConnections()
+    MapSense.clear()
     table.clear(Logic.Candidates)
 end
 

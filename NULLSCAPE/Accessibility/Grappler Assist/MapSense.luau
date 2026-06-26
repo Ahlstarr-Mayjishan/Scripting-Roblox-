@@ -1,0 +1,201 @@
+--!nocheck
+-- [[
+--  NULLSCAPE - Grappler Assist Map Sense
+--  Builds a lightweight map of rescue anchors for emergency/void grapples.
+-- ]]
+
+local MapSense = {
+    Anchors = {},
+    LastScanAt = 0,
+    LastWorkspace = nil,
+}
+
+local TARGET_PRIORITY = {
+    Bell = -120,
+    JumpPad = -70,
+    GrapplePoint = -42,
+    TriaOrb = -18,
+}
+
+local function getNow(deps)
+    if deps.now then
+        return deps.now()
+    end
+
+    return os.clock()
+end
+
+local function getCandidateName(deps, instance, part)
+    if instance and deps.VALID_TARGETS[instance.Name] then
+        return instance.Name
+    end
+    if part and deps.VALID_TARGETS[part.Name] then
+        return part.Name
+    end
+
+    return nil
+end
+
+local function addAnchor(deps, anchors, seen, instance)
+    if not (instance and instance.Parent) or seen[instance] then
+        return
+    end
+
+    local part = deps.getTargetPart(instance)
+    local name = getCandidateName(deps, instance, part)
+    if not (part and name) then
+        return
+    end
+
+    seen[instance] = true
+    table.insert(anchors, {
+        Instance = instance,
+        Part = part,
+        Name = name,
+    })
+end
+
+function MapSense.refresh(deps, force)
+    local workspace = deps.Workspace
+    if not workspace then
+        table.clear(MapSense.Anchors)
+        return MapSense.Anchors
+    end
+
+    local now = getNow(deps)
+    local cfg = deps.CFG
+    local interval = cfg.MAP_ANCHOR_SCAN_INTERVAL or 1.25
+    if not force and MapSense.LastWorkspace == workspace and now - MapSense.LastScanAt < interval then
+        return MapSense.Anchors
+    end
+
+    MapSense.LastWorkspace = workspace
+    MapSense.LastScanAt = now
+    table.clear(MapSense.Anchors)
+
+    local seen = {}
+    local anchors = MapSense.Anchors
+    local maxDescendants = cfg.MAP_ANCHOR_SCAN_MAX_DESCENDANTS or 9000
+    local maxAnchors = cfg.MAP_ANCHOR_MAX_CANDIDATES or 320
+    local scanned = 0
+
+    for _, child in ipairs(workspace:GetChildren()) do
+        addAnchor(deps, anchors, seen, child)
+        if #anchors >= maxAnchors then
+            break
+        end
+    end
+
+    if #anchors < maxAnchors then
+        for _, descendant in ipairs(workspace:GetDescendants()) do
+            scanned = scanned + 1
+            if scanned > maxDescendants or #anchors >= maxAnchors then
+                break
+            end
+            addAnchor(deps, anchors, seen, descendant)
+        end
+    end
+
+    return anchors
+end
+
+local function getAnchorScore(deps, grapple, candidate, position, distance, screenScore)
+    local cfg = deps.CFG
+    local rootPart = grapple and grapple.RootPart
+    if not rootPart then
+        return math.huge
+    end
+
+    local verticalOffset = position.Y - rootPart.Position.Y
+    local score = (TARGET_PRIORITY[candidate.Name] or 0)
+        + distance * (cfg.MAP_ANCHOR_DISTANCE_WEIGHT or 0.03)
+        + (screenScore or 0) * (cfg.MAP_ANCHOR_SCREEN_WEIGHT or 36)
+
+    if verticalOffset >= -4 then
+        score = score + (cfg.MAP_ANCHOR_UPWARD_BONUS or -62)
+    else
+        score = score + (cfg.MAP_ANCHOR_LOW_PENALTY or 135)
+    end
+
+    if candidate.Name == "Bell" then
+        score = score - 28
+    elseif candidate.Name == "JumpPad" and verticalOffset >= -8 then
+        score = score - 22
+    elseif candidate.Name == "GrapplePoint" and verticalOffset >= -16 then
+        score = score - 14
+    end
+
+    return score
+end
+
+function MapSense.findBestVoidAnchor(deps, grapple, options)
+    local camera = deps.Workspace and deps.Workspace.CurrentCamera
+    local rootPart = grapple and grapple.RootPart
+    if not (camera and rootPart) then
+        return nil
+    end
+
+    local driveMode = typeof(options) == "table" and options.driveMode == true
+    local returnDecision = typeof(options) == "table" and options.returnDecision == true
+    local anchors = MapSense.refresh(deps, false)
+    if #anchors == 0 then
+        return nil
+    end
+
+    local maxRange = deps.getAssistRange(grapple, driveMode)
+    local viewportSize = camera.ViewportSize
+    local screenAnchor = viewportSize * 0.5
+    local bestResult = nil
+    local bestInstance = nil
+    local bestName = nil
+    local bestDistance = nil
+    local bestScreenScore = nil
+    local bestScore = math.huge
+
+    for _, candidate in ipairs(anchors) do
+        local part = candidate.Part
+        if part and part.Parent then
+            local position = part.Position
+            local viewportPoint, onScreen = camera:WorldToViewportPoint(position)
+            local screenScore = 0.75
+            if onScreen then
+                screenScore = (Vector2.new(viewportPoint.X, viewportPoint.Y) - screenAnchor).Magnitude / math.max(viewportSize.X, viewportSize.Y)
+            end
+
+            local result, distance = deps.isLineClear(grapple, candidate.Instance, part, position, maxRange)
+            if result and deps.isUsableResult(grapple, result) and deps.isPathSafeForHitbox(grapple, candidate.Instance, part, position, maxRange) then
+                local score = getAnchorScore(deps, grapple, candidate, position, distance, screenScore)
+                if score < bestScore then
+                    bestResult = result
+                    bestInstance = candidate.Instance
+                    bestName = candidate.Name
+                    bestDistance = distance
+                    bestScreenScore = screenScore
+                    bestScore = score
+                end
+            end
+        end
+    end
+
+    if returnDecision then
+        return bestResult and {
+            Result = bestResult,
+            Instance = bestInstance,
+            Name = bestName,
+            Distance = bestDistance,
+            ScreenScore = bestScreenScore,
+            Score = bestScore,
+            Reason = "MapVoidAnchor",
+        } or nil
+    end
+
+    return bestResult
+end
+
+function MapSense.clear()
+    table.clear(MapSense.Anchors)
+    MapSense.LastWorkspace = nil
+    MapSense.LastScanAt = 0
+end
+
+return MapSense

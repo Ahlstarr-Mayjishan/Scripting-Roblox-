@@ -6,9 +6,17 @@
 
 local EmergencyDecision = {}
 
+local function isAssistDecision(result)
+    return typeof(result) == "table"
+end
+
 local function getAssistResultInstance(result)
     if not result then
         return nil
+    end
+
+    if not isAssistDecision(result) then
+        return result.Instance
     end
 
     if result.Instance then
@@ -24,6 +32,10 @@ end
 local function getAssistResultPosition(result)
     if not result then
         return nil
+    end
+
+    if not isAssistDecision(result) then
+        return result.Position
     end
 
     if result.Position then
@@ -61,7 +73,8 @@ function EmergencyDecision.createSnapshot(deps, grapple, rescueResult)
     local resultInstance = getAssistResultInstance(rescueResult)
     local resultPosition = getAssistResultPosition(rescueResult)
     local targetName = getAssistResultTargetName(deps, rescueResult)
-    local terrainReason = rescueResult and rescueResult.Reason
+    local terrainReason = isAssistDecision(rescueResult) and rescueResult.Reason or nil
+    local terrainScore = isAssistDecision(rescueResult) and rescueResult.Score or nil
 
     return {
         ClassId = classId,
@@ -85,7 +98,7 @@ function EmergencyDecision.createSnapshot(deps, grapple, rescueResult)
         RescuePosition = resultPosition,
         RescueTargetName = targetName,
         TerrainReason = terrainReason,
-        TerrainScore = rescueResult and rescueResult.Score or nil,
+        TerrainScore = terrainScore,
         IsReeling = movement.grappling == true,
     }
 end
