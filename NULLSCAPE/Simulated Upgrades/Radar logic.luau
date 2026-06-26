@@ -7,6 +7,10 @@
 
 local Logic = {}
 
+local function canSimulate(controller, featureKey)
+	return Logic.canSimulateFeature(controller, featureKey)
+end
+
 -- Bảng màu dùng chung cho các Highlight/Dot (Định nghĩa tập trung)
 local ESPColors = {
 	-- 1. Gifts & Mines
@@ -410,14 +414,15 @@ local function updateNativeEnemyESPState(controller)
 	local upgradesFolder = game.ReplicatedStorage:FindFirstChild("UpgradeFolder") 
 		and game.ReplicatedStorage.UpgradeFolder:FindFirstChild("Upgrades")
 	
-	local shouldEnableNative = controller.EnemyESPEnabled and controller.ESPStyle == "Box"
+	local shouldEnableNative = canSimulate(controller, "Enemy")
 	
 	if shouldEnableNative then
 		-- 1. Kích hoạt simulated upgrade trong ReplicatedStorage để native spriteManager tự vẽ các enemy mới
 		if upgradesFolder then
 			if not upgradesFolder:FindFirstChild("EnemyOnTop") then
-				local simulated = Instance.new("Folder")
+				local simulated = Instance.new("IntValue")
 				simulated.Name = "EnemyOnTop"
+				simulated.Value = 1
 				simulated.Parent = upgradesFolder
 			end
 		end
@@ -666,11 +671,6 @@ function Logic.clearVisuals(gc, keepArrows)
 					cached.Dot:Destroy()
 				end)
 			end
-			if cached.Box then
-				pcall(function()
-					cached.Box:Destroy()
-				end)
-			end
 		end
 		table.clear(saved.ActiveTargets)
 	else
@@ -804,6 +804,9 @@ local function shouldUseNativeRadar(controller, kind)
 	if controller and controller.UseNativeRadarWhenAvailable == false then
 		return false
 	end
+	if Logic.shouldYieldToNative(controller, kind) then
+		return true
+	end
 	if kind == "Gift" then
 		-- Chỉ nhường cho radar gốc nếu người chơi thật sự có nâng cấp HighlightGifts.
 		-- Nếu chỉ là kích hoạt radar 20% (chỉ highlight 1 quà), ta không nhường để giữ nguyên ESP vẽ tất cả quà.
@@ -858,14 +861,13 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	local nativeCadenceRadar = shouldUseNativeRadar(controller, "Cadence")
 	local nativeAltarRadar = shouldUseNativeRadar(controller, "Altar")
 
-	local instruments = controller.CadenceESPEnabled and not nativeCadenceRadar and (controller.ActiveInstruments or {}) or {}
-	local altars = controller.AltarESPEnabled and not nativeAltarRadar and (controller.ActiveAltars or {}) or {}
+	local instruments = canSimulate(controller, "Cadence") and not nativeCadenceRadar and (controller.ActiveInstruments or {}) or {}
+	local altars = canSimulate(controller, "Altar") and not nativeAltarRadar and (controller.ActiveAltars or {}) or {}
 
 	local validGifts = {}
 	local validInstruments = {}
 	local validAltars = {}
 	local validPlayers = {}
-	local validEnemies = {}
 
 	-- Lọc các target hợp lệ và cập nhật khoảng cách (Dùng Vector3 thuần từ RAM để tối ưu hiệu năng cực hạn)
 	local rawGifts = controller.ActiveGifts or {}
@@ -874,9 +876,9 @@ function Logic.updateESPStyles(controller, gc, hrp)
 			local isTripmine = t.type == "Tripmine" or t.type == "GoldenTripmine" or t.type == "GoldenTripmines"
 			local shouldShow = false
 			if isTripmine then
-				shouldShow = controller.TripmineESPEnabled and not nativeTripmineRadar
+				shouldShow = canSimulate(controller, "Tripmine") and not nativeTripmineRadar
 			else
-				shouldShow = controller.GiftESPEnabled and not nativeGiftRadar
+				shouldShow = canSimulate(controller, "Gift") and not nativeGiftRadar
 			end
 
 			if shouldShow then
@@ -888,7 +890,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	end
 
 	-- Lấy danh sách người chơi khác để vẽ ESP liên tục thời gian thực (chỉ chạy khi style không phải là Ping)
-	if controller.PlayerESPEnabled and controller.ESPStyle ~= "Ping" then
+	if canSimulate(controller, "Player") and controller.ESPStyle ~= "Ping" then
 		local Players_ = game:GetService("Players")
 		local LocalPlayer_ = Players_.LocalPlayer
 		for _, player in ipairs(Players_:GetPlayers()) do
@@ -906,33 +908,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
 						distance = dist,
 						isDead = isDead,
 					})
-				end
-			end
-		end
-	end
-
-	-- Lấy danh sách kẻ địch để vẽ ESP liên tục thời gian thực (chỉ chạy khi style không phải là Ping)
-	if controller.EnemyESPEnabled and controller.ESPStyle ~= "Ping" then
-		-- CHỈ tự vẽ Highlight hoặc Dot nếu style KHÔNG PHẢI là Box (vì Box được vẽ qua updateNativeEnemyESPState)
-		if controller.ESPStyle ~= "Box" then
-			local enemyFolder = workspace:FindFirstChild("Enemies")
-			if enemyFolder then
-				for _, enemyModel in ipairs(enemyFolder:GetChildren()) do
-					if isEnemyValidForESP(enemyModel) then
-						local enemyHRP = enemyModel:IsA("BasePart") and enemyModel
-							or enemyModel:FindFirstChild("HumanoidRootPart")
-							or enemyModel.PrimaryPart
-							or enemyModel:FindFirstChildWhichIsA("BasePart")
-						if enemyHRP and enemyModel.Parent then
-							local dist = (hrp.Position - enemyHRP.Position).Magnitude
-							table.insert(validEnemies, {
-								part = enemyHRP,
-								model = enemyModel,
-								color = controller.EnemyESPColor or Color3.fromRGB(255, 128, 0),
-								distance = dist,
-							})
-						end
-					end
 				end
 			end
 		end
@@ -982,14 +957,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				Color = t.color,
 				ParentObject = t.part,
 			}
-		elseif controller.ESPStyle == "Box" then
-			currentTargets[t.part] = {
-				Style = "Box",
-				Color = t.color,
-				ParentObject = t.part,
-				Text = t.altarName or "Altar",
-				DrawBox = false,
-			}
 		end
 	end
 
@@ -1002,14 +969,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				Style = "Dot",
 				Color = t.color,
 				ParentObject = t.part,
-			}
-		elseif controller.ESPStyle == "Box" then
-			currentTargets[t.part] = {
-				Style = "Box",
-				Color = t.color,
-				ParentObject = t.part,
-				Text = t.part.Name or "Instrument",
-				DrawBox = false,
 			}
 		end
 	end
@@ -1042,21 +1001,11 @@ function Logic.updateESPStyles(controller, gc, hrp)
 		elseif isGolden then
 			-- Quà vàng/Mìn vàng luôn vẽ chấm Dot để không chiếm dụng Highlight pool (Giới hạn 1200 studs để tối ưu hiệu năng)
 			if actualPart and t.distance <= 1200 then
-				if controller.ESPStyle == "Box" then
-					currentTargets[actualPart] = {
-						Style = "Box",
-						Color = t.color,
-						ParentObject = actualPart,
-						Text = "Golden Gift",
-						DrawBox = false,
-					}
-				else
-					currentTargets[actualPart] = {
-						Style = "Dot",
-						Color = t.color,
-						ParentObject = actualPart,
-					}
-				end
+				currentTargets[actualPart] = {
+					Style = "Dot",
+					Color = t.color,
+					ParentObject = actualPart,
+				}
 			end
 		else
 			if controller.ESPStyle == "Highlight" or controller.ESPStyle == "Ping" then
@@ -1068,21 +1017,11 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				})
 			else
 				if actualPart and t.distance <= 1200 then
-					if controller.ESPStyle == "Box" then
-						currentTargets[actualPart] = {
-							Style = "Box",
-							Color = t.color,
-							ParentObject = actualPart,
-							Text = t.type == "Tripmine" and "Tripmine" or "Gift",
-							DrawBox = false,
-						}
-					else
-						currentTargets[actualPart] = {
-							Style = "Dot",
-							Color = t.color,
-							ParentObject = actualPart,
-						}
-					end
+					currentTargets[actualPart] = {
+						Style = "Dot",
+						Color = t.color,
+						ParentObject = actualPart,
+					}
 				end
 			end
 		end
@@ -1090,27 +1029,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
 
 	-- Phân loại: Người chơi khác (Chỉ vẽ liên tục khi style không phải là Ping)
 	for _, t in ipairs(validPlayers) do
-		if controller.ESPStyle == "Highlight" then
-			table.insert(highlightTargets, t)
-		elseif controller.ESPStyle == "Dot" then
-			currentTargets[t.part] = {
-				Style = "Dot",
-				Color = t.color,
-				ParentObject = t.part,
-			}
-		elseif controller.ESPStyle == "Box" then
-			currentTargets[t.part] = {
-				Style = "Box",
-				Color = t.color,
-				ParentObject = t.part,
-				Text = t.model.Name,
-				DrawBox = false,
-			}
-		end
-	end
-
-	-- Phân loại: Kẻ địch (Chỉ vẽ liên tục khi style không phải là Ping)
-	for _, t in ipairs(validEnemies) do
 		if controller.ESPStyle == "Highlight" then
 			table.insert(highlightTargets, t)
 		elseif controller.ESPStyle == "Dot" then
@@ -1225,13 +1143,12 @@ function Logic.updateESPStyles(controller, gc, hrp)
 		end
 	end
 
-	-- 2. Tạo hoặc cập nhật BillboardGui/Box (Dot/Ping/Box)
+	-- 2. Tạo hoặc cập nhật BillboardGui (Dot/Ping)
 	for targetPart, current in pairs(currentTargets) do
 		local cached = saved.ActiveTargets[targetPart]
 
 		if not cached or cached.Style ~= current.Style then
 			local oldDot = cached and cached.Dot
-			local oldBox = cached and cached.Box
 
 			local newCache = {
 				Style = current.Style,
@@ -1239,17 +1156,11 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				LastSeen = scanTime,
 				Dot = nil,
 				Frame = nil,
-				Box = nil,
 			}
 			saved.ActiveTargets[targetPart] = newCache
 			if oldDot then
 				pcall(function()
 					oldDot:Destroy()
-				end)
-			end
-			if oldBox then
-				pcall(function()
-					oldBox:Destroy()
 				end)
 			end
 
@@ -1278,58 +1189,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 					billboard.Parent = current.ParentObject
 					newCache.Dot = billboard
 					newCache.Frame = frame
-				elseif current.Style == "Box" then
-					local folder = Instance.new("Folder")
-					folder.Name = "NULLSCAPE_ESP_Box"
-					
-					-- SelectionBox vẽ khung viền rỗng màu sắc tương ứng (chỉ tạo cho Gift/Enemy có DrawBox == true)
-					if current.DrawBox then
-						local box = Instance.new("SelectionBox")
-						box.Name = "Box"
-						local adornTarget = targetPart.Parent:IsA("Model") and targetPart.Parent or targetPart
-						box.Adornee = adornTarget
-						box.Color3 = current.Color
-						box.LineThickness = 0.04
-						box.AlwaysOnTop = true
-						box.Parent = folder
-					end
-					
-					-- Tính toán chiều cao thực tế của đối tượng để căn lề Billboard nhãn tên ở góc dưới cùng bên phải
-					local sizeY = 4.0 -- Giá trị mặc định an toàn
-					pcall(function()
-						if adornTarget:IsA("Model") then
-							local _, size = adornTarget:GetBoundingBox()
-							sizeY = size.Y
-						else
-							sizeY = adornTarget.Size.Y
-						end
-					end)
-					
-					-- BillboardGui vẽ nhãn tên ở góc dưới cùng bên phải
-					local billboard = Instance.new("BillboardGui")
-					billboard.Name = "LabelGui"
-					billboard.Adornee = targetPart
-					billboard.Size = UDim2.fromScale(6, 2)
-					billboard.AlwaysOnTop = true
-					billboard.StudsOffset = Vector3.new(0, -(sizeY / 2) - 0.2, 0)
-					
-					local label = Instance.new("TextLabel")
-					label.Name = "Label"
-					label.Size = UDim2.fromScale(1, 1)
-					label.BackgroundTransparency = 1
-					label.TextColor3 = current.Color
-					label.TextSize = 12
-					label.Font = Enum.Font.RobotoMono
-					label.TextXAlignment = Enum.TextXAlignment.Right
-					label.TextYAlignment = Enum.TextYAlignment.Bottom
-					label.Text = current.Text or ""
-					label.TextStrokeTransparency = 0.5
-					label.TextStrokeColor3 = Color3.new(0, 0, 0)
-					label.Parent = billboard
-					
-					billboard.Parent = folder
-					folder.Parent = targetPart
-					newCache.Box = folder
+
 				else
 					local billboard = Instance.new("BillboardGui")
 					billboard.Name = "NULLSCAPE_ESP_Dot"
@@ -1356,39 +1216,18 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				if frame.BackgroundColor3 ~= current.Color then
 					frame.BackgroundColor3 = current.Color
 				end
-			elseif cached.Box then
-				-- Cập nhật màu sắc và nội dung nếu thay đổi
-				local box = cached.Box:FindFirstChild("Box")
-				if box and box.Color3 ~= current.Color then
-					box.Color3 = current.Color
-				end
-				local billboard = cached.Box:FindFirstChild("LabelGui")
-				local label = billboard and billboard:FindFirstChild("Label")
-				if label then
-					if label.TextColor3 ~= current.Color then
-						label.TextColor3 = current.Color
-					end
-					if label.Text ~= (current.Text or "") then
-						label.Text = current.Text or ""
-					end
-				end
 			else
 				saved.ActiveTargets[targetPart] = nil
 			end
 		end
 	end
 
-	-- 3. Xóa các BillboardGui (Dot/Ping/Box) bị bỏ quên
+	-- 3. Xóa các BillboardGui (Dot/Ping) bị bỏ quên
 	for targetPart, cached in pairs(saved.ActiveTargets) do
 		if cached.LastSeen ~= scanTime then
 			if cached.Dot then
 				pcall(function()
 					cached.Dot:Destroy()
-				end)
-			end
-			if cached.Box then
-				pcall(function()
-					cached.Box:Destroy()
 				end)
 			end
 			saved.ActiveTargets[targetPart] = nil
@@ -1399,7 +1238,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	local nearestGiftPos = nil
 	local nearestGiftColor = ESPColors.Gift
 	local shortestGiftDist = math.huge
-	if controller.GiftESPEnabled and #validGifts > 0 then
+	if canSimulate(controller, "Gift") and #validGifts > 0 then
 		for _, t in ipairs(validGifts) do
 			-- Chỉ chỉ hướng tới quà thật (Gift, GoldenGift, PassageGift), tuyệt đối không chỉ vào mìn (Tripmine)
 			if t.type and not string.find(t.type:lower(), "tripmine") then
@@ -1419,7 +1258,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	local nearestCadencePos = nil
 	local shortestCadenceDist = math.huge
 	local nearestCadenceColor = ESPColors.Cadence
-	if controller.CadenceESPEnabled and #validInstruments > 0 then
+	if canSimulate(controller, "Cadence") and #validInstruments > 0 then
 		for _, t in ipairs(validInstruments) do
 			local dist = t.distance
 			if dist < shortestCadenceDist then
@@ -1436,7 +1275,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	local nearestAltarPos = nil
 	local shortestAltarDist = math.huge
 	local nearestAltarColor = ESPColors.Altar.Unknown
-	if controller.AltarESPEnabled and #validAltars > 0 then
+	if canSimulate(controller, "Altar") and #validAltars > 0 then
 		for _, t in ipairs(validAltars) do
 			local dist = t.distance
 			if dist < shortestAltarDist then
@@ -1451,7 +1290,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 	saved.NearestAltarColor = nearestAltarColor
 
 	-- Đảm bảo các mũi tên tồn tại/hủy phù hợp dựa trên số lượng hợp lệ thực tế
-	if controller.GiftESPEnabled and nearestGiftPos then
+	if canSimulate(controller, "Gift") and nearestGiftPos then
 		getOrCreateArrow(saved, "ArrowGift", nearestGiftColor)
 	else
 		if saved.ArrowGift then
@@ -1462,7 +1301,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 		end
 	end
 
-	if controller.CadenceESPEnabled and nearestCadencePos then
+	if canSimulate(controller, "Cadence") and nearestCadencePos then
 		getOrCreateArrow(saved, "ArrowCadence", RADAR_ARROW_COLORS.Cadence)
 	else
 		if saved.ArrowCadence then
@@ -1473,7 +1312,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 		end
 	end
 
-	if controller.AltarESPEnabled and nearestAltarPos then
+	if canSimulate(controller, "Altar") and nearestAltarPos then
 		getOrCreateArrow(saved, "ArrowAltar", RADAR_ARROW_COLORS.Altar)
 	else
 		if saved.ArrowAltar then
@@ -1621,25 +1460,6 @@ Logic.getAltarTypeAndColor = getAltarTypeAndColor
 -- Tự động "thả ra" khi UpgradeHandler.IsUpgradeEnabled("RadarPlayer") = true thật.
 -- =============================================================================
 
--- Kiểm tra xem native RadarPlayer upgrade có đang thật sự hoạt động không
--- (tránh duplicate highlight với hệ thống game gốc)
-local function isNativePlayerRadarEnabled()
-	local ReplicatedFirst_ = game:GetService("ReplicatedFirst")
-	local ClientModules = ReplicatedFirst_:FindFirstChild("ClientModules")
-	local UpgradeHandlerModule = ClientModules and ClientModules:FindFirstChild("UpgradeHandler")
-	if not UpgradeHandlerModule then
-		return false
-	end
-	-- Lấy bản gốc (không qua hook của NULLSCAPE) để tránh infinite loop
-	local origFn = getgenv()._NULLSCAPE_Globals
-		and getgenv()._NULLSCAPE_Globals.OriginalIsUpgradeEnabled
-	if not origFn then
-		return false
-	end
-	local ok, result = pcall(origFn, "RadarPlayer")
-	return ok and result == true
-end
-
 -- Tạo highlight tạm thời cho 1 character (giống hệt RadarSlop f2 của game gốc)
 local function spawnCharacterHighlight(character, outlineColor)
 	if not character or not character.Parent then
@@ -1679,8 +1499,8 @@ function Logic.pulsePlayerESP(hrp, color)
 		return false
 	end
 
-	-- Thả ra nếu upgrade thật đã kích hoạt
-	if isNativePlayerRadarEnabled() then
+	-- Thả ra nếu native RadarPlayer upgrade đang hoạt động thật
+	if Logic.shouldYieldToNative(nil, "Player") then
 		return false -- "release": báo controller biết để dừng loop
 	end
 
@@ -1934,6 +1754,275 @@ function Logic.triggerPulseRadar(targets, hrp)
 			end)
 		end
 	end
+end
+
+-- =============================================================================
+-- HYBRID PERMISSIONS (C)
+-- Simulation: Index owned + toggle ON + native chưa active.
+-- Native active trong run → tự thả simulation.
+-- =============================================================================
+
+Logic.FEATURES = {
+	Gift = {
+		toggle = "GiftESPEnabled",
+		indexUpgrade = "HighlightGifts",
+		nativeUpgrade = "HighlightGifts",
+	},
+	Tripmine = {
+		toggle = "TripmineESPEnabled",
+		indexUpgrade = "HighlightTripmines",
+		nativeUpgrade = "HighlightTripmines",
+	},
+	Cadence = {
+		toggle = "CadenceESPEnabled",
+		indexUpgrade = "RadarInstruments",
+		nativeUpgrade = "RadarInstruments",
+	},
+	Altar = {
+		toggle = "AltarESPEnabled",
+		indexUpgrade = "RadarAltars",
+		nativeUpgrade = "RadarAltars",
+	},
+	Player = {
+		toggle = "PlayerESPEnabled",
+		indexUpgrade = "RadarPlayer",
+		nativeUpgrade = "RadarPlayer",
+	},
+	Enemy = {
+		toggle = "EnemyESPEnabled",
+		indexUpgrade = "EnemyOnTop",
+		nativeUpgrade = "EnemyOnTop",
+	},
+}
+
+local UPGRADE_TO_FEATURE = {}
+for featureKey, cfg in pairs(Logic.FEATURES) do
+	UPGRADE_TO_FEATURE[cfg.nativeUpgrade] = featureKey
+	if cfg.indexUpgrade ~= cfg.nativeUpgrade then
+		UPGRADE_TO_FEATURE[cfg.indexUpgrade] = featureKey
+	end
+end
+
+local bestiaryHandler = nil
+
+local function resolveBestiaryHandler()
+	if bestiaryHandler ~= nil then
+		return bestiaryHandler
+	end
+
+	local ReplicatedFirst = game:GetService("ReplicatedFirst")
+	local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+	local playerData = clientModules
+		and clientModules:FindFirstChild("Core")
+		and clientModules.Core:FindFirstChild("PlayerData")
+	local moduleScript = playerData and playerData:FindFirstChild("BestiaryHandler")
+	if not moduleScript then
+		return nil
+	end
+
+	local ok, handler = pcall(require, moduleScript)
+	if ok and typeof(handler) == "table" then
+		bestiaryHandler = handler
+		return handler
+	end
+
+	return nil
+end
+
+function Logic.getFeatureConfig(featureKey)
+	return Logic.FEATURES[featureKey]
+end
+
+function Logic.getFeatureForUpgrade(upgradeName)
+	return UPGRADE_TO_FEATURE[upgradeName]
+end
+
+function Logic.isIndexUpgradeOwned(upgradeName)
+	local handler = resolveBestiaryHandler()
+	if not handler or typeof(handler.IsDiscovered) ~= "function" then
+		return nil
+	end
+
+	local ok, discovered = pcall(handler.IsDiscovered, "Upgrades", upgradeName)
+	if ok and discovered == true then
+		return true
+	end
+
+	return false
+end
+
+function Logic.isNativeUpgradeActive(upgradeName)
+	local origFn = getgenv()._NULLSCAPE_Globals
+		and getgenv()._NULLSCAPE_Globals.OriginalIsUpgradeEnabled
+	if origFn then
+		local ok, result = pcall(origFn, upgradeName)
+		if ok and result == true then
+			return true
+		end
+	end
+
+	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local upgradeFolder = ReplicatedStorage:FindFirstChild("UpgradeFolder")
+	local upgrades = upgradeFolder and upgradeFolder:FindFirstChild("Upgrades")
+	local valueObj = upgrades and upgrades:FindFirstChild(upgradeName)
+	if valueObj and valueObj:IsA("IntValue") and valueObj.Value > 0 then
+		return true
+	end
+
+	return false
+end
+
+function Logic.isSimulationToggleOn(controller, featureKey)
+	local cfg = Logic.FEATURES[featureKey]
+	if not cfg or not controller then
+		return false
+	end
+	return controller[cfg.toggle] == true
+end
+
+function Logic.shouldYieldToNative(_controller, featureKey)
+	local cfg = Logic.FEATURES[featureKey]
+	if not cfg then
+		return false
+	end
+	return Logic.isNativeUpgradeActive(cfg.nativeUpgrade)
+end
+
+function Logic.canSimulateFeature(controller, featureKey)
+	local cfg = Logic.FEATURES[featureKey]
+	if not cfg or not controller then
+		return false
+	end
+
+	if not Logic.isSimulationToggleOn(controller, featureKey) then
+		return false
+	end
+
+	if Logic.shouldYieldToNative(controller, featureKey) then
+		return false
+	end
+
+	local owned = Logic.isIndexUpgradeOwned(cfg.indexUpgrade)
+	if owned == true then
+		return true
+	end
+	if owned == nil then
+		return true
+	end
+
+	return false
+end
+
+function Logic.canEnableSimulation(controller, featureKey)
+	local cfg = Logic.FEATURES[featureKey]
+	if not cfg then
+		return false, "unknown_feature"
+	end
+
+	if Logic.shouldYieldToNative(controller, featureKey) then
+		return false, "native_active"
+	end
+
+	local owned = Logic.isIndexUpgradeOwned(cfg.indexUpgrade)
+	if owned == false then
+		return false, "index_not_owned"
+	end
+
+	return true
+end
+
+local function wantsRadarPlayerSimulation(controller)
+	if Logic.isSimulationToggleOn(controller, "Player") then
+		return true
+	end
+	return controller.RadarEnabled == true
+end
+
+function Logic.shouldSpoofUpgradeEnabled(controller, upgradeName)
+	local featureKey = UPGRADE_TO_FEATURE[upgradeName]
+	if not featureKey then
+		if upgradeName == "RadarPlayer" and controller then
+			if Logic.shouldYieldToNative(controller, "Player") then
+				return false
+			end
+			local owned = Logic.isIndexUpgradeOwned("RadarPlayer")
+			if owned == false then
+				return false
+			end
+			if wantsRadarPlayerSimulation(controller) then
+				return true, true
+			end
+		end
+		return false
+	end
+
+	if Logic.shouldYieldToNative(controller, featureKey) then
+		return false
+	end
+
+	if Logic.canSimulateFeature(controller, featureKey) then
+		return true, true
+	end
+
+	return false
+end
+
+function Logic.shouldSpoofUpgradeStack(controller, upgradeName)
+	local shouldSpoof, _ = Logic.shouldSpoofUpgradeEnabled(controller, upgradeName)
+	if shouldSpoof then
+		return true, 1
+	end
+	return false
+end
+
+function Logic.syncNativeRelease(controller)
+	if not controller or controller.Destroyed then
+		return false
+	end
+
+	local released = false
+	for featureKey, cfg in pairs(Logic.FEATURES) do
+		if Logic.shouldYieldToNative(controller, featureKey) and controller[cfg.toggle] then
+			controller[cfg.toggle] = false
+			released = true
+			print(string.format(
+				"[NULLSCAPE] Native %s active → released %s simulation",
+				cfg.nativeUpgrade,
+				featureKey
+			))
+		end
+	end
+
+	return released
+end
+
+function Logic.bindUpgradeWatcher(controller, onChanged)
+	task.spawn(function()
+		local ReplicatedFirst = game:GetService("ReplicatedFirst")
+		local clientModules = ReplicatedFirst:WaitForChild("ClientModules", 15)
+		local upgradeModule = clientModules and clientModules:WaitForChild("UpgradeHandler", 15)
+		if upgradeModule then
+			local ok, UpgradeHandler = pcall(require, upgradeModule)
+			if ok and typeof(UpgradeHandler) == "table" and UpgradeHandler.UpgradesChanged then
+				UpgradeHandler.UpgradesChanged:Connect(function()
+					if Logic.syncNativeRelease(controller) and onChanged then
+						onChanged()
+					end
+				end)
+			end
+		end
+
+		local handler = resolveBestiaryHandler()
+		if handler and handler.OnBestiaryChanged then
+			pcall(function()
+				handler.OnBestiaryChanged:Connect(function()
+					if onChanged then
+						onChanged()
+					end
+				end)
+			end)
+		end
+	end)
 end
 
 return Logic

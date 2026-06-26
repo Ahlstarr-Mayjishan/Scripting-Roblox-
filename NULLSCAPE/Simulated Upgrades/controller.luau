@@ -125,26 +125,49 @@ local startMatchLoops, startRenderStepped, stopRenderStepped, startRadarPulseLoo
 local unregisterInstrument
 local unregisterAltar
 
+local function isFeatureSimulating(featureKey)
+	return Logic.canSimulateFeature(Controller, featureKey)
+end
+
 -- Kiểm tra xem có mục tiêu hợp lệ nào được bật hay không
 local function checkActiveState()
-	if not Controller.RadarEnabled then
-		return false
+	if isFeatureSimulating("Gift") or isFeatureSimulating("Tripmine") then
+		if #Controller.ActiveGifts > 0 then
+			return true
+		end
 	end
-
-	if (Controller.GiftESPEnabled or Controller.TripmineESPEnabled) and #Controller.ActiveGifts > 0 then
+	if isFeatureSimulating("Cadence") and #Controller.ActiveInstruments > 0 then
 		return true
 	end
-	if Controller.CadenceESPEnabled and #Controller.ActiveInstruments > 0 then
+	if isFeatureSimulating("Altar") and #Controller.ActiveAltars > 0 then
 		return true
 	end
-	if Controller.AltarESPEnabled and #Controller.ActiveAltars > 0 then
-		return true
-	end
-	if Controller.PlayerESPEnabled or Controller.EnemyESPEnabled then
+	if isFeatureSimulating("Player") or isFeatureSimulating("Enemy") then
 		return true
 	end
 
 	return false
+end
+
+local function applySimulationToggle(featureKey, fieldName, value)
+	if value then
+		local ok, reason = Logic.canEnableSimulation(Controller, featureKey)
+		if not ok then
+			if reason == "index_not_owned" then
+				local cfg = Logic.getFeatureConfig(featureKey)
+				warn(string.format(
+					"[NULLSCAPE] %s chưa mua trong Index — không thể bật simulation.",
+					cfg and cfg.indexUpgrade or featureKey
+				))
+			elseif reason == "native_active" then
+				warn(string.format("[NULLSCAPE] Native %s đang active — simulation bị khóa.", featureKey))
+			end
+			return false
+		end
+	end
+
+	Controller[fieldName] = value == true
+	return true
 end
 
 -- Điều phối trạng thái chạy/dừng của các loop và render
@@ -634,7 +657,7 @@ startRadarPulseLoop = function()
 			if not hrp then return end
 
 			-- f3: Altar ping (giống game gốc RadarSlop f3 — AltarPing clone)
-			if Controller.AltarESPEnabled and #Controller.ActiveAltars > 0 then
+			if isFeatureSimulating("Altar") and #Controller.ActiveAltars > 0 then
 				task.spawn(function()
 					local targets = {}
 					for _, a in ipairs(Controller.ActiveAltars) do
@@ -651,7 +674,7 @@ startRadarPulseLoop = function()
 			end
 
 			-- f4: Cadence ping (giống game gốc RadarSlop f4 — CadencePing clone)
-			if Controller.CadenceESPEnabled and #Controller.ActiveInstruments > 0 then
+			if isFeatureSimulating("Cadence") and #Controller.ActiveInstruments > 0 then
 				task.spawn(function()
 					local targets = {}
 					for _, inst in ipairs(Controller.ActiveInstruments) do
@@ -668,7 +691,7 @@ startRadarPulseLoop = function()
 			end
 
 			-- Gift ping (không có trong game gốc nhưng bổ sung thêm nhất quán)
-			if Controller.GiftESPEnabled and #Controller.ActiveGifts > 0 then
+			if isFeatureSimulating("Gift") and #Controller.ActiveGifts > 0 then
 				task.spawn(function()
 					local targets = {}
 					for _, g in ipairs(Controller.ActiveGifts) do
@@ -688,9 +711,12 @@ startRadarPulseLoop = function()
 
 		doPulseNow()
 
-		while not Controller.Destroyed and (Controller.RadarEnabled or Controller.AltarESPEnabled or Controller.CadenceESPEnabled or Controller.GiftESPEnabled or Controller.TripmineESPEnabled) do
+		while not Controller.Destroyed and checkActiveState() do
 			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
 				break
+			end
+			if Logic.syncNativeRelease(Controller) then
+				triggerInstantUpdate()
 			end
 			-- Chờ 12 giây — giống game gốc while task.wait(12)
 			task.wait(12)
@@ -811,25 +837,33 @@ end
 
 -- Bật/tắt định vị hộp quà
 function Controller:SetGiftESP(value)
-	self.GiftESPEnabled = value
+	if not applySimulationToggle("Gift", "GiftESPEnabled", value) then
+		return
+	end
 	triggerInstantUpdate()
 end
 
 -- Bật/tắt định vị bẫy mìn Tripmine
 function Controller:SetTripmineESP(value)
-	self.TripmineESPEnabled = value
+	if not applySimulationToggle("Tripmine", "TripmineESPEnabled", value) then
+		return
+	end
 	triggerInstantUpdate()
 end
 
 -- Bật/tắt định vị nhạc cụ Cadence
 function Controller:SetCadenceESP(value)
-	self.CadenceESPEnabled = value
+	if not applySimulationToggle("Cadence", "CadenceESPEnabled", value) then
+		return
+	end
 	triggerInstantUpdate()
 end
 
 -- Bật/tắt định vị Đàn tế (Altar)
 function Controller:SetAltarESP(value)
-	self.AltarESPEnabled = value
+	if not applySimulationToggle("Altar", "AltarESPEnabled", value) then
+		return
+	end
 	triggerInstantUpdate()
 end
 
@@ -868,15 +902,15 @@ local function startPlayerEnemyESPLoop()
 		local char0 = LocalPlayer.Character
 		local hrp0 = char0 and char0:FindFirstChild("HumanoidRootPart")
 		if hrp0 and Controller.ESPStyle == "Ping" then
-			if Controller.PlayerESPEnabled then
+			if isFeatureSimulating("Player") then
 				pcall(Logic.pulsePlayerESP, hrp0, Controller.PlayerESPColor)
 			end
-			if Controller.EnemyESPEnabled then
+			if isFeatureSimulating("Enemy") then
 				pcall(Logic.pulseEnemyESP, hrp0, Controller.EnemyESPColor)
 			end
 		end
 
-		while not Controller.Destroyed and (Controller.PlayerESPEnabled or Controller.EnemyESPEnabled) and Controller.ESPStyle == "Ping" do
+		while not Controller.Destroyed and (isFeatureSimulating("Player") or isFeatureSimulating("Enemy")) and Controller.ESPStyle == "Ping" do
 			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
 				break
 			end
@@ -894,17 +928,16 @@ local function startPlayerEnemyESPLoop()
 				continue
 			end
 
-			if Controller.PlayerESPEnabled then
+			if isFeatureSimulating("Player") then
 				-- pulsePlayerESP trả về false = native upgrade đã kích hoạt → tự thả ra
 				local ok, released = pcall(Logic.pulsePlayerESP, hrp, Controller.PlayerESPColor)
 				if ok and released == false then
-					-- Native RadarPlayer đang hoạt động thật → dừng mô phỏng
 					Controller.PlayerESPEnabled = false
 					print("[NULLSCAPE] Native RadarPlayer active → đã thả PlayerESP")
 				end
 			end
 
-			if Controller.EnemyESPEnabled then
+			if isFeatureSimulating("Enemy") then
 				pcall(Logic.pulseEnemyESP, hrp, Controller.EnemyESPColor)
 			end
 		end
@@ -913,7 +946,9 @@ local function startPlayerEnemyESPLoop()
 end
 
 function Controller:SetPlayerESP(value, color)
-	self.PlayerESPEnabled = value == true
+	if not applySimulationToggle("Player", "PlayerESPEnabled", value) then
+		return
+	end
 	if color then
 		self.PlayerESPColor = color
 	end
@@ -924,7 +959,9 @@ function Controller:SetPlayerESP(value, color)
 end
 
 function Controller:SetEnemyESP(value, color)
-	self.EnemyESPEnabled = value == true
+	if not applySimulationToggle("Enemy", "EnemyESPEnabled", value) then
+		return
+	end
 	if color then
 		self.EnemyESPColor = color
 	end
@@ -1253,7 +1290,7 @@ local function startGiftPoolObserver()
 				safeControllerCleanUp()
 				break
 			end
-			if Controller.RadarEnabled and (Controller.GiftESPEnabled or Controller.TripmineESPEnabled) then
+			if isFeatureSimulating("Gift") or isFeatureSimulating("Tripmine") then
 				local poolGifts = scanActiveGiftsFromPools()
 
 				-- Hợp nhất dữ liệu quét pool với ActiveGifts hiện tại (tránh trùng lặp)
@@ -1303,10 +1340,6 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local isGraceWings = false
 	local isAdvancedGravityCoil = false
 	local isBetterJumpPad = false
-	local isRadarPlayer = false
-	local isRadarAltars = false
-	local isRadarInstruments = false
-	local isHighlightTripmines = false
 	for _, v in ipairs(args) do
 		if v == "DefuseKit" or v == "Defuse Kit" then
 			isDefuse = true
@@ -1318,14 +1351,11 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 			isAdvancedGravityCoil = true
 		elseif v == "BetterJumpPad" or v == "Better Jump Pad" then
 			isBetterJumpPad = true
-		elseif v == "RadarPlayer" then
-			isRadarPlayer = true
-		elseif v == "RadarAltars" then
-			isRadarAltars = true
-		elseif v == "RadarInstruments" then
-			isRadarInstruments = true
-		elseif v == "HighlightTripmines" then
-			isHighlightTripmines = true
+		else
+			local shouldSpoof, result = Logic.shouldSpoofUpgradeEnabled(Controller, v)
+			if shouldSpoof then
+				return true, result
+			end
 		end
 	end
 	if isDefuse and Controller.SimulateDefuseKit then
@@ -1343,15 +1373,6 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	if isBetterJumpPad and Controller.BetterJumpPadEnabled then
 		return true, true
 	end
-	if isRadarPlayer and Controller.RadarEnabled then
-		return true, true
-	end
-	if isHighlightTripmines and Controller.TripmineESPEnabled then
-		return true, true
-	end
-	if isRadarAltars or isRadarInstruments then
-		return false
-	end
 	return false
 end
 
@@ -1362,8 +1383,6 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	local isGraceWings = false
 	local isAdvancedGravityCoil = false
 	local isBetterJumpPad = false
-	local isRadarPlayer = false
-	local isRadarSubUpgrade = false
 	for _, v in ipairs(args) do
 		if v == "DefuseKit" or v == "Defuse Kit" then
 			isDefuse = true
@@ -1375,10 +1394,11 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 			isAdvancedGravityCoil = true
 		elseif v == "BetterJumpPad" or v == "Better Jump Pad" then
 			isBetterJumpPad = true
-		elseif v == "RadarPlayer" then
-			isRadarPlayer = true
-		elseif v == "RadarAltars" or v == "RadarInstruments" then
-			isRadarSubUpgrade = true
+		else
+			local shouldSpoof, stack = Logic.shouldSpoofUpgradeStack(Controller, v)
+			if shouldSpoof then
+				return true, stack
+			end
 		end
 	end
 	if isDefuse and Controller.SimulateDefuseKit then
@@ -1395,12 +1415,6 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	end
 	if isBetterJumpPad and Controller.BetterJumpPadEnabled then
 		return true, 1
-	end
-	if isRadarPlayer and Controller.RadarEnabled then
-		return true, 1
-	end
-	if isRadarSubUpgrade then
-		return false
 	end
 	return false
 end
@@ -1500,6 +1514,8 @@ end
 getgenv()._NULLSCAPE_Globals.activeUpgradeController = Controller
 
 -- Khởi tạo ban đầu khi nạp script
+Logic.syncNativeRelease(Controller)
+Logic.bindUpgradeWatcher(Controller, triggerInstantUpdate)
 startObservingFolders()
 setupGiftClientHook()
 startGiftPoolObserver()

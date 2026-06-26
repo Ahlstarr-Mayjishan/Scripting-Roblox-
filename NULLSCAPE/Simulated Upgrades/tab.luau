@@ -57,10 +57,9 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateDropdown({
-		Name = "ESP Gift/Tripmine Style",
-		Options = { "Highlight", "Dot", "Ping", "Box" },
-		CurrentOption = Controller.ESPStyle == "Highlight" and "Highlight"
-			or (Controller.ESPStyle == "Ping" and "Ping" or (Controller.ESPStyle == "Box" and "Box" or "Dot")),
+		Name = "ESP Style",
+		Options = { "Highlight", "Dot", "Ping" },
+		CurrentOption = Controller.ESPStyle == "Highlight" and "Highlight" or (Controller.ESPStyle == "Ping" and "Ping" or "Dot"),
 		MultipleOptions = false,
 		Flag = "ESPStyleDropdown",
 		Callback = function(Option)
@@ -74,8 +73,6 @@ return function(Client, Controller)
 				Controller:SetESPStyle("Dot")
 			elseif selectedStyle == "Ping" then
 				Controller:SetESPStyle("Ping")
-			elseif selectedStyle == "Box" then
-				Controller:SetESPStyle("Box")
 			end
 		end,
 	})
