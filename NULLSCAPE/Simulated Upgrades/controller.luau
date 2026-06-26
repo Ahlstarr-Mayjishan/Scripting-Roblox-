@@ -65,6 +65,13 @@ local Controller = {
 	ActiveInstruments = {},
 	ActiveAltars = {},
 	PermanentConnections = {},
+
+	-- Player & Enemy ESP (cơ chế tạm thời giống RadarPlayer của game gốc)
+	-- Tự "thả ra" khi native RadarPlayer upgrade có hiệu lực thật
+	PlayerESPEnabled = false,
+	PlayerESPColor = Color3.fromRGB(255, 255, 255), -- Trắng như game gốc
+	EnemyESPEnabled = false,
+	EnemyESPColor = Color3.fromRGB(255, 128, 0),   -- Cam để phân biệt với player
 }
 
 local function safeControllerCleanUp()
@@ -112,7 +119,7 @@ local matchLoopsActive = false
 local folderConnections = {}
 
 -- Forward references cho việc quản lý các loop
-local startMatchLoops, startRenderStepped, stopRenderStepped
+local startMatchLoops, startRenderStepped, stopRenderStepped, startRadarPulseLoop
 -- Forward reference cho unregisterInstrument (dùng trong registerInstrument callback)
 local unregisterInstrument
 local unregisterAltar
@@ -660,7 +667,102 @@ startMatchLoops = function()
 			Executor.clearVisuals(GC, false)
 		end)
 	end)
+
+	-- Khởi động vòng lặp radar pulse 12s cùng lúc
+	startRadarPulseLoop()
 end
+
+-- =============================================================================
+-- RADAR PULSE LOOP — Phỏng theo vòng while-wait(12) trong RadarSlop của game gốc:
+--   while task.wait(12) do
+--     if IsUpgradeEnabled("RadarAltars") then task.spawn(f3) end
+--     if IsUpgradeEnabled("RadarInstruments") then task.spawn(f4) end
+--   end
+-- Mỗi loại (Altar/Cadence/Gift) spawn task riêng để không block nhau.
+-- =============================================================================
+local radarPulseLoopActive = false
+startRadarPulseLoop = function()
+	if radarPulseLoopActive then
+		return
+	end
+	radarPulseLoopActive = true
+
+	task.spawn(function()
+		-- Pulse ngay lần đầu (không chờ 12s)
+		local function doPulseNow()
+			local char = LocalPlayer.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if not hrp then return end
+
+			-- f3: Altar ping (giống game gốc RadarSlop f3 — AltarPing clone)
+			if Controller.AltarESPEnabled and #Controller.ActiveAltars > 0 then
+				task.spawn(function()
+					local targets = {}
+					for _, a in ipairs(Controller.ActiveAltars) do
+						if a.part and a.part.Parent then
+							table.insert(targets, {
+								part = a.part,
+								color = a.color,
+								pingType = "Altar",
+							})
+						end
+					end
+					pcall(Logic.triggerPulseRadar, targets, hrp)
+				end)
+			end
+
+			-- f4: Cadence ping (giống game gốc RadarSlop f4 — CadencePing clone)
+			if Controller.CadenceESPEnabled and #Controller.ActiveInstruments > 0 then
+				task.spawn(function()
+					local targets = {}
+					for _, inst in ipairs(Controller.ActiveInstruments) do
+						if inst.part and inst.part.Parent then
+							table.insert(targets, {
+								part = inst.part,
+								color = inst.color,
+								pingType = "Cadence",
+							})
+						end
+					end
+					pcall(Logic.triggerPulseRadar, targets, hrp)
+				end)
+			end
+
+			-- Gift ping (không có trong game gốc nhưng bổ sung thêm nhất quán)
+			if Controller.GiftESPEnabled and #Controller.ActiveGifts > 0 then
+				task.spawn(function()
+					local targets = {}
+					for _, g in ipairs(Controller.ActiveGifts) do
+						local part = g.part
+						if part and part.Parent and g.type and not string.find(g.type:lower(), "tripmine") then
+							table.insert(targets, {
+								part = part,
+								color = g.color,
+								pingType = "Gift",
+							})
+						end
+					end
+					pcall(Logic.triggerPulseRadar, targets, hrp)
+				end)
+			end
+		end
+
+		doPulseNow()
+
+		while not Controller.Destroyed and (Controller.RadarEnabled or Controller.AltarESPEnabled or Controller.CadenceESPEnabled or Controller.GiftESPEnabled) do
+			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+				break
+			end
+			-- Chờ 12 giây — giống game gốc while task.wait(12)
+			task.wait(12)
+			if Controller.Destroyed then break end
+			doPulseNow()
+		end
+
+		radarPulseLoopActive = false
+	end)
+end
+
 
 local utilityLoopActive = false
 local function startUtilityLoop()
@@ -803,6 +905,83 @@ function Controller:SetESPStyle(style)
 		Executor.clearVisuals(GC, true)
 	end)
 	triggerInstantUpdate()
+end
+
+-- Bật/tắt ESP cho Player khác
+-- Khi native RadarPlayer upgrade thật kích hoạt → Logic.pulsePlayerESP trả về false → loop tự dừng
+local playerEnemyESPLoopActive = false
+local function startPlayerEnemyESPLoop()
+	if playerEnemyESPLoopActive then
+		return
+	end
+	playerEnemyESPLoopActive = true
+	task.spawn(function()
+		-- Chạy ngay lần đầu (không chờ 12s)
+		local char0 = LocalPlayer.Character
+		local hrp0 = char0 and char0:FindFirstChild("HumanoidRootPart")
+		if hrp0 then
+			if Controller.PlayerESPEnabled then
+				pcall(Logic.pulsePlayerESP, hrp0, Controller.PlayerESPColor)
+			end
+			if Controller.EnemyESPEnabled then
+				pcall(Logic.pulseEnemyESP, hrp0, Controller.EnemyESPColor)
+			end
+		end
+
+		while not Controller.Destroyed and (Controller.PlayerESPEnabled or Controller.EnemyESPEnabled) do
+			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+				break
+			end
+
+			-- Chờ 12 giây như game gốc (interval của RadarSlop)
+			task.wait(12)
+
+			if Controller.Destroyed then
+				break
+			end
+
+			local char = LocalPlayer.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if not hrp then
+				continue
+			end
+
+			if Controller.PlayerESPEnabled then
+				-- pulsePlayerESP trả về false = native upgrade đã kích hoạt → tự thả ra
+				local ok, released = pcall(Logic.pulsePlayerESP, hrp, Controller.PlayerESPColor)
+				if ok and released == false then
+					-- Native RadarPlayer đang hoạt động thật → dừng mô phỏng
+					Controller.PlayerESPEnabled = false
+					print("[NULLSCAPE] Native RadarPlayer active → đã thả PlayerESP")
+				end
+			end
+
+			if Controller.EnemyESPEnabled then
+				pcall(Logic.pulseEnemyESP, hrp, Controller.EnemyESPColor)
+			end
+		end
+		playerEnemyESPLoopActive = false
+	end)
+end
+
+function Controller:SetPlayerESP(value, color)
+	self.PlayerESPEnabled = value == true
+	if color then
+		self.PlayerESPColor = color
+	end
+	if value then
+		startPlayerEnemyESPLoop()
+	end
+end
+
+function Controller:SetEnemyESP(value, color)
+	self.EnemyESPEnabled = value == true
+	if color then
+		self.EnemyESPColor = color
+	end
+	if value then
+		startPlayerEnemyESPLoop()
+	end
 end
 
 -- Bật/tắt Auto Collect

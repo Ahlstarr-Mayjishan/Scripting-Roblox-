@@ -22,7 +22,7 @@ return function(Client, Controller)
     local isSettingESP = false
     ESPSelection = Tab:CreateDropdown({
         Name = "ESP types",
-        Options = {"Gift", "Cadence", "Altar"},
+        Options = {"Gift", "Cadence", "Altar", "Player", "Enemy"},
         CurrentOption = {},
         MultipleOptions = true,
         Flag = "ESPSelectionDropdown",
@@ -33,10 +33,16 @@ return function(Client, Controller)
             local giftSelected = table.find(SelectedOptions, "Gift") ~= nil
             local cadenceSelected = table.find(SelectedOptions, "Cadence") ~= nil
             local altarSelected = table.find(SelectedOptions, "Altar") ~= nil
+            local playerSelected = table.find(SelectedOptions, "Player") ~= nil
+            local enemySelected = table.find(SelectedOptions, "Enemy") ~= nil
             
             Controller:SetGiftESP(giftSelected)
             Controller:SetCadenceESP(cadenceSelected)
             Controller:SetAltarESP(altarSelected)
+            -- Player/Enemy dùng cơ chế highlight tạm thời 8s của game gốc
+            -- Tự thả ra khi native RadarPlayer upgrade có hiệu lực thật
+            Controller:SetPlayerESP(playerSelected)
+            Controller:SetEnemyESP(enemySelected)
             
             if not isSettingESP and ESPSelection then
                 isSettingESP = true
