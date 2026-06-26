@@ -417,26 +417,64 @@ local function updateNativeEnemyESPState(controller)
 		local enemyFolder = workspace:FindFirstChild("Enemies")
 		if enemyFolder then
 			for _, enemy in ipairs(enemyFolder:GetChildren()) do
-				local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("Head") or enemy:FindFirstChildWhichIsA("BasePart")
+				local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("Head") 
+					or (enemy:IsA("BasePart") and enemy) 
+					or enemy:FindFirstChildWhichIsA("BasePart")
+					
 				if head then
-					-- Nếu đã có custom box của chúng ta vẽ, hoặc đã có native ESP rồi thì bỏ qua
-					if enemy:FindFirstChild("ESP") or enemy:FindFirstChild("ESPCrayon") or enemy:FindFirstChild("NULLSCAPE_CustomBoxESP") then
+					-- Đệ phòng trường hợp đã có native ESP hoặc ESPCrayon nhưng bị lỗi gán Adornee cho Model (làm nó bị nil/ẩn)
+					local existing = enemy:FindFirstChild("ESP") or enemy:FindFirstChild("ESPCrayon")
+					if existing then
+						local hasValidAdornee = false
+						pcall(function()
+							hasValidAdornee = existing.Adornee ~= nil
+						end)
+						if not hasValidAdornee then
+							-- Sửa lỗi gán Adornee sang BasePart (head)
+							pcall(function()
+								existing.Adornee = head
+							end)
+							pcall(function()
+								existing.Visible = true
+							end)
+							pcall(function()
+								existing.Enabled = true
+							end)
+						end
+						continue
+					end
+					
+					-- Nếu đã có custom box của chúng ta vẽ thì bỏ qua
+					if enemy:FindFirstChild("NULLSCAPE_CustomBoxESP") then
 						continue
 					end
 					
 					if espTemplate then
 						local clone = espTemplate:Clone()
-						pcall(function()
+						local successAdornee = pcall(function()
 							clone.Adornee = enemy
 						end)
+						
+						-- Nếu clone không phải là SelectionBox/Highlight (yêu cầu Adornee là BasePart) hoặc gán bị lỗi/nil
+						if not successAdornee or not clone.Adornee or (clone.Adornee:IsA("Model") and not clone:IsA("SelectionBox") and not clone:IsA("Highlight")) then
+							pcall(function()
+								clone.Adornee = head
+							end)
+						end
+						
 						pcall(function()
 							clone.Enabled = true
 						end)
 						pcall(function()
 							clone.Visible = true
 						end)
+						
 						pcall(function()
-							clone.Size = head.Size
+							if clone:IsA("BoxHandleAdornment") or not enemy:IsA("Model") then
+								clone.Size = head.Size
+							else
+								clone.Size = enemy:GetExtentsSize()
+							end
 						end)
 						
 						local nameLower = enemy.Name:lower()
