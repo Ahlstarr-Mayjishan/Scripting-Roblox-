@@ -245,6 +245,16 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateToggle({
+		Name = "Void Rescue",
+		Info = "Immediately escalates Emergency Fall Protection near KillVoid/FallenPartsDestroyHeight. Uses ClassID so it only drives Grappler behavior for now.",
+		CurrentValue = Controller.GrappleVoidRescueEnabled ~= false,
+		Flag = "GrappleVoidRescueToggle",
+		Callback = function(Value)
+			Controller:SetGrappleVoidRescue(Value)
+		end,
+	})
+
 	Tab:CreateDropdown({
 		Name = "Emergency Rescue Mode",
 		Info = "Manual needs repeated panic Grapple inputs. Smart Auto reads fall path, input control, speed, and rescue target quality. Automatic uses the same checks with a lower threshold.",

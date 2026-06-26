@@ -9,6 +9,11 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 
+local ClassProfiles = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/ClassProfiles.luau")
+local EmergencyDecision = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/EmergencyDecision.luau")
+local TerrainSense = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TerrainSense.luau")
+local IntentModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/IntentModel.luau")
+
 local Logic = {
     Connections = {},
     InputConnections = {},
@@ -48,6 +53,8 @@ local Logic = {
     LastPanicDangerEvalAt = 0,
     LastPanicDangerValue = false,
     EmergencyRescueLockUntil = 0,
+    LastVoidRescueAt = 0,
+    VoidRescueUntil = 0,
     LastSharkTailAssistAt = 0,
     LastSharkTailEvalAt = 0,
     NextSharkTailEvalDelay = 0.08,
@@ -83,6 +90,8 @@ local RANGE_OPTIONS = {
     "Random",
 }
 
+local GRAPPLER_CLASS_ID = ClassProfiles.GRAPPLER_CLASS_ID
+
 local CFG = {
     ADAPT_INPUT_PULSE_DURATION = 0.05,
     ADAPT_TAP_THRESHOLD = 0.16,
@@ -113,6 +122,25 @@ local CFG = {
     PANIC_RESCUE_COOLDOWN = 0.16,
     EMERGENCY_RESCUE_RECAST_LOCK = 0.55,
     PANIC_RESCUE_WINDOW = 0.55,
+    VOID_RESCUE_WINDOW = 0.9,
+    VOID_RESCUE_COOLDOWN = 0.12,
+    VOID_RESCUE_KILL_PLANE_BUFFER = 34,
+    VOID_RESCUE_HARD_BUFFER = 10,
+    VOID_RESCUE_PREDICT_TIME = 0.42,
+    VOID_RESCUE_TARGET_UPWARD_BONUS = -58,
+    VOID_RESCUE_LOW_TARGET_PENALTY = 95,
+    TERRAIN_SURFACE_SCREEN_WEIGHT = 110,
+    TERRAIN_SURFACE_DISTANCE_WEIGHT = 0.035,
+    TERRAIN_UPWARD_RESCUE_BONUS = -36,
+    TERRAIN_LOW_VOID_PENALTY = 115,
+    TERRAIN_WALL_RESCUE_PENALTY = 18,
+    TERRAIN_CEILING_PENALTY = 140,
+    TERRAIN_EDGE_PROBE_DISTANCE = 4,
+    TERRAIN_EDGE_PENALTY = 42,
+    TERRAIN_SAFE_FLOOR_BONUS = -16,
+    INTENT_CONTROL_SUPPRESS_DOT = 0.34,
+    INTENT_REEL_SUPPRESS_PENALTY = 58,
+    INTENT_JUMPPAD_SUPPRESS_PENALTY = 72,
     PANIC_RESCUE_GROUND_CHECK_HEIGHT = 10,
     PANIC_RESCUE_GROUND_CHECK_DEPTH = 90,
     PANIC_INPUT_WINDOW = 0.42,
@@ -339,6 +367,14 @@ local function isJumpPadUsesBypassEnabled()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleJumpPadUsesBypassEnabled == true
 end
 
+local function isVoidRescueEnabled()
+    local controller = getController()
+    return controller
+        and controller.GrappleAssistSuiteEnabled == true
+        and controller.GrappleEmergencyProtectionEnabled == true
+        and controller.GrappleVoidRescueEnabled ~= false
+end
+
 local function getAdaptInputKeyCode()
     local controller = getController()
     local keyName = tostring(controller and controller.GrappleAdaptInputKey or "T")
@@ -515,6 +551,22 @@ local function clearInputConnections()
     Logic.AdaptRetryAt = 0
 end
 
+local function getClassId(grapple)
+    return ClassProfiles.getClassId(grapple)
+end
+
+local function hasClassCapability(grapple, capability)
+    return ClassProfiles.hasCapability(grapple, capability)
+end
+
+local function hasAnyGrappleAssistCapability(grapple)
+    return ClassProfiles.hasAnyCapability(grapple)
+end
+
+local function isActiveClassSpecial(grapple)
+    return ClassProfiles.isActiveSpecial(grapple)
+end
+
 local function getTrackedGrapple()
     local grapple = Logic.CurrentGrappleStep or Logic.LastKnownGrapple
     if typeof(grapple) ~= "table" then
@@ -526,7 +578,11 @@ local function getTrackedGrapple()
         return nil
     end
 
-    if movement.ActiveSpecial ~= grapple then
+    if not isActiveClassSpecial(grapple) then
+        return nil
+    end
+
+    if not hasAnyGrappleAssistCapability(grapple) then
         return nil
     end
 
@@ -567,7 +623,7 @@ local function pulseSpecialAction(grapple)
         end
 
         local activeGrapple = grapple
-        if not (activeGrapple and activeGrapple.Movement and activeGrapple.Movement.ActiveSpecial == activeGrapple) then
+        if not (activeGrapple and isActiveClassSpecial(activeGrapple) and hasClassCapability(activeGrapple, "RescueAssist")) then
             activeGrapple = getTrackedGrapple()
         end
         if not activeGrapple then
@@ -599,8 +655,8 @@ local function isAwaitingAdaptAttach(grapple)
     return time() <= (Logic.AdaptAwaitingAttachUntil or 0)
 end
 
-local function isEmergencyRescueRecastBlocked(grapple)
-    if time() <= (Logic.EmergencyRescueLockUntil or 0) then
+local function isEmergencyRescueRecastBlocked(grapple, ignoreTimeLock)
+    if not ignoreTimeLock and time() <= (Logic.EmergencyRescueLockUntil or 0) then
         return true
     end
 
@@ -695,6 +751,10 @@ local function clampAdaptRecastVelocity(grapple)
 end
 
 local function requestAdaptRecast(grapple)
+    if not hasClassCapability(grapple, "AimAssist") then
+        return false
+    end
+
     local now = time()
     if now - Logic.LastAdaptPulseAt < CFG.ADAPT_RECAST_COOLDOWN then
         return false
@@ -780,7 +840,7 @@ local function updateAdaptRecast(grapple)
 end
 
 local function maintainAdaptInputHold(grapple)
-    if not (Logic.AdaptDriveActive and Logic.AdaptInputHeld and isSuiteEnabled() and isInAir(grapple)) then
+    if not (hasClassCapability(grapple, "AimAssist") and Logic.AdaptDriveActive and Logic.AdaptInputHeld and isSuiteEnabled() and isInAir(grapple)) then
         return
     end
     if Logic.AdaptRecastPending then
@@ -1014,6 +1074,64 @@ local function hasFloorBelow(position, params)
     return hit ~= nil
 end
 
+local function getVoidKillPlaneY()
+    local killVoid = Workspace:FindFirstChild("KillVoid")
+    if killVoid and killVoid:IsA("BasePart") then
+        return killVoid.Position.Y
+    end
+
+    local fallenHeight = tonumber(Workspace.FallenPartsDestroyHeight)
+    if fallenHeight then
+        return fallenHeight
+    end
+
+    return nil
+end
+
+local function getVoidDangerState(grapple)
+    if not (hasClassCapability(grapple, "VoidRescue") and isVoidRescueEnabled()) then
+        return false, nil
+    end
+
+    local rootPart = grapple and grapple.RootPart
+    local velocity = rootPart and rootPart.Velocity
+    local killY = getVoidKillPlaneY()
+    if not (rootPart and velocity and killY) then
+        return false, nil
+    end
+
+    local y = rootPart.Position.Y
+    if y <= killY + CFG.VOID_RESCUE_HARD_BUFFER then
+        return true, "BelowKillPlane"
+    end
+
+    if y <= killY + CFG.VOID_RESCUE_KILL_PLANE_BUFFER then
+        return true, "NearKillPlane"
+    end
+
+    if velocity.Y < -8 then
+        local projectedY = y + velocity.Y * CFG.VOID_RESCUE_PREDICT_TIME
+        if projectedY <= killY + CFG.VOID_RESCUE_HARD_BUFFER then
+            return true, "ProjectedKillPlane"
+        end
+    end
+
+    return false, nil
+end
+
+local function isVoidRescueDanger(grapple)
+    local danger = getVoidDangerState(grapple)
+    return danger == true
+end
+
+local function markVoidRescueWindow()
+    Logic.VoidRescueUntil = time() + CFG.VOID_RESCUE_WINDOW
+end
+
+local function isVoidRescueWindowActive()
+    return time() <= (Logic.VoidRescueUntil or 0)
+end
+
 local function getProjectedUnsafeSampleCount(grapple)
     local rootPart = grapple and grapple.RootPart
     local velocity = rootPart and rootPart.Velocity
@@ -1021,8 +1139,8 @@ local function getProjectedUnsafeSampleCount(grapple)
         return 0, false
     end
 
-    local fallenHeight = tonumber(Workspace.FallenPartsDestroyHeight)
-    if fallenHeight and rootPart.Position.Y <= fallenHeight + 45 then
+    local killY = getVoidKillPlaneY()
+    if killY and rootPart.Position.Y <= killY + 45 then
         return #CFG.PANIC_RESCUE_LOOKAHEADS, true
     end
 
@@ -1071,6 +1189,10 @@ end
 function isPanicRescueDanger(grapple)
     if not (grapple and isInAir(grapple)) then
         return false
+    end
+
+    if isVoidRescueDanger(grapple) then
+        return true
     end
 
     local rootPart = grapple.RootPart
@@ -1170,7 +1292,7 @@ local function getStaminaRatio(grapple)
 end
 
 local function refillStamina(grapple)
-    if not isInfiniteStamina() or typeof(grapple) ~= "table" then
+    if not (hasClassCapability(grapple, "StaminaAssist") and isInfiniteStamina()) or typeof(grapple) ~= "table" then
         return
     end
 
@@ -1544,6 +1666,11 @@ local function holdBellBypass(part)
 end
 
 local function maintainBellBypass(grapple)
+    if not hasClassCapability(grapple, "BellBypass") then
+        scheduleBellBypassRelease(0.5)
+        return
+    end
+
     local movement = grapple and grapple.Movement
     local part = grapple and grapple.grapplePart
     if movement and movement.grappling and isBellInstance(part) then
@@ -1816,12 +1943,75 @@ local function getPanicRescueScore(grapple, candidate, position, distance, scree
     local upwardScore = math.clamp(verticalOffset, -35, 80) * CFG.PANIC_TARGET_UPWARD_WEIGHT
     local distanceScore = distance * 0.018
     local screenRescueScore = screenScore * 45
+    local voidScore = 0
+    if isVoidRescueWindowActive() or isVoidRescueDanger(grapple) then
+        if verticalOffset < -8 then
+            voidScore = voidScore + CFG.VOID_RESCUE_LOW_TARGET_PENALTY
+        else
+            voidScore = voidScore + CFG.VOID_RESCUE_TARGET_UPWARD_BONUS
+        end
+
+        if candidate.Name == "GrapplePoint" then
+            voidScore = voidScore - 26
+        elseif candidate.Name == "JumpPad" and verticalOffset >= -4 then
+            voidScore = voidScore - 18
+        elseif candidate.Name == "Bell" then
+            voidScore = voidScore - 14
+        end
+    end
 
     return getPanicTargetPriority(candidate.Name, distance, verticalOffset)
         + distanceScore
         + screenRescueScore
         + fallAlignmentPenalty
         + upwardScore
+        + voidScore
+end
+
+local function getTerrainSenseDeps()
+    return {
+        CFG = CFG,
+        isVoidRescueWindowActive = isVoidRescueWindowActive,
+        isVoidRescueDanger = isVoidRescueDanger,
+    }
+end
+
+local function getTerrainSurfaceScore(grapple, result, screenScore, driveMode)
+    return TerrainSense.scoreSurface(getTerrainSenseDeps(), grapple, result, screenScore, driveMode)
+end
+
+local function getIntentModelDeps()
+    return {
+        CFG = CFG,
+        getAssistFlatUnit = getAssistFlatUnit,
+        isPanicPressureActive = isPanicPressureActive,
+        isVoidRescueDanger = isVoidRescueDanger,
+    }
+end
+
+local function getPlayerIntentSuppression(grapple, rescueResult)
+    return IntentModel.getSuppression(getIntentModelDeps(), grapple, rescueResult)
+end
+
+local function getGrapplerEmergencyDecisionDeps()
+    return {
+        CFG = CFG,
+        GRAPPLER_CLASS_ID = GRAPPLER_CLASS_ID,
+        getClassId = getClassId,
+        getProjectedUnsafeSampleCount = getProjectedUnsafeSampleCount,
+        getVoidDangerState = getVoidDangerState,
+        getAssistFlatUnit = getAssistFlatUnit,
+        getHorizontalVelocity = getHorizontalVelocity,
+        isPanicPressureActive = isPanicPressureActive,
+        getEmergencyProtectionMode = getEmergencyProtectionMode,
+        getEmergencyFallThreshold = getEmergencyFallThreshold,
+        getPlayerIntentSuppression = getPlayerIntentSuppression,
+        isRescueTargetName = isRescueTargetName,
+    }
+end
+
+local function createGrapplerEmergencyDecision(grapple, rescueResult)
+    return EmergencyDecision.createDecision(getGrapplerEmergencyDecisionDeps(), grapple, rescueResult)
 end
 
 local function rememberAssistTarget(candidateInstance, reason, score)
@@ -2062,9 +2252,13 @@ local function scanScreenSurface(grapple, options)
     end
 
     local driveMode = typeof(options) == "table" and options.driveMode == true
-
+    local returnDecision = typeof(options) == "table" and options.returnDecision == true
     local viewportSize = camera.ViewportSize
     local maxRange = getAssistRange(grapple, driveMode)
+    local bestResult = nil
+    local bestScore = math.huge
+    local bestReason = nil
+    local bestScreenScore = nil
 
     for _, offset in ipairs(SCREEN_RAY_OFFSETS) do
         local screenPoint = Vector2.new(
@@ -2082,13 +2276,42 @@ local function scanScreenSurface(grapple, options)
                     and isUsableResult(grapple, directHit)
                     and isPathSafeForHitbox(grapple, directHit.Instance, directHit.Instance, directHit.Position, maxRange)
                 then
-                    return directHit
+                    local screenScore = offset.Magnitude
+                    local score, reason = getTerrainSurfaceScore(grapple, directHit, screenScore, driveMode)
+                    if score < bestScore then
+                        bestResult = directHit
+                        bestScore = score
+                        bestReason = reason
+                        bestScreenScore = screenScore
+                    end
                 end
             end
         end
     end
 
-    return nil
+    if bestResult then
+        Logic.LastAssistDebug = {
+            Reason = bestReason or "TerrainSurface",
+            Score = bestScore,
+            ScreenScore = bestScreenScore,
+            Target = bestResult.Instance and bestResult.Instance.Name or "Surface",
+        }
+    end
+
+    if returnDecision then
+        return bestResult and {
+            Result = bestResult,
+            Instance = bestResult.Instance,
+            Name = bestResult.Instance and bestResult.Instance.Name or nil,
+            Position = bestResult.Position,
+            Distance = (bestResult.Position - rootPart.Position).Magnitude,
+            ScreenScore = bestScreenScore,
+            Score = bestScore,
+            Reason = bestReason,
+        } or nil
+    end
+
+    return bestResult
 end
 
 local function getResultTargetName(result)
@@ -2246,87 +2469,30 @@ function hasAdaptDriveTarget(grapple)
 end
 
 local function getEmergencyAutoConfidence(grapple, rescueResult)
-    local rootPart = grapple and grapple.RootPart
-    local movement = grapple and grapple.Movement
-    local velocity = rootPart and rootPart.Velocity
-    if not (rootPart and movement and velocity) then
-        return 0, "NoState"
-    end
-
-    local horizontalSpeed = getHorizontalVelocity(rootPart).Magnitude
-    local fallSpeed = math.max(-velocity.Y, 0)
-    local unsafeSamples, nearVoidKillPlane = getProjectedUnsafeSampleCount(grapple)
-    local score = 0
-    local reason = "SmartAuto"
-
-    if nearVoidKillPlane then
-        score = score + 48
-        reason = "KillPlane"
-    end
-    score = score + unsafeSamples * 18
-    score = score + math.clamp((horizontalSpeed - CFG.AUTO_RESCUE_SPEED) / 120, 0, 1) * 24
-    score = score + math.clamp((fallSpeed - getEmergencyFallThreshold()) / 120, 0, 1) * 34
-
-    local inputDirection = getAssistFlatUnit(movement.PlayerMoveDirection)
-    local velocityDirection = getAssistFlatUnit(velocity)
-    if inputDirection and velocityDirection and not isPanicPressureActive() then
-        local controlDot = inputDirection:Dot(velocityDirection)
-        if controlDot > 0.2 then
-            score = score - CFG.EMERGENCY_ACTIVE_INPUT_PENALTY * math.clamp(controlDot, 0, 1)
-            reason = "PlayerSteering"
-        elseif controlDot < -0.25 then
-            score = score - CFG.EMERGENCY_ACTIVE_INPUT_PENALTY * 0.5
-            reason = "PlayerBraking"
-        end
-    elseif not inputDirection then
-        score = score + CFG.EMERGENCY_NO_INPUT_BONUS
-    end
-
-    if isPanicPressureActive() then
-        score = score + 30
-        reason = "PanicInput"
-    end
-
-    local instance = rescueResult and rescueResult.Instance
-    if instance and isRescueTargetName(instance.Name) then
-        local distance = (rescueResult.Position - rootPart.Position).Magnitude
-        if instance.Name == "Bell" then
-            score = score + (distance <= CFG.PANIC_BELL_NEAR_DISTANCE and 24 or 12)
-        elseif instance.Name == "JumpPad" then
-            score = score + (distance <= CFG.PANIC_JUMPPAD_NEAR_DISTANCE and 18 or 8)
-        elseif instance.Name == "TriaOrb" then
-            score = score + 14
-        elseif instance.Name == "GrapplePoint" then
-            score = score + 6
-        end
-    else
-        score = score - 36
-        reason = "NoRescueTarget"
-    end
-
-    return score, reason
+    local decision = createGrapplerEmergencyDecision(grapple, rescueResult)
+    return decision.Score, decision.Reason, decision
 end
 
 local function canAutoEmergencyRescue(grapple, rescueResult)
-    local mode = getEmergencyProtectionMode()
-    if mode == "Manual" then
-        return false
-    end
-
-    local score, reason = getEmergencyAutoConfidence(grapple, rescueResult)
-    local threshold = mode == "Smart Auto" and CFG.EMERGENCY_SMART_AUTO_THRESHOLD or CFG.EMERGENCY_AUTO_THRESHOLD
+    local _, _, decision = getEmergencyAutoConfidence(grapple, rescueResult)
     Logic.LastAssistDebug = {
-        Reason = "Emergency" .. tostring(mode),
-        Score = score,
-        Threshold = threshold,
-        Detail = reason,
+        Action = decision.Action,
+        Reason = "Emergency" .. tostring(getEmergencyProtectionMode()),
+        Score = decision.Score,
+        Threshold = decision.Threshold,
+        Detail = decision.Reason,
+        Target = decision.Target,
+        ClassId = decision.ClassId,
+        VoidDanger = decision.VoidDanger,
+        Suppression = decision.Suppression,
+        SuppressionReason = decision.SuppressionReason,
     }
 
-    return score >= threshold
+    return decision.Allowed == true
 end
 
 local function tryAutoMomentumRescue(grapple)
-    if not (isRescueEnabled() and isEmergencyProtectionEnabled() and isHighMomentumDanger(grapple)) then
+    if not (hasClassCapability(grapple, "EmergencyRescue") and isRescueEnabled() and isEmergencyProtectionEnabled() and isHighMomentumDanger(grapple)) then
         return false
     end
     if getEmergencyProtectionMode() == "Manual" then
@@ -2337,7 +2503,7 @@ local function tryAutoMomentumRescue(grapple)
     if not (grapple and movement and grapple.specialHeld and isInAir(grapple)) then
         return false
     end
-    if isEmergencyRescueRecastBlocked(grapple) then
+    if isEmergencyRescueRecastBlocked(grapple, false) then
         return false
     end
     if time() - Logic.LastAutoRescuePulseAt < CFG.AUTO_RESCUE_COOLDOWN then
@@ -2363,7 +2529,7 @@ local function tryAutoMomentumRescue(grapple)
 end
 
 local function tryPanicRescue(grapple)
-    if not isEmergencyProtectionEnabled() then
+    if not (hasClassCapability(grapple, "EmergencyRescue") and isEmergencyProtectionEnabled()) then
         return false
     end
 
@@ -2371,28 +2537,36 @@ local function tryPanicRescue(grapple)
     if not (grapple and movement and isInAir(grapple)) then
         return false
     end
-    if isEmergencyRescueRecastBlocked(grapple) then
+    local voidDanger = isVoidRescueDanger(grapple)
+    if isEmergencyRescueRecastBlocked(grapple, voidDanger) then
         return false
     end
-    if time() - Logic.LastPanicRescuePulseAt < CFG.PANIC_RESCUE_COOLDOWN then
+    local rescueCooldown = voidDanger and CFG.VOID_RESCUE_COOLDOWN or CFG.PANIC_RESCUE_COOLDOWN
+    if time() - Logic.LastPanicRescuePulseAt < rescueCooldown then
         return false
     end
     if not getCachedPanicRescueDanger(grapple) then
         return false
     end
     local emergencyMode = getEmergencyProtectionMode()
-    if emergencyMode == "Manual" and not isPanicPressureActive() then
+    if emergencyMode == "Manual" and not (isPanicPressureActive() or voidDanger) then
         return false
     end
 
     Logic.AutoRescueUntil = time() + CFG.PANIC_RESCUE_WINDOW
+    if voidDanger then
+        markVoidRescueWindow()
+    end
     local previewResult = scanNamedTargets(grapple, { driveMode = true })
+    if not previewResult and voidDanger then
+        previewResult = scanScreenSurface(grapple, { driveMode = true, returnDecision = true })
+    end
     if not previewResult then
         return false
     end
 
     local instance = previewResult.Instance
-    if not (instance and isRescueTargetName(instance.Name)) then
+    if not voidDanger and not (instance and isRescueTargetName(instance.Name)) then
         return false
     end
     if emergencyMode ~= "Manual" and not canAutoEmergencyRescue(grapple, previewResult) then
@@ -2402,6 +2576,10 @@ local function tryPanicRescue(grapple)
     Logic.LastPanicRescuePulseAt = time()
     if pulseSpecialAction(grapple) then
         markEmergencyRescuePulse()
+        if voidDanger then
+            Logic.LastVoidRescueAt = time()
+            markVoidRescueWindow()
+        end
         Logic.PanicStabilizeUntil = time() + CFG.PANIC_STABILIZE_WINDOW
         markGrappleBonkGrace(grapple, CFG.PANIC_STABILIZE_WINDOW)
         return true
@@ -2450,7 +2628,8 @@ end
 local function assistedCast(grapple, forceRefresh, originalCast, ...)
     notePanicInput(grapple)
     local result, direction = originalCast(grapple, forceRefresh, ...)
-    local canAssist = isEnabled() or (isRescueEnabled() and isFallingFast(grapple))
+    local canAssist = (hasClassCapability(grapple, "AimAssist") and isEnabled())
+        or (hasClassCapability(grapple, "RescueAssist") and isRescueEnabled() and isFallingFast(grapple))
     if not canAssist then
         return result, direction
     end
@@ -2458,7 +2637,7 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
     if isUsableResult(grapple, result) then
         local overrideResult = getSoftOverrideResult(grapple, result)
         if overrideResult then
-            if overrideResult.Instance and overrideResult.Instance.Name == "Bell" then
+            if hasClassCapability(grapple, "BellBypass") and overrideResult.Instance and overrideResult.Instance.Name == "Bell" then
                 holdBellBypass(overrideResult.Instance)
             end
             return overrideResult
@@ -2478,7 +2657,7 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
         assistedResult = scanNamedTargets(grapple) or scanScreenSurface(grapple)
     end
     if assistedResult then
-        if assistedResult.Instance and assistedResult.Instance.Name == "Bell" then
+        if hasClassCapability(grapple, "BellBypass") and assistedResult.Instance and assistedResult.Instance.Name == "Bell" then
             holdBellBypass(assistedResult.Instance)
         end
         return assistedResult
@@ -2489,7 +2668,7 @@ end
 
 local function canUseSharkTail(grapple)
     local movement = grapple and grapple.Movement
-    if not (grapple and movement and isSharkTailHelperEnabled()) then
+    if not (grapple and movement and hasClassCapability(grapple, "SharkTail") and isSharkTailHelperEnabled()) then
         return false
     end
     if getModeValue("GrappleSharkTailMode") ~= "Automatic" and getModeValue("GrappleSharkTailMode") ~= "Manual" then
@@ -2781,7 +2960,7 @@ local function planSmartSharkTail(grapple)
         end
 
         local activeGrapple = grapple
-        if not (activeGrapple and activeGrapple.Movement and activeGrapple.Movement.ActiveSpecial == activeGrapple) then
+        if not (activeGrapple and isActiveClassSpecial(activeGrapple) and hasClassCapability(activeGrapple, "SharkTail")) then
             activeGrapple = getTrackedGrapple()
         end
         if not activeGrapple then
@@ -2835,7 +3014,7 @@ end
 
 local function getSmartReelBaseState(grapple)
     local movement = grapple and grapple.Movement
-    if not (grapple and movement and isSmartReelEnabled()) then
+    if not (grapple and movement and hasClassCapability(grapple, "SmartReel") and isSmartReelEnabled()) then
         return nil
     end
     if not isInAir(grapple) then
@@ -3034,7 +3213,7 @@ local function startSmartReel(grapple, manual)
 end
 
 local function applyMomentumGuard(grapple)
-    if not isMomentumGuardEnabled() then
+    if not (hasClassCapability(grapple, "MomentumGuard") and isMomentumGuardEnabled()) then
         return
     end
 
@@ -3112,6 +3291,10 @@ local function applySharkTailStabilize(grapple)
 end
 
 local function applyAirControlMultiplier(grapple, dt)
+    if not hasClassCapability(grapple, "AirControl") then
+        return
+    end
+
     local multiplier = getAirControlMultiplier()
     if multiplier <= 1 then
         return
@@ -3136,6 +3319,10 @@ local function applyAirControlMultiplier(grapple, dt)
 end
 
 local function applyReelPullMultiplier(grapple)
+    if not hasClassCapability(grapple, "SmartReel") then
+        return
+    end
+
     local multiplier = getReelPullMultiplier()
     if multiplier <= 1 then
         return
@@ -3150,6 +3337,10 @@ local function applyReelPullMultiplier(grapple)
 end
 
 local function applySharkTailPullMultiplier(grapple, previousVelocity)
+    if not hasClassCapability(grapple, "SharkTail") then
+        return
+    end
+
     local multiplier = getSharkTailPullMultiplier()
     if multiplier <= 1 then
         return
@@ -3180,6 +3371,9 @@ local function shouldSuppressGrappleBonk(movement)
 
     local grapple = Logic.CurrentGrappleStep
     if grapple and grapple.Movement == movement then
+        if not hasClassCapability(grapple, "MomentumGuard") then
+            return false
+        end
         return movement.grappling == true or grapple.jumpPadReel == true
     end
 
@@ -3207,7 +3401,7 @@ local function getNoCollisionMoveCastParams()
 end
 
 local function shouldSuppressGrappleCollisionCheck(grapple)
-    if not isAntiBonkEnabled() then
+    if not (hasClassCapability(grapple, "MomentumGuard") and isAntiBonkEnabled()) then
         return false
     end
 
@@ -3304,19 +3498,21 @@ function Logic.enable()
         grappleModule.Start = function(self, result, ...)
             Logic.LastKnownGrapple = self
             refillStamina(self)
-            maintainJumpPadUsesBypass()
+            if hasClassCapability(self, "JumpPadBypass") then
+                maintainJumpPadUsesBypass()
+            end
             local jumpPadTarget = result and result.Instance
-            if isJumpPadUsesBypassEnabled() and isJumpPadInstance(jumpPadTarget) then
+            if hasClassCapability(self, "JumpPadBypass") and isJumpPadUsesBypassEnabled() and isJumpPadInstance(jumpPadTarget) then
                 normalizeJumpPadForReuse(jumpPadTarget)
             end
 
-            if result and result.Instance and result.Instance.Name == "Bell" then
+            if hasClassCapability(self, "BellBypass") and result and result.Instance and result.Instance.Name == "Bell" then
                 holdBellBypass(result.Instance)
             end
 
             local startResult = originalStart(self, result, ...)
             refillStamina(self)
-            if isJumpPadUsesBypassEnabled() and isJumpPadInstance(jumpPadTarget) then
+            if hasClassCapability(self, "JumpPadBypass") and isJumpPadUsesBypassEnabled() and isJumpPadInstance(jumpPadTarget) then
                 normalizeJumpPadForReuse(jumpPadTarget)
             end
             maintainBellBypass(self)
@@ -3329,7 +3525,7 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalAltSpecialAction = originalAltSpecialAction
 
         grappleModule.AltSpecialAction = function(self, state, ...)
-            if isSuiteEnabled() and state == Enum.UserInputState.Begin then
+            if isSuiteEnabled() and hasAnyGrappleAssistCapability(self) and state == Enum.UserInputState.Begin then
                 local shouldManualSharkTail = isSharkTailHelperEnabled()
                     and getModeValue("GrappleSharkTailMode") == "Manual"
                     and shouldUseSmartSharkTail(self, true)
@@ -3365,14 +3561,18 @@ function Logic.enable()
         grappleModule.Step = function(self, dt, ...)
             Logic.LastKnownGrapple = self
             refillStamina(self)
-            maintainJumpPadUsesBypass()
+            if hasClassCapability(self, "JumpPadBypass") then
+                maintainJumpPadUsesBypass()
+            end
             maintainBellBypass(self)
-            if self.Movement and (self.Movement.grappling or self.jumpPadReel) then
+            if hasClassCapability(self, "MomentumGuard") and self.Movement and (self.Movement.grappling or self.jumpPadReel) then
                 markGrappleBonkGrace(self, 0.45)
             end
 
-            if isSuiteEnabled() and isInAir(self) then
-                updateAdaptInputMode(self)
+            if isSuiteEnabled() and hasAnyGrappleAssistCapability(self) and isInAir(self) then
+                if hasClassCapability(self, "AimAssist") then
+                    updateAdaptInputMode(self)
+                end
 
                 local sharkTailPlanned = false
                 if isSharkTailHelperEnabled() and getModeValue("GrappleSharkTailMode") == "Automatic" then
@@ -3418,7 +3618,9 @@ function Logic.enable()
 
         grappleModule.End = function(self, ...)
             Logic.LastKnownGrapple = self
-            markGrappleBonkGrace(self, 0.45)
+            if hasClassCapability(self, "MomentumGuard") then
+                markGrappleBonkGrace(self, 0.45)
+            end
             local endResult = originalEnd(self, ...)
             scheduleBellBypassRelease(0.5)
             return endResult
@@ -3485,6 +3687,8 @@ function Logic.disable()
     Logic.LastPanicDangerEvalAt = 0
     Logic.LastPanicDangerValue = false
     Logic.EmergencyRescueLockUntil = 0
+    Logic.LastVoidRescueAt = 0
+    Logic.VoidRescueUntil = 0
     Logic.LastAssistTargetInstance = nil
     Logic.LastAssistTargetAt = 0
     Logic.LastAssistDebug = nil
