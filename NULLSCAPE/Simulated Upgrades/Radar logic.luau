@@ -426,8 +426,15 @@ local function updateNativeEnemyESPState(controller)
 					
 					if espTemplate then
 						local clone = espTemplate:Clone()
-						clone.Adornee = enemy
-						clone.Enabled = true
+						pcall(function()
+							clone.Adornee = enemy
+						end)
+						pcall(function()
+							clone.Enabled = true
+						end)
+						pcall(function()
+							clone.Visible = true
+						end)
 						pcall(function()
 							clone.Size = head.Size
 						end)
@@ -457,7 +464,9 @@ local function updateNativeEnemyESPState(controller)
 							end
 						end)
 						
-						clone.Parent = enemy
+						pcall(function()
+							clone.Parent = enemy
+						end)
 					else
 						-- Fallback: Tự vẽ box 3D SelectionBox + BillboardGui cực đẹp
 						local folder = Instance.new("Folder")
