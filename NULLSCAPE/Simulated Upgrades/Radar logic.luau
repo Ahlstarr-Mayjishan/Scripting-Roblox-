@@ -189,20 +189,35 @@ local function isAltarValid(t)
 	return true
 end
 
-local function hasNativeEnemyESP(enemy)
-	if not enemy or not enemy.Parent then
-		return false
-	end
-
-	return enemy:FindFirstChild("ESP") ~= nil or enemy:FindFirstChild("ESPCrayon") ~= nil
-end
-
 local function isSpringerEnemy(enemy)
 	if not enemy then
 		return false
 	end
 
-	return enemy.Name == "Springer" or enemy.Name == "BigSpringer"
+	return string.find(enemy.Name:lower(), "springer") ~= nil
+end
+
+local function shouldFallbackEnemyESP(enemy)
+	if not enemy or not enemy.Parent then
+		return false
+	end
+
+	if isSpringerEnemy(enemy) then
+		return true
+	end
+
+	local ignoredNames = {
+		nilEnemy = true,
+		nilMirage = true,
+		Celestial = true,
+		MothSpectator = true,
+		CatalystHand = true,
+	}
+	if ignoredNames[enemy.Name] then
+		return false
+	end
+
+	return enemy:IsA("Model") or enemy:FindFirstChildWhichIsA("BasePart", true) ~= nil
 end
 
 local function findEnemyVisualPart(enemy, hrp)
@@ -466,7 +481,7 @@ local function addCustomVisual(style, highlights, billboards, part, model, color
 	end
 end
 
-local function addSpringerEnemyFallback(controller, style, highlights, billboards, hrp)
+local function addModelEnemyFallback(controller, style, highlights, billboards, hrp)
 	if not canSimulate(controller, "Enemy") then
 		return
 	end
@@ -478,7 +493,7 @@ local function addSpringerEnemyFallback(controller, style, highlights, billboard
 
 	local color = controller.EnemyESPColor or Color3.fromRGB(255, 128, 0)
 	for _, enemy in ipairs(enemies:GetChildren()) do
-		if isSpringerEnemy(enemy) and not hasNativeEnemyESP(enemy) then
+		if shouldFallbackEnemyESP(enemy) then
 			local part = findEnemyVisualPart(enemy, hrp)
 			if isSafeEnemyVisualPart(part, hrp) then
 				addCustomVisual(style, highlights, billboards, part, part, color)
@@ -570,7 +585,7 @@ local function updateCustomESPStyles(controller, gc, hrp)
 		end
 	end
 
-	addSpringerEnemyFallback(controller, style, highlights, billboards, hrp)
+	addModelEnemyFallback(controller, style, highlights, billboards, hrp)
 
 	applyCustomBillboards(saved, billboards)
 	applyCustomHighlights(saved, highlights)

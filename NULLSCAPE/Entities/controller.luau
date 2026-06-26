@@ -462,16 +462,33 @@ function Controller:StartSkinwalkerEvasion()
 			local char = LocalPlayer and LocalPlayer.Character
 			local root = char and char:FindFirstChild("HumanoidRootPart")
 			if root then
+				local function findEnemyPart(enemy)
+					local head = enemy:FindFirstChild("head")
+					if head and head:IsA("BasePart") then
+						return head
+					end
+
+					local rootPart = enemy:FindFirstChild("HumanoidRootPart")
+					if rootPart and rootPart:IsA("BasePart") then
+						return rootPart
+					end
+
+					if enemy:IsA("BasePart") then
+						return enemy
+					end
+
+					return enemy:FindFirstChildWhichIsA("BasePart", true)
+				end
+
 				local function checkAndEvade(enemy)
 					if string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") then
-						local head = enemy:FindFirstChild("head")
-							or enemy:FindFirstChild("HumanoidRootPart")
-							or enemy:FindFirstChildOfClass("BasePart")
-						if head then
-							local distance = (root.Position - head.Position).Magnitude
+						local enemyPart = findEnemyPart(enemy)
+						if enemyPart then
+							local offset = root.Position - enemyPart.Position
+							local distance = offset.Magnitude
 							if distance < 9 then
 								-- Đẩy lùi player ra xa để tránh va chạm vật lý/server-side
-								local direction = (root.Position - head.Position)
+								local direction = offset
 								if direction.Magnitude == 0 then
 									direction = Vector3.new(0, 0, 1)
 								else
