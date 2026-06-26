@@ -384,30 +384,257 @@ local function isInstrumentValid(t)
 	return true
 end
 
-local function updateNativeEnemyESPState(_controller)
+local function isEnemyValidForESP(enemy)
+	if not enemy or not enemy.Parent then
+		return false
+	end
+
+	local name = enemy.Name
+	-- Các loại trừ theo logic gốc của game
+	if name == "nilEnemy" or name == "nilMirage" or name == "Celestial" or name == "MothSpectator" or name == "CatalystHand" then
+		return false
+	end
+
+	-- Phải có head
+	local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("Head") 
+		or (enemy:IsA("BasePart") and enemy) 
+		or enemy:FindFirstChildWhichIsA("BasePart")
+	if not head then
+		return false
+	end
+
+	return true
+end
+
+local function updateNativeEnemyESPState(controller)
 	local upgradesFolder = game.ReplicatedStorage:FindFirstChild("UpgradeFolder") 
 		and game.ReplicatedStorage.UpgradeFolder:FindFirstChild("Upgrades")
 	
-	-- Dọn dẹp simulated upgrade EnemyOnTop để tránh script gốc tự vẽ đè hộp nhỏ lên đầu
-	if upgradesFolder then
-		local simulated = upgradesFolder:FindFirstChild("EnemyOnTop")
-		if simulated then
-			pcall(function()
-				simulated:Destroy()
-			end)
-		end
-	end
+	local shouldEnableNative = controller.EnemyESPEnabled and controller.ESPStyle == "Box"
 	
-	-- Dọn dẹp các đối tượng native ESP/ESPCrayon của game để tránh xung đột với custom Box ESP của ta
-	local enemyFolder = workspace:FindFirstChild("Enemies")
-	if enemyFolder then
-		for _, enemy in ipairs(enemyFolder:GetChildren()) do
-			for _, name in ipairs({"ESP", "ESPCrayon", "NULLSCAPE_CustomBoxESP"}) do
-				local child = enemy:FindFirstChild(name)
-				if child then
-					pcall(function()
-						child:Destroy()
-					end)
+	if shouldEnableNative then
+		-- 1. Kích hoạt simulated upgrade trong ReplicatedStorage để native spriteManager tự vẽ các enemy mới
+		if upgradesFolder then
+			if not upgradesFolder:FindFirstChild("EnemyOnTop") then
+				local simulated = Instance.new("Folder")
+				simulated.Name = "EnemyOnTop"
+				simulated.Parent = upgradesFolder
+			end
+		end
+		
+		-- 2. Thử tìm native ESP template để tự vẽ cho các enemy hiện tại
+		local espTemplate = nil
+		local playerScripts = game.Players.LocalPlayer:FindFirstChild("PlayerScripts")
+		local spriteManager = playerScripts and playerScripts:FindFirstChild("spriteManager")
+		if spriteManager then
+			espTemplate = spriteManager:FindFirstChild("ESP") or spriteManager:FindFirstChild("ESPCrayon")
+		end
+		if not espTemplate then
+			local starterPlayerScripts = game:GetService("StarterPlayer"):FindFirstChild("StarterPlayerScripts")
+			spriteManager = starterPlayerScripts and starterPlayerScripts:FindFirstChild("spriteManager")
+			espTemplate = spriteManager and (spriteManager:FindFirstChild("ESP") or spriteManager:FindFirstChild("ESPCrayon"))
+		end
+		
+		-- 3. Quét tất cả enemy hiện có
+		local enemyFolder = workspace:FindFirstChild("Enemies")
+		if enemyFolder then
+			for _, enemy in ipairs(enemyFolder:GetChildren()) do
+				if isEnemyValidForESP(enemy) then
+					local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("Head") 
+						or (enemy:IsA("BasePart") and enemy) 
+						or enemy:FindFirstChildWhichIsA("BasePart")
+					
+					if head then
+						-- Tìm tất cả ESP / ESPCrayon con của enemy
+						local espInstances = {}
+						for _, child in ipairs(enemy:GetChildren()) do
+							if child.Name == "ESP" or child.Name == "ESPCrayon" then
+								table.insert(espInstances, child)
+							end
+						end
+						
+						-- Nếu chưa có ESP của native vẽ, tự clone đè lên
+						if #espInstances == 0 and espTemplate then
+							local clone = espTemplate:Clone()
+							local isCrayon = false
+							pcall(function()
+								local ReplicatedFirst_ = game:GetService("ReplicatedFirst")
+								local ClientModules = ReplicatedFirst_:FindFirstChild("ClientModules")
+								local CurseHandlerModule = ClientModules and ClientModules:FindFirstChild("CurseHandler")
+								if CurseHandlerModule then
+									local CurseHandler = require(CurseHandlerModule)
+									isCrayon = CurseHandler.IsCurseEnabled("CrayonEnemies")
+								end
+							end)
+							clone.Name = isCrayon and "ESPCrayon" or "ESP"
+							clone.Parent = enemy
+							table.insert(espInstances, clone)
+						end
+						
+						-- Nếu trùng lặp (nhiều hơn 1 cái), hủy cái thừa
+						if #espInstances > 1 then
+							for i = 2, #espInstances do
+								pcall(function()
+									espInstances[i]:Destroy()
+								end)
+							end
+							espInstances = { espInstances[1] }
+						end
+						
+						local existing = espInstances[1]
+						if existing then
+							-- Sửa lỗi Adornee của game gốc (gán Model cho BoxHandleAdornment bị lỗi)
+							pcall(function()
+								existing.Adornee = head
+							end)
+							pcall(function()
+								existing.Visible = true
+							end)
+							pcall(function()
+								existing.Enabled = true
+							end)
+							
+							-- Ẩn chiếc hộp lập phương nhỏ màu xanh của game gốc
+							pcall(function()
+								existing.Transparency = 1
+							end)
+							
+							-- Tự vẽ SelectionBox ôm sát toàn thân của kẻ địch
+							local customBox = enemy:FindFirstChild("NULLSCAPE_CustomESPBox")
+							if not customBox then
+								customBox = Instance.new("SelectionBox")
+								customBox.Name = "NULLSCAPE_CustomESPBox"
+								customBox.Adornee = enemy
+								customBox.Color3 = Color3.fromRGB(0, 255, 0) -- Xanh lá
+								customBox.LineThickness = 0.04
+								customBox.AlwaysOnTop = true
+								customBox.Parent = enemy
+							end
+							
+							-- Căn chỉnh lại nhãn tên gốc hiển thị ở góc dưới cùng bên phải của SelectionBox
+							pcall(function()
+								local labelGui = existing:FindFirstChild("Label") or existing
+								if labelGui and labelGui:IsA("BillboardGui") then
+									local sizeY = 4.0
+									if enemy:IsA("Model") then
+										local _, size = enemy:GetBoundingBox()
+										sizeY = size.Y
+									else
+										sizeY = enemy.Size.Y
+									end
+									
+									labelGui.Adornee = head
+									labelGui.StudsOffset = Vector3.new(0, -(sizeY / 2) - 0.2, 0)
+									
+									local textLabel = labelGui:FindFirstChildWhichIsA("TextLabel") or labelGui:FindFirstChild("Label")
+									if textLabel then
+										textLabel.TextXAlignment = Enum.TextXAlignment.Right
+										textLabel.TextYAlignment = Enum.TextYAlignment.Bottom
+										textLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+									end
+								end
+							end)
+							
+							-- Dọn dẹp fallback
+							local fallback = enemy:FindFirstChild("NULLSCAPE_CustomESPBoxFallback")
+							if fallback then
+								pcall(function() fallback:Destroy() end)
+							end
+						else
+							-- Fallback hoàn toàn nếu không tìm thấy template
+							local folder = enemy:FindFirstChild("NULLSCAPE_CustomESPBoxFallback")
+							if not folder then
+								folder = Instance.new("Folder")
+								folder.Name = "NULLSCAPE_CustomESPBoxFallback"
+								
+								local box = Instance.new("SelectionBox")
+								box.Name = "Box"
+								box.Adornee = enemy
+								box.Color3 = Color3.fromRGB(0, 255, 0)
+								box.LineThickness = 0.04
+								box.AlwaysOnTop = true
+								box.Parent = folder
+								
+								local sizeY = 4.0
+								if enemy:IsA("Model") then
+									local _, size = enemy:GetBoundingBox()
+									sizeY = size.Y
+								else
+									sizeY = enemy.Size.Y
+								end
+								
+								local billboard = Instance.new("BillboardGui")
+								billboard.Name = "LabelGui"
+								billboard.Adornee = head
+								billboard.Size = UDim2.fromScale(6, 2)
+								billboard.AlwaysOnTop = true
+								billboard.StudsOffset = Vector3.new(0, -(sizeY / 2) - 0.2, 0)
+								
+								local label = Instance.new("TextLabel")
+								label.Name = "Label"
+								label.Size = UDim2.fromScale(1, 1)
+								label.BackgroundTransparency = 1
+								label.TextColor3 = Color3.fromRGB(0, 255, 0)
+								label.TextSize = 12
+								label.Font = Enum.Font.RobotoMono
+								label.TextXAlignment = Enum.TextXAlignment.Right
+								label.TextYAlignment = Enum.TextYAlignment.Bottom
+								
+								local nameLower = enemy.Name:lower()
+								local dispName = nameLower
+								if nameLower == "shadowguardian" then
+									dispName = "voidboundguardian"
+								elseif nameLower == "shadowbaby" then
+									dispName = "voidboundbaby"
+								elseif nameLower == "skinwalker" then
+									dispName = "husk"
+								elseif nameLower == "mirage" then
+									dispName = "???"
+								end
+								label.Text = dispName
+								label.TextStrokeTransparency = 0.5
+								label.TextStrokeColor3 = Color3.new(0, 0, 0)
+								label.Parent = billboard
+								
+								billboard.Parent = folder
+								folder.Parent = enemy
+							end
+						end
+					end
+				else
+					-- Dọn dẹp ESP trên enemy không hợp lệ
+					for _, name in ipairs({"ESP", "ESPCrayon", "NULLSCAPE_CustomESPBox", "NULLSCAPE_CustomESPBoxFallback"}) do
+						local child = enemy:FindFirstChild(name)
+						if child then
+							pcall(function()
+								child:Destroy()
+							end)
+						end
+					end
+				end
+			end
+		end
+	else
+		-- Dọn dẹp simulated upgrade và các visual đã vẽ
+		if upgradesFolder then
+			local simulated = upgradesFolder:FindFirstChild("EnemyOnTop")
+			if simulated then
+				pcall(function()
+					simulated:Destroy()
+				end)
+			end
+		end
+		
+		local enemyFolder = workspace:FindFirstChild("Enemies")
+		if enemyFolder then
+			for _, enemy in ipairs(enemyFolder:GetChildren()) do
+				for _, name in ipairs({"ESP", "ESPCrayon", "NULLSCAPE_CustomESPBox", "NULLSCAPE_CustomESPBoxFallback"}) do
+					local child = enemy:FindFirstChild(name)
+					if child then
+						pcall(function()
+							child:Destroy()
+						end)
+					end
 				end
 			end
 		end
@@ -686,21 +913,26 @@ function Logic.updateESPStyles(controller, gc, hrp)
 
 	-- Lấy danh sách kẻ địch để vẽ ESP liên tục thời gian thực (chỉ chạy khi style không phải là Ping)
 	if controller.EnemyESPEnabled and controller.ESPStyle ~= "Ping" then
-		local enemyFolder = workspace:FindFirstChild("Enemies")
-		if enemyFolder then
-			for _, enemyModel in ipairs(enemyFolder:GetChildren()) do
-				local enemyHRP = enemyModel:IsA("BasePart") and enemyModel
-					or enemyModel:FindFirstChild("HumanoidRootPart")
-					or enemyModel.PrimaryPart
-					or enemyModel:FindFirstChildWhichIsA("BasePart")
-				if enemyHRP and enemyModel.Parent then
-					local dist = (hrp.Position - enemyHRP.Position).Magnitude
-					table.insert(validEnemies, {
-						part = enemyHRP,
-						model = enemyModel,
-						color = controller.EnemyESPColor or Color3.fromRGB(255, 128, 0),
-						distance = dist,
-					})
+		-- CHỈ tự vẽ Highlight hoặc Dot nếu style KHÔNG PHẢI là Box (vì Box được vẽ qua updateNativeEnemyESPState)
+		if controller.ESPStyle ~= "Box" then
+			local enemyFolder = workspace:FindFirstChild("Enemies")
+			if enemyFolder then
+				for _, enemyModel in ipairs(enemyFolder:GetChildren()) do
+					if isEnemyValidForESP(enemyModel) then
+						local enemyHRP = enemyModel:IsA("BasePart") and enemyModel
+							or enemyModel:FindFirstChild("HumanoidRootPart")
+							or enemyModel.PrimaryPart
+							or enemyModel:FindFirstChildWhichIsA("BasePart")
+						if enemyHRP and enemyModel.Parent then
+							local dist = (hrp.Position - enemyHRP.Position).Magnitude
+							table.insert(validEnemies, {
+								part = enemyHRP,
+								model = enemyModel,
+								color = controller.EnemyESPColor or Color3.fromRGB(255, 128, 0),
+								distance = dist,
+							})
+						end
+					end
 				end
 			end
 		end
@@ -756,6 +988,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				Color = t.color,
 				ParentObject = t.part,
 				Text = t.altarName or "Altar",
+				DrawBox = false,
 			}
 		end
 	end
@@ -776,6 +1009,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				Color = t.color,
 				ParentObject = t.part,
 				Text = t.part.Name or "Instrument",
+				DrawBox = false,
 			}
 		end
 	end
@@ -814,6 +1048,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 						Color = t.color,
 						ParentObject = actualPart,
 						Text = "Golden Gift",
+						DrawBox = false,
 					}
 				else
 					currentTargets[actualPart] = {
@@ -838,7 +1073,8 @@ function Logic.updateESPStyles(controller, gc, hrp)
 							Style = "Box",
 							Color = t.color,
 							ParentObject = actualPart,
-							Text = "Gift",
+							Text = t.type == "Tripmine" and "Tripmine" or "Gift",
+							DrawBox = false,
 						}
 					else
 						currentTargets[actualPart] = {
@@ -868,6 +1104,7 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				Color = t.color,
 				ParentObject = t.part,
 				Text = t.model.Name,
+				DrawBox = false,
 			}
 		end
 	end
@@ -881,25 +1118,6 @@ function Logic.updateESPStyles(controller, gc, hrp)
 				Style = "Dot",
 				Color = t.color,
 				ParentObject = t.part,
-			}
-		elseif controller.ESPStyle == "Box" then
-			local nameLower = t.model.Name:lower()
-			local dispName = nameLower
-			if nameLower == "shadowguardian" then
-				dispName = "voidboundguardian"
-			elseif nameLower == "shadowbaby" then
-				dispName = "voidboundbaby"
-			elseif nameLower == "skinwalker" then
-				dispName = "husk"
-			elseif nameLower == "mirage" then
-				dispName = "???"
-			end
-			
-			currentTargets[t.part] = {
-				Style = "Box",
-				Color = Color3.fromRGB(0, 255, 0), -- Màu xanh lá cho kẻ địch
-				ParentObject = t.part,
-				Text = dispName,
 			}
 		end
 	end
@@ -1064,15 +1282,17 @@ function Logic.updateESPStyles(controller, gc, hrp)
 					local folder = Instance.new("Folder")
 					folder.Name = "NULLSCAPE_ESP_Box"
 					
-					-- SelectionBox vẽ khung viền rỗng màu sắc tương ứng
-					local box = Instance.new("SelectionBox")
-					box.Name = "Box"
-					local adornTarget = targetPart.Parent:IsA("Model") and targetPart.Parent or targetPart
-					box.Adornee = adornTarget
-					box.Color3 = current.Color
-					box.LineThickness = 0.04
-					box.AlwaysOnTop = true
-					box.Parent = folder
+					-- SelectionBox vẽ khung viền rỗng màu sắc tương ứng (chỉ tạo cho Gift/Enemy có DrawBox == true)
+					if current.DrawBox then
+						local box = Instance.new("SelectionBox")
+						box.Name = "Box"
+						local adornTarget = targetPart.Parent:IsA("Model") and targetPart.Parent or targetPart
+						box.Adornee = adornTarget
+						box.Color3 = current.Color
+						box.LineThickness = 0.04
+						box.AlwaysOnTop = true
+						box.Parent = folder
+					end
 					
 					-- Tính toán chiều cao thực tế của đối tượng để căn lề Billboard nhãn tên ở góc dưới cùng bên phải
 					local sizeY = 4.0 -- Giá trị mặc định an toàn
@@ -1521,31 +1741,33 @@ function Logic.pulseEnemyESP(hrp, color)
 	end
 
 	for _, enemyModel in ipairs(enemyFolder:GetChildren()) do
-		-- Hỗ trợ cực kỳ mạnh mẽ cả Model và BasePart lẻ làm kẻ địch
-		local enemyHRP = enemyModel:IsA("BasePart") and enemyModel
-			or enemyModel:FindFirstChild("HumanoidRootPart")
-			or enemyModel.PrimaryPart
-			or enemyModel:FindFirstChildWhichIsA("BasePart")
-		if not enemyHRP then
-			continue
-		end
+		if isEnemyValidForESP(enemyModel) then
+			-- Hỗ trợ cực kỳ mạnh mẽ cả Model và BasePart lẻ làm kẻ địch
+			local enemyHRP = enemyModel:IsA("BasePart") and enemyModel
+				or enemyModel:FindFirstChild("HumanoidRootPart")
+				or enemyModel.PrimaryPart
+				or enemyModel:FindFirstChildWhichIsA("BasePart")
+			if not enemyHRP then
+				continue
+			end
 
-		local dist = (enemyHRP.Position - hrp.Position).Magnitude
+			local dist = (enemyHRP.Position - hrp.Position).Magnitude
 
-		if dist <= 1024 then
-			local delayTime = dist / 1024
-			task.delay(delayTime, function()
-				spawnCharacterHighlight(enemyModel, outlineColor)
-				pcall(function()
-					local sfx = game:GetService("SoundService"):FindFirstChild("SFXFolder")
-					local sound = sfx and sfx:FindFirstChild("Radar_Player")
-					if sound then
-						local rand = Random.new()
-						sound.PlaybackSpeed = rand:NextNumber(0.9, 1.1)
-						sound:Play()
-					end
+			if dist <= 1024 then
+				local delayTime = dist / 1024
+				task.delay(delayTime, function()
+					spawnCharacterHighlight(enemyModel, outlineColor)
+					pcall(function()
+						local sfx = game:GetService("SoundService"):FindFirstChild("SFXFolder")
+						local sound = sfx and sfx:FindFirstChild("Radar_Player")
+						if sound then
+							local rand = Random.new()
+							sound.PlaybackSpeed = rand:NextNumber(0.9, 1.1)
+							sound:Play()
+						end
+					end)
 				end)
-			end)
+			end
 		end
 	end
 

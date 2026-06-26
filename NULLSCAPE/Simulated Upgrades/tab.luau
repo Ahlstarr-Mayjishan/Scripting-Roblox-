@@ -5,358 +5,359 @@
 -- ]]
 
 return function(Client, Controller)
-    local Tab = Client.Window:CreateTab("Upgrade Simulations", 4483362458)
-    
-    Tab:CreateSection("Radar")
-    
-    Tab:CreateToggle({
-        Name = "Enable Radar",
-        CurrentValue = Controller.RadarEnabled,
-        Flag = "RadarEnabledToggle",
-        Callback = function(Value)
-            Controller:SetRadarEnabled(Value)
-        end
-    })
-        
-    local ESPSelection
-    local isSettingESP = false
-    ESPSelection = Tab:CreateDropdown({
-        Name = "ESP types",
-        Options = {"Gift", "Tripmine", "Cadence", "Altar", "Player", "Enemy"},
-        CurrentOption = {},
-        MultipleOptions = true,
-        Flag = "ESPSelectionDropdown",
-        Callback = function(SelectedOptions)
-            if typeof(SelectedOptions) ~= "table" then
-                SelectedOptions = {}
-            end
-            local giftSelected = table.find(SelectedOptions, "Gift") ~= nil
-            local tripmineSelected = table.find(SelectedOptions, "Tripmine") ~= nil
-            local cadenceSelected = table.find(SelectedOptions, "Cadence") ~= nil
-            local altarSelected = table.find(SelectedOptions, "Altar") ~= nil
-            local playerSelected = table.find(SelectedOptions, "Player") ~= nil
-            local enemySelected = table.find(SelectedOptions, "Enemy") ~= nil
-            
-            Controller:SetGiftESP(giftSelected)
-            Controller:SetTripmineESP(tripmineSelected)
-            Controller:SetCadenceESP(cadenceSelected)
-            Controller:SetAltarESP(altarSelected)
-            -- Player/Enemy dùng cơ chế highlight tạm thời 8s của game gốc
-            -- Tự thả ra khi native RadarPlayer upgrade có hiệu lực thật
-            Controller:SetPlayerESP(playerSelected)
-            Controller:SetEnemyESP(enemySelected)
-            
-            if not isSettingESP and ESPSelection then
-                isSettingESP = true
-                pcall(function()
-                    ESPSelection:Set(SelectedOptions)
-                end)
-                isSettingESP = false
-            end
-        end
-    })
-    
-    Tab:CreateDropdown({
-        Name = "ESP Style",
-        Options = {"Highlight", "Dot", "Ping", "Box"},
-        CurrentOption = Controller.ESPStyle == "Highlight" and "Highlight" or (Controller.ESPStyle == "Ping" and "Ping" or (Controller.ESPStyle == "Box" and "Box" or "Dot")),
-        MultipleOptions = false,
-        Flag = "ESPStyleDropdown",
-        Callback = function(Option)
-            local selectedStyle = Option
-            if typeof(Option) == "table" then
-                selectedStyle = Option[1]
-            end
-            if selectedStyle == "Highlight" then
-                Controller:SetESPStyle("Highlight")
-            elseif selectedStyle == "Dot" then
-                Controller:SetESPStyle("Dot")
-            elseif selectedStyle == "Ping" then
-                Controller:SetESPStyle("Ping")
-            elseif selectedStyle == "Box" then
-                Controller:SetESPStyle("Box")
-            end
-        end
-    })
-    
-    local AltarFilter
-    local isSettingAltar = false
-    AltarFilter = Tab:CreateDropdown({
-        Name = "Select Altar Highlight",
-        Options = {"All", "Purgatory", "Chance", "Chaos", "Echo", "Passage", "Protection", "Purification"},
-        CurrentOption = {"All"},
-        MultipleOptions = true,
-        Flag = "AltarFilterDropdown",
-        Callback = function(SelectedOptions)
-            if typeof(SelectedOptions) ~= "table" then
-                SelectedOptions = {}
-            end
-            Controller:SetAltarFilter(SelectedOptions)
-            
-            if not isSettingAltar and AltarFilter then
-                isSettingAltar = true
-                pcall(function()
-                    AltarFilter:Set(SelectedOptions)
-                end)
-                isSettingAltar = false
-            end
-        end
-    })
+	local Tab = Client.Window:CreateTab("Upgrade Simulations", 4483362458)
 
-    Tab:CreateSection("Gifts Magnet")
+	Tab:CreateSection("Radar")
 
-    Tab:CreateToggle({
-        Name = "Enable Magnet Gifts",
-        CurrentValue = Controller.AutoCollectEnabled,
-        Flag = "AutoCollectGiftsToggle",
-        Callback = function(Value)
-            Controller:SetAutoCollectEnabled(Value)
-        end
-    })
+	Tab:CreateToggle({
+		Name = "Enable Radar",
+		CurrentValue = Controller.RadarEnabled,
+		Flag = "RadarEnabledToggle",
+		Callback = function(Value)
+			Controller:SetRadarEnabled(Value)
+		end,
+	})
 
-    Tab:CreateDropdown({
-        Name = "Collection Mode",
-        Options = {"Legit", "Blatant"},
-        CurrentOption = Controller.AutoCollectMode or "Legit",
-        MultipleOptions = false,
-        Flag = "AutoCollectModeDropdown",
-        Callback = function(Option)
-            local selected = Option
-            if typeof(Option) == "table" then
-                selected = Option[1]
-            end
-            Controller:SetAutoCollectMode(selected)
-        end
-    })
+	local ESPSelection
+	local isSettingESP = false
+	ESPSelection = Tab:CreateDropdown({
+		Name = "ESP types",
+		Options = { "Gift", "Tripmine", "Cadence", "Altar", "Player", "Enemy" },
+		CurrentOption = {},
+		MultipleOptions = true,
+		Flag = "ESPSelectionDropdown",
+		Callback = function(SelectedOptions)
+			if typeof(SelectedOptions) ~= "table" then
+				SelectedOptions = {}
+			end
+			local giftSelected = table.find(SelectedOptions, "Gift") ~= nil
+			local tripmineSelected = table.find(SelectedOptions, "Tripmine") ~= nil
+			local cadenceSelected = table.find(SelectedOptions, "Cadence") ~= nil
+			local altarSelected = table.find(SelectedOptions, "Altar") ~= nil
+			local playerSelected = table.find(SelectedOptions, "Player") ~= nil
+			local enemySelected = table.find(SelectedOptions, "Enemy") ~= nil
 
-    Tab:CreateSlider({
-        Name = "Collection Range",
-        Range = {5, 30},
-        CurrentValue = Controller.AutoCollectRange,
-        Increment = 1,
-        ValueName = "Studs",
-        Flag = "AutoCollectRangeSlider",
-        Callback = function(Value)
-            Controller:SetAutoCollectRange(Value)
-        end
-    })
+			Controller:SetGiftESP(giftSelected)
+			Controller:SetTripmineESP(tripmineSelected)
+			Controller:SetCadenceESP(cadenceSelected)
+			Controller:SetAltarESP(altarSelected)
+			-- Player/Enemy dùng cơ chế highlight tạm thời 8s của game gốc
+			-- Tự thả ra khi native RadarPlayer upgrade có hiệu lực thật
+			Controller:SetPlayerESP(playerSelected)
+			Controller:SetEnemyESP(enemySelected)
 
-    Tab:CreateSection("Defuse Kits")
+			if not isSettingESP and ESPSelection then
+				isSettingESP = true
+				pcall(function()
+					ESPSelection:Set(SelectedOptions)
+				end)
+				isSettingESP = false
+			end
+		end,
+	})
 
-    Tab:CreateToggle({
-        Name = "Tripmine Immunity (Bypass)",
-        CurrentValue = Controller.TripmineBarrierEnabled,
-        Flag = "TripmineBarrierToggle",
-        Callback = function(Value)
-            Controller:SetTripmineBarrier(Value)
-        end
-    })
+	Tab:CreateDropdown({
+		Name = "ESP Gift/Tripmine Style",
+		Options = { "Highlight", "Dot", "Ping", "Box" },
+		CurrentOption = Controller.ESPStyle == "Highlight" and "Highlight"
+			or (Controller.ESPStyle == "Ping" and "Ping" or (Controller.ESPStyle == "Box" and "Box" or "Dot")),
+		MultipleOptions = false,
+		Flag = "ESPStyleDropdown",
+		Callback = function(Option)
+			local selectedStyle = Option
+			if typeof(Option) == "table" then
+				selectedStyle = Option[1]
+			end
+			if selectedStyle == "Highlight" then
+				Controller:SetESPStyle("Highlight")
+			elseif selectedStyle == "Dot" then
+				Controller:SetESPStyle("Dot")
+			elseif selectedStyle == "Ping" then
+				Controller:SetESPStyle("Ping")
+			elseif selectedStyle == "Box" then
+				Controller:SetESPStyle("Box")
+			end
+		end,
+	})
 
-    Tab:CreateDropdown({
-        Name = "Tripmine Bypass Mode",
-        Info = "Passthrough: đi xuyên mìn bằng iframes. PreDetonate: theo dõi vùng nguy hiểm nhưng không gửi nổ chủ động. Barrier: chỉ giữ iframes.",
-        Options = {"Passthrough", "PreDetonate", "Barrier"},
-        CurrentOption = (Controller.TripmineMode == "Barrier" and "Barrier")
-            or (Controller.TripmineMode == "PreDetonate" and "PreDetonate")
-            or "Passthrough",
-        MultipleOptions = false,
-        Flag = "TripmineModeDropdown",
-        Callback = function(Option)
-            local selected = Option
-            if typeof(Option) == "table" then
-                selected = Option[1]
-            end
-            Controller:SetTripmineMode(selected)
-        end
-    })
+	local AltarFilter
+	local isSettingAltar = false
+	AltarFilter = Tab:CreateDropdown({
+		Name = "Select Altar Highlight",
+		Options = { "All", "Purgatory", "Chance", "Chaos", "Echo", "Passage", "Protection", "Purification" },
+		CurrentOption = { "All" },
+		MultipleOptions = true,
+		Flag = "AltarFilterDropdown",
+		Callback = function(SelectedOptions)
+			if typeof(SelectedOptions) ~= "table" then
+				SelectedOptions = {}
+			end
+			Controller:SetAltarFilter(SelectedOptions)
 
-    Tab:CreateSlider({
-        Name = "Detonation Distance",
-        Info = "Passthrough: khoảng cách từ mìn để nổ sau khi đi qua. PreDetonate: khoảng cách để kích nổ sớm.",
-        Range = {5, 50},
-        CurrentValue = Controller.TripmineDetonationDistance or 15,
-        Increment = 1,
-        ValueName = "Studs",
-        Flag = "TripmineDetonationDistanceSlider",
-        Callback = function(Value)
-            Controller:SetTripmineDetonationDistance(Value)
-        end
-    })
+			if not isSettingAltar and AltarFilter then
+				isSettingAltar = true
+				pcall(function()
+					AltarFilter:Set(SelectedOptions)
+				end)
+				isSettingAltar = false
+			end
+		end,
+	})
 
-    Tab:CreateSlider({
-        Name = "Detonation Jitter",
-        Range = {0, 10},
-        CurrentValue = Controller.TripmineDetonationJitter or 2,
-        Increment = 1,
-        ValueName = "Studs",
-        Flag = "TripmineDetonationJitterSlider",
-        Callback = function(Value)
-            Controller:SetTripmineDetonationJitter(Value)
-        end
-    })
+	Tab:CreateSection("Gifts Magnet")
 
-    Tab:CreateToggle({
-        Name = "Simulate Defuse Kit",
-        CurrentValue = Controller.SimulateDefuseKit or false,
-        Flag = "SimulateDefuseKitToggle",
-        Callback = function(Value)
-            Controller:SetSimulateDefuseKit(Value)
-        end
-    })
+	Tab:CreateToggle({
+		Name = "Enable Magnet Gifts",
+		CurrentValue = Controller.AutoCollectEnabled,
+		Flag = "AutoCollectGiftsToggle",
+		Callback = function(Value)
+			Controller:SetAutoCollectEnabled(Value)
+		end,
+	})
 
-    Tab:CreateSlider({
-        Name = "Defuse Kit Stacks",
-        Range = {1, 5},
-        CurrentValue = Controller.DefuseKitStack or 3,
-        Increment = 1,
-        ValueName = "Stacks",
-        Flag = "DefuseKitStackSlider",
-        Callback = function(Value)
-            Controller:SetDefuseKitStack(Value)
-        end
-    })
+	Tab:CreateDropdown({
+		Name = "Collection Mode",
+		Options = { "Legit", "Blatant" },
+		CurrentOption = Controller.AutoCollectMode or "Legit",
+		MultipleOptions = false,
+		Flag = "AutoCollectModeDropdown",
+		Callback = function(Option)
+			local selected = Option
+			if typeof(Option) == "table" then
+				selected = Option[1]
+			end
+			Controller:SetAutoCollectMode(selected)
+		end,
+	})
 
-    Tab:CreateSection("Matrix Tetrahedron")
+	Tab:CreateSlider({
+		Name = "Collection Range",
+		Range = { 5, 30 },
+		CurrentValue = Controller.AutoCollectRange,
+		Increment = 1,
+		ValueName = "Studs",
+		Flag = "AutoCollectRangeSlider",
+		Callback = function(Value)
+			Controller:SetAutoCollectRange(Value)
+		end,
+	})
 
-    Tab:CreateToggle({
-        Name = "Simulate Matrix Tetrahedron",
-        Info = "Instant acceleration, removes slippery momentum, and reduces ice tiles sliding.",
-        CurrentValue = Controller.MatrixTetrahedronEnabled,
-        Flag = "MatrixTetrahedronToggle",
-        Callback = function(Value)
-            Controller:SetMatrixTetrahedron(Value)
-        end
-    })
+	Tab:CreateSection("Defuse Kits")
 
-    Tab:CreateSlider({
-        Name = "Momentum Reduction",
-        Info = "Brake animation duration: 10% -> 90%, 50% -> 50%, >=60% bypass.",
-        Range = {10, 100},
-        Increment = 10,
-        CurrentValue = math.clamp((Controller.MomentumReduction or 1.0) * 100, 10, 100),
-        Flag = "MomentumReductionSlider",
-        Suffix = "%",
-        Callback = function(Value)
-            Controller:SetMomentumReduction(Value / 100)
-        end
-    })
+	Tab:CreateToggle({
+		Name = "Tripmine Immunity (Bypass)",
+		CurrentValue = Controller.TripmineBarrierEnabled,
+		Flag = "TripmineBarrierToggle",
+		Callback = function(Value)
+			Controller:SetTripmineBarrier(Value)
+		end,
+	})
 
-    Tab:CreateSection("Grace Wings")
+	Tab:CreateDropdown({
+		Name = "Tripmine Bypass Mode",
+		Info = "Passthrough: đi xuyên mìn bằng iframes. PreDetonate: theo dõi vùng nguy hiểm nhưng không gửi nổ chủ động. Barrier: chỉ giữ iframes.",
+		Options = { "Passthrough", "PreDetonate", "Barrier" },
+		CurrentOption = (Controller.TripmineMode == "Barrier" and "Barrier")
+			or (Controller.TripmineMode == "PreDetonate" and "PreDetonate")
+			or "Passthrough",
+		MultipleOptions = false,
+		Flag = "TripmineModeDropdown",
+		Callback = function(Option)
+			local selected = Option
+			if typeof(Option) == "table" then
+				selected = Option[1]
+			end
+			Controller:SetTripmineMode(selected)
+		end,
+	})
 
-    Tab:CreateToggle({
-        Name = "Enable Grace Wings",
-        Info = "Master toggle. Turning it off restores movement hook and stops spoofing GraceWings.",
-        CurrentValue = Controller.GraceWingsEnabled or false,
-        Flag = "GraceWingsToggle",
-        Callback = function(Value)
-            Controller:SetGraceWings(Value)
-        end
-    })
+	Tab:CreateSlider({
+		Name = "Detonation Distance",
+		Info = "Passthrough: khoảng cách từ mìn để nổ sau khi đi qua. PreDetonate: khoảng cách để kích nổ sớm.",
+		Range = { 5, 50 },
+		CurrentValue = Controller.TripmineDetonationDistance or 15,
+		Increment = 1,
+		ValueName = "Studs",
+		Flag = "TripmineDetonationDistanceSlider",
+		Callback = function(Value)
+			Controller:SetTripmineDetonationDistance(Value)
+		end,
+	})
 
-    Tab:CreateSlider({
-        Name = "Air Control Multiplier",
-        Range = {1.1, 5},
-        Increment = 0.1,
-        CurrentValue = Controller.GraceWingsAirControlMultiplier or 1.1,
-        Flag = "GraceWingsAirControlSlider",
-        Suffix = "x",
-        Callback = function(Value)
-            Controller:SetGraceWingsAirControlMultiplier(Value)
-        end
-    })
+	Tab:CreateSlider({
+		Name = "Detonation Jitter",
+		Range = { 0, 10 },
+		CurrentValue = Controller.TripmineDetonationJitter or 2,
+		Increment = 1,
+		ValueName = "Studs",
+		Flag = "TripmineDetonationJitterSlider",
+		Callback = function(Value)
+			Controller:SetTripmineDetonationJitter(Value)
+		end,
+	})
 
-    Tab:CreateToggle({
-        Name = "Strong Air Control",
-        Info = "Extra direct horizontal steering while falling. Keep off for closer GraceWings simulation.",
-        CurrentValue = Controller.GraceWingsStrongAirControl or false,
-        Flag = "GraceWingsStrongAirControlToggle",
-        Callback = function(Value)
-            Controller:SetGraceWingsStrongAirControl(Value)
-        end
-    })
+	Tab:CreateToggle({
+		Name = "Simulate Defuse Kit",
+		CurrentValue = Controller.SimulateDefuseKit or false,
+		Flag = "SimulateDefuseKitToggle",
+		Callback = function(Value)
+			Controller:SetSimulateDefuseKit(Value)
+		end,
+	})
 
-    Tab:CreateSection("Advanced Gravity Coil")
+	Tab:CreateSlider({
+		Name = "Defuse Kit Stacks",
+		Range = { 1, 5 },
+		CurrentValue = Controller.DefuseKitStack or 3,
+		Increment = 1,
+		ValueName = "Stacks",
+		Flag = "DefuseKitStackSlider",
+		Callback = function(Value)
+			Controller:SetDefuseKitStack(Value)
+		end,
+	})
 
-    Tab:CreateToggle({
-        Name = "Enable Advanced Gravity Coil",
-        Info = "Spoofs the upgrade and applies the JumpPower override from Ref logic.",
-        CurrentValue = Controller.AdvancedGravityCoilEnabled or false,
-        Flag = "AdvancedGravityCoilToggle",
-        Callback = function(Value)
-            Controller:SetAdvancedGravityCoil(Value)
-        end
-    })
+	Tab:CreateSection("Matrix Tetrahedron")
 
-    Tab:CreateSlider({
-        Name = "Jump Power",
-        Info = "Ref minimum is 35 * 0.8 = 28. Raise it up to 100.",
-        Range = {28, 100},
-        Increment = 1,
-        CurrentValue = Controller.AdvancedGravityCoilJumpPower or 28,
-        Flag = "AdvancedGravityCoilJumpPowerSlider",
-        Callback = function(Value)
-            Controller:SetAdvancedGravityCoilJumpPower(Value)
-        end
-    })
+	Tab:CreateToggle({
+		Name = "Simulate Matrix Tetrahedron",
+		Info = "Instant acceleration, removes slippery momentum, and reduces ice tiles sliding.",
+		CurrentValue = Controller.MatrixTetrahedronEnabled,
+		Flag = "MatrixTetrahedronToggle",
+		Callback = function(Value)
+			Controller:SetMatrixTetrahedron(Value)
+		end,
+	})
 
-    Tab:CreateSection("Better Jump Pad")
+	Tab:CreateSlider({
+		Name = "Momentum Reduction",
+		Info = "Brake animation duration: 10% -> 90%, 50% -> 50%, >=60% bypass.",
+		Range = { 10, 100 },
+		Increment = 10,
+		CurrentValue = math.clamp((Controller.MomentumReduction or 1.0) * 100, 10, 100),
+		Flag = "MomentumReductionSlider",
+		Suffix = "%",
+		Callback = function(Value)
+			Controller:SetMomentumReduction(Value / 100)
+		end,
+	})
 
-    Tab:CreateToggle({
-        Name = "Enable Better Jump Pad",
-        Info = "Spoofs BetterJumpPad and raises JumpPad vertical launch.",
-        CurrentValue = Controller.BetterJumpPadEnabled or false,
-        Flag = "BetterJumpPadToggle",
-        Callback = function(Value)
-            Controller:SetBetterJumpPad(Value)
-        end
-    })
+	Tab:CreateSection("Grace Wings")
 
-    Tab:CreateSlider({
-        Name = "JumpPad Power",
-        Info = "Ref JumpPad power is 100. Raise it up to 200.",
-        Range = {100, 200},
-        Increment = 1,
-        CurrentValue = Controller.BetterJumpPadPower or 100,
-        Flag = "BetterJumpPadPowerSlider",
-        Callback = function(Value)
-            Controller:SetBetterJumpPadPower(Value)
-        end
-    })
+	Tab:CreateToggle({
+		Name = "Enable Grace Wings",
+		Info = "Master toggle. Turning it off restores movement hook and stops spoofing GraceWings.",
+		CurrentValue = Controller.GraceWingsEnabled or false,
+		Flag = "GraceWingsToggle",
+		Callback = function(Value)
+			Controller:SetGraceWings(Value)
+		end,
+	})
 
-    local SpeedBuffOptions = {
-        "Swiftness Ring I (+10%)",
-        "Swiftness Ring II (+10%)",
-        "Swiftness Ring III (+10%)",
-        "Adrenaline (+20%)",
-        "Sport Shoes (+40%)",
-    }
+	Tab:CreateSlider({
+		Name = "Air Control Multiplier",
+		Range = { 1.1, 5 },
+		Increment = 0.1,
+		CurrentValue = Controller.GraceWingsAirControlMultiplier or 1.1,
+		Flag = "GraceWingsAirControlSlider",
+		Suffix = "x",
+		Callback = function(Value)
+			Controller:SetGraceWingsAirControlMultiplier(Value)
+		end,
+	})
 
-    local SpeedBuffSelection
-    local isSettingSpeedBuffs = false
+	Tab:CreateToggle({
+		Name = "Strong Air Control",
+		Info = "Extra direct horizontal steering while falling. Keep off for closer GraceWings simulation.",
+		CurrentValue = Controller.GraceWingsStrongAirControl or false,
+		Flag = "GraceWingsStrongAirControlToggle",
+		Callback = function(Value)
+			Controller:SetGraceWingsStrongAirControl(Value)
+		end,
+	})
 
-    Tab:CreateSection("Speed Buffs")
+	Tab:CreateSection("Advanced Gravity Coil")
 
-    SpeedBuffSelection = Tab:CreateDropdown({
-        Name = "Buff Speed",
-        Info = "Multi-select simulated speed upgrades. Bonuses stack together.",
-        Options = SpeedBuffOptions,
-        CurrentOption = Controller.SpeedBuffSelections or {},
-        MultipleOptions = true,
-        Flag = "SpeedBuffSelectionsDropdown",
-        Callback = function(SelectedOptions)
-            if typeof(SelectedOptions) ~= "table" then
-                SelectedOptions = {}
-            end
+	Tab:CreateToggle({
+		Name = "Enable Advanced Gravity Coil",
+		Info = "Spoofs the upgrade and applies the JumpPower override from Ref logic.",
+		CurrentValue = Controller.AdvancedGravityCoilEnabled or false,
+		Flag = "AdvancedGravityCoilToggle",
+		Callback = function(Value)
+			Controller:SetAdvancedGravityCoil(Value)
+		end,
+	})
 
-            Controller:SetSpeedBuffSelections(SelectedOptions)
+	Tab:CreateSlider({
+		Name = "Jump Power",
+		Info = "Ref minimum is 35 * 0.8 = 28. Raise it up to 100.",
+		Range = { 28, 100 },
+		Increment = 1,
+		CurrentValue = Controller.AdvancedGravityCoilJumpPower or 28,
+		Flag = "AdvancedGravityCoilJumpPowerSlider",
+		Callback = function(Value)
+			Controller:SetAdvancedGravityCoilJumpPower(Value)
+		end,
+	})
 
-            if not isSettingSpeedBuffs and SpeedBuffSelection then
-                isSettingSpeedBuffs = true
-                pcall(function()
-                    SpeedBuffSelection:Set(SelectedOptions)
-                end)
-                isSettingSpeedBuffs = false
-            end
-        end
-    })
+	Tab:CreateSection("Better Jump Pad")
+
+	Tab:CreateToggle({
+		Name = "Enable Better Jump Pad",
+		Info = "Spoofs BetterJumpPad and raises JumpPad vertical launch.",
+		CurrentValue = Controller.BetterJumpPadEnabled or false,
+		Flag = "BetterJumpPadToggle",
+		Callback = function(Value)
+			Controller:SetBetterJumpPad(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "JumpPad Power",
+		Info = "Ref JumpPad power is 100. Raise it up to 200.",
+		Range = { 100, 200 },
+		Increment = 1,
+		CurrentValue = Controller.BetterJumpPadPower or 100,
+		Flag = "BetterJumpPadPowerSlider",
+		Callback = function(Value)
+			Controller:SetBetterJumpPadPower(Value)
+		end,
+	})
+
+	local SpeedBuffOptions = {
+		"Swiftness Ring I (+10%)",
+		"Swiftness Ring II (+10%)",
+		"Swiftness Ring III (+10%)",
+		"Adrenaline (+20%)",
+		"Sport Shoes (+40%)",
+	}
+
+	local SpeedBuffSelection
+	local isSettingSpeedBuffs = false
+
+	Tab:CreateSection("Speed Buffs")
+
+	SpeedBuffSelection = Tab:CreateDropdown({
+		Name = "Buff Speed",
+		Info = "Multi-select simulated speed upgrades. Bonuses stack together.",
+		Options = SpeedBuffOptions,
+		CurrentOption = Controller.SpeedBuffSelections or {},
+		MultipleOptions = true,
+		Flag = "SpeedBuffSelectionsDropdown",
+		Callback = function(SelectedOptions)
+			if typeof(SelectedOptions) ~= "table" then
+				SelectedOptions = {}
+			end
+
+			Controller:SetSpeedBuffSelections(SelectedOptions)
+
+			if not isSettingSpeedBuffs and SpeedBuffSelection then
+				isSettingSpeedBuffs = true
+				pcall(function()
+					SpeedBuffSelection:Set(SelectedOptions)
+				end)
+				isSettingSpeedBuffs = false
+			end
+		end,
+	})
 end
