@@ -51,10 +51,14 @@ local Controller = {
 	SpeedBuffSelections = {},
 
 	TripmineBarrierEnabled = false,
-	TripmineMode = "Passthrough", -- "Passthrough" (xuyên mìn, nổ sau) | "PreDetonate" (nổ sớm từ xa) | "Barrier" (xuyên, không nổ)
+	TripmineMode = "Blocker", -- "Blocker" (chan/day khoi min) | "Barrier" (local iframe only)
 	TripmineDetonationDistance = 15,
 	TripmineDetonationJitter = 2,
 	TripmineBlastSafeRadius = 8, -- Legacy: active tripmine detonation is disabled by Defuse Kits
+	ChargerTripmineAssistEnabled = false,
+	ChargerTripmineMode = "Passthrough",
+	ChargerTripmineDistance = 15,
+	ChargerTripmineJitter = 2,
 	SimulateDefuseKit = false,
 	DefuseKitStack = 3,
 
@@ -920,7 +924,7 @@ end
 
 -- Thiết lập chế độ chống mìn (Passthrough / PreDetonate / Barrier)
 function Controller:SetTripmineMode(value)
-	self.TripmineMode = value or "Passthrough"
+	self.TripmineMode = value or "Blocker"
 end
 
 -- Thiết lập khoảng cách kích nổ mìn cơ sở
@@ -931,6 +935,22 @@ end
 -- Thiết lập biên độ dao động khoảng cách kích nổ ngẫu nhiên
 function Controller:SetTripmineDetonationJitter(value)
 	self.TripmineDetonationJitter = value or 2
+end
+
+function Controller:SetChargerTripmineAssist(value)
+	self.ChargerTripmineAssistEnabled = value
+end
+
+function Controller:SetChargerTripmineMode(value)
+	self.ChargerTripmineMode = value or "Passthrough"
+end
+
+function Controller:SetChargerTripmineDistance(value)
+	self.ChargerTripmineDistance = value or 15
+end
+
+function Controller:SetChargerTripmineJitter(value)
+	self.ChargerTripmineJitter = value or 2
 end
 
 -- Thiết lập bán kính an toàn trước khi kích nổ mìn

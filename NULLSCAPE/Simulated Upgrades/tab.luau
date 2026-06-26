@@ -151,11 +151,10 @@ return function(Client, Controller)
 
 	Tab:CreateDropdown({
 		Name = "Tripmine Bypass Mode",
-		Info = "Passthrough: đi xuyên mìn bằng iframes. PreDetonate: theo dõi vùng nguy hiểm nhưng không gửi nổ chủ động. Barrier: chỉ giữ iframes.",
-		Options = { "Passthrough", "PreDetonate", "Barrier" },
+		Info = "Blocker: tao vat can local de chan/repel truoc tripmine. Barrier: chi giu local iframes.",
+		Options = { "Blocker", "Barrier" },
 		CurrentOption = (Controller.TripmineMode == "Barrier" and "Barrier")
-			or (Controller.TripmineMode == "PreDetonate" and "PreDetonate")
-			or "Passthrough",
+			or "Blocker",
 		MultipleOptions = false,
 		Flag = "TripmineModeDropdown",
 		Callback = function(Option)
@@ -167,31 +166,58 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateSection("Charger Assists")
+
+	Tab:CreateToggle({
+		Name = "Charger Tripmine Assist",
+		CurrentValue = Controller.ChargerTripmineAssistEnabled or false,
+		Flag = "ChargerTripmineAssistToggle",
+		Callback = function(Value)
+			Controller:SetChargerTripmineAssist(Value)
+		end,
+	})
+
+	Tab:CreateDropdown({
+		Name = "Charger Tripmine Mode",
+		Info = "Passthrough/PreDetonate da tach khoi Defuse Kits; dung cho tech Charger rieng.",
+		Options = { "Passthrough", "PreDetonate" },
+		CurrentOption = (Controller.ChargerTripmineMode == "PreDetonate" and "PreDetonate")
+			or "Passthrough",
+		MultipleOptions = false,
+		Flag = "ChargerTripmineModeDropdown",
+		Callback = function(Option)
+			local selected = Option
+			if typeof(Option) == "table" then
+				selected = Option[1]
+			end
+			Controller:SetChargerTripmineMode(selected)
+		end,
+	})
+
 	Tab:CreateSlider({
 		Name = "Detonation Distance",
-		Info = "Passthrough: khoảng cách từ mìn để nổ sau khi đi qua. PreDetonate: khoảng cách để kích nổ sớm.",
+		Info = "Charger Passthrough/PreDetonate distance.",
 		Range = { 5, 50 },
-		CurrentValue = Controller.TripmineDetonationDistance or 15,
+		CurrentValue = Controller.ChargerTripmineDistance or 15,
 		Increment = 1,
 		ValueName = "Studs",
-		Flag = "TripmineDetonationDistanceSlider",
+		Flag = "ChargerTripmineDistanceSlider",
 		Callback = function(Value)
-			Controller:SetTripmineDetonationDistance(Value)
+			Controller:SetChargerTripmineDistance(Value)
 		end,
 	})
 
 	Tab:CreateSlider({
 		Name = "Detonation Jitter",
 		Range = { 0, 10 },
-		CurrentValue = Controller.TripmineDetonationJitter or 2,
+		CurrentValue = Controller.ChargerTripmineJitter or 2,
 		Increment = 1,
 		ValueName = "Studs",
-		Flag = "TripmineDetonationJitterSlider",
+		Flag = "ChargerTripmineJitterSlider",
 		Callback = function(Value)
-			Controller:SetTripmineDetonationJitter(Value)
+			Controller:SetChargerTripmineJitter(Value)
 		end,
 	})
-
 	Tab:CreateToggle({
 		Name = "Simulate Defuse Kit",
 		CurrentValue = Controller.SimulateDefuseKit or false,

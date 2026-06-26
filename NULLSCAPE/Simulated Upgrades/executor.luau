@@ -7,6 +7,7 @@
 local Logic = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Radar logic.luau")
 local Magnet = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Magnet logic.luau")
 local Barrier = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Defuse Kits.luau")
+local ChargerAssist = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Charger Assists/Tripmine Charger Assist.luau")
 local Executor = {}
 
 -- Thực thi dọn dẹp vẽ cũ
@@ -27,6 +28,7 @@ end
 -- Thực thi cập nhật rào cản vật lý mìn (Tripmine Barrier)
 function Executor.updateBarriers(controller, gc)
     Barrier.update(controller, gc)
+    ChargerAssist.update(controller, gc)
 end
 
 return Executor

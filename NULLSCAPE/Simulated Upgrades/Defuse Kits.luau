@@ -1,44 +1,41 @@
+--!nocheck
 -- [[
---  NULLSCAPE - Anti-Tripmine Immunity & Defuse Kits Logic
---
---  3 CHẾ ĐỘ BẢO VỆ:
---  ───────────────────────────────────────────────────────────────────────
---  "Passthrough"  – Đi xuyên qua mìn (có iframes bảo vệ), sau khi ra ngoài
---                   phạm vi an toàn (BlastSafeRadius) mới kích nổ sau lưng.
---
---  "PreDetonate"  – Kích nổ mìn từ xa trước khi chạm. Chỉ nổ khi player
---                   đang trong phạm vi DetonationDistance và đã ở khoảng cách
---                   an toàn (BlastSafeRadius) để tránh tự sát.
---
---  "Barrier"      – Đi xuyên mìn hoàn toàn, không bao giờ nổ.
---  ───────────────────────────────────────────────────────────────────────
---
---  Tối ưu hóa Iframes & Tránh tự sát do Latency:
---  1. Giữ TRIP_IFRAMES liên tục trong suốt quá trình xử lý mìn (kể cả khi chờ nổ).
---     Không tắt iframes trước khi gửi gói tin Collect để tránh bị nổ ngược do lag gói tin.
---  2. Tốc độ kiểm tra khoảng cách an toàn nâng lên tần số cao (mỗi frame - task.wait())
---     thay vì 0.05s để tránh việc di chuyển quá nhanh đâm vào vùng nổ.
---  3. Tăng giới hạn cấu hình khoảng cách trong UI lên đến 50 studs để người chơi
---     bù đắp ping cao hoặc tốc độ di chuyển cực nhanh.
+--  NULLSCAPE - Tripmine Defuse / Barrier Logic
+--  Keeps defensive tripmine modes separate from Charger-specific assists.
 -- ]]
 
 local Barrier = {}
+
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+
 local LocalPlayer = Players.LocalPlayer
 
-local activeController = nil
+local BLOCKER_MODE = "Blocker"
+local BARRIER_MODE = "Barrier"
+local BLOCKER_FOLDER_NAME = "NULLSCAPE_TripmineBlockers"
+local BLOCKER_SCAN_RADIUS = 180
+local BLOCKER_BASE_RADIUS = 7.5
+local BLOCKER_REPEL_PADDING = 4
+local BLOCKER_REPEL_SPEED = 46
+local BLOCKER_REPEL_VERTICAL_LIFT = 4
 
--- ─────────────────────────────────────────────────────────────────────
--- TRIP_IFRAMES helper
--- ─────────────────────────────────────────────────────────────────────
+local activeController = nil
+local watcherRunning = false
 local iframeObject = nil
+local cachedGCH = nil
+local blockerFolder = nil
+local blockerParts = {}
 
 local function hasIframes()
     return iframeObject ~= nil and iframeObject.Parent ~= nil
 end
 
 local function addIframes()
-    if hasIframes() then return end
+    if hasIframes() then
+        return
+    end
+
     local obj = Instance.new("BoolValue")
     obj.Name = "TRIP_IFRAMES"
     obj.Parent = LocalPlayer
@@ -47,22 +44,25 @@ end
 
 local function removeIframes()
     if iframeObject then
-        pcall(function() iframeObject:Destroy() end)
+        pcall(function()
+            iframeObject:Destroy()
+        end)
         iframeObject = nil
     end
-    -- Xóa luôn bất kỳ object nào game tự tạo hoặc thừa
+
     local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
-    if existing and existing ~= iframeObject then
-        pcall(function() existing:Destroy() end)
+    if existing then
+        pcall(function()
+            existing:Destroy()
+        end)
     end
 end
 
--- ─────────────────────────────────────────────────────────────────────
--- Lấy GiftClientHandler từ game
--- ─────────────────────────────────────────────────────────────────────
-local cachedGCH = nil
 local function getGiftClientHandler()
-    if cachedGCH then return cachedGCH end
+    if cachedGCH then
+        return cachedGCH
+    end
+
     local ok, result = pcall(function()
         return require(game:GetService("ReplicatedFirst").ClientModules.GiftClient.GiftClientHandler)
     end)
@@ -70,177 +70,190 @@ local function getGiftClientHandler()
         cachedGCH = result
         return result
     end
+
     return nil
 end
 
--- ─────────────────────────────────────────────────────────────────────
--- State tracking
--- ─────────────────────────────────────────────────────────────────────
--- processedMines[giftId] = true | "__dist_"..giftId = targetDist
--- passthroughState[giftId] = "inside" | "exited"
-local processedMines = {}
-local passthroughState = {}
-local blockedDetonationLogs = {}
+local function getBlockerFolder()
+    if blockerFolder and blockerFolder.Parent then
+        return blockerFolder
+    end
 
-local function clearMineState(giftId)
-    processedMines[giftId] = nil
-    processedMines["__dist_" .. giftId] = nil
-    passthroughState[giftId] = nil
+    local existing = Workspace:FindFirstChild(BLOCKER_FOLDER_NAME)
+    if existing then
+        blockerFolder = existing
+        return blockerFolder
+    end
+
+    local folder = Instance.new("Folder")
+    folder.Name = BLOCKER_FOLDER_NAME
+    folder.Parent = Workspace
+    blockerFolder = folder
+    return folder
 end
 
-local function logBlockedDetonation(giftId, reason, dist)
-    local key = reason .. ":" .. tostring(giftId)
-    if blockedDetonationLogs[key] then
+local function destroyBlocker(giftId)
+    local part = blockerParts[giftId]
+    if part then
+        pcall(function()
+            part:Destroy()
+        end)
+        blockerParts[giftId] = nil
+    end
+end
+
+local function clearBlockers()
+    for giftId in pairs(blockerParts) do
+        destroyBlocker(giftId)
+    end
+end
+
+local function getBlockerRadius(gift)
+    local size = tonumber(gift and gift.Size) or 1
+    return math.clamp(BLOCKER_BASE_RADIUS * size, 6, 24)
+end
+
+local function ensureBlocker(giftId, gift)
+    local giftPos = gift and gift.Position
+    if typeof(giftPos) ~= "Vector3" then
+        destroyBlocker(giftId)
+        return nil
+    end
+
+    local radius = getBlockerRadius(gift)
+    local part = blockerParts[giftId]
+    if not (part and part.Parent) then
+        part = Instance.new("Part")
+        part.Name = "TripmineBlocker_" .. tostring(giftId)
+        part.Shape = Enum.PartType.Ball
+        part.Anchored = true
+        part.CanCollide = true
+        part.CanTouch = false
+        part.CanQuery = false
+        part.CastShadow = false
+        part.Material = Enum.Material.ForceField
+        part.Color = Color3.fromRGB(255, 0, 170)
+        part.Transparency = 0.58
+        part.Parent = getBlockerFolder()
+        blockerParts[giftId] = part
+    end
+
+    local diameter = radius * 2
+    part.Size = Vector3.new(diameter, diameter, diameter)
+    part.CFrame = CFrame.new(giftPos)
+    return part
+end
+
+local function applyTripmineRepel(hrp, gift, dist)
+    local giftPos = gift and gift.Position
+    if not (hrp and typeof(giftPos) == "Vector3") then
         return
     end
 
-    blockedDetonationLogs[key] = true
-    print("[NULLSCAPE] " .. reason .. ": tripmine active detonation blocked", giftId, "at", math.round(dist), "studs")
+    local radius = getBlockerRadius(gift)
+    if dist > radius + BLOCKER_REPEL_PADDING then
+        return
+    end
+
+    local away = hrp.Position - giftPos
+    if away.Magnitude <= 0.05 then
+        away = Vector3.new(0, 0, 1)
+    end
+
+    local flatAway = Vector3.new(away.X, 0, away.Z)
+    if flatAway.Magnitude <= 0.05 then
+        flatAway = away
+    end
+    flatAway = flatAway.Unit
+
+    local velocity = hrp.Velocity
+    local inwardSpeed = -Vector3.new(velocity.X, 0, velocity.Z):Dot(flatAway)
+    local pushSpeed = math.max(BLOCKER_REPEL_SPEED, inwardSpeed + 18)
+    local nextHorizontal = flatAway * pushSpeed
+    local nextY = math.max(velocity.Y, BLOCKER_REPEL_VERTICAL_LIFT)
+    hrp.Velocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
 end
 
--- ─────────────────────────────────────────────────────────────────────
--- Watcher: vòng lặp chính phát hiện và xử lý tripmines
--- ─────────────────────────────────────────────────────────────────────
-local watcherRunning = false
+local function updateBlockers()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        clearBlockers()
+        return
+    end
+
+    local GCH = getGiftClientHandler()
+    if not GCH or not GCH.Gifts then
+        clearBlockers()
+        return
+    end
+
+    local hrpPos = hrp.Position
+    local seen = {}
+    for giftId, gift in pairs(GCH.Gifts) do
+        if gift.Tripmine and not gift.Collected and typeof(gift.Position) == "Vector3" then
+            local dist = (hrpPos - gift.Position).Magnitude
+            if dist <= BLOCKER_SCAN_RADIUS then
+                seen[giftId] = true
+                ensureBlocker(giftId, gift)
+                applyTripmineRepel(hrp, gift, dist)
+            end
+        end
+    end
+
+    for giftId in pairs(blockerParts) do
+        if not seen[giftId] then
+            destroyBlocker(giftId)
+        end
+    end
+end
 
 local function startWatcher()
-    if watcherRunning then return end
+    if watcherRunning then
+        return
+    end
     watcherRunning = true
 
     task.spawn(function()
         while true do
-            task.wait(0.05) -- 20 Hz scan các thực thể xung quanh
+            task.wait(0.05)
 
             if not activeController or not activeController.TripmineBarrierEnabled then
-                -- Không hoạt động: đảm bảo dọn sạch iframes
-                if hasIframes() then removeIframes() end
+                removeIframes()
+                clearBlockers()
                 continue
             end
 
-            local mode = activeController.TripmineMode or "Passthrough"
-            addIframes()
-
-            -- Barrier mode: chỉ cần duy trì iframes liên tục, không cần quét nổ
-            if mode == "Barrier" then
-                table.clear(passthroughState)
-                continue
-            end
-
-            -- Các mode khác cần scan Gifts
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then
-                addIframes() -- giữ iframes khi không có character để an toàn
-                continue
-            end
-
-            local GCH = getGiftClientHandler()
-            if not GCH or not GCH.Gifts then
+            local mode = activeController.TripmineMode or BARRIER_MODE
+            if mode == BARRIER_MODE or mode == BLOCKER_MODE then
                 addIframes()
+            else
+                removeIframes()
+                clearBlockers()
                 continue
             end
 
-            local hrpPos = hrp.Position
-            local baseDist = activeController.TripmineDetonationDistance or 15
-            local jitter = activeController.TripmineDetonationJitter or 2
-            local Gifts = GCH.Gifts
-
-            -- ── Dọn dẹp trạng thái cho các mìn đã nổ/biến mất ──────────
-            for id, _ in pairs(processedMines) do
-                local idStr = tostring(id)
-                if idStr:sub(1, 7) == "__dist_" then continue end
-                local numId = tonumber(id)
-                if numId and not Gifts[numId] then
-                    clearMineState(numId)
-                end
+            if mode == BLOCKER_MODE then
+                updateBlockers()
+            else
+                clearBlockers()
             end
-
-            -- ── Quét và xử lý từng Tripmine ────────────────────────────
-            for giftId, gift in pairs(Gifts) do
-                if not gift.Tripmine or gift.Collected then
-                    if passthroughState[giftId] then
-                        clearMineState(giftId)
-                    end
-                    continue
-                end
-
-                local giftPos = gift.Position
-                if not giftPos then continue end
-                local dist = (hrpPos - giftPos).Magnitude
-
-                -- ── CHẾ ĐỘ PASSTHROUGH ─────────────────────────────────
-                if mode == "Passthrough" then
-                    local state = passthroughState[giftId]
-
-                    if not state then
-                        -- Chưa theo dõi: Player bắt đầu đi xuyên qua mìn
-                        if dist < 6 then
-                            passthroughState[giftId] = "inside"
-                            addIframes()
-                            -- Tính toán khoảng cách kích nổ sau khi đi xa ra ngoài
-                            local targetDist = baseDist + (jitter > 0 and math.random(-jitter, jitter) or 0)
-                            processedMines["__dist_" .. giftId] = math.max(targetDist, 6)
-                            print("[NULLSCAPE] Passthrough: đang đi xuyên mìn", giftId)
-                        end
-
-                    elseif state == "inside" then
-                        -- Đang ở trong vùng mìn với iframes bảo vệ
-                        -- Đợi cho đến khi đi ra ngoài khoảng cách kích nổ đã định
-                        local targetDist = processedMines["__dist_" .. giftId] or baseDist
-                        if dist >= targetDist then
-                            passthroughState[giftId] = "exited"
-                            print("[NULLSCAPE] Passthrough: đã đi ra cách mìn", math.round(dist), "studs, chờ khoảng cách an toàn trước khi nổ...", giftId)
-
-                            logBlockedDetonation(giftId, "Passthrough", dist)
-                            clearMineState(giftId)
-                        end
-                    end
-
-                -- ── CHẾ ĐỘ PREDETONATE ─────────────────────────────────
-                elseif mode == "PreDetonate" then
-                    if processedMines[giftId] then continue end
-
-                    -- Xác định khoảng cách kích nổ sớm cho quả mìn này
-                    if not processedMines["__dist_" .. giftId] then
-                        local targetDist = baseDist + (jitter > 0 and math.random(-jitter, jitter) or 0)
-                        processedMines["__dist_" .. giftId] = math.max(targetDist, 5)
-                    end
-
-                    local targetDist = processedMines["__dist_" .. giftId]
-
-                    -- Khi player đi vào vùng kích nổ sớm
-                    if dist <= targetDist then
-                        processedMines[giftId] = true
-                        logBlockedDetonation(giftId, "PreDetonate", dist)
-                    end
-                end
-            end
-
         end
     end)
 end
 
--- ─────────────────────────────────────────────────────────────────────
--- Barrier.update(controller) — gọi định kỳ từ controller
--- ─────────────────────────────────────────────────────────────────────
-function Barrier.update(controller, gc)
+function Barrier.update(controller)
     activeController = controller
 
     if not controller.TripmineBarrierEnabled then
         removeIframes()
-        -- Reset trạng thái khi tắt bypass
-        table.clear(processedMines)
-        table.clear(passthroughState)
-        table.clear(blockedDetonationLogs)
+        clearBlockers()
     end
 end
 
--- ─────────────────────────────────────────────────────────────────────
--- Init
--- ─────────────────────────────────────────────────────────────────────
 function Barrier.Init()
     startWatcher()
-    print("[NULLSCAPE Defuse] Module khởi tạo thành công. Bảo vệ: Passthrough | PreDetonate | Barrier")
+    print("[NULLSCAPE Defuse] Module ready. Modes: Barrier | Blocker")
 end
 
 Barrier.Init()

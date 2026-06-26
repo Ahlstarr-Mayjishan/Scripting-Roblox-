@@ -90,4 +90,106 @@ function TerrainSense.scoreSurface(deps, grapple, result, screenScore, driveMode
     return score, reason
 end
 
+local function getFlatUnit(vector)
+    local flat = vector and Vector3.new(vector.X, 0, vector.Z)
+    if not flat or flat.Magnitude <= 0.05 then
+        return nil
+    end
+
+    return flat.Unit
+end
+
+local function addProbePosition(positions, position)
+    table.insert(positions, position)
+end
+
+function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
+    local cfg = deps.CFG
+    local rootPart = grapple and grapple.RootPart
+    local velocity = rootPart and rootPart.Velocity
+    if not (rootPart and velocity) then
+        return nil
+    end
+
+    local now = deps.now()
+    local floorHit = deps.getFloorHit(rootPart.Position)
+    local state = previousState or {}
+    if floorHit then
+        state.LastSafeFloorAt = now
+        state.LastSafePosition = rootPart.Position
+        state.LastFloorHit = floorHit
+        state.Danger = false
+        state.Reason = "Grounded"
+        state.UnsafeSamples = 0
+        state.NoFloorBelow = false
+        state.SinceSafeFloor = 0
+        state.LastEvaluatedAt = now
+        return state
+    end
+
+    local sinceSafeFloor = state.LastSafeFloorAt and (now - state.LastSafeFloorAt) or math.huge
+    local fallSpeed = math.max(-velocity.Y, 0)
+    local recentGroundSlip = sinceSafeFloor <= cfg.TERRAIN_VOID_RECENT_GROUND_WINDOW
+    local shouldFullScan = state.Danger == true
+        or recentGroundSlip
+        or fallSpeed >= cfg.TERRAIN_VOID_FULL_SCAN_FALL_SPEED
+    if not shouldFullScan then
+        state.Danger = false
+        state.Reason = "AirborneLight"
+        state.UnsafeSamples = 1
+        state.NoFloorBelow = true
+        state.SinceSafeFloor = sinceSafeFloor
+        state.FallSpeed = fallSpeed
+        state.LastEvaluatedAt = now
+        return state
+    end
+
+    local horizontalUnit = getFlatUnit(velocity)
+    local positions = {}
+    if horizontalUnit then
+        local sideUnit = horizontalUnit:Cross(Vector3.yAxis)
+        addProbePosition(positions, rootPart.Position + horizontalUnit * cfg.TERRAIN_VOID_FORWARD_PROBE_DISTANCE)
+        addProbePosition(positions, rootPart.Position - sideUnit * cfg.TERRAIN_VOID_SIDE_PROBE_DISTANCE)
+        addProbePosition(positions, rootPart.Position + sideUnit * cfg.TERRAIN_VOID_SIDE_PROBE_DISTANCE)
+    end
+    for _, lookahead in ipairs(cfg.PANIC_RESCUE_LOOKAHEADS) do
+        addProbePosition(positions, rootPart.Position + velocity * lookahead)
+    end
+
+    local unsafeSamples = 1
+    for _, position in ipairs(positions) do
+        if not deps.hasFloorBelow(position) then
+            unsafeSamples = unsafeSamples + 1
+        end
+    end
+
+    local falling = velocity.Y <= -cfg.TERRAIN_VOID_FALL_SPEED
+    local droppedFromLastSafe = state.LastSafePosition
+        and rootPart.Position.Y <= state.LastSafePosition.Y - cfg.TERRAIN_VOID_DROP_DISTANCE
+    local terrainLost = unsafeSamples >= cfg.TERRAIN_VOID_MIN_UNSAFE_SAMPLES
+    local noFloorBelow = unsafeSamples > 0
+
+    local danger = false
+    local reason = "Airborne"
+    if terrainLost and falling and recentGroundSlip then
+        danger = true
+        reason = "LedgeSlip"
+    elseif terrainLost and falling and droppedFromLastSafe then
+        danger = true
+        reason = "TerrainVoidDrop"
+    elseif terrainLost and falling and sinceSafeFloor <= cfg.TERRAIN_VOID_CONTEXT_TTL then
+        danger = true
+        reason = "TerrainNoFloor"
+    end
+
+    state.Danger = danger
+    state.Reason = reason
+    state.UnsafeSamples = unsafeSamples
+    state.NoFloorBelow = noFloorBelow
+    state.SinceSafeFloor = sinceSafeFloor
+    state.FallSpeed = fallSpeed
+    state.LastEvaluatedAt = now
+    return state
+end
+
 return TerrainSense

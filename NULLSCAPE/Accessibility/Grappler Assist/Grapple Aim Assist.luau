@@ -56,6 +56,10 @@ local Logic = {
     EmergencyRescueLockUntil = 0,
     LastVoidRescueAt = 0,
     VoidRescueUntil = 0,
+    TerrainFallState = nil,
+    LastTerrainFallEvalAt = 0,
+    EmergencyFloorRaycastParams = nil,
+    EmergencyFloorRaycastCharacter = nil,
     LastSharkTailAssistAt = 0,
     LastSharkTailEvalAt = 0,
     NextSharkTailEvalDelay = 0.08,
@@ -68,6 +72,10 @@ local Logic = {
     LastAssistDebug = nil,
     LastSmartReelEvalAt = 0,
     LastSmartReelDebug = nil,
+    LastSmartReelDecision = nil,
+    SmartReelLandingAssistUntil = 0,
+    SmartReelLandingTargetPosition = nil,
+    SmartReelLandingPlaneY = nil,
 }
 
 local VALID_TARGETS = {
@@ -139,6 +147,16 @@ local CFG = {
     TERRAIN_EDGE_PROBE_DISTANCE = 4,
     TERRAIN_EDGE_PENALTY = 42,
     TERRAIN_SAFE_FLOOR_BONUS = -16,
+    TERRAIN_VOID_CONTEXT_TTL = 1.15,
+    TERRAIN_VOID_RECENT_GROUND_WINDOW = 0.9,
+    TERRAIN_VOID_FALL_SPEED = 22,
+    TERRAIN_VOID_FORWARD_PROBE_DISTANCE = 30,
+    TERRAIN_VOID_SIDE_PROBE_DISTANCE = 10,
+    TERRAIN_VOID_DROP_DISTANCE = 11,
+    TERRAIN_VOID_MIN_UNSAFE_SAMPLES = 2,
+    TERRAIN_VOID_SCAN_INTERVAL = 0.1,
+    TERRAIN_VOID_SAFE_SCAN_INTERVAL = 0.18,
+    TERRAIN_VOID_FULL_SCAN_FALL_SPEED = 35,
     INTENT_CONTROL_SUPPRESS_DOT = 0.34,
     INTENT_REEL_SUPPRESS_PENALTY = 58,
     INTENT_JUMPPAD_SUPPRESS_PENALTY = 72,
@@ -233,6 +251,18 @@ local CFG = {
     SMART_REEL_OVERSHOOT_LOOKAHEAD = 0.18,
     SMART_REEL_ROUTE_LOOKAHEAD = 0.28,
     SMART_REEL_GOOD_ROUTE_BONUS = 18,
+    SMART_REEL_ROUTE_GOOD_GAIN_RATIO = 0.14,
+    SMART_REEL_CATCHUP_CLOSING_SPEED = 38,
+    SMART_REEL_WORSENING_MARGIN = 4,
+    SMART_REEL_START_COOLDOWN = 0.18,
+    SMART_REEL_LANDING_PLANE_MIN_BELOW = 10,
+    SMART_REEL_LANDING_FALL_SPEED = 18,
+    SMART_REEL_LANDING_MAX_DISTANCE = 70,
+    SMART_REEL_LANDING_ASSIST_DURATION = 0.35,
+    SMART_REEL_LANDING_HORIZONTAL_SPEED = 72,
+    SMART_REEL_LANDING_UP_SPEED_MIN = 28,
+    SMART_REEL_LANDING_UP_SPEED_MAX = 92,
+    SMART_REEL_LANDING_BLEND = 0.38,
     SMART_REEL_PLAYER_CONTROL_PENALTY = 24,
     SMART_REEL_BAD_INPUT_PENALTY = 34,
     SMART_REEL_AUTO_MIN_DOT = -0.2,
@@ -1061,17 +1091,23 @@ local function isEmergencyAssistDanger(grapple)
 end
 
 local function getEmergencyFloorRaycastParams(grapple)
+    local character = grapple and grapple.Character
+    if Logic.EmergencyFloorRaycastParams and Logic.EmergencyFloorRaycastCharacter == character then
+        return Logic.EmergencyFloorRaycastParams
+    end
+
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
     params.RespectCanCollide = true
 
     local filter = {}
-    local character = grapple and grapple.Character
     if character then
         table.insert(filter, character)
     end
 
     params.FilterDescendantsInstances = filter
+    Logic.EmergencyFloorRaycastParams = params
+    Logic.EmergencyFloorRaycastCharacter = character
     return params
 end
 
@@ -1080,6 +1116,54 @@ local function hasFloorBelow(position, params)
     local direction = Vector3.new(0, -CFG.PANIC_RESCUE_GROUND_CHECK_DEPTH, 0)
     local hit = Workspace:Raycast(origin, direction, params)
     return hit ~= nil
+end
+
+local function getFloorHit(position, params)
+    local origin = position + Vector3.new(0, CFG.PANIC_RESCUE_GROUND_CHECK_HEIGHT, 0)
+    local direction = Vector3.new(0, -CFG.PANIC_RESCUE_GROUND_CHECK_DEPTH, 0)
+    return Workspace:Raycast(origin, direction, params)
+end
+
+local function updateTerrainFallContext(grapple)
+    if not (grapple and hasClassCapability(grapple, "VoidRescue") and isVoidRescueEnabled()) then
+        Logic.TerrainFallState = nil
+        return nil
+    end
+
+    local now = time()
+    local previousState = Logic.TerrainFallState
+    local airborne = isInAir(grapple)
+    local scanInterval = (airborne or (previousState and previousState.Danger))
+        and CFG.TERRAIN_VOID_SCAN_INTERVAL
+        or CFG.TERRAIN_VOID_SAFE_SCAN_INTERVAL
+    if previousState and now - (previousState.LastEvaluatedAt or 0) < scanInterval then
+        return previousState
+    end
+
+    local params = getEmergencyFloorRaycastParams(grapple)
+    local state = TerrainSense.analyzeVoidFall({
+        CFG = CFG,
+        now = time,
+        getFloorHit = function(position)
+            return getFloorHit(position, params)
+        end,
+        hasFloorBelow = function(position)
+            return hasFloorBelow(position, params)
+        end,
+    }, grapple, Logic.TerrainFallState)
+
+    Logic.TerrainFallState = state
+    Logic.LastTerrainFallEvalAt = now
+    return state
+end
+
+local function getTerrainVoidFallState(grapple)
+    local state = Logic.TerrainFallState
+    if state and time() - (state.LastEvaluatedAt or 0) <= CFG.TERRAIN_VOID_CONTEXT_TTL then
+        return state
+    end
+
+    return updateTerrainFallContext(grapple)
 end
 
 local function getVoidKillPlaneY()
@@ -1104,24 +1188,31 @@ local function getVoidDangerState(grapple)
     local rootPart = grapple and grapple.RootPart
     local velocity = rootPart and rootPart.Velocity
     local killY = getVoidKillPlaneY()
-    if not (rootPart and velocity and killY) then
+    if not (rootPart and velocity) then
         return false, nil
     end
 
     local y = rootPart.Position.Y
-    if y <= killY + CFG.VOID_RESCUE_HARD_BUFFER then
-        return true, "BelowKillPlane"
-    end
-
-    if y <= killY + CFG.VOID_RESCUE_KILL_PLANE_BUFFER then
-        return true, "NearKillPlane"
-    end
-
-    if velocity.Y < -8 then
-        local projectedY = y + velocity.Y * CFG.VOID_RESCUE_PREDICT_TIME
-        if projectedY <= killY + CFG.VOID_RESCUE_HARD_BUFFER then
-            return true, "ProjectedKillPlane"
+    if killY then
+        if y <= killY + CFG.VOID_RESCUE_HARD_BUFFER then
+            return true, "BelowKillPlane"
         end
+
+        if y <= killY + CFG.VOID_RESCUE_KILL_PLANE_BUFFER then
+            return true, "NearKillPlane"
+        end
+
+        if velocity.Y < -8 then
+            local projectedY = y + velocity.Y * CFG.VOID_RESCUE_PREDICT_TIME
+            if projectedY <= killY + CFG.VOID_RESCUE_HARD_BUFFER then
+                return true, "ProjectedKillPlane"
+            end
+        end
+    end
+
+    local terrainState = getTerrainVoidFallState(grapple)
+    if terrainState and terrainState.Danger then
+        return true, terrainState.Reason or "TerrainVoidDrop"
     end
 
     return false, nil
@@ -1145,6 +1236,11 @@ local function getProjectedUnsafeSampleCount(grapple)
     local velocity = rootPart and rootPart.Velocity
     if not (rootPart and velocity) then
         return 0, false
+    end
+
+    local terrainState = getTerrainVoidFallState(grapple)
+    if terrainState and terrainState.Danger then
+        return math.max(terrainState.UnsafeSamples or 0, CFG.TERRAIN_VOID_MIN_UNSAFE_SAMPLES), false
     end
 
     local killY = getVoidKillPlaneY()
@@ -1200,6 +1296,11 @@ function isPanicRescueDanger(grapple)
     end
 
     if isVoidRescueDanger(grapple) then
+        return true
+    end
+
+    local terrainState = getTerrainVoidFallState(grapple)
+    if terrainState and terrainState.Danger then
         return true
     end
 
@@ -3116,6 +3217,7 @@ local function getSmartReelScore(grapple, manual)
     local flatVelocityDot = (flatToTarget and velocityDirection) and flatToTarget:Dot(velocityDirection) or velocityDot
     local inputDot = (flatToTarget and inputDirection) and flatToTarget:Dot(inputDirection) or 0
     local panic = isEmergencyProtectionEnabled() and getCachedPanicRescueDanger(grapple)
+    local closingSpeed = velocity:Dot(toTarget)
 
     local attachAge = time() - (tonumber(grapple.reelStart) or 0)
     if not manual and not panic and attachAge < CFG.SMART_REEL_MIN_ATTACH_TIME then
@@ -3134,6 +3236,52 @@ local function getSmartReelScore(grapple, manual)
         return 0, "UnsafePath", state
     end
 
+    local projectedDistance = (state.TargetPosition - (rootPart.Position + velocity * CFG.SMART_REEL_OVERSHOOT_LOOKAHEAD)).Magnitude
+    local routeProjectedDistance = (state.TargetPosition - (rootPart.Position + velocity * CFG.SMART_REEL_ROUTE_LOOKAHEAD)).Magnitude
+    local routeGain = state.Distance - routeProjectedDistance
+    local naturalRoute = routeGain > state.Distance * CFG.SMART_REEL_ROUTE_GOOD_GAIN_RATIO
+        and flatVelocityDot > 0.35
+        and inputDot > 0.15
+    local catchupNeeded = closingSpeed < CFG.SMART_REEL_CATCHUP_CLOSING_SPEED
+        and state.Distance >= CFG.SMART_REEL_GOOD_DISTANCE
+    local routeWorsening = routeProjectedDistance > state.Distance + CFG.SMART_REEL_WORSENING_MARGIN
+    local overshootRisk = projectedDistance > state.Distance
+        and state.Distance <= CFG.SMART_REEL_EXIT_DISTANCE + horizontalSpeed * 0.045
+    local brakeNeeded = horizontalSpeed >= CFG.SMART_REEL_HIGH_SPEED
+        and velocityDot > 0.2
+        and state.Distance > CFG.SMART_REEL_EXIT_DISTANCE
+        and (overshootRisk or routeWorsening)
+    local targetHeight = state.TargetPosition.Y - rootPart.Position.Y
+    local landingPullNeeded = targetHeight >= CFG.SMART_REEL_LANDING_PLANE_MIN_BELOW
+        and velocity.Y <= -CFG.SMART_REEL_LANDING_FALL_SPEED
+        and state.Distance <= CFG.SMART_REEL_LANDING_MAX_DISTANCE
+        and state.Distance > CFG.SMART_REEL_EXIT_DISTANCE
+
+    state.ClosingSpeed = closingSpeed
+    state.RouteGain = routeGain
+    state.ProjectedDistance = projectedDistance
+    state.RouteProjectedDistance = routeProjectedDistance
+    state.TargetHeight = targetHeight
+    state.LandingPullNeeded = landingPullNeeded
+
+    if not manual and not panic then
+        if naturalRoute and not overshootRisk and not routeWorsening and not landingPullNeeded then
+            return 0, "NaturalRouteGuard", state
+        end
+        if inputDirection and inputDot < -0.15 then
+            return 0, "InputBrakeGuard", state
+        end
+        if not (catchupNeeded or brakeNeeded or routeWorsening or landingPullNeeded) then
+            return 0, "NoPullNeed", state
+        end
+        if targetHeight > CFG.SMART_REEL_LOW_ARC_HEIGHT and velocity.Y > CFG.SMART_REEL_LOW_ARC_UP_SPEED and not landingPullNeeded then
+            return 0, "LowArcGuard", state
+        end
+        if horizontalSpeed >= CFG.SMART_REEL_EXTREME_SPEED and not brakeNeeded then
+            return 0, "ExtremeSpeedGuard", state
+        end
+    end
+
     local score = 28
     local reason = "SoftReel"
 
@@ -3150,41 +3298,46 @@ local function getSmartReelScore(grapple, manual)
     if inputDirection then
         score = score + math.clamp((inputDot + 1) * 0.5, 0, 1) * 12
         if not manual and not panic then
-            if inputDot < -0.15 then
-                score = score - CFG.SMART_REEL_BAD_INPUT_PENALTY
-                reason = "InputBrakeGuard"
-            elseif inputDot > 0.45 and flatVelocityDot > 0.25 then
+            if inputDot > 0.45 and flatVelocityDot > 0.25 and not routeWorsening then
                 score = score - CFG.SMART_REEL_PLAYER_CONTROL_PENALTY
                 reason = "PlayerControlGuard"
             end
         end
     end
 
-    local projectedDistance = (state.TargetPosition - (rootPart.Position + velocity * CFG.SMART_REEL_OVERSHOOT_LOOKAHEAD)).Magnitude
-    local routeProjectedDistance = (state.TargetPosition - (rootPart.Position + velocity * CFG.SMART_REEL_ROUTE_LOOKAHEAD)).Magnitude
-    local routeGain = state.Distance - routeProjectedDistance
     if routeGain > 0 and state.Distance > CFG.SMART_REEL_EXIT_DISTANCE then
         score = score + math.clamp(routeGain / math.max(state.Distance, 1), 0, 1) * CFG.SMART_REEL_GOOD_ROUTE_BONUS
     end
 
-    if projectedDistance > state.Distance and state.Distance <= CFG.SMART_REEL_EXIT_DISTANCE + horizontalSpeed * 0.045 then
-        score = score - 42
-        reason = "OvershootGuard"
-    elseif not manual and not panic and routeGain > state.Distance * 0.18 and flatVelocityDot > 0.35 and inputDot > 0.2 then
-        score = score - 28
-        reason = "NaturalRouteGuard"
-    elseif horizontalSpeed >= CFG.SMART_REEL_HIGH_SPEED and velocityDot > 0.2 and state.Distance > CFG.SMART_REEL_EXIT_DISTANCE then
-        score = score + 12
+    if catchupNeeded then
+        score = score + 22
+        reason = "CatchUpPull"
+    end
+
+    if routeWorsening then
+        score = score + 24
+        reason = "RouteRecovery"
+    end
+
+    if overshootRisk then
+        score = score + 30
+        reason = "OvershootBrake"
+    elseif brakeNeeded then
+        score = score + 22
         reason = "BrakeReel"
     end
 
-    local targetHeight = state.TargetPosition.Y - rootPart.Position.Y
-    if not panic and targetHeight > CFG.SMART_REEL_LOW_ARC_HEIGHT and velocity.Y > CFG.SMART_REEL_LOW_ARC_UP_SPEED then
+    if landingPullNeeded then
+        score = score + 30
+        reason = "LandingPull"
+    end
+
+    if manual and not panic and targetHeight > CFG.SMART_REEL_LOW_ARC_HEIGHT and velocity.Y > CFG.SMART_REEL_LOW_ARC_UP_SPEED then
         score = score - 34
         reason = "LowArcGuard"
     end
 
-    if horizontalSpeed >= CFG.SMART_REEL_EXTREME_SPEED and not panic then
+    if manual and horizontalSpeed >= CFG.SMART_REEL_EXTREME_SPEED and not panic then
         score = score - 16
         reason = "ExtremeSpeedGuard"
     end
@@ -3201,6 +3354,9 @@ local function getSmartReelScore(grapple, manual)
 
     if manual then
         score = score + 10
+        if reason == "SoftReel" then
+            reason = "ManualPull"
+        end
     end
 
     return math.clamp(score, 0, 100), reason, state
@@ -3208,6 +3364,9 @@ end
 
 local function canStartSmartReel(grapple, manual)
     local now = time()
+    if not manual and now - (Logic.LastSmartReelStartAt or 0) < CFG.SMART_REEL_START_COOLDOWN then
+        return false
+    end
     if not manual and now - Logic.LastSmartReelEvalAt < CFG.SMART_REEL_EVAL_INTERVAL then
         return false
     end
@@ -3215,11 +3374,21 @@ local function canStartSmartReel(grapple, manual)
         Logic.LastSmartReelEvalAt = now
     end
 
-    local score, reason = getSmartReelScore(grapple, manual)
+    local score, reason, state = getSmartReelScore(grapple, manual)
     local threshold = manual and CFG.SMART_REEL_MANUAL_THRESHOLD or CFG.SMART_REEL_AUTO_THRESHOLD
     Logic.LastSmartReelDebug = {
         Score = score,
         Reason = reason,
+        Manual = manual == true,
+        Distance = state and state.Distance or nil,
+        ClosingSpeed = state and state.ClosingSpeed or nil,
+        RouteGain = state and state.RouteGain or nil,
+        TargetHeight = state and state.TargetHeight or nil,
+    }
+    Logic.LastSmartReelDecision = {
+        Score = score,
+        Reason = reason,
+        State = state,
         Manual = manual == true,
     }
 
@@ -3236,6 +3405,18 @@ local function startSmartReel(grapple, manual)
     grapple.grappleReel = true
     Logic.LastSmartReelStartAt = time()
     markGrappleBonkGrace(grapple, CFG.MOMENTUM_GUARD_WINDOW)
+
+    local decision = Logic.LastSmartReelDecision
+    local state = decision and decision.State
+    if decision and decision.Reason == "LandingPull" and state and state.TargetPosition then
+        Logic.SmartReelLandingAssistUntil = time() + CFG.SMART_REEL_LANDING_ASSIST_DURATION
+        Logic.SmartReelLandingTargetPosition = state.TargetPosition
+        Logic.SmartReelLandingPlaneY = state.TargetPosition.Y
+    else
+        Logic.SmartReelLandingAssistUntil = 0
+        Logic.SmartReelLandingTargetPosition = nil
+        Logic.SmartReelLandingPlaneY = nil
+    end
 
     if grapple.SFX and grapple.SFX.PlaySound then
         pcall(function()
@@ -3352,18 +3533,81 @@ local function applyAirControlMultiplier(grapple, dt)
     rootPart.Velocity = rootPart.Velocity + extraForce
 end
 
+local function applySmartReelLandingAssist(grapple)
+    if time() > (Logic.SmartReelLandingAssistUntil or 0) then
+        return false
+    end
+
+    local rootPart = grapple and grapple.RootPart
+    local targetPosition = Logic.SmartReelLandingTargetPosition
+    local planeY = Logic.SmartReelLandingPlaneY
+    if not (rootPart and typeof(targetPosition) == "Vector3" and type(planeY) == "number") then
+        return false
+    end
+
+    local heightToPlane = planeY - rootPart.Position.Y
+    if heightToPlane <= 1 then
+        Logic.SmartReelLandingAssistUntil = 0
+        return false
+    end
+
+    local velocity = rootPart.Velocity
+    local horizontalOffset = Vector3.new(
+        targetPosition.X - rootPart.Position.X,
+        0,
+        targetPosition.Z - rootPart.Position.Z
+    )
+    local nextHorizontal = getHorizontalVelocity(rootPart)
+    if horizontalOffset.Magnitude > 1 then
+        local desiredHorizontalSpeed = math.clamp(
+            horizontalOffset.Magnitude / 0.65,
+            18,
+            CFG.SMART_REEL_LANDING_HORIZONTAL_SPEED
+        )
+        local desiredHorizontal = horizontalOffset.Unit * desiredHorizontalSpeed
+        nextHorizontal = nextHorizontal:Lerp(desiredHorizontal, CFG.SMART_REEL_LANDING_BLEND)
+    end
+
+    local fallSpeed = math.max(-velocity.Y, 0)
+    local desiredY = math.clamp(
+        heightToPlane * 1.85 + fallSpeed * 0.3,
+        CFG.SMART_REEL_LANDING_UP_SPEED_MIN,
+        CFG.SMART_REEL_LANDING_UP_SPEED_MAX
+    )
+    if heightToPlane < 6 then
+        desiredY = math.min(desiredY, 42)
+    end
+
+    local nextY = velocity.Y
+    if nextY < desiredY then
+        nextY = nextY + (desiredY - nextY) * CFG.SMART_REEL_LANDING_BLEND
+    elseif nextY > CFG.SMART_REEL_LANDING_UP_SPEED_MAX then
+        nextY = CFG.SMART_REEL_LANDING_UP_SPEED_MAX
+    end
+
+    rootPart.Velocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
+    Logic.LastSmartReelDebug = Logic.LastSmartReelDebug or {}
+    Logic.LastSmartReelDebug.LandingAssist = true
+    Logic.LastSmartReelDebug.LandingHeight = heightToPlane
+    return true
+end
+
 local function applyReelPullMultiplier(grapple)
     if not hasClassCapability(grapple, "SmartReel") then
         return
     end
 
-    local multiplier = getReelPullMultiplier()
-    if multiplier <= 1 then
+    local rootPart = grapple and grapple.RootPart
+    if not (grapple and rootPart and grapple.jumpPadReel) then
         return
     end
 
-    local rootPart = grapple and grapple.RootPart
-    if not (grapple and rootPart and grapple.jumpPadReel) then
+    if applySmartReelLandingAssist(grapple) then
+        return
+    end
+
+    local multiplier = getReelPullMultiplier()
+    if multiplier <= 1 then
         return
     end
 
@@ -3599,6 +3843,9 @@ function Logic.enable()
                 maintainJumpPadUsesBypass()
             end
             maintainBellBypass(self)
+            if isSuiteEnabled() and hasAnyGrappleAssistCapability(self) then
+                updateTerrainFallContext(self)
+            end
             if hasClassCapability(self, "MomentumGuard") and self.Movement and (self.Movement.grappling or self.jumpPadReel) then
                 markGrappleBonkGrace(self, 0.45)
             end
@@ -3723,11 +3970,19 @@ function Logic.disable()
     Logic.EmergencyRescueLockUntil = 0
     Logic.LastVoidRescueAt = 0
     Logic.VoidRescueUntil = 0
+    Logic.TerrainFallState = nil
+    Logic.LastTerrainFallEvalAt = 0
+    Logic.EmergencyFloorRaycastParams = nil
+    Logic.EmergencyFloorRaycastCharacter = nil
     Logic.LastAssistTargetInstance = nil
     Logic.LastAssistTargetAt = 0
     Logic.LastAssistDebug = nil
     Logic.LastSmartReelEvalAt = 0
     Logic.LastSmartReelDebug = nil
+    Logic.LastSmartReelDecision = nil
+    Logic.SmartReelLandingAssistUntil = 0
+    Logic.SmartReelLandingTargetPosition = nil
+    Logic.SmartReelLandingPlaneY = nil
     Logic.BellBypassToken = Logic.BellBypassToken + 1
     releaseBellBypass()
     restoreJumpPadBypassParts()
