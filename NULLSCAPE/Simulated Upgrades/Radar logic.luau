@@ -189,6 +189,48 @@ local function isAltarValid(t)
 	return true
 end
 
+local function hasNativeEnemyESP(enemy)
+	if not enemy or not enemy.Parent then
+		return false
+	end
+
+	return enemy:FindFirstChild("ESP") ~= nil or enemy:FindFirstChild("ESPCrayon") ~= nil
+end
+
+local function isSpringerEnemy(enemy)
+	if not enemy then
+		return false
+	end
+
+	return enemy.Name == "Springer" or enemy.Name == "BigSpringer"
+end
+
+local function findEnemyVisualPart(enemy)
+	if not enemy or not enemy.Parent then
+		return nil
+	end
+
+	if enemy:IsA("BasePart") then
+		return enemy
+	end
+
+	local head = enemy:FindFirstChild("head")
+	if head and head:IsA("BasePart") then
+		return head
+	end
+
+	local shockwave = enemy:FindFirstChild("SpringerShockwave", true)
+	if shockwave and shockwave:IsA("BasePart") then
+		return shockwave
+	end
+
+	if enemy:IsA("Model") then
+		return enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+	end
+
+	return enemy:FindFirstChildWhichIsA("BasePart", true)
+end
+
 -- Dọn dẹp toàn bộ Highlight, Beam, Dot và các đối tượng lưu đệm
 function Logic.clearVisuals(gc, keepArrows)
 	-- Dọn dẹp native enemy ESP
@@ -388,6 +430,27 @@ local function addCustomVisual(style, highlights, billboards, part, model, color
 	end
 end
 
+local function addSpringerEnemyFallback(controller, style, highlights, billboards)
+	if not canSimulate(controller, "Enemy") then
+		return
+	end
+
+	local enemies = workspace:FindFirstChild("Enemies")
+	if not enemies then
+		return
+	end
+
+	local color = controller.EnemyESPColor or Color3.fromRGB(255, 128, 0)
+	for _, enemy in ipairs(enemies:GetChildren()) do
+		if isSpringerEnemy(enemy) and not hasNativeEnemyESP(enemy) then
+			local part = findEnemyVisualPart(enemy)
+			if part then
+				addCustomVisual(style, highlights, billboards, part, enemy, color)
+			end
+		end
+	end
+end
+
 local function altarMatchesFilter(controller, altarName)
 	local filter = controller.AltarFilter
 	if typeof(filter) == "table" then
@@ -470,6 +533,8 @@ local function updateCustomESPStyles(controller, gc, hrp)
 			end
 		end
 	end
+
+	addSpringerEnemyFallback(controller, style, highlights, billboards)
 
 	applyCustomBillboards(saved, billboards)
 	applyCustomHighlights(saved, highlights)
