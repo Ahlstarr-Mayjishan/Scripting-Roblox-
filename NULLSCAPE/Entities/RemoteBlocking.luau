@@ -90,6 +90,12 @@ Logic.Config = {
         Remotes = { "ClientEvent" },
         Keywords = { "Fail" },
         LegitKeywords = { "Fail" }
+    },
+    ["VoidImplosion"] = {
+        ControllerFlag = "VoidImplosionImmune",
+        Remotes = { "Died" },
+        Keywords = { "VoidImplosion" },
+        LegitKeywords = { "VoidImplosion" }
     }
     -- Thêm cấu hình chặn Remote cho thực thể mới tại đây
 }

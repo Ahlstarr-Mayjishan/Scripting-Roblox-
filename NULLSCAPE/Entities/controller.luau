@@ -35,6 +35,7 @@ local Controller = {
 	VoidbreakerImmune = false,
 	RazorbloomImmune = false,
 	CadenceImmune = false,
+	VoidImplosionImmune = false,
 	SpringerImmunityMode = "Legit",
 	Destroyed = false,
 
@@ -201,6 +202,7 @@ local SPECIAL_IMMUNITY_FLAGS = {
 	Slicer = "SlicerImmune",
 	Voidbreaker = "VoidbreakerImmune",
 	Razorbloom = "RazorbloomImmune",
+	VoidImplosion = "VoidImplosionImmune",
 }
 
 local function isSpecialImmunityEntity(entityName)

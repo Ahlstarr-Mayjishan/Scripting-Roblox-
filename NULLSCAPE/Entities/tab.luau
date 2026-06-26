@@ -169,6 +169,15 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateToggle({
+		Name = "Void Implosion",
+		CurrentValue = Controller.VoidImplosionImmune,
+		Flag = "ImmunityVoidImplosionToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("VoidImplosion", Value)
+		end,
+	})
+
 	Tab:CreateSection("Entities - Mimics")
 
 	Tab:CreateToggle({
