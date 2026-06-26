@@ -469,42 +469,6 @@ local function observeEnemies(folder)
 	table.insert(folderConnections, removedConn)
 end
 
-local function checkRoomForAltar(room)
-	local altarObj = room:FindFirstChild("AltarLocation")
-		or room:FindFirstChild("AltarModel")
-		or room:FindFirstChild("Altar")
-	if altarObj then
-		registerAltar(altarObj)
-	end
-
-	local childAddedConn = room.ChildAdded:Connect(function(child)
-		if child.Name == "AltarLocation" or child.Name == "AltarModel" or child.Name == "Altar" then
-			registerAltar(child)
-		end
-	end)
-	table.insert(folderConnections, childAddedConn)
-end
-
-local function observeCurrentRooms(folder)
-	for _, room in ipairs(folder:GetChildren()) do
-		checkRoomForAltar(room)
-	end
-
-	local roomAddedConn = folder.ChildAdded:Connect(function(room)
-		checkRoomForAltar(room)
-	end)
-	table.insert(folderConnections, roomAddedConn)
-
-	local roomRemovedConn = folder.ChildRemoved:Connect(function(room)
-		local altarObj = room:FindFirstChild("AltarLocation")
-			or room:FindFirstChild("AltarModel")
-			or room:FindFirstChild("Altar")
-		if altarObj then
-			unregisterAltar(altarObj)
-		end
-	end)
-	table.insert(folderConnections, roomRemovedConn)
-end
 
 local function startObservingFolders()
 	disconnectFolderObservations()
@@ -568,9 +532,7 @@ local function startObservingFolders()
 			observeItemPools(child)
 		elseif child.Name == "Enemies" then
 			observeEnemies(child)
-		elseif child.Name == "CurrentRooms" then
-			observeCurrentRooms(child)
-		else
+		elseif child.Name ~= "CurrentRooms" then
 			-- Đề phòng Gift hoặc nhạc cụ spawn trực tiếp ngoài workspace
 			registerGift(child)
 			registerInstrument(child)
@@ -594,11 +556,6 @@ local function startObservingFolders()
 	local enemies = workspace:FindFirstChild("Enemies")
 	if enemies then
 		observeEnemies(enemies)
-	end
-
-	local currentRooms = workspace:FindFirstChild("CurrentRooms")
-	if currentRooms then
-		observeCurrentRooms(currentRooms)
 	end
 end
 
