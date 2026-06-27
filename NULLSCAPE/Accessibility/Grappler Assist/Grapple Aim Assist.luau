@@ -383,47 +383,37 @@ local SCREEN_RAY_OFFSETS = {
     Vector2.new(-0.1, -0.06),
 }
 
-local markGrappleBonkGrace
-local getHorizontalVelocity
-local isInAir
-local hasAdaptDriveTarget
-local isPanicRescueDanger
-local getCachedPanicRescueDanger
-local getGravityAssistProfile
-local getEffectiveEmergencyFallThreshold
-local isJumpPadInstance
-
-local function getGlobals()
+function getGlobals()
     local env = getgenv()
     env._NULLSCAPE_Globals = env._NULLSCAPE_Globals or {}
     return env._NULLSCAPE_Globals
 end
 
-local function getController()
+function getController()
     return getGlobals().activeAccessibilityController
 end
 
-local function isEnabled()
+function isEnabled()
     local controller = getController()
-    return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleAimAssistEnabled == true
+    return controller and controller.GrappleAimAssistEnabled == true and controller.GrappleAssistSuiteEnabled == true
 end
 
-local function isSuiteEnabled()
+function isSuiteEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true
 end
 
-local function isRescueEnabled()
+function isRescueEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleRescueAssistEnabled == true
 end
 
-local function isEmergencyProtectionEnabled()
+function isEmergencyProtectionEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleEmergencyProtectionEnabled == true
 end
 
-local function getEmergencyProtectionMode()
+function getEmergencyProtectionMode()
     local controller = getController()
     local mode = tostring(controller and controller.GrappleEmergencyProtectionMode or "Manual")
     if mode == "Smart Auto" then
@@ -435,42 +425,42 @@ local function getEmergencyProtectionMode()
     return "Manual"
 end
 
-local function getEmergencySpeedThreshold()
+function getEmergencySpeedThreshold()
     local controller = getController()
     return math.clamp(tonumber(controller and controller.GrappleEmergencySpeedThreshold) or 220, 150, 320)
 end
 
-local function getEmergencyFallThreshold()
+function getEmergencyFallThreshold()
     local controller = getController()
     return math.clamp(tonumber(controller and controller.GrappleEmergencyFallThreshold) or 125, 80, 220)
 end
 
-local function isAntiBonkEnabled()
+function isAntiBonkEnabled()
     local controller = getController()
     return controller and controller.AntiBonkEnabled == true
 end
 
-local function isSmartReelEnabled()
+function isSmartReelEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleSmartReelEnabled == true
 end
 
-local function isSharkTailHelperEnabled()
+function isSharkTailHelperEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleSharkTailHelperEnabled == true
 end
 
-local function isMomentumGuardEnabled()
+function isMomentumGuardEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleMomentumGuardEnabled == true
 end
 
-local function isJumpPadUsesBypassEnabled()
+function isJumpPadUsesBypassEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleJumpPadUsesBypassEnabled == true
 end
 
-local function setMovementIntent(state, duration, reason)
+function setMovementIntent(state, duration, reason)
     local now = time()
     local untilTime = now + math.max(tonumber(duration) or 0, 0)
     if untilTime < (Logic.MovementIntentUntil or 0) and Logic.MovementIntentState == state then
@@ -482,7 +472,7 @@ local function setMovementIntent(state, duration, reason)
     Logic.MovementIntentReason = reason
 end
 
-local function getMovementIntentState()
+function getMovementIntentState()
     if time() > (Logic.MovementIntentUntil or 0) then
         Logic.MovementIntentState = MOVEMENT_INTENT.Freefall
         Logic.MovementIntentReason = nil
@@ -492,15 +482,15 @@ local function getMovementIntentState()
     return Logic.MovementIntentState or MOVEMENT_INTENT.Freefall
 end
 
-local function isMovementIntent(state)
+function isMovementIntent(state)
     return getMovementIntentState() == state
 end
 
-local function isAutomationSuppressedByIntent()
+function isAutomationSuppressedByIntent()
     return isMovementIntent(MOVEMENT_INTENT.JumpPadCommit)
 end
 
-local function clearLandingIntent()
+function clearLandingIntent()
     Logic.SmartReelLandingAssistUntil = 0
     Logic.SmartReelLandingTargetPosition = nil
     Logic.SmartReelLandingPlaneY = nil
@@ -509,11 +499,11 @@ local function clearLandingIntent()
     end
 end
 
-local function isJumpPadCommitGuardActive()
+function isJumpPadCommitGuardActive()
     return isAutomationSuppressedByIntent()
 end
 
-local function markJumpPadCommit(grapple, jumpPadPart)
+function markJumpPadCommit(grapple, jumpPadPart)
     if not isJumpPadInstance(jumpPadPart) then
         return
     end
@@ -532,7 +522,7 @@ local function markJumpPadCommit(grapple, jumpPadPart)
     clearLandingIntent()
 end
 
-local function isVoidRescueEnabled()
+function isVoidRescueEnabled()
     local controller = getController()
     return controller
         and controller.GrappleAssistSuiteEnabled == true
@@ -540,7 +530,7 @@ local function isVoidRescueEnabled()
         and controller.GrappleVoidRescueEnabled ~= false
 end
 
-local function isWallSlamRescueEnabled()
+function isWallSlamRescueEnabled()
     local controller = getController()
     return controller
         and controller.GrappleAssistSuiteEnabled == true
@@ -548,20 +538,20 @@ local function isWallSlamRescueEnabled()
         and controller.GrappleWallSlamRescueEnabled == true
 end
 
-local function getAdaptInputKeyCode()
+function getAdaptInputKeyCode()
     local controller = getController()
     local keyName = tostring(controller and controller.GrappleAdaptInputKey or "T")
     return Enum.KeyCode[keyName] or Enum.KeyCode.T
 end
 
-local function isTextBoxFocused()
+function isTextBoxFocused()
     local success, focused = pcall(function()
         return UserInputService:GetFocusedTextBox()
     end)
     return success and focused ~= nil
 end
 
-local function getAirControlMultiplier()
+function getAirControlMultiplier()
     local controller = getController()
     if not (controller and controller.GrappleAssistSuiteEnabled == true) then
         return 1
@@ -570,7 +560,7 @@ local function getAirControlMultiplier()
     return math.clamp(tonumber(controller.GrappleAirControlMultiplier) or 1, 1, 5)
 end
 
-local function getReelPullMultiplier()
+function getReelPullMultiplier()
     local controller = getController()
     if not (controller and controller.GrappleAssistSuiteEnabled == true) then
         return 1
@@ -579,7 +569,7 @@ local function getReelPullMultiplier()
     return math.clamp(tonumber(controller.GrappleReelPullMultiplier) or 1, 1, 5)
 end
 
-local function getSharkTailPullMultiplier()
+function getSharkTailPullMultiplier()
     local controller = getController()
     if not (controller and controller.GrappleAssistSuiteEnabled == true) then
         return 1
@@ -588,12 +578,12 @@ local function getSharkTailPullMultiplier()
     return math.clamp(tonumber(controller.GrappleSharkTailPullMultiplier) or 1, 1, 5)
 end
 
-local function isInfiniteStamina()
+function isInfiniteStamina()
     local controller = getController()
     return controller and controller.GrapplerStaminaMode == "Infinite Stamina"
 end
 
-local function normalizeTargetPriority(value)
+function normalizeTargetPriority(value)
     value = tostring(value or "GrapplePoint")
     if VALID_TARGETS[value] then
         return value

@@ -138,6 +138,18 @@ local function createCadenceUI()
 	Controller.CadenceUIFrame = Frame
 end
 
+local function getAccessibilityController()
+	local globals = getgenv()._NULLSCAPE_Globals
+	if globals and globals.activeAccessibilityController then
+		return globals.activeAccessibilityController
+	end
+	
+	local success, result = pcall(function()
+		return getgenv().loadModule and getgenv().loadModule("NULLSCAPE/Accessibility/controller.luau")
+	end)
+	return success and result or nil
+end
+
 local inLobby = not isInMatch() -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
 Controller.inLobby = inLobby
 local hasInRoundValue = false
@@ -322,7 +334,7 @@ function Controller:SetImmunity(entityName, value)
 		self.SpringerImmune = value
 
 		-- Thông báo cho Accessibility controller cập nhật lại trạng thái Auto Jump
-		local accessibilityController = getgenv().loadModule("NULLSCAPE/Accessibility/controller.luau")
+		local accessibilityController = getAccessibilityController()
 		if accessibilityController and accessibilityController.updateSpringerAutoJumpState then
 			pcall(function()
 				accessibilityController:updateSpringerAutoJumpState()
@@ -436,7 +448,7 @@ function Controller:SetSpringerImmunityMode(mode)
 	self.SpringerImmunityMode = mode
 
 	-- Thông báo cho Accessibility controller cập nhật lại trạng thái Auto Jump
-	local accessibilityController = getgenv().loadModule("NULLSCAPE/Accessibility/controller.luau")
+	local accessibilityController = getAccessibilityController()
 	if accessibilityController and accessibilityController.updateSpringerAutoJumpState then
 		pcall(function()
 			accessibilityController:updateSpringerAutoJumpState()
