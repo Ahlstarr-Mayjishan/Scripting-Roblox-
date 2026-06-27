@@ -447,7 +447,7 @@ end
 
 local function isAntiBonkEnabled()
     local controller = getController()
-    return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleAntiBonkEnabled == true
+    return controller and controller.AntiBonkEnabled == true
 end
 
 local function isSmartReelEnabled()

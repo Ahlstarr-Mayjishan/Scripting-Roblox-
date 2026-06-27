@@ -83,7 +83,7 @@ local Controller = {
 	GrappleAimAssistTargetPriority = "GrapplePoint",
 	GrappleAimAssistRangePriority = "Nearest",
 	GrappleAimAssistStrength = "Balanced",
-	GrappleAntiBonkEnabled = false,
+	AntiBonkEnabled = false,
 	GrappleSmartReelEnabled = false,
 	GrappleSmartReelMode = "Manual",
 	GrappleSharkTailHelperEnabled = false,
@@ -291,7 +291,6 @@ function Controller:HasAnyGrappleAssistFeature()
 		or self.GrappleEmergencyProtectionEnabled
 		or (self.GrappleEmergencyProtectionEnabled and self.GrappleVoidRescueEnabled)
 		or (self.GrappleEmergencyProtectionEnabled and self.GrappleWallSlamRescueEnabled)
-		or self.GrappleAntiBonkEnabled
 		or self.GrappleSmartReelEnabled
 		or self.GrappleSharkTailHelperEnabled
 		or self.GrappleMomentumGuardEnabled
@@ -420,25 +419,25 @@ function Controller:SetGrappleEmergencyFallThreshold(value)
 	self.GrappleEmergencyFallThreshold = math.clamp(tonumber(value) or 125, 80, 220)
 end
 
-function Controller:SetGrappleAntiBonk(value)
-	self.GrappleAntiBonkEnabled = value == true
-
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleAntiBonkEnabled = false
+function Controller:SetAntiBonk(value)
+	if value and not Executor.initializeAntiBonk() then
+		self.AntiBonkEnabled = false
 		if getgenv().Rayfield then
 			getgenv().Rayfield:Notify({
 				Title = "Accessibility Config",
-				Content = "Grapple module is not available yet",
+				Content = "Movement module is not available yet",
 				Duration = 3,
 			})
 		end
 		return
 	end
 
+	self.AntiBonkEnabled = value == true
+
 	if getgenv().Rayfield then
 		getgenv().Rayfield:Notify({
 			Title = "Accessibility Config",
-			Content = (self.GrappleAntiBonkEnabled and "Activated" or "Disabled") .. " Grapple Anti Bonk",
+			Content = (self.AntiBonkEnabled and "Activated" or "Disabled") .. " Universal Anti-Bonk",
 			Duration = 2,
 		})
 	end

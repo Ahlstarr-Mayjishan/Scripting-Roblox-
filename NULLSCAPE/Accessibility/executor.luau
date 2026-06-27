@@ -5,6 +5,7 @@
 
 local SpringerLogic = getgenv().loadModule("NULLSCAPE/Accessibility/Auto jump - Springer.luau")
 local InfiniteAirJump = getgenv().loadModule("NULLSCAPE/Accessibility/Infinite Air Jump.luau")
+local AntiBonk = getgenv().loadModule("NULLSCAPE/Accessibility/Anti Bonk.luau")
 local GrapplerInfiniteStamina = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/Grappler Infinite Stamina.luau")
 local GrappleAimAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/Grapple Aim Assist.luau")
 local RailAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Rail Assist.luau")
@@ -17,6 +18,10 @@ end
 
 function Executor.initializeInfiniteAirJump()
     return InfiniteAirJump.initialize()
+end
+
+function Executor.initializeAntiBonk()
+    return AntiBonk.initialize()
 end
 
 function Executor.initializeGrapplerInfiniteStamina()

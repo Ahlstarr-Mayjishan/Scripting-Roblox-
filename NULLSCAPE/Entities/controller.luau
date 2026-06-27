@@ -143,9 +143,12 @@ Controller.inLobby = inLobby
 local hasInRoundValue = false
 local folderConnections = {} -- key: folder -> value: list of connections
 local workspaceConnections = {} -- list of workspace-level connections
+local processedEntities = setmetatable({}, { __mode = "k" })
+local ENTITY_PROCESS_BATCH_SIZE = 4
 
 -- Ngắt các kết nối quan sát thư mục và workspace
 local function disconnectFolderObservations()
+	table.clear(processedEntities)
 	for _, conn in ipairs(workspaceConnections) do
 		if conn then
 			pcall(function()
@@ -555,6 +558,10 @@ local function processEntity(enemy)
 	if not enemy or not (enemy:IsA("Model") or enemy:IsA("BasePart")) or enemy.Name == "Skinwalkers" then
 		return
 	end
+	if processedEntities[enemy] or (GC.EntityConnections and GC.EntityConnections[enemy]) then
+		return
+	end
+	processedEntities[enemy] = true
 
 	if enemy:IsA("Model") then
 		-- Tự động đổi Adornee của ESP / ESPCrayon sang PrimaryPart để tránh lỗi hiển thị khi Adornee là Model không có PrimaryPart từ server
@@ -713,11 +720,6 @@ local function processEntity(enemy)
 		end)
 	end
 
-	-- Tránh việc đăng ký nhiều lần trùng lặp cho cùng một thực thể
-	if GC.EntityConnections and GC.EntityConnections[enemy] then
-		return
-	end
-
 	-- Hàm xử lý chính khi kiểm tra tên thực thể
 	local function checkAndApply()
 		if not enemy or not enemy.Parent then
@@ -867,6 +869,7 @@ end
 
 -- Gỡ bỏ lắng nghe của thực thể khi nó bị xóa
 local function removeEntity(enemy)
+	processedEntities[enemy] = nil
 	GC.removeEntityConnections(enemy)
 	for part, data in pairs(disabledShockwaves) do
 		if data.enemy == enemy then
@@ -940,11 +943,23 @@ function Controller:ObserveFolder(folder)
 	table.insert(conns, childRemovedConn)
 
 	-- 3. Xử lý các thực thể đã có sẵn trong thư mục
-	debugPrint("ObserveFolder: Existing children in:", folder.Name, "| count:", #folder:GetChildren())
-	for _, child in ipairs(folder:GetChildren()) do
-		debugPrint("ObserveFolder: Processing existing child:", child.Name)
-		processEntity(child)
-	end
+	local existingChildren = folder:GetChildren()
+	debugPrint("ObserveFolder: Existing children in:", folder.Name, "| count:", #existingChildren)
+	task.spawn(function()
+		local processedThisSlice = 0
+		for _, child in ipairs(existingChildren) do
+			if Controller.Destroyed or (folderConnections[folder] and folderConnections[folder] ~= conns) or not folder.Parent then
+				break
+			end
+			debugPrint("ObserveFolder: Processing existing child:", child.Name)
+			processEntity(child)
+			processedThisSlice += 1
+			if processedThisSlice >= ENTITY_PROCESS_BATCH_SIZE then
+				processedThisSlice = 0
+				task.wait()
+			end
+		end
+	end)
 
 	-- 4. Cơ chế tự động GC khi thư mục bị xóa/hủy khỏi Workspace
 	local destroyingConn = folder.AncestryChanged:Connect(function(_, parent)
@@ -1218,6 +1233,12 @@ local function initializeICBMHook()
 end
 
 -- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
+local previousEntitiesController = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+if previousEntitiesController and previousEntitiesController ~= Controller and typeof(previousEntitiesController.CleanUp) == "function" then
+	pcall(function()
+		previousEntitiesController:CleanUp()
+	end)
+end
 getgenv()._NULLSCAPE_Globals.activeEntitiesController = Controller
 
 -- Khởi tạo ban đầu khi nạp script

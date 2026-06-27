@@ -128,6 +128,8 @@ local hasInRoundValue = false
 local matchLoopsActive = false
 local instantUpdateQueued = false
 local folderConnections = {}
+local OBSERVE_REGISTER_BATCH_SIZE = 80
+local GIFT_POOL_SCAN_INTERVAL = 0.85
 
 -- Forward references cho việc quản lý các loop
 local startMatchLoops, stopRenderStepped
@@ -486,7 +488,7 @@ local function observeItemPools(folder)
 			end
 
 			scannedThisSlice += 1
-			if scannedThisSlice >= 250 then
+			if scannedThisSlice >= OBSERVE_REGISTER_BATCH_SIZE then
 				scannedThisSlice = 0
 				task.wait()
 			end
@@ -515,16 +517,26 @@ local function startObservingFolders()
 	table.clear(Controller.ActiveInstruments)
 	table.clear(Controller.ActiveAltars)
 
-	-- 1. Đăng ký các thực thể hiện có bằng CollectionService (Chuẩn xác theo ref.lua)
-	for _, obj in ipairs(CollectionService:GetTagged("Gift")) do
-		registerGift(obj)
+	-- Register existing CollectionService tags in batches to avoid round-start spikes
+	local function processTagged(tagName, registerFn)
+		task.spawn(function()
+			local processedThisSlice = 0
+			for _, obj in ipairs(CollectionService:GetTagged(tagName)) do
+				if Controller.Destroyed or Controller.inLobby then
+					break
+				end
+				registerFn(obj)
+				processedThisSlice += 1
+				if processedThisSlice >= OBSERVE_REGISTER_BATCH_SIZE then
+					processedThisSlice = 0
+					task.wait()
+				end
+			end
+		end)
 	end
-	for _, obj in ipairs(CollectionService:GetTagged("CadenceOrb")) do
-		registerInstrument(obj)
-	end
-	for _, obj in ipairs(CollectionService:GetTagged("Altar")) do
-		registerAltar(obj)
-	end
+	processTagged("Gift", registerGift)
+	processTagged("CadenceOrb", registerInstrument)
+	processTagged("Altar", registerAltar)
 
 	-- Lắng nghe các tín hiệu thêm/bớt tag của CollectionService
 	table.insert(folderConnections, CollectionService:GetInstanceAddedSignal("Gift"):Connect(registerGift))
@@ -1322,30 +1334,23 @@ local function startGiftPoolObserver()
 				safeControllerCleanUp()
 				break
 			end
-			local shouldScanPools = isFeatureSimulating("Gift") or isFeatureSimulating("Tripmine")
+			local shouldScanPools = not Controller.inLobby and (isFeatureSimulating("Gift") or isFeatureSimulating("Tripmine"))
 			if shouldScanPools then
 				local poolGifts = scanActiveGiftsFromPools()
-
-				-- Hợp nhất dữ liệu quét pool với ActiveGifts hiện tại (tránh trùng lặp)
 				local newGifts = {}
+				local seen = {}
 
-				-- Giữ lại các gift từ setupGiftClientHook (nếu có rawObj) mà chưa bị Collected
 				for _, g in ipairs(Controller.ActiveGifts) do
 					if g.rawObj and not g.rawObj.Collected and not g.rawObj.Destroyed then
 						table.insert(newGifts, g)
+						seen[g.part or g.id] = true
 					end
 				end
 
-				-- Thêm các gift quét được từ pool folder vào nếu chưa có
 				for _, pg in ipairs(poolGifts) do
-					local exists = false
-					for _, g in ipairs(newGifts) do
-						if g.part == pg.part or g.id == pg.id then
-							exists = true
-							break
-						end
-					end
-					if not exists then
+					local key = pg.part or pg.id
+					if not seen[key] then
+						seen[key] = true
 						table.insert(newGifts, pg)
 					end
 				end
@@ -1353,7 +1358,7 @@ local function startGiftPoolObserver()
 				Controller.ActiveGifts = newGifts
 				updateRunningState()
 			end
-			task.wait(shouldScanPools and 0.35 or 1.0)
+			task.wait(shouldScanPools and GIFT_POOL_SCAN_INTERVAL or 1.2)
 		end
 	end)
 end
@@ -1556,6 +1561,12 @@ local function setupGiftClientHook()
 end
 
 -- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
+local previousUpgradeController = getgenv()._NULLSCAPE_Globals.activeUpgradeController
+if previousUpgradeController and previousUpgradeController ~= Controller and typeof(previousUpgradeController.CleanUp) == "function" then
+	pcall(function()
+		previousUpgradeController:CleanUp()
+	end)
+end
 getgenv()._NULLSCAPE_Globals.activeUpgradeController = Controller
 
 -- Khởi tạo ban đầu khi nạp script
@@ -1565,7 +1576,9 @@ Logic.bindUpgradeWatcher(Controller, function()
 		triggerInstantUpdate()
 	end
 end)
-startObservingFolders()
+if not inLobby then
+	startObservingFolders()
+end
 setupGiftClientHook()
 startGiftPoolObserver()
 updateRunningState()

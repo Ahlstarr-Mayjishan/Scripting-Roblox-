@@ -43,8 +43,15 @@ return function(Client, Controller)
 			Controller:SetInfiniteAirJump(Value)
 		end,
 	})
-
-
+	Tab:CreateToggle({
+		Name = "Anti Bonk",
+		Info = "Suppresses all DiveBonk/stun states from diving or sliding into obstacles completely.",
+		CurrentValue = Controller.AntiBonkEnabled or false,
+		Flag = "AntiBonkToggle",
+		Callback = function(Value)
+			Controller:SetAntiBonk(Value)
+		end,
+	})
 
 	Tab:CreateSection("Rail Assist")
 
@@ -306,16 +313,6 @@ return function(Client, Controller)
 		Flag = "GrappleEmergencyFallThresholdSlider",
 		Callback = function(Value)
 			Controller:SetGrappleEmergencyFallThreshold(Value)
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "Grapple Anti Bonk",
-		Info = "Suppresses Grapple-related DiveBonk stun during active pulls/reels and a short grace window after release.",
-		CurrentValue = Controller.GrappleAntiBonkEnabled or false,
-		Flag = "GrappleAntiBonkToggle",
-		Callback = function(Value)
-			Controller:SetGrappleAntiBonk(Value)
 		end,
 	})
 
