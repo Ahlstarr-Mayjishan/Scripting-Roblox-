@@ -25,9 +25,8 @@ function TechniqueSelector:Prune(expiry, now)
         if not entry
             or not entry.Model
             or not entry.Model.Parent
-            or ((entry.LastSeen or 0) > 0 and (entry.LastSeen or 0) < pruneBefore) then
-            self._states[entry] = nil
-        elseif state and state.LastSwitch > 0 and state.LastSwitch < (pruneBefore - 8) then
+            or ((entry.LastSeen or 0) > 0 and (entry.LastSeen or 0) < pruneBefore)
+            or (state and state.LastSwitch > 0 and state.LastSwitch < (pruneBefore - 8)) then
             self._states[entry] = nil
         end
     end

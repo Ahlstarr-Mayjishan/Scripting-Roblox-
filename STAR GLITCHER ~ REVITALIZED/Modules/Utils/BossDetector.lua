@@ -178,20 +178,14 @@ function BossDetector:IsBoss(model, humanoid)
 
     if isStaticBoard then
         isBoss = false
-    elseif displayHint or nameHint or isOrbType then
-        -- Name hints or specific shapes (Orbs) are strong boss indicators
-        isBoss = true
-    elseif maxHealth and maxHealth > 500 then
-        isBoss = true
-    elseif boundsScale > 70 then
+    elseif displayHint or nameHint or isOrbType or (maxHealth and maxHealth > 500) or boundsScale > 70 then
+        -- Name hints, high health, bounds, or specific shapes (Orbs) are strong boss indicators
         isBoss = true
     elseif primaryIsBall then
         local maxAxis = math.max(size.X, size.Y, size.Z, primary.Size.X, primary.Size.Y, primary.Size.Z)
         local minAxis = math.min(primary.Size.X, primary.Size.Y, primary.Size.Z)
 
-        if maxAxis >= 5 then
-            isBoss = true
-        elseif minAxis >= 3.5 and (health or 0) > 150 then
+        if maxAxis >= 5 or (minAxis >= 3.5 and (health or 0) > 150) then
             isBoss = true
         end
     end

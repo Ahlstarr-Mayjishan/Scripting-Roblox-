@@ -68,9 +68,8 @@ function NPCTracker:Prune(now)
             or not entry
             or not entry.PrimaryPart
             or not entry.PrimaryPart.Parent
-            or self:_HasBlacklistedName(model) then
-            self._entries[model] = nil
-        elseif lastSeen > 0 and (now - lastSeen) > expiry then
+            or self:_HasBlacklistedName(model)
+            or (lastSeen > 0 and (now - lastSeen) > expiry) then
             self._entries[model] = nil
         end
     end

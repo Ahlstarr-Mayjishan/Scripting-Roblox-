@@ -248,10 +248,8 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
                         isRelated = true
                     else
                         for _, arg in ipairs(args) do
-                            if typeof(arg) == "Instance" and string.find(arg.Name, entityName) then
-                                isRelated = true
-                                break
-                            elseif typeof(arg) == "string" and string.find(arg, entityName) then
+                            if (typeof(arg) == "Instance" and string.find(arg.Name, entityName))
+                                or (typeof(arg) == "string" and string.find(arg, entityName)) then
                                 isRelated = true
                                 break
                             end
