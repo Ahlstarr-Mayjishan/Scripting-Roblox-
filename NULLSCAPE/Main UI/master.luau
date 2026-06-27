@@ -49,7 +49,6 @@ local Client = {
 	Modules = {},
 	ActiveConnections = {},
 	Destroyed = false,
-	DebugLogs = false,
 }
 getgenv().Client = Client
 
@@ -135,7 +134,6 @@ pcall(function()
 			AdvancedGravityCoilJumpPowerSlider = 28,
 			BetterJumpPadToggle = false,
 			BetterJumpPadPowerSlider = 100,
-			ImmunityDebugLogsToggle = false,
 		}
 
 		local currentSettings = {}
@@ -264,14 +262,7 @@ end)
 local SettingsTab = Window:CreateTab("Settings", 4483362458)
 Client.Tabs["Settings"] = SettingsTab
 
-SettingsTab:CreateToggle({
-	Name = "Immunity Debug Logs",
-	CurrentValue = false,
-	Flag = "ImmunityDebugLogsToggle",
-	Callback = function(Value)
-		Client.DebugLogs = Value
-	end,
-})
+
 
 SettingsTab:CreateButton({
 	Name = "Destroy UI",

@@ -64,7 +64,7 @@ local function isInMatch()
 end
 
 local function debugPrint(...)
-	warn("[DEBUG NULLSCAPE Controller]", ...)
+	-- Không in debug theo yêu cầu của người dùng
 end
 
 local function createCadenceUI()
@@ -521,7 +521,7 @@ local function processEntity(enemy)
 		return
 	end
 
-	-- Tạo phần đầu giả lập "head" (chữ thường) cho thực thể 3D để kích hoạt hệ thống ESP nguyên bản của game
+	-- Tạo phần đầu giả lập "head" (chữ thường) dạng BillboardGui cho thực thể 3D để khớp kiểu dữ liệu UDim2.Size của game gốc
 	if enemy:IsA("Model") and not enemy:FindFirstChild("head") then
 		task.spawn(function()
 			-- Tìm kiếm đệ quy phần đầu hoặc phần thân khả dụng của quái vật 3D một cách không đồng bộ
@@ -538,20 +538,14 @@ local function processEntity(enemy)
 			end
 
 			if actualHead and enemy.Parent and not enemy:FindFirstChild("head") then
-				local fakeHead = Instance.new("Part")
+				-- Nguyên bản game sử dụng BillboardGui (sprite) tên là "head" cho thực thể 2D
+				-- Do đó thuộc tính Size của nó là UDim2 chứ không phải Vector3. Ta cần tạo BillboardGui giả lập để tránh lỗi gán v2.Size = head.Size trong code game gốc gây crash.
+				local fakeHead = Instance.new("BillboardGui")
 				fakeHead.Name = "head"
-				fakeHead.Size = Vector3.new(2, 2, 2)
-				fakeHead.Transparency = 1
-				fakeHead.CanCollide = false
-				fakeHead.Anchored = false
+				fakeHead.Size = UDim2.new(4, 0, 4, 0)
+				fakeHead.Adornee = actualHead
+				fakeHead.AlwaysOnTop = true
 				fakeHead.Parent = enemy
-
-				local weld = Instance.new("WeldConstraint")
-				weld.Part0 = fakeHead
-				weld.Part1 = actualHead
-				weld.Parent = fakeHead
-
-				fakeHead.CFrame = actualHead.CFrame
 
 				-- Chờ một chút để xem hệ thống gốc của game có tự động gắn ESP hay không
 				task.wait(0.2)
