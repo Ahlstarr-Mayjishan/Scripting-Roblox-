@@ -48,8 +48,6 @@ local function getActiveDoubleJump()
 	return nil
 end
 
-local JUMP_TYPES = { "Highrise", "MedalStatus", "DoubleJump", "PocketBell", "Wicked", "Spirit" }
-
 local function doAirJump()
 	local character = Players.LocalPlayer.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -60,41 +58,26 @@ local function doAirJump()
 			and state ~= Enum.HumanoidStateType.Landed 
 			and state ~= Enum.HumanoidStateType.Dead then
 			
-			local doubleJump = getActiveDoubleJump()
-			local hasNativeJumpUpgrade = false
+			-- Perform pure physics jump
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 			
-			if doubleJump and doubleJump.AvailableJumps then
-				for _, jumpType in ipairs(JUMP_TYPES) do
-					if doubleJump.AvailableJumps[jumpType] ~= nil then
-						hasNativeJumpUpgrade = true
-						doubleJump.AvailableJumps[jumpType] = 1
-					end
-				end
-			end
-
-			local triggered = false
-			if hasNativeJumpUpgrade and doubleJump then
+			local jumpVelocity = humanoid.JumpPower > 0 and humanoid.JumpPower or 50.1
+			rootPart.AssemblyLinearVelocity = Vector3.new(rootPart.AssemblyLinearVelocity.X, jumpVelocity, rootPart.AssemblyLinearVelocity.Z)
+			
+			-- Play native double jump flip animation
+			local animator = getActiveAnimator()
+			if animator then
 				pcall(function()
-					doubleJump:TryDoubleJump()
-					triggered = true
+					animator:PlayAnimation("DoubleJump")
 				end)
 			end
-
-			if not triggered then
-				-- Fallback to manual physics jump if native method fails/unavailable or no upgrade bought
-				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-				
-				local animator = getActiveAnimator()
-				if animator then
-					pcall(function()
-						animator:PlayAnimation("DoubleJump")
-					end)
-				end
-				if doubleJump then
-					pcall(function()
-						doubleJump:UsedDoubleJump()
-					end)
-				end
+			
+			-- Play native double jump SFX and particles
+			local doubleJump = getActiveDoubleJump()
+			if doubleJump then
+				pcall(function()
+					doubleJump:UsedDoubleJump()
+				end)
 			end
 		end
 	end
