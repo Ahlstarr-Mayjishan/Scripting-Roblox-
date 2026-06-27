@@ -123,6 +123,8 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
         state.UnsafeSamples = 0
         state.NoFloorBelow = false
         state.SinceSafeFloor = 0
+        state.IntentGrace = false
+        state.IntentGraceAllowsRescue = false
         state.LastEvaluatedAt = now
         return state
     end
@@ -130,6 +132,12 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
     local sinceSafeFloor = state.LastSafeFloorAt and (now - state.LastSafeFloorAt) or math.huge
     local fallSpeed = math.max(-velocity.Y, 0)
     local recentGroundSlip = sinceSafeFloor <= cfg.TERRAIN_VOID_RECENT_GROUND_WINDOW
+    local intentGrace = sinceSafeFloor <= cfg.TERRAIN_VOID_INTENT_GRACE
+    local graceDropDistance = cfg.TERRAIN_VOID_GRACE_DROP_DISTANCE or cfg.TERRAIN_VOID_DROP_DISTANCE
+    local graceFallSpeed = cfg.TERRAIN_VOID_GRACE_MIN_FALL_SPEED or cfg.TERRAIN_VOID_FULL_SCAN_FALL_SPEED
+    local droppedBeyondGrace = state.LastSafePosition
+        and rootPart.Position.Y <= state.LastSafePosition.Y - graceDropDistance
+    local graceAllowsRescue = fallSpeed >= graceFallSpeed or droppedBeyondGrace == true
     local shouldFullScan = state.Danger == true
         or recentGroundSlip
         or fallSpeed >= cfg.TERRAIN_VOID_FULL_SCAN_FALL_SPEED
@@ -140,6 +148,8 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
         state.NoFloorBelow = true
         state.SinceSafeFloor = sinceSafeFloor
         state.FallSpeed = fallSpeed
+        state.IntentGrace = intentGrace and not graceAllowsRescue
+        state.IntentGraceAllowsRescue = graceAllowsRescue
         state.LastEvaluatedAt = now
         return state
     end
@@ -171,7 +181,10 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
 
     local danger = false
     local reason = "Airborne"
-    if terrainLost and falling and recentGroundSlip then
+    local suppressForIntent = terrainLost and falling and intentGrace and not graceAllowsRescue
+    if suppressForIntent then
+        reason = "RecentGroundIntentGrace"
+    elseif terrainLost and falling and recentGroundSlip then
         danger = true
         reason = "LedgeSlip"
     elseif terrainLost and falling and droppedFromLastSafe then
@@ -188,6 +201,8 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
     state.NoFloorBelow = noFloorBelow
     state.SinceSafeFloor = sinceSafeFloor
     state.FallSpeed = fallSpeed
+    state.IntentGrace = suppressForIntent
+    state.IntentGraceAllowsRescue = graceAllowsRescue
     state.LastEvaluatedAt = now
     return state
 end

@@ -149,6 +149,9 @@ local CFG = {
     TERRAIN_SAFE_FLOOR_BONUS = -16,
     TERRAIN_VOID_CONTEXT_TTL = 1.15,
     TERRAIN_VOID_RECENT_GROUND_WINDOW = 0.9,
+    TERRAIN_VOID_INTENT_GRACE = 0.48,
+    TERRAIN_VOID_GRACE_MIN_FALL_SPEED = 70,
+    TERRAIN_VOID_GRACE_DROP_DISTANCE = 24,
     TERRAIN_VOID_FALL_SPEED = 22,
     TERRAIN_VOID_FORWARD_PROBE_DISTANCE = 30,
     TERRAIN_VOID_SIDE_PROBE_DISTANCE = 10,
@@ -1300,6 +1303,9 @@ function isPanicRescueDanger(grapple)
     end
 
     local terrainState = getTerrainVoidFallState(grapple)
+    if terrainState and terrainState.IntentGrace then
+        return false
+    end
     if terrainState and terrainState.Danger then
         return true
     end

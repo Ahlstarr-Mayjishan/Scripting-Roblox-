@@ -197,6 +197,19 @@ local function isSpringerEnemy(enemy)
 	return string.find(enemy.Name:lower(), "springer") ~= nil
 end
 
+
+local function hasWorkingNativeEnemyESP(enemy)
+	for _, child in ipairs(enemy:GetChildren()) do
+		if (child.Name == "ESP" or child.Name == "ESPCrayon") and child:IsA("BillboardGui") then
+			local enabledOk = child.Enabled ~= false
+			local adorneeOk = child.Adornee ~= nil and child.Adornee.Parent ~= nil
+			if enabledOk and adorneeOk then
+				return true
+			end
+		end
+	end
+	return false
+end
 local function shouldFallbackEnemyESP(enemy)
 	if not enemy or not enemy.Parent then
 		return false
@@ -204,6 +217,10 @@ local function shouldFallbackEnemyESP(enemy)
 
 	if isSpringerEnemy(enemy) then
 		return true
+	end
+
+	if hasWorkingNativeEnemyESP(enemy) then
+		return false
 	end
 
 	local ignoredNames = {
@@ -318,6 +335,15 @@ function Logic.clearVisuals(gc, keepArrows)
 			end)
 		end
 		table.clear(saved.Highlights)
+	end
+
+	if saved.NativeEnemyFallbacks then
+		for _, gui in pairs(saved.NativeEnemyFallbacks) do
+			pcall(function()
+				gui:Destroy()
+			end)
+		end
+		table.clear(saved.NativeEnemyFallbacks)
 	end
 	if saved.Beams then
 		table.clear(saved.Beams)
@@ -464,6 +490,113 @@ local function applyCustomHighlights(saved, desired)
 	end
 end
 
+local function getEnemyDisplayName(enemy)
+	local nameLower = enemy.Name:lower()
+	if nameLower == "shadowguardian" then
+		return "voidboundguardian"
+	elseif nameLower == "shadowbaby" then
+		return "voidboundbaby"
+	elseif nameLower == "skinwalker" then
+		return "husk"
+	elseif nameLower == "mirage" then
+		return "???"
+	end
+	return nameLower
+end
+
+local function findNativeEnemyESPTemplate()
+	local players = game:GetService("Players")
+	local localPlayer = players.LocalPlayer
+	local playerScripts = localPlayer and localPlayer:FindFirstChild("PlayerScripts")
+	if playerScripts then
+		for _, inst in ipairs(playerScripts:GetDescendants()) do
+			if (inst.Name == "ESP" or inst.Name == "ESPCrayon") and inst:IsA("BillboardGui") then
+				return inst
+			end
+		end
+	end
+
+	local enemies = workspace:FindFirstChild("Enemies")
+	if enemies then
+		for _, inst in ipairs(enemies:GetDescendants()) do
+			if (inst.Name == "ESP" or inst.Name == "ESPCrayon") and inst:IsA("BillboardGui") then
+				return inst
+			end
+		end
+	end
+
+	return nil
+end
+
+local function createFallbackEnemyESP()
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "NULLSCAPE_NativeEnemyESP"
+	billboard.AlwaysOnTop = true
+	billboard.Size = UDim2.fromOffset(110, 24)
+	billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Label"
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.Font = Enum.Font.Code
+	label.TextScaled = true
+	label.TextStrokeTransparency = 0.35
+	label.TextColor3 = Color3.fromRGB(255, 180, 80)
+	label.Parent = billboard
+
+	return billboard
+end
+
+local function setEnemyESPLabel(gui, text, color)
+	local label = gui:FindFirstChild("Label", true)
+	if label and label:IsA("TextLabel") then
+		label.Text = text
+		label.TextColor3 = color
+	end
+end
+
+local function updateNativeLikeEnemyFallbacks(saved, desired)
+	if not saved.NativeEnemyFallbacks then
+		saved.NativeEnemyFallbacks = {}
+	end
+
+	for enemy, gui in pairs(saved.NativeEnemyFallbacks) do
+		if not desired[enemy] or not enemy.Parent or not gui.Parent then
+			pcall(function()
+				gui:Destroy()
+			end)
+			saved.NativeEnemyFallbacks[enemy] = nil
+		end
+	end
+
+	for enemy, data in pairs(desired) do
+		local gui = saved.NativeEnemyFallbacks[enemy]
+		if not gui or not gui.Parent then
+			local template = findNativeEnemyESPTemplate()
+			if template then
+				gui = template:Clone()
+				gui.Name = "NULLSCAPE_NativeEnemyESP"
+			else
+				gui = createFallbackEnemyESP()
+			end
+			gui.Parent = enemy
+			saved.NativeEnemyFallbacks[enemy] = gui
+		end
+
+		pcall(function()
+			gui.Adornee = data.Part
+		end)
+		pcall(function()
+			gui.Enabled = true
+		end)
+		pcall(function()
+			gui.Size = data.Part.Size
+		end)
+		setEnemyESPLabel(gui, getEnemyDisplayName(enemy), data.Color)
+	end
+end
+
 local function addCustomVisual(style, highlights, billboards, part, model, color)
 	local targetObject = model or part
 	if not part or not part.Parent or not targetObject or not targetObject.Parent then
@@ -481,7 +614,7 @@ local function addCustomVisual(style, highlights, billboards, part, model, color
 	end
 end
 
-local function addModelEnemyFallback(controller, style, highlights, billboards, hrp)
+local function addModelEnemyFallback(controller, enemyFallbacks, hrp)
 	if not canSimulate(controller, "Enemy") then
 		return
 	end
@@ -496,7 +629,10 @@ local function addModelEnemyFallback(controller, style, highlights, billboards, 
 		if shouldFallbackEnemyESP(enemy) then
 			local part = findEnemyVisualPart(enemy, hrp)
 			if isSafeEnemyVisualPart(part, hrp) then
-				addCustomVisual(style, highlights, billboards, part, part, color)
+				enemyFallbacks[enemy] = {
+					Part = part,
+					Color = color,
+				}
 			end
 		end
 	end
@@ -529,12 +665,14 @@ local function updateCustomESPStyles(controller, gc, hrp)
 	if not hrp then
 		applyCustomBillboards(saved, {})
 		applyCustomHighlights(saved, {})
+		updateNativeLikeEnemyFallbacks(saved, {})
 		return
 	end
 
 	local style = controller.ESPStyle or "Highlight"
 	local billboards = {}
 	local highlights = {}
+	local enemyFallbacks = {}
 
 	for _, t in ipairs(controller.ActiveGifts or {}) do
 		if isGiftValid(t) then
@@ -585,10 +723,11 @@ local function updateCustomESPStyles(controller, gc, hrp)
 		end
 	end
 
-	addModelEnemyFallback(controller, style, highlights, billboards, hrp)
+	addModelEnemyFallback(controller, enemyFallbacks, hrp)
 
 	applyCustomBillboards(saved, billboards)
 	applyCustomHighlights(saved, highlights)
+	updateNativeLikeEnemyFallbacks(saved, enemyFallbacks)
 end
 
 function Logic.updateESPStyles(controller, gc, hrp)
