@@ -9,26 +9,57 @@ local Magnet = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Magnet logic.l
 local Barrier = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Defuse Kits.luau")
 local ChargerAssist = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Charger Assists/Tripmine Charger Assist.luau")
 local Executor = {}
+local missingWarnings = {}
 
--- Thực thi dọn dẹp vẽ cũ
+local function getCallable(module, methodName, label)
+    if module and typeof(module[methodName]) == "function" then
+        return module[methodName]
+    end
+
+    local key = tostring(label) .. "." .. tostring(methodName)
+    if not missingWarnings[key] then
+        missingWarnings[key] = true
+        warn("[NULLSCAPE Executor] Missing callable: " .. key)
+    end
+
+    return nil
+end
+
+-- Run visual cleanup
 function Executor.clearVisuals(gc, keepArrows)
-    Logic.clearVisuals(gc, keepArrows)
+    local clearVisuals = getCallable(Logic, "clearVisuals", "RadarLogic")
+    if clearVisuals then
+        clearVisuals(gc, keepArrows)
+    end
 end
 
--- Thực thi cập nhật khoảng cách và style visual
+-- Run ESP/style updates
 function Executor.updateESPStyles(controller, gc, hrp)
-    Logic.updateESPStyles(controller, gc, hrp)
+    local updateESPStyles = getCallable(Logic, "updateESPStyles", "RadarLogic")
+    if updateESPStyles then
+        updateESPStyles(controller, gc, hrp)
+    end
 end
 
--- Thực thi tự động hút quà (Magnet Bypass)
+-- Run gift magnet automation
 function Executor.updateMagnet(controller, hrp)
-    Magnet.update(controller, hrp)
+    local update = getCallable(Magnet, "update", "Magnet")
+    if update then
+        update(controller, hrp)
+    end
 end
 
--- Thực thi cập nhật rào cản vật lý mìn (Tripmine Barrier)
+-- Run tripmine barrier assists
 function Executor.updateBarriers(controller, gc)
-    Barrier.update(controller, gc)
-    ChargerAssist.update(controller, gc)
+    local updateBarrier = getCallable(Barrier, "update", "DefuseKits")
+    if updateBarrier then
+        updateBarrier(controller, gc)
+    end
+
+    local updateChargerAssist = getCallable(ChargerAssist, "update", "ChargerAssist")
+    if updateChargerAssist then
+        updateChargerAssist(controller, gc)
+    end
 end
 
 return Executor
