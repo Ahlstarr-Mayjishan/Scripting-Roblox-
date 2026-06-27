@@ -835,6 +835,38 @@ local function altarMatchesFilter(controller, altarName)
 	return filterStr == "All" or filterStr == "Tất cả" or filterStr == altarName
 end
 
+local function getUpgradesFolder()
+	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local upgradeFolder = ReplicatedStorage:FindFirstChild("UpgradeFolder")
+	return upgradeFolder and upgradeFolder:FindFirstChild("Upgrades")
+end
+
+local function isNativelyOwned(upgradeName)
+	local orig = getgenv()._NULLSCAPE_Globals.OriginalIsUpgradeEnabled
+	if typeof(orig) == "function" then
+		local success, result = pcall(orig, upgradeName)
+		if success then
+			return result == true
+		end
+	end
+
+	local upgradesFolder = getUpgradesFolder()
+	if upgradesFolder then
+		local val = upgradesFolder:FindFirstChild(upgradeName)
+		if val and (val:IsA("ValueObject") or val:IsA("Attribute") or val:IsA("IntValue") or val:IsA("BoolValue")) then
+			local value = 0
+			pcall(function() value = val.Value or 0 end)
+			if value > 0 or value == true then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+Logic.isNativelyOwned = isNativelyOwned
+
 local function updateCustomESPStyles(controller, gc, hrp)
 	Logic.syncSimulatedUpgradeHud(controller)
 
@@ -862,7 +894,10 @@ local function updateCustomESPStyles(controller, gc, hrp)
 		if isGiftValid(t) then
 			local isTripmine = t.type == "Tripmine" or t.type == "GoldenTripmine" or t.type == "GoldenTripmines"
 			local featureKey = isTripmine and "Tripmine" or "Gift"
-			if canSimulate(controller, featureKey) then
+			
+			-- Bỏ qua vẽ ESP nếu người chơi đã mua tính năng này trong game
+			local nativeUpgrade = Logic.FEATURES[featureKey].upgrade
+			if canSimulate(controller, featureKey) and not isNativelyOwned(nativeUpgrade) then
 				local model = t.rawObj and t.rawObj.Model and typeof(t.rawObj.Model) == "Instance" and t.rawObj.Model.Parent and t.rawObj.Model or t.model
 				local part = t.part
 				if (not part or not part.Parent) and model then
@@ -873,7 +908,7 @@ local function updateCustomESPStyles(controller, gc, hrp)
 		end
 	end
 
-	if canSimulate(controller, "Cadence") then
+	if canSimulate(controller, "Cadence") and not isNativelyOwned("RadarInstruments") then
 		for _, t in ipairs(controller.ActiveInstruments or {}) do
 			if isInstrumentValid(t) then
 				addCustomVisual(style, highlights, billboards, t.part, t.model or t.part, t.color or ESPColors.Cadence)
@@ -881,7 +916,7 @@ local function updateCustomESPStyles(controller, gc, hrp)
 		end
 	end
 
-	if canSimulate(controller, "Altar") then
+	if canSimulate(controller, "Altar") and not isNativelyOwned("RadarAltars") then
 		for _, t in ipairs(controller.ActiveAltars or {}) do
 			if isAltarValid(t) and altarMatchesFilter(controller, t.altarName or "Unknown") then
 				addCustomVisual(style, highlights, billboards, t.part, t.model or t.part, t.color or ESPColors.Altar.Unknown)
@@ -889,7 +924,7 @@ local function updateCustomESPStyles(controller, gc, hrp)
 		end
 	end
 
-	if style ~= "Ping" and canSimulate(controller, "Player") then
+	if style ~= "Ping" and canSimulate(controller, "Player") and not isNativelyOwned("RadarPlayer") then
 		local Players_ = game:GetService("Players")
 		local LocalPlayer_ = Players_.LocalPlayer
 		for _, player in ipairs(Players_:GetPlayers()) do
@@ -907,7 +942,9 @@ local function updateCustomESPStyles(controller, gc, hrp)
 		end
 	end
 
-	addModelEnemyFallback(controller, enemyFallbacks, hrp)
+	if not isNativelyOwned("EnemyOnTop") then
+		addModelEnemyFallback(controller, enemyFallbacks, hrp)
+	end
 
 	applyCustomBillboards(saved, billboards)
 	applyCustomHighlights(saved, highlights)
@@ -1082,6 +1119,11 @@ end
 
 function Logic.shouldSpoofUpgradeEnabled(controller, upgradeName)
 	if not controller then
+		return false
+	end
+
+	-- Nếu người dùng đã thực sự mua nâng cấp này, nhường quyền kiểm soát lại cho game
+	if isNativelyOwned(upgradeName) then
 		return false
 	end
 
