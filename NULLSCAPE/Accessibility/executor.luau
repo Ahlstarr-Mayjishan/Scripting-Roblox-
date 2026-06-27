@@ -1,53 +1,99 @@
 -- [[
 --  NULLSCAPE - Accessibility Executor
---  Vai trò: Đầu mối thực thi các logic trợ năng thông qua API của file logic
+--  Dispatches accessibility modules with fail-soft loading so one broken helper
+--  cannot take down the whole Accessibility tab.
 -- ]]
 
-local SpringerLogic = getgenv().loadModule("NULLSCAPE/Accessibility/Auto jump - Springer.luau")
-local InfiniteAirJump = getgenv().loadModule("NULLSCAPE/Accessibility/Infinite Air Jump.luau")
-local AntiBonk = getgenv().loadModule("NULLSCAPE/Accessibility/Anti Bonk.luau")
-local GrapplerInfiniteStamina = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/Grappler Infinite Stamina.luau")
-local GrappleAimAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/Grapple Aim Assist.luau")
-local RailAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Rail Assist.luau")
+local MODULE_PATHS = {
+    SpringerLogic = "NULLSCAPE/Accessibility/Auto jump - Springer.luau",
+    InfiniteAirJump = "NULLSCAPE/Accessibility/Infinite Air Jump.luau",
+    AntiBonk = "NULLSCAPE/Accessibility/Anti Bonk.luau",
+    GrapplerInfiniteStamina = "NULLSCAPE/Accessibility/Grappler Assist/Grappler Infinite Stamina.luau",
+    GrappleAimAssist = "NULLSCAPE/Accessibility/Grappler Assist/Grapple Aim Assist.luau",
+    RailAssist = "NULLSCAPE/Accessibility/Rail Assist.luau",
+}
+
+local Modules = {}
 local Executor = {}
 
--- Thực thi gán tự động nhảy cho Springer
+local function loadAccessibilityModule(name)
+    if typeof(Modules[name]) == "table" then
+        return Modules[name]
+    end
+
+    local path = MODULE_PATHS[name]
+    if not path then
+        return nil
+    end
+
+    local success, module = pcall(function()
+        return getgenv().loadModule(path)
+    end)
+    if not success or typeof(module) ~= "table" then
+        warn("[NULLSCAPE] Accessibility module failed: " .. tostring(path) .. " -> " .. tostring(module))
+        Modules[name] = nil
+        return nil
+    end
+
+    Modules[name] = module
+    return module
+end
+
+local function callModule(name, methodName, ...)
+    local module = loadAccessibilityModule(name)
+    if not module or typeof(module[methodName]) ~= "function" then
+        return false
+    end
+
+    local success, result = pcall(function(...)
+        return module[methodName](...)
+    end, ...)
+    if not success then
+        warn("[NULLSCAPE] Accessibility call failed: " .. tostring(name) .. "." .. tostring(methodName) .. " -> " .. tostring(result))
+        return false
+    end
+
+    return result ~= false
+end
+
 function Executor.setupAutoJump(enemy, shockwave, controller, gc)
-    SpringerLogic.setupAutoJump(enemy, shockwave, controller, gc)
+    callModule("SpringerLogic", "setupAutoJump", enemy, shockwave, controller, gc)
 end
 
 function Executor.initializeInfiniteAirJump()
-    return InfiniteAirJump.initialize()
+    return callModule("InfiniteAirJump", "initialize")
 end
 
 function Executor.disableInfiniteAirJump()
-    if typeof(InfiniteAirJump.disable) == "function" then
-        InfiniteAirJump.disable()
-    end
+    callModule("InfiniteAirJump", "disable")
 end
 
 function Executor.initializeAntiBonk()
-    return AntiBonk.initialize()
+    return callModule("AntiBonk", "initialize")
+end
+
+function Executor.disableAntiBonk()
+    callModule("AntiBonk", "disable")
 end
 
 function Executor.initializeGrapplerInfiniteStamina()
-    return GrapplerInfiniteStamina.initialize()
+    return callModule("GrapplerInfiniteStamina", "initialize")
 end
 
 function Executor.enableGrappleAimAssist()
-    return GrappleAimAssist.enable()
+    return callModule("GrappleAimAssist", "enable")
 end
 
 function Executor.disableGrappleAimAssist()
-    GrappleAimAssist.disable()
+    callModule("GrappleAimAssist", "disable")
 end
 
 function Executor.enableRailAssist()
-    return RailAssist.enable()
+    return callModule("RailAssist", "enable")
 end
 
 function Executor.disableRailAssist()
-    RailAssist.disable()
+    callModule("RailAssist", "disable")
 end
 
 return Executor

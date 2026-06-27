@@ -112,7 +112,6 @@ local function grantTemporaryJump(doubleJump)
 	local movement = rawget(doubleJump, "Movement")
 	if movement then
 		movement.usedDoubleJumpInAir = false
-		movement.isDoubleJumping = false
 		local character = movement.Character
 		if character and typeof(character.SetAttribute) == "function" then
 			pcall(function()
@@ -122,6 +121,15 @@ local function grantTemporaryJump(doubleJump)
 	end
 
 	return true
+end
+
+local function playDoubleJumpAnimation(doubleJump)
+	local animator = doubleJump and rawget(doubleJump, "Animator")
+	if animator and typeof(animator.PlayAnimation) == "function" then
+		pcall(function()
+			animator:PlayAnimation("DoubleJump")
+		end)
+	end
 end
 
 local function tryNativeAirJump()
@@ -137,35 +145,22 @@ local function tryNativeAirJump()
 
 	grantTemporaryJump(doubleJump)
 	if typeof(doubleJump.TryDoubleJump) == "function" then
+		local beforeY = movement and movement.RootPart and movement.RootPart.Velocity.Y or nil
 		local success = pcall(function()
 			doubleJump:TryDoubleJump()
 		end)
-		return success
+		if success then
+			playDoubleJumpAnimation(doubleJump)
+			local afterY = movement and movement.RootPart and movement.RootPart.Velocity.Y or nil
+			return beforeY == nil or afterY == nil or afterY > beforeY - 0.01
+		end
 	end
 
 	return false
 end
 
-local function fallbackPhysicsJump()
-	local character = Players.LocalPlayer.Character
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-	if not (humanoid and humanoid.Parent and rootPart and isAirborne({ Humanoid = humanoid })) then
-		return false
-	end
-
-	humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-	local jumpVelocity = humanoid.JumpPower > 0 and humanoid.JumpPower or 50.1
-	rootPart.AssemblyLinearVelocity = Vector3.new(rootPart.AssemblyLinearVelocity.X, jumpVelocity, rootPart.AssemblyLinearVelocity.Z)
-	return true
-end
-
 local function doAirJump()
-	if tryNativeAirJump() then
-		return
-	end
-
-	fallbackPhysicsJump()
+	tryNativeAirJump()
 end
 
 local function hookDoubleJump(doubleJump)
@@ -188,11 +183,19 @@ local function hookDoubleJump(doubleJump)
 	globals.InfiniteAirJumpHookedDoubleJump = doubleJump
 
 	doubleJump.TryDoubleJump = function(self, ...)
-		if shouldJump() and isMovementAlive(rawget(self, "Movement")) and isAirborne(rawget(self, "Movement")) then
+		local movement = rawget(self, "Movement")
+		local forceInfiniteJump = shouldJump() and isMovementAlive(movement) and isAirborne(movement)
+		if forceInfiniteJump then
 			grantTemporaryJump(self)
 		end
 
-		return originalTryDoubleJump(self, ...)
+		local result = originalTryDoubleJump(self, ...)
+		if forceInfiniteJump then
+			playDoubleJumpAnimation(self)
+			grantTemporaryJump(self)
+		end
+
+		return result
 	end
 
 	return true

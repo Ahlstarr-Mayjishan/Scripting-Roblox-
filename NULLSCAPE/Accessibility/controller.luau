@@ -3,12 +3,43 @@
 --  Vai trò: Quản lý trạng thái và phối hợp các tính năng trợ năng (Accessibility) của hack.
 -- ]]
 
+local getgenv = getgenv
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 
-local Executor = getgenv().loadModule("NULLSCAPE/Accessibility/executor.luau")
-local GC = getgenv().loadModule("NULLSCAPE/Accessibility/GC.luau")
+local executorLoaded, Executor = pcall(function()
+	return getgenv().loadModule("NULLSCAPE/Accessibility/executor.luau")
+end)
+if not executorLoaded or typeof(Executor) ~= "table" then
+	warn("[NULLSCAPE] Accessibility executor failed; using fallback dispatcher: " .. tostring(Executor))
+	Executor = {}
+end
+
+local gcLoaded, GC = pcall(function()
+	return getgenv().loadModule("NULLSCAPE/Accessibility/GC.luau")
+end)
+if not gcLoaded or typeof(GC) ~= "table" then
+	warn("[NULLSCAPE] Accessibility GC failed; using fallback cleaner: " .. tostring(GC))
+	GC = {
+		cleanAll = function() end,
+	}
+end
+
+local function callExecutor(methodName, ...)
+	local method = Executor and Executor[methodName]
+	if typeof(method) ~= "function" then
+		return false
+	end
+
+	local success, result = pcall(method, ...)
+	if not success then
+		warn("[NULLSCAPE] Accessibility executor call failed: " .. tostring(methodName) .. " -> " .. tostring(result))
+		return false
+	end
+
+	return result ~= false
+end
 
 local SETTINGS_FOLDER = "NULLSCAPE"
 local SETTINGS_FILE = SETTINGS_FOLDER .. "/master_settings.json"
@@ -139,8 +170,8 @@ function Controller:CleanUp()
 	disconnectFolderObservations()
 	local globals = getgenv()._NULLSCAPE_Globals
 	if self.Destroyed or (globals and globals.activeAccessibilityController ~= self) then
-		Executor.disableRailAssist()
-		Executor.disableGrappleAimAssist()
+		callExecutor("disableRailAssist")
+		callExecutor("disableGrappleAimAssist")
 	end
 	GC.cleanAll()
 	self.EnemiesFolder = nil
@@ -158,7 +189,7 @@ function Controller:CleanUp()
 
 	-- Don dep ket noi nhay vo han neu huy hoan toan
 	if self.Destroyed and (not globals or globals.activeAccessibilityController == self or globals.activeAccessibilityController == nil) then
-		Executor.disableInfiniteAirJump()
+		callExecutor("disableInfiniteAirJump")
 	end
 
 	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
@@ -182,7 +213,7 @@ function Controller:SetSpringerAutoJump(value)
 end
 
 function Controller:SetInfiniteAirJump(value)
-	if value and not Executor.initializeInfiniteAirJump() then
+	if value and not callExecutor("initializeInfiniteAirJump") then
 		self.InfiniteAirJumpEnabled = false
 		if getgenv().Rayfield then
 			getgenv().Rayfield:Notify({
@@ -196,7 +227,7 @@ function Controller:SetInfiniteAirJump(value)
 
 	self.InfiniteAirJumpEnabled = value
 	if not self.InfiniteAirJumpEnabled then
-		Executor.disableInfiniteAirJump()
+		callExecutor("disableInfiniteAirJump")
 	end
 
 	if getgenv().Rayfield then
@@ -212,11 +243,11 @@ end
 
 function Controller:RefreshRailAssistHook()
 	if self.RailAssistSuiteEnabled then
-		if not Executor.enableRailAssist() then
+		if not callExecutor("enableRailAssist") then
 			return false
 		end
 	else
-		Executor.disableRailAssist()
+		callExecutor("disableRailAssist")
 	end
 
 	return true
@@ -307,11 +338,11 @@ end
 
 function Controller:RefreshGrappleAssistHook()
 	if (self.GrappleAssistSuiteEnabled and self:HasAnyGrappleAssistFeature()) or self.GrapplerStaminaMode == "Infinite Stamina" then
-		if not Executor.enableGrappleAimAssist() then
+		if not callExecutor("enableGrappleAimAssist") then
 			return false
 		end
 	else
-		Executor.disableGrappleAimAssist()
+		callExecutor("disableGrappleAimAssist")
 	end
 
 	return true
@@ -448,7 +479,7 @@ function Controller:SetGrappleEmergencyFallThreshold(value)
 end
 
 function Controller:SetAntiBonk(value)
-	if value and not Executor.initializeAntiBonk() then
+	if value and not callExecutor("initializeAntiBonk") then
 		self.AntiBonkEnabled = false
 		if getgenv().Rayfield then
 			getgenv().Rayfield:Notify({
@@ -461,6 +492,9 @@ function Controller:SetAntiBonk(value)
 	end
 
 	self.AntiBonkEnabled = value == true
+	if not self.AntiBonkEnabled then
+		callExecutor("disableAntiBonk")
+	end
 
 	if getgenv().Rayfield then
 		getgenv().Rayfield:Notify({
@@ -615,7 +649,7 @@ end
 
 local function handleSpringerShockwave(enemy, child)
 	if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
-		Executor.setupAutoJump(enemy, child, Controller, GC)
+		callExecutor("setupAutoJump", enemy, child, Controller, GC)
 	end
 end
 
@@ -748,7 +782,9 @@ task.spawn(function()
 	end
 	if inRoundVal and inRoundVal:IsA("BoolValue") then
 		if getgenv()._NULLSCAPE_Globals.activeAccessibilityController ~= Controller then
-			pcall(function() Controller:CleanUp() end)
+			pcall(function()
+				Controller:CleanUp()
+			end)
 			return
 		end
 		setInLobby(not inRoundVal.Value)
@@ -757,14 +793,20 @@ task.spawn(function()
 		conn = inRoundVal.Changed:Connect(function(val)
 			if Controller.Destroyed or not Controller.CleanUp then
 				if conn then
-					pcall(function() conn:Disconnect() end)
+					pcall(function()
+						conn:Disconnect()
+					end)
 				end
 				return
 			end
 			if getgenv()._NULLSCAPE_Globals.activeAccessibilityController ~= Controller then
-				pcall(function() Controller:CleanUp() end)
+				pcall(function()
+					Controller:CleanUp()
+				end)
 				if conn then
-					pcall(function() conn:Disconnect() end)
+					pcall(function()
+						conn:Disconnect()
+					end)
 				end
 				return
 			end

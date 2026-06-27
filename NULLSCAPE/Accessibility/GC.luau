@@ -75,7 +75,7 @@ end
 -- Thực hiện dọn dẹp và giải phóng tài nguyên cực hạn (GC)
 function GC.cleanAll()
 	-- 1. Ngắt toàn bộ kết nối của từng thực thể riêng biệt
-	for enemy, connections in pairs(GC.EntityConnections) do
+	for _, connections in pairs(GC.EntityConnections) do
 		for _, conn in ipairs(connections) do
 			cleanupItem(conn)
 		end

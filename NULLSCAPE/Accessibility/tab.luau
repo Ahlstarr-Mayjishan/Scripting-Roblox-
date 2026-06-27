@@ -1,6 +1,107 @@
 local UserInputService = game:GetService("UserInputService")
 
+local DEFAULTS = {
+	SpringerAutoJumpEnabled = false,
+	InfiniteAirJumpEnabled = false,
+	AntiBonkEnabled = false,
+	RailAssistSuiteEnabled = false,
+	RailAutoEnabled = false,
+	RailSpeedMultiplier = 1.1,
+	RailAutoDelay = 1.5,
+	RailAutoCaptureRange = 4,
+	GrappleAssistSuiteEnabled = false,
+	GrapplerStaminaMode = "Off",
+	GrappleAimAssistEnabled = false,
+	GrappleAimAssistStrength = "Balanced",
+	GrappleRescueAssistEnabled = false,
+	GrappleEmergencyProtectionEnabled = false,
+	GrappleVoidRescueEnabled = true,
+	GrappleWallSlamRescueEnabled = false,
+	GrappleEmergencyProtectionMode = "Manual",
+	GrappleEmergencySpeedThreshold = 220,
+	GrappleEmergencyFallThreshold = 125,
+	GrappleSmartReelEnabled = false,
+	GrappleSmartReelMode = "Manual",
+	GrappleSharkTailHelperEnabled = false,
+	GrappleSharkTailMode = "Manual",
+	GrappleSharkTailStyle = "Balanced",
+	GrappleMomentumGuardEnabled = false,
+	GrappleJumpPadUsesBypassEnabled = false,
+	GrappleAirControlMultiplier = 1.1,
+	GrappleReelPullMultiplier = 1.1,
+	GrappleSharkTailPullMultiplier = 1.1,
+	GrappleAimAssistTargetPriority = "GrapplePoint",
+	GrappleAimAssistRangePriority = "Nearest",
+	GrappleAdaptInputKey = "T",
+}
+
+local function resolveController(Client, Controller)
+	if typeof(Controller) == "table" and rawget(Controller, "__AccessibilityProxy") ~= true then
+		return Controller
+	end
+
+	if Client and typeof(Client.Modules) == "table" and typeof(Client.Modules.AccessibilityController) == "table" then
+		return Client.Modules.AccessibilityController
+	end
+
+	local globals = getgenv and getgenv()._NULLSCAPE_Globals
+	if globals and typeof(globals.activeAccessibilityController) == "table" then
+		return globals.activeAccessibilityController
+	end
+
+	if getgenv and typeof(getgenv().loadModule) == "function" then
+		local success, loadedController = pcall(function()
+			return getgenv().loadModule("NULLSCAPE/Accessibility/controller.luau")
+		end)
+		if success and typeof(loadedController) == "table" then
+			if Client and typeof(Client.Modules) == "table" then
+				Client.Modules.AccessibilityController = loadedController
+			end
+			return loadedController
+		end
+	end
+
+	return nil
+end
+
+local function createControllerProxy(Client, Controller)
+	return setmetatable({ __AccessibilityProxy = true }, {
+		__index = function(_, key)
+			local activeController = resolveController(Client, Controller)
+			if activeController then
+				local value = activeController[key]
+				if value ~= nil then
+					if typeof(value) == "function" and type(key) == "string" and string.sub(key, 1, 3) == "Set" then
+						return function(_, ...)
+							local latestController = resolveController(Client, Controller) or activeController
+							local latestMethod = latestController and latestController[key]
+							if typeof(latestMethod) == "function" then
+								return latestMethod(latestController, ...)
+							end
+						end
+					end
+					return value
+				end
+			end
+
+			if type(key) == "string" and string.sub(key, 1, 3) == "Set" then
+				return function(_, ...)
+					local latestController = resolveController(Client, Controller)
+					local latestMethod = latestController and latestController[key]
+					if typeof(latestMethod) == "function" then
+						return latestMethod(latestController, ...)
+					end
+					warn("[NULLSCAPE] Accessibility controller is not ready; ignored " .. tostring(key))
+				end
+			end
+
+			return DEFAULTS[key]
+		end,
+	})
+end
+
 return function(Client, Controller)
+	Controller = createControllerProxy(Client, Controller)
 	local Tab = Client.Window:CreateTab("Accessibility", 4483362458)
 	local adaptInputCaptureConnection = nil
 	local adaptInputStatusLabel = nil
