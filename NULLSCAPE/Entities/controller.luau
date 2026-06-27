@@ -1022,6 +1022,11 @@ local activeCallbacks = {}
 
 -- Hook hệ thống trạng thái (Status Effects) để miễn nhiễm debuff ở chế độ Blatant
 local function initializeStatusEffectHook()
+	local globals = getgenv()._NULLSCAPE_Globals
+	if globals.StatusEffectHooked then
+		return
+	end
+
 	local StatusEffectChanged = ReplicatedStorage:FindFirstChild("Events")
 		and ReplicatedStorage.Events:FindFirstChild("StatusEffectChanged")
 	if StatusEffectChanged and StatusEffectChanged:IsA("RemoteEvent") then
@@ -1097,6 +1102,8 @@ local function initializeStatusEffectHook()
 			end
 		end
 	end)
+
+	globals.StatusEffectHooked = true
 end
 
 -- Hook để chặn RemoteEvent báo tử của thực thể Client-side (như ICBM và Springer) một cách an toàn
