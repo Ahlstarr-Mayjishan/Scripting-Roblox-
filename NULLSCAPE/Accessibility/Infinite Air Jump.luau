@@ -6,6 +6,7 @@
 -- ]]
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
 local Logic = {}
@@ -13,6 +14,13 @@ local Logic = {}
 local BAR_REFRESH_INTERVAL = 0.45
 local JUMP_REQUEST_DEBOUNCE = 0.08
 local FALLBACK_JUMP_POWER = 38
+local DOUBLE_JUMP_ANIMATION_NAMES = {
+	"DoubleJump",
+	"Double Jump",
+	"Jump_Double",
+	"DoubleJumpAnimation",
+}
+local MAX_ANIMATION_DESCENDANTS = 160
 
 local function getGlobals()
 	local env = getgenv()
@@ -85,10 +93,105 @@ end
 local function playDoubleJumpAnimation(doubleJump)
 	local animator = doubleJump and rawget(doubleJump, "Animator")
 	if animator and typeof(animator.PlayAnimation) == "function" then
-		pcall(function()
+		local success = pcall(function()
 			animator:PlayAnimation("DoubleJump")
 		end)
+		if success then
+			setStatus("fallback jump + native anim")
+			return true
+		end
 	end
+
+	return false
+end
+
+local function findNamedAnimation(root)
+	if not root then
+		return nil
+	end
+
+	for _, wantedName in ipairs(DOUBLE_JUMP_ANIMATION_NAMES) do
+		local direct = root:FindFirstChild(wantedName, true)
+		if direct and direct:IsA("Animation") and tostring(direct.AnimationId or "") ~= "" then
+			return direct
+		end
+	end
+
+	local checked = 0
+	for _, descendant in ipairs(root:GetDescendants()) do
+		checked = checked + 1
+		if checked > MAX_ANIMATION_DESCENDANTS then
+			break
+		end
+		if descendant:IsA("Animation") then
+			local name = string.lower(descendant.Name)
+			if string.find(name, "double") and string.find(name, "jump") and tostring(descendant.AnimationId or "") ~= "" then
+				return descendant
+			end
+		end
+	end
+
+	return nil
+end
+
+local function resolveDoubleJumpAnimationId()
+	local globals = getGlobals()
+	if type(globals.InfiniteAirJumpAnimationId) == "string" and globals.InfiniteAirJumpAnimationId ~= "" then
+		return globals.InfiniteAirJumpAnimationId
+	end
+
+	local localPlayer = Players.LocalPlayer
+	local animationsFolder = ReplicatedStorage:FindFirstChild("Animations")
+	local animationInstances = animationsFolder and animationsFolder:FindFirstChild("Instances")
+	local defaultAnimations = animationInstances and animationInstances:FindFirstChild("Default")
+	local roots = {
+		defaultAnimations,
+		localPlayer.Character,
+		localPlayer:FindFirstChild("PlayerScripts"),
+	}
+
+	for _, root in ipairs(roots) do
+		local animation = findNamedAnimation(root)
+		if animation then
+			globals.InfiniteAirJumpAnimationId = animation.AnimationId
+			return animation.AnimationId
+		end
+	end
+
+	return nil
+end
+
+local function playFallbackDoubleJumpAnimation(humanoid)
+	local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+	if not animator then
+		return false
+	end
+
+	local animationId = resolveDoubleJumpAnimationId()
+	if not animationId then
+		return false
+	end
+
+	local animation = Instance.new("Animation")
+	animation.Name = "NULLSCAPE_DoubleJump"
+	animation.AnimationId = animationId
+
+	local success, track = pcall(function()
+		return animator:LoadAnimation(animation)
+	end)
+	animation:Destroy()
+
+	if not success or not track then
+		return false
+	end
+
+	pcall(function()
+		track.Priority = Enum.AnimationPriority.Action2
+		track:Play(0.05, 1, 1)
+	end)
+
+	getGlobals().InfiniteAirJumpLastAnimationTrack = track
+	return true
 end
 
 local function refreshVirtualJumpBar(doubleJump, force)
@@ -162,9 +265,13 @@ local function tryFallbackAirJump()
 	end
 
 	local doubleJump = getCachedDoubleJump()
+	local playedAnimation = false
 	if doubleJump then
 		sustainVirtualJump(doubleJump, true)
-		playDoubleJumpAnimation(doubleJump)
+		playedAnimation = playDoubleJumpAnimation(doubleJump)
+	end
+	if not playedAnimation then
+		playedAnimation = playFallbackDoubleJumpAnimation(humanoid)
 	end
 
 	local velocity = rootPart.AssemblyLinearVelocity or rootPart.Velocity
@@ -179,7 +286,7 @@ local function tryFallbackAirJump()
 		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 	end)
 
-	setStatus("fallback jump")
+	setStatus(playedAnimation and "fallback jump + anim" or "fallback jump")
 	return true
 end
 
