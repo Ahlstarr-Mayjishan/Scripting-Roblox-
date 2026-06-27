@@ -25,20 +25,21 @@ function Logic.initialize()
 	end
 
 	local movement = ReplicatedStorage:FindFirstChild("Movement")
-	if not movement or not movement:IsA("ModuleScript") then
+	local movementCoreScript = movement and movement:FindFirstChild("MovementCore")
+	if not movementCoreScript or not movementCoreScript:IsA("ModuleScript") then
 		return false
 	end
 
-	local success, movementModule = pcall(require, movement)
-	if not success or typeof(movementModule) ~= "table" or typeof(movementModule.DiveBonk) ~= "function" then
+	local success, movementCore = pcall(require, movementCoreScript)
+	if not success or typeof(movementCore) ~= "table" or typeof(movementCore.DiveBonk) ~= "function" then
 		return false
 	end
 
-	local originalDiveBonk = movementModule.DiveBonk
+	local originalDiveBonk = movementCore.DiveBonk
 	globals.OriginalDiveBonk = originalDiveBonk
 
 	-- Hook DiveBonk to do absolutely nothing when shouldSuppress() is true
-	movementModule.DiveBonk = function(self, ...)
+	movementCore.DiveBonk = function(self, ...)
 		if shouldSuppress() then
 			-- Suppress the stun state and animation
 			self.diveBonked = false
