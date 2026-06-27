@@ -164,6 +164,10 @@ local CFG = {
     VOID_RESCUE_PREDICT_TIME = 0.42,
     VOID_RESCUE_TARGET_UPWARD_BONUS = -58,
     VOID_RESCUE_LOW_TARGET_PENALTY = 95,
+    VOID_RESCUE_SAFE_LANDING_DEPTH = 190,
+    VOID_RESCUE_SAFE_LANDING_MAX_TIME = 1.55,
+    VOID_RESCUE_SAFE_LANDING_NORMAL_Y = 0.45,
+    VOID_RESCUE_SAFE_LANDING_KILL_MARGIN = 12,
     SHARK_TAIL_VOID_SAVER_ENABLED = false,
     SHARK_TAIL_VOID_SAVER_TRIGGER_BUFFER = 46,
     SHARK_TAIL_VOID_SAVER_USE_BUFFER = 28,
@@ -1257,6 +1261,68 @@ local function getFloorHit(position, params)
     return Workspace:Raycast(origin, direction, params)
 end
 
+local function isSafeLandingFloorHit(result, killY)
+    if not result then
+        return false
+    end
+
+    local instance = result.Instance
+    if instance and instance.Name == "KillVoid" then
+        return false
+    end
+    if result.Normal and result.Normal.Y < CFG.VOID_RESCUE_SAFE_LANDING_NORMAL_Y then
+        return false
+    end
+    if killY and result.Position.Y <= killY + CFG.VOID_RESCUE_SAFE_LANDING_KILL_MARGIN then
+        return false
+    end
+
+    return true
+end
+
+local function getSafeLandingFloorHit(grapple, killY)
+    local rootPart = grapple and grapple.RootPart
+    local velocity = rootPart and rootPart.Velocity
+    if not (rootPart and velocity and velocity.Y < -2) then
+        return nil
+    end
+
+    local params = getEmergencyFloorRaycastParams(grapple)
+    local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+    local samples = {
+        rootPart.Position,
+        rootPart.Position + horizontal * 0.22,
+        rootPart.Position + horizontal * 0.42,
+    }
+
+    local bestHit = nil
+    local bestDistance = math.huge
+    for _, sample in ipairs(samples) do
+        local hit = Workspace:Raycast(sample, Vector3.new(0, -CFG.VOID_RESCUE_SAFE_LANDING_DEPTH, 0), params)
+        if isSafeLandingFloorHit(hit, killY) then
+            local distance = rootPart.Position.Y - hit.Position.Y
+            if distance >= 0 and distance < bestDistance then
+                bestHit = hit
+                bestDistance = distance
+            end
+        end
+    end
+
+    if not bestHit then
+        return nil
+    end
+
+    local fallSpeed = math.max(-velocity.Y, 8)
+    local timeToLanding = bestDistance / fallSpeed
+    local gravityProfile = Logic.getGravityAssistProfile(grapple)
+    local maxLandingTime = CFG.VOID_RESCUE_SAFE_LANDING_MAX_TIME + (gravityProfile.Active and 0.35 or 0)
+    if timeToLanding > maxLandingTime then
+        return nil
+    end
+
+    return bestHit
+end
+
 local function getWallHit(position, direction, params)
     if not (position and direction and direction.Magnitude > 0) then
         return nil
@@ -1349,9 +1415,14 @@ local function getVoidDangerState(grapple)
     local y = rootPart.Position.Y
     local gravityProfile = Logic.getGravityAssistProfile(grapple)
     local voidBufferBonus = gravityProfile.VoidBufferBonus or 0
+    local safeLandingHit = getSafeLandingFloorHit(grapple, killY)
     if killY then
         if y <= killY + CFG.VOID_RESCUE_HARD_BUFFER + voidBufferBonus * 0.35 then
             return true, "BelowKillPlane"
+        end
+
+        if safeLandingHit then
+            return false, "SafeLandingFloor"
         end
 
         if y <= killY + CFG.VOID_RESCUE_KILL_PLANE_BUFFER + voidBufferBonus then
@@ -1364,6 +1435,10 @@ local function getVoidDangerState(grapple)
                 return true, gravityProfile.Active and "LowGravityProjectedKillPlane" or "ProjectedKillPlane"
             end
         end
+    end
+
+    if safeLandingHit then
+        return false, "SafeLandingFloor"
     end
 
     local terrainState = getTerrainVoidFallState(grapple)
@@ -1397,12 +1472,15 @@ local function getProjectedUnsafeSampleCount(grapple)
         return 0, false
     end
 
+    local killY = getVoidKillPlaneY()
+    if getSafeLandingFloorHit(grapple, killY) then
+        return 0, false
+    end
+
     local terrainState = getTerrainVoidFallState(grapple)
     if terrainState and terrainState.Danger then
         return math.max(terrainState.UnsafeSamples or 0, CFG.TERRAIN_VOID_MIN_UNSAFE_SAMPLES), false
     end
-
-    local killY = getVoidKillPlaneY()
     if killY and rootPart.Position.Y <= killY + 45 then
         return #CFG.PANIC_RESCUE_LOOKAHEADS, true
     end
@@ -3896,7 +3974,6 @@ local function applySharkTailStabilize(grapple)
 end
 
 local function applyAirControlMultiplier(grapple, dt)
-
     local controlLevel = Logic.getAirControlMultiplier()
     if controlLevel <= 0 then
         return
@@ -3924,21 +4001,31 @@ local function applyAirControlMultiplier(grapple, dt)
     local graceWingsMultiplier = hasUpgrade(movement, "GraceWings") and 1.5 or 1
     local movementSpeedMultiplier = tonumber(movement.movementSpeedMulti) or 1
 
-    local desiredSpeed = math.clamp(
-        32 + (controlLevel * 8 * movementSpeedMultiplier * graceWingsMultiplier),
-        32,
-        controlLevel >= 10 and 145 or 118
+    local inputUnit = playerMoveDirection.Unit
+    local alongInputSpeed = horizontalVelocity:Dot(inputUnit)
+    local lateralVelocity = horizontalVelocity - inputUnit * alongInputSpeed
+    local assistAcceleration = (42 + controlLevel * 30) * movementSpeedMultiplier * graceWingsMultiplier
+    local authority = levelAlpha ^ 1.35
+    local maxControlSpeed = 62 + controlLevel * 13
+    local desiredAlongSpeed = math.clamp(
+        alongInputSpeed + assistAcceleration * dtClamped,
+        -maxControlSpeed * 0.35,
+        maxControlSpeed
     )
-    local desiredHorizontal = playerMoveDirection.Unit * desiredSpeed
-    local steerAlpha = math.clamp((0.18 + levelAlpha * 0.72) * dtClamped * 60, 0, controlLevel >= 10 and 1 or 0.92)
-    local nextHorizontal = horizontalVelocity:Lerp(desiredHorizontal, steerAlpha)
+    local lateralDamping = math.clamp((0.08 + authority * 0.58) * dtClamped * 60, 0, controlLevel >= 10 and 0.82 or 0.62)
+    local nextHorizontal = inputUnit * desiredAlongSpeed + lateralVelocity * (1 - lateralDamping)
 
-    local gravityCancel = math.clamp((controlLevel - 5) / 5, 0, 1)
+    local maxHorizontalSpeed = 128 + controlLevel * 15
+    if nextHorizontal.Magnitude > maxHorizontalSpeed then
+        nextHorizontal = nextHorizontal.Unit * maxHorizontalSpeed
+    end
+
+    local gravityCancel = math.clamp((controlLevel - 3) / 7, 0, 1) ^ 1.25
     local nextY = velocity.Y
     if gravityCancel > 0 then
         nextY += Workspace.Gravity * gravityCancel * dtClamped
-        if controlLevel >= 10 and nextY < -8 then
-            nextY = math.max(nextY, -8)
+        if controlLevel >= 10 and nextY < -3 then
+            nextY = math.max(nextY, -3)
         end
     end
 

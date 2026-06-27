@@ -15,7 +15,7 @@ local DEFAULTS = {
 	GrappleAimAssistStrength = "Balanced",
 	GrappleRescueAssistEnabled = false,
 	GrappleEmergencyProtectionEnabled = false,
-	GrappleVoidRescueEnabled = true,
+	GrappleVoidRescueEnabled = false,
 	GrappleWallSlamRescueEnabled = false,
 	GrappleEmergencyProtectionMode = "Manual",
 	GrappleEmergencySpeedThreshold = 220,
@@ -150,16 +150,16 @@ return function(Client, Controller)
 
 	local infiniteAirJumpStatusLabel = nil
 	if Tab.CreateLabel then
-		infiniteAirJumpStatusLabel =
-			Tab:CreateLabel("Infinite Air Jump Status: " .. tostring(Controller:GetInfiniteAirJumpStatus() or "pending"))
+		infiniteAirJumpStatusLabel = Tab:CreateLabel(
+			"Infinite Air Jump Status: " .. tostring(Controller:GetInfiniteAirJumpStatus() or "pending")
+		)
 		task.spawn(function()
 			while infiniteAirJumpStatusLabel and Client and not Client.Destroyed do
 				task.wait(1)
 				if infiniteAirJumpStatusLabel and typeof(infiniteAirJumpStatusLabel.Set) == "function" then
 					pcall(function()
 						infiniteAirJumpStatusLabel:Set(
-							"Infinite Air Jump Status: "
-								.. tostring(Controller:GetInfiniteAirJumpStatus() or "pending")
+							"Infinite Air Jump Status: " .. tostring(Controller:GetInfiniteAirJumpStatus() or "pending")
 						)
 					end)
 				end
@@ -562,7 +562,7 @@ return function(Client, Controller)
 
 	Tab:CreateSlider({
 		Name = "Grapple Air Control",
-		Info = "0 returns control to the game. 1-9 adds progressively freer grapple steering. 10 strongly overrides gravity and horizontal drift while grappling.",
+		Info = "0 returns control to the game. 1-9 adds stronger physical steering while preserving grapple momentum. 10 gives near-full directional authority.",
 		Range = { 0, 10 },
 		Increment = 1,
 		Suffix = "/10",
