@@ -156,6 +156,17 @@ function Controller:CleanUp()
 		table.clear(self.PermanentConnections)
 	end
 
+	-- Dọn dẹp kết nối nhảy vô hạn nếu hủy hoàn toàn
+	if self.Destroyed and (not globals or globals.activeAccessibilityController == self or globals.activeAccessibilityController == nil) then
+		if globals and globals.InfiniteAirJumpConnection then
+			pcall(function()
+				globals.InfiniteAirJumpConnection:Disconnect()
+			end)
+			globals.InfiniteAirJumpConnection = nil
+			globals.InfiniteAirJumpListenerConnected = nil
+		end
+	end
+
 	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
 	if globals and globals.activeAccessibilityController == self then
 		globals.activeAccessibilityController = nil
@@ -334,10 +345,15 @@ function Controller:SetGrappleAssistSuite(value)
 end
 
 function Controller:SetGrappleAimAssist(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
 	self.GrappleAimAssistEnabled = value == true
+	if self.GrappleAimAssistEnabled then
+		self.GrappleAssistSuiteEnabled = true
+	end
 
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleAimAssistEnabled = false
+		self.GrappleAssistSuiteEnabled = previousSuite
 		if getgenv().Rayfield then
 			getgenv().Rayfield:Notify({
 				Title = "Accessibility Config",
@@ -358,42 +374,57 @@ function Controller:SetGrappleAimAssist(value)
 end
 
 function Controller:SetGrappleRescueAssist(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
 	self.GrappleRescueAssistEnabled = value == true
+	if self.GrappleRescueAssistEnabled then
+		self.GrappleAssistSuiteEnabled = true
+	end
 
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleRescueAssistEnabled = false
-		if getgenv().Rayfield then
-			getgenv().Rayfield:Notify({
-				Title = "Accessibility Config",
-				Content = "Grapple module is not available yet",
-				Duration = 3,
-			})
-		end
-		return
+		self.GrappleAssistSuiteEnabled = previousSuite
 	end
 end
 
 function Controller:SetGrappleEmergencyProtection(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
 	self.GrappleEmergencyProtectionEnabled = value == true
+	if self.GrappleEmergencyProtectionEnabled then
+		self.GrappleAssistSuiteEnabled = true
+	end
 
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleEmergencyProtectionEnabled = false
+		self.GrappleAssistSuiteEnabled = previousSuite
 	end
 end
 
 function Controller:SetGrappleVoidRescue(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
 	self.GrappleVoidRescueEnabled = value == true
+	if self.GrappleVoidRescueEnabled and self.GrappleEmergencyProtectionEnabled then
+		self.GrappleAssistSuiteEnabled = true
+	end
 
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleVoidRescueEnabled = false
+		self.GrappleAssistSuiteEnabled = previousSuite
 	end
 end
 
 function Controller:SetGrappleWallSlamRescue(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
+	local previousEmergencyProtection = self.GrappleEmergencyProtectionEnabled
 	self.GrappleWallSlamRescueEnabled = value == true
+	if self.GrappleWallSlamRescueEnabled then
+		self.GrappleAssistSuiteEnabled = true
+		self.GrappleEmergencyProtectionEnabled = true
+	end
 
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleWallSlamRescueEnabled = false
+		self.GrappleEmergencyProtectionEnabled = previousEmergencyProtection
+		self.GrappleAssistSuiteEnabled = previousSuite
 	end
 end
 
@@ -444,36 +475,50 @@ function Controller:SetAntiBonk(value)
 end
 
 function Controller:SetGrappleSmartReel(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
 	self.GrappleSmartReelEnabled = value == true
 	if self.GrappleSmartReelEnabled then
 		self.GrappleAssistSuiteEnabled = true
 	end
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleSmartReelEnabled = false
+		self.GrappleAssistSuiteEnabled = previousSuite
 	end
 end
 
 function Controller:SetGrappleSharkTailHelper(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
 	self.GrappleSharkTailHelperEnabled = value == true
 	if self.GrappleSharkTailHelperEnabled then
 		self.GrappleAssistSuiteEnabled = true
 	end
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleSharkTailHelperEnabled = false
+		self.GrappleAssistSuiteEnabled = previousSuite
 	end
 end
 
 function Controller:SetGrappleMomentumGuard(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
 	self.GrappleMomentumGuardEnabled = value == true
+	if self.GrappleMomentumGuardEnabled then
+		self.GrappleAssistSuiteEnabled = true
+	end
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleMomentumGuardEnabled = false
+		self.GrappleAssistSuiteEnabled = previousSuite
 	end
 end
 
 function Controller:SetGrappleJumpPadUsesBypass(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
 	self.GrappleJumpPadUsesBypassEnabled = value == true
+	if self.GrappleJumpPadUsesBypassEnabled then
+		self.GrappleAssistSuiteEnabled = true
+	end
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleJumpPadUsesBypassEnabled = false
+		self.GrappleAssistSuiteEnabled = previousSuite
 	end
 end
 

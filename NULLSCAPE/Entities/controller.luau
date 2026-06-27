@@ -7,6 +7,7 @@
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local activeCallbacks = {}
 
 local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
 local SpecialImmunity = getgenv().loadModule("NULLSCAPE/Entities/SpecialImmunity.luau")
@@ -203,6 +204,88 @@ local function disconnectFolderObservations()
 	table.clear(folderConnections)
 end
 
+local function restoreHooks()
+	local globals = getgenv()._NULLSCAPE_Globals
+	if not globals then return end
+
+	-- Restore namecall
+	if globals.NamecallHooked and globals.OriginalNamecall then
+		if typeof(hookmetamethod) == "function" then
+			pcall(hookmetamethod, game, "__namecall", globals.OriginalNamecall)
+		end
+		globals.NamecallHooked = nil
+		globals.OriginalNamecall = nil
+	end
+
+	-- Restore prototype hooks
+	if globals.PrototypeHooked then
+		if typeof(hookfunction) == "function" then
+			local remoteProto = Instance.new("RemoteEvent")
+			if globals.OriginalFireServer then
+				pcall(hookfunction, remoteProto.FireServer, globals.OriginalFireServer)
+			end
+			local funcProto = Instance.new("RemoteFunction")
+			if globals.OriginalInvokeServer then
+				pcall(hookfunction, funcProto.InvokeServer, globals.OriginalInvokeServer)
+			end
+		end
+		globals.PrototypeHooked = nil
+		globals.OriginalFireServer = nil
+		globals.OriginalInvokeServer = nil
+	end
+
+	-- Restore StatusEffect connection hook
+	if globals.StatusEffectHooked then
+		local StatusEffectChanged = ReplicatedStorage:FindFirstChild("Events")
+			and ReplicatedStorage.Events:FindFirstChild("StatusEffectChanged")
+		if StatusEffectChanged and StatusEffectChanged:IsA("RemoteEvent") then
+			if typeof(hookfunction) == "function" and globals.OriginalOnClientEventConnect then
+				pcall(hookfunction, StatusEffectChanged.OnClientEvent.Connect, globals.OriginalOnClientEventConnect)
+			end
+		end
+
+		local ReplicatedFirst = game:GetService("ReplicatedFirst")
+		local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+		local handlerModule = clientModules and clientModules:FindFirstChild("StatusEffectHandler")
+		if handlerModule and handlerModule:IsA("ModuleScript") then
+			local StatusEffectHandler = require(handlerModule)
+			if typeof(StatusEffectHandler) == "table" and globals.OriginalHasStatus then
+				if typeof(hookfunction) == "function" then
+					pcall(hookfunction, StatusEffectHandler.HasStatus, globals.OriginalHasStatus)
+				else
+					StatusEffectHandler.HasStatus = globals.OriginalHasStatus
+				end
+			end
+		end
+		globals.StatusEffectHooked = nil
+		globals.OriginalOnClientEventConnect = nil
+		globals.OriginalHasStatus = nil
+	end
+
+	-- Restore SettingsHandler hooks
+	if globals.SettingsHooked then
+		local ReplicatedFirst = game:GetService("ReplicatedFirst")
+		local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+		local core = clientModules and clientModules:FindFirstChild("Core")
+		local playerData = core and core:FindFirstChild("PlayerData")
+		local settingsModule = playerData and playerData:FindFirstChild("SettingsHandler")
+		if settingsModule and settingsModule:IsA("ModuleScript") then
+			local SettingsHandler = require(settingsModule)
+			if typeof(SettingsHandler) == "table" then
+				if globals.OriginalSettingsGet then
+					SettingsHandler.Get = globals.OriginalSettingsGet
+				end
+				if globals.OriginalGetSettings then
+					SettingsHandler.GetSettings = globals.OriginalGetSettings
+				end
+			end
+		end
+		globals.SettingsHooked = nil
+		globals.OriginalSettingsGet = nil
+		globals.OriginalGetSettings = nil
+	end
+end
+
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
 function Controller:CleanUp()
 	disconnectFolderObservations()
@@ -231,6 +314,10 @@ function Controller:CleanUp()
 			end
 		end
 		table.clear(self.PermanentConnections)
+	end
+
+	if self.Destroyed then
+		pcall(restoreHooks)
 	end
 
 	-- Keep the active controller during lobby cleanup; only full destroy may release it.
@@ -479,6 +566,15 @@ function Controller:SetSpringerImmunityMode(mode)
 	if mode == "Blatant" then
 		-- Tự động dọn dẹp toàn bộ debuff đang có trên người chơi
 		pcall(function()
+			local ReplicatedFirst = game:GetService("ReplicatedFirst")
+			local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+			local handlerModule = clientModules and clientModules:FindFirstChild("StatusEffectHandler")
+			if handlerModule and handlerModule:IsA("ModuleScript") then
+				local StatusEffectHandler = require(handlerModule)
+				if typeof(StatusEffectHandler) == "table" and typeof(StatusEffectHandler.RemoveAllStatuses) == "function" then
+					StatusEffectHandler.RemoveAllStatuses()
+				end
+			end
 			for _, debuffName in ipairs({ "Flesh", "Panic", "Concussion", "Fire", "Insanity" }) do
 				for _, callback in ipairs(activeCallbacks) do
 					pcall(callback, debuffName, false)
@@ -1039,8 +1135,6 @@ local function setInLobby(val)
 	end
 end
 
-local activeCallbacks = {}
-
 -- Hook hệ thống trạng thái (Status Effects) để miễn nhiễm debuff ở chế độ Blatant
 local function initializeStatusEffectHook()
 	local globals = getgenv()._NULLSCAPE_Globals
@@ -1080,6 +1174,34 @@ local function initializeStatusEffectHook()
 					end
 					return oldConnect(self, callback)
 				end)
+				globals.OriginalOnClientEventConnect = oldConnect
+			end
+		end)
+
+		-- Hook các connection hiện có của StatusEffectChanged.OnClientEvent
+		pcall(function()
+			if typeof(getconnections) == "function" and typeof(hookfunction) == "function" then
+				for _, connection in ipairs(getconnections(StatusEffectChanged.OnClientEvent)) do
+					local originalFunction = connection.Function
+					if typeof(originalFunction) == "function" then
+						if not table.find(activeCallbacks, originalFunction) then
+							table.insert(activeCallbacks, originalFunction)
+						end
+						local oldFunc
+						oldFunc = hookfunction(originalFunction, function(statusName, isActive, ...)
+							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+							if
+								activeCtrl
+								and activeCtrl.SpringerImmunityMode == "Blatant"
+								and statusName ~= "Medal"
+								and statusName ~= "Overtuned"
+							then
+								return
+							end
+							return oldFunc(statusName, isActive, ...)
+						end)
+					end
+				end
 			end
 		end)
 	end
@@ -1105,8 +1227,10 @@ local function initializeStatusEffectHook()
 						end
 						return oldHasStatus(statusName, ...)
 					end)
+					globals.OriginalHasStatus = oldHasStatus
 				else
 					local oldHasStatus = StatusEffectHandler.HasStatus
+					globals.OriginalHasStatus = oldHasStatus
 					StatusEffectHandler.HasStatus = function(statusName, ...)
 						local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
 						if
@@ -1136,6 +1260,7 @@ local function initializeStatusEffectHook()
 			if typeof(SettingsHandler) == "table" then
 				if typeof(SettingsHandler.Get) == "function" and not globals.SettingsHooked then
 					local oldGet = SettingsHandler.Get
+					globals.OriginalSettingsGet = oldGet
 					SettingsHandler.Get = function(keys, ...)
 						local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
 						if activeCtrl and activeCtrl.SpringerImmunityMode == "Blatant" then
@@ -1150,6 +1275,7 @@ local function initializeStatusEffectHook()
 					
 					if typeof(SettingsHandler.GetSettings) == "function" then
 						local oldGetSettings = SettingsHandler.GetSettings
+						globals.OriginalGetSettings = oldGetSettings
 						SettingsHandler.GetSettings = function(...)
 							local settingsTable = oldGetSettings(...)
 							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
@@ -1284,6 +1410,7 @@ local function initializeICBMHook()
 					end
 					return oldNamecall(self, ...)
 				end)
+				getgenv()._NULLSCAPE_Globals.OriginalNamecall = oldNamecall
 				getgenv()._NULLSCAPE_Globals.NamecallHooked = true
 				namecallSuccess = true
 			end)
@@ -1322,6 +1449,8 @@ local function initializeICBMHook()
 					end
 					return oldInvokeServer(self, ...)
 				end)
+				getgenv()._NULLSCAPE_Globals.OriginalFireServer = oldFireServer
+				getgenv()._NULLSCAPE_Globals.OriginalInvokeServer = oldInvokeServer
 				getgenv()._NULLSCAPE_Globals.PrototypeHooked = true
 				prototypeSuccess = true
 			end)

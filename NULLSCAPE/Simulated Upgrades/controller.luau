@@ -25,12 +25,6 @@ local SpeedBuffs = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Speed Buff
 
 local Controller = {
 	RadarEnabled = false,
-	GiftESPEnabled = false,
-	TripmineESPEnabled = false,
-	CadenceESPEnabled = false,
-	AltarESPEnabled = false,
-	AltarFilter = { "All" },
-	ESPStyle = "Highlight", -- Mặc định: "Highlight" hoặc "Dot"
 	Destroyed = false,
 	inLobby = true,
 
@@ -67,20 +61,7 @@ local Controller = {
 	SimulateDefuseKit = false,
 	DefuseKitStack = 3,
 
-	NearestGiftPosition = nil,
-	NearestCadencePosition = nil,
-	NearestAltarPosition = nil,
-	ActiveGifts = {},
-	ActiveInstruments = {},
-	ActiveAltars = {},
 	PermanentConnections = {},
-
-	-- Player & Enemy ESP (cơ chế tạm thời giống RadarPlayer của game gốc)
-	-- Tự "thả ra" khi native RadarPlayer upgrade có hiệu lực thật
-	PlayerESPEnabled = false,
-	PlayerESPColor = Color3.fromRGB(255, 255, 255), -- Trắng như game gốc
-	EnemyESPEnabled = false,
-	EnemyESPColor = Color3.fromRGB(255, 128, 0),   -- Cam để phân biệt với player
 }
 
 local function safeControllerCleanUp()
@@ -125,481 +106,21 @@ local function refreshUpgradeServerState()
 end
 
 local hasInRoundValue = false
-local matchLoopsActive = false
-local instantUpdateQueued = false
 local folderConnections = {}
-local OBSERVE_REGISTER_BATCH_SIZE = 180
-local GIFT_POOL_SCAN_INTERVAL = 0.45
 
--- Forward references cho việc quản lý các loop
-local startMatchLoops, stopRenderStepped
-local triggerInstantUpdate
--- Forward reference cho unregisterInstrument (dùng trong registerInstrument callback)
-local unregisterInstrument
-local unregisterAltar
+-- Stubs for backward/compatibility reference
+local function triggerInstantUpdate() end
+local function updateRunningState() end
+local function stopRenderStepped() end
+local function startMatchLoops() end
+local function checkActiveState() return false end
 
-local function isFeatureSimulating(featureKey)
-	if Controller.RadarEnabled ~= true then
-		return false
-	end
-	return Logic.isSimulationToggleOn(Controller, featureKey)
-end
-
--- Kiểm tra xem có mục tiêu hợp lệ nào được bật hay không
-local function checkActiveState()
-	if isFeatureSimulating("Gift") or isFeatureSimulating("Tripmine") then
-		if #Controller.ActiveGifts > 0 then
-			return true
-		end
-	end
-	if isFeatureSimulating("Cadence") and #Controller.ActiveInstruments > 0 then
-		return true
-	end
-	if isFeatureSimulating("Altar") and #Controller.ActiveAltars > 0 then
-		return true
-	end
-	if isFeatureSimulating("Player") or isFeatureSimulating("Enemy") then
-		return true
-	end
-
-	return false
-end
-
-local function setFeatureToggle(fieldName, value)
-	local nextValue = value == true
-	if Controller[fieldName] == nextValue then
-		return
-	end
-	Controller[fieldName] = nextValue
-	Logic.syncSimulatedUpgradeHud(Controller)
-	triggerInstantUpdate()
-end
-
--- Điều phối trạng thái chạy/dừng của các loop và render
-local function updateRunningState()
-	if checkActiveState() then
-		startMatchLoops()
-	else
-		stopRenderStepped()
-	end
-end
-
--- Ngắt các kết nối sự kiện thư mục
 local function disconnectFolderObservations()
-	for _, conn in ipairs(folderConnections) do
-		if conn then
-			pcall(function()
-				conn:Disconnect()
-			end)
-		end
-	end
 	table.clear(folderConnections)
 end
 
--- Đăng ký các hàm helper để quan sát vật thể thời gian thực (Gift từ Module gốc của game)
-local function registerGiftObj(giftObj)
-	if typeof(giftObj) ~= "table" then
-		return
-	end
-	if giftObj.Id == nil then
-		return
-	end
-	if giftObj.Collected then
-		return
-	end
-
-	for _, g in ipairs(Controller.ActiveGifts) do
-		if g.id == giftObj.Id then
-			return
-		end
-	end
-
-	local giftModel = typeof(giftObj.Model) == "Instance" and giftObj.Model or nil
-	local giftPart = nil
-	if giftModel then
-		if giftModel:IsA("BasePart") then
-			giftPart = giftModel
-		elseif giftModel:IsA("Model") then
-			giftPart = giftModel.PrimaryPart or giftModel:FindFirstChildWhichIsA("BasePart")
-		end
-	end
-
-	local color = Logic.ESPColors.Gift
-	local giftType = giftObj.Type or "Gift"
-
-	if giftObj.Tripmine then
-		color = Logic.ESPColors.Tripmine
-		giftType = "Tripmine"
-	elseif giftObj.Golden then
-		color = Logic.ESPColors.GoldenGift
-		giftType = "GoldenGift"
-	elseif giftType == "PassageGift" then
-		color = Logic.ESPColors.PassageGift
-	end
-
-	table.insert(Controller.ActiveGifts, {
-		id = giftObj.Id,
-		part = giftPart,
-		model = giftModel,
-		color = color,
-		type = giftType,
-		rawObj = giftObj,
-	})
-	updateRunningState()
-end
-
-local function unregisterGiftById(id)
-	local removed = false
-	for i, g in ipairs(Controller.ActiveGifts) do
-		if g.id == id then
-			table.remove(Controller.ActiveGifts, i)
-			removed = true
-			break
-		end
-	end
-	if removed then
-		updateRunningState()
-	end
-end
-
-local function registerGift(obj)
-	if not (obj:IsA("BasePart") or obj:IsA("Model")) then
-		return
-	end
-	local nameLower = obj.Name:lower()
-
-	local isGift = string.find(nameLower, "gift") or string.find(nameLower, "present") or obj:HasTag("Gift")
-	local isTripmine = string.find(nameLower, "tripmine")
-
-	if isGift or isTripmine then
-		local targetPart = obj:IsA("Model")
-				and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart") or obj)
-			or obj
-		if not targetPart then
-			return
-		end
-
-		for _, g in ipairs(Controller.ActiveGifts) do
-			if g.part == targetPart or g.model == obj then
-				return
-			end
-		end
-
-		-- Xác định màu sắc và phân loại từ bảng màu dùng chung
-		local color = Logic.ESPColors.Gift
-		local giftType = "Gift"
-
-		if isTripmine then
-			color = Logic.ESPColors.Tripmine
-			giftType = "Tripmine"
-		elseif string.find(nameLower, "golden") then
-			color = Logic.ESPColors.GoldenGift
-			giftType = "GoldenGift"
-		elseif string.find(nameLower, "passage") then
-			color = Logic.ESPColors.PassageGift
-			giftType = "PassageGift"
-		end
-
-		table.insert(Controller.ActiveGifts, {
-			id = obj:GetDebugId(),
-			part = targetPart,
-			model = obj,
-			color = color,
-			type = giftType,
-			rawObj = nil,
-		})
-		updateRunningState()
-	end
-end
-
-local function unregisterGift(obj)
-	local removed = false
-	for i, g in ipairs(Controller.ActiveGifts) do
-		if g.part == obj or g.model == obj then
-			table.remove(Controller.ActiveGifts, i)
-			removed = true
-			break
-		end
-	end
-	if removed then
-		updateRunningState()
-	end
-end
-
-local function registerInstrument(obj)
-	if not (obj:IsA("BasePart") or obj:IsA("Model")) then
-		return
-	end
-	if not (Logic.isInstrument(obj.Name) or obj:HasTag("CadenceOrb")) then
-		return
-	end
-
-	-- Theo ref.lua: CadenceOrb chỉ hợp lệ khi CanTouch = true (chưa bị nhặt)
-	if obj:IsA("BasePart") and obj:HasTag("CadenceOrb") then
-		if not obj.CanTouch then
-			return
-		end
-	end
-
-	local targetPart = obj:IsA("Model")
-			and (obj:FindFirstChild("HumanoidRootPart") or obj:FindFirstChildWhichIsA("BasePart"))
-		or obj
-	if targetPart and targetPart:IsA("BasePart") then
-		for _, inst in ipairs(Controller.ActiveInstruments) do
-			if inst.model == obj or inst.part == targetPart then
-				return
-			end
-		end
-		table.insert(
-			Controller.ActiveInstruments,
-			{ part = targetPart, model = obj, color = Logic.ESPColors.Cadence, type = "Cadence" }
-		)
-		updateRunningState()
-
-		-- Theo ref.lua: lắng nghe CanTouch thay đổi → tự động unregister
-		if obj:IsA("BasePart") and obj:HasTag("CadenceOrb") then
-			local canTouchConn
-			canTouchConn = obj:GetPropertyChangedSignal("CanTouch"):Connect(function()
-				if not obj.CanTouch then
-					unregisterInstrument(obj)
-					if canTouchConn then
-						canTouchConn:Disconnect()
-						canTouchConn = nil
-					end
-				end
-			end)
-			table.insert(folderConnections, canTouchConn)
-		end
-	end
-end
-
-unregisterInstrument = function(obj)
-	local removed = false
-	for i, inst in ipairs(Controller.ActiveInstruments) do
-		if inst.model == obj or inst.part == obj then
-			table.remove(Controller.ActiveInstruments, i)
-			removed = true
-			break
-		end
-	end
-	if removed then
-		updateRunningState()
-	end
-end
-
-local function registerAltar(altarObj)
-	-- Theo ref.lua RadarSlop: v2 = v.Parent, HitBox = v2:FindFirstChild("HitBox")
-	-- Theo ref.lua ArrowHandler: Position = p1:WaitForChild("Hitbox").Position (trong altarObj)
-	-- AltarUsed: attribute trên parent của tagged object
-	local parentObj = altarObj.Parent
-	if parentObj and parentObj:GetAttribute("AltarUsed") then
-		return
-	end
-
-	-- Tìm HitBox/Hitbox: ArrowHandler dùng "Hitbox" (h viết thường) trong chính altarObj
-	-- RadarSlop dùng "HitBox" từ v.Parent (tức room chứa altar)
-	local hitBox = altarObj:FindFirstChild("Hitbox") -- ArrowHandler style (chưa thường)
-		or altarObj:FindFirstChild("HitBox") -- fallback viết hoa
-	if not hitBox and parentObj then
-		hitBox = parentObj:FindFirstChild("HitBox") -- RadarSlop style
-			or parentObj:FindFirstChild("Hitbox")
-	end
-
-	-- Nếu vẫn không tìm được HitBox, fallback sang bất kỳ BasePart nào
-	local targetPart = hitBox
-	if not targetPart then
-		if altarObj:IsA("BasePart") then
-			targetPart = altarObj
-		elseif altarObj:IsA("Model") then
-			targetPart = altarObj:FindFirstChildWhichIsA("BasePart")
-		end
-	end
-
-	if not targetPart or not targetPart:IsA("BasePart") then
-		return
-	end
-
-	for _, a in ipairs(Controller.ActiveAltars) do
-		if a.model == altarObj or a.part == targetPart then
-			return
-		end
-	end
-
-	local altarName, altarColor = Logic.getAltarTypeAndColor(altarObj)
-
-	-- Theo ref.lua ArrowHandler dòng 1315:
-	-- Arrow chỉ hiển khi altar có tag "Voting" (Enabled > 0)
-	-- Script mô phỏng: luôn hiển (ignore voting gate) nhưng đánh dấu voting state
-	local isVoting = altarObj:HasTag("Voting")
-
-	table.insert(Controller.ActiveAltars, {
-		part = targetPart,
-		model = altarObj,
-		color = altarColor,
-		type = "Altar",
-		altarName = altarName,
-		isVoting = isVoting,
-	})
-	updateRunningState()
-
-	-- Lắng nghe sự thay đổi của AltarUsed để tự động huỷ đăng ký Altar
-	if parentObj then
-		local attrConn
-		attrConn = parentObj:GetAttributeChangedSignal("AltarUsed"):Connect(function()
-			if parentObj:GetAttribute("AltarUsed") then
-				unregisterAltar(altarObj)
-				if attrConn then
-					attrConn:Disconnect()
-				end
-			end
-		end)
-		table.insert(folderConnections, attrConn)
-	end
-end
-
-unregisterAltar = function(altarObj)
-	local removed = false
-	for i, a in ipairs(Controller.ActiveAltars) do
-		if a.model == altarObj or a.part == altarObj then
-			table.remove(Controller.ActiveAltars, i)
-			removed = true
-			break
-		end
-	end
-	if removed then
-		updateRunningState()
-	end
-end
-
-local function observeItemPools(folder)
-	task.spawn(function()
-		local stack = folder:GetChildren()
-		local scannedThisSlice = 0
-		while #stack > 0 and folder.Parent and not Controller.Destroyed do
-			local obj = table.remove(stack)
-			if obj and obj.Parent then
-				registerGift(obj)
-				registerInstrument(obj)
-
-				local children = obj:GetChildren()
-				for i = #children, 1, -1 do
-					table.insert(stack, children[i])
-				end
-			end
-
-			scannedThisSlice = scannedThisSlice + 1
-			if scannedThisSlice >= OBSERVE_REGISTER_BATCH_SIZE then
-				scannedThisSlice = 0
-				task.wait()
-			end
-		end
-	end)
-
-	local addedConn = folder.DescendantAdded:Connect(function(obj)
-		registerGift(obj)
-		registerInstrument(obj)
-	end)
-	table.insert(folderConnections, addedConn)
-
-	local removedConn = folder.DescendantRemoving:Connect(function(obj)
-		unregisterGift(obj)
-		unregisterInstrument(obj)
-	end)
-	table.insert(folderConnections, removedConn)
-end
-
-
-
 local function startObservingFolders()
 	disconnectFolderObservations()
-
-	table.clear(Controller.ActiveGifts)
-	table.clear(Controller.ActiveInstruments)
-	table.clear(Controller.ActiveAltars)
-
-	-- Register existing CollectionService tags in batches to avoid round-start spikes
-	local function processTagged(tagName, registerFn)
-		task.spawn(function()
-			local processedThisSlice = 0
-			for _, obj in ipairs(CollectionService:GetTagged(tagName)) do
-				if Controller.Destroyed then
-					break
-				end
-				registerFn(obj)
-				processedThisSlice = processedThisSlice + 1
-				if processedThisSlice >= OBSERVE_REGISTER_BATCH_SIZE then
-					processedThisSlice = 0
-					task.wait()
-				end
-			end
-		end)
-	end
-	processTagged("Gift", registerGift)
-	processTagged("CadenceOrb", registerInstrument)
-	processTagged("Altar", registerAltar)
-
-	-- Lắng nghe các tín hiệu thêm/bớt tag của CollectionService
-	table.insert(folderConnections, CollectionService:GetInstanceAddedSignal("Gift"):Connect(registerGift))
-	table.insert(folderConnections, CollectionService:GetInstanceRemovedSignal("Gift"):Connect(unregisterGift))
-
-	table.insert(folderConnections, CollectionService:GetInstanceAddedSignal("CadenceOrb"):Connect(registerInstrument))
-	table.insert(
-		folderConnections,
-		CollectionService:GetInstanceRemovedSignal("CadenceOrb"):Connect(unregisterInstrument)
-	)
-
-	table.insert(folderConnections, CollectionService:GetInstanceAddedSignal("Altar"):Connect(registerAltar))
-	table.insert(folderConnections, CollectionService:GetInstanceRemovedSignal("Altar"):Connect(unregisterAltar))
-
-	-- Theo ref.lua dòng 1315: Altar chỉ hiển mũi tên khi có tag "Voting"
-	-- Cập nhật isVoting state khi có Voting tag thêm/xoá
-	table.insert(
-		folderConnections,
-		CollectionService:GetInstanceAddedSignal("Voting"):Connect(function(obj)
-			for _, a in ipairs(Controller.ActiveAltars) do
-				if a.model == obj or a.part == obj then
-					a.isVoting = true
-					break
-				end
-			end
-		end)
-	)
-	table.insert(
-		folderConnections,
-		CollectionService:GetInstanceRemovedSignal("Voting"):Connect(function(obj)
-			for _, a in ipairs(Controller.ActiveAltars) do
-				if a.model == obj or a.part == obj then
-					a.isVoting = false
-					break
-				end
-			end
-		end)
-	)
-
-	-- 2. Fallback: Lắng nghe cấu trúc thư mục Workspace phòng trường hợp game đổi cơ chế
-	local function checkAndObserve(child)
-		if child.Name == "Item_Pools" then
-			observeItemPools(child)
-		elseif child.Name ~= "Enemies" and child.Name ~= "CurrentRooms" then
-			-- Đề phòng Gift hoặc nhạc cụ spawn trực tiếp ngoài workspace
-			registerGift(child)
-			registerInstrument(child)
-		end
-	end
-
-	local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
-	table.insert(folderConnections, wsConn)
-
-	local wsRemovedConn = workspace.ChildRemoved:Connect(function(child)
-		unregisterGift(child)
-		unregisterInstrument(child)
-	end)
-	table.insert(folderConnections, wsRemovedConn)
-
-	local itemPools = workspace:FindFirstChild("Item_Pools")
-	if itemPools then
-		observeItemPools(itemPools)
-	end
 end
 
 local function hasUtilityWork()
@@ -763,98 +284,10 @@ end
 -- Bật/tắt radar tổng
 function Controller:SetRadarEnabled(value)
 	self.RadarEnabled = value
-	if not value then
-		pcall(function()
-			Executor.clearVisuals(GC, false)
-		end)
-	end
 	Logic.syncSimulatedUpgradeHud(self)
-	triggerInstantUpdate()
 end
 
--- Bật/tắt định vị hộp quà
-function Controller:SetGiftESP(value)
-	setFeatureToggle("GiftESPEnabled", value)
-end
 
--- Bật/tắt định vị bẫy mìn Tripmine
-function Controller:SetTripmineESP(value)
-	setFeatureToggle("TripmineESPEnabled", value)
-end
-
--- Bật/tắt định vị nhạc cụ Cadence
-function Controller:SetCadenceESP(value)
-	setFeatureToggle("CadenceESPEnabled", value)
-end
-
--- Bật/tắt định vị Đàn tế (Altar)
-function Controller:SetAltarESP(value)
-	setFeatureToggle("AltarESPEnabled", value)
-end
-
--- Bộ lọc loại Altar (Hỗ trợ multi-select table)
-function Controller:SetAltarFilter(option)
-	if typeof(option) == "string" then
-		self.AltarFilter = { option }
-	else
-		self.AltarFilter = option or { "All" }
-	end
-	triggerInstantUpdate()
-end
-
--- Thay đổi chế độ hiển thị ESP
-function Controller:SetESPStyle(style)
-	self.ESPStyle = style or "Highlight"
-	pcall(function()
-		Executor.clearVisuals(GC, true)
-	end)
-	triggerInstantUpdate()
-end
-
--- Bật/tắt ESP cho Player khác
-function Controller:SetPlayerESP(value, color)
-	Controller.PlayerESPEnabled = value == true
-	if color then
-		self.PlayerESPColor = color
-	end
-	Logic.syncSimulatedUpgradeHud(self)
-	triggerInstantUpdate()
-end
-
-function Controller:SetEnemyESP(value, color)
-	Controller.EnemyESPEnabled = value == true
-	if color then
-		self.EnemyESPColor = color
-	end
-	Logic.syncSimulatedUpgradeHud(self)
-	triggerInstantUpdate()
-end
-
--- Bật/tắt Auto Collect
-function Controller:SetESPSelections(selections)
-	selections = typeof(selections) == "table" and selections or {}
-	local changed = false
-
-	local function apply(fieldName, optionName)
-		local nextValue = table.find(selections, optionName) ~= nil
-		if self[fieldName] ~= nextValue then
-			self[fieldName] = nextValue
-			changed = true
-		end
-	end
-
-	apply("GiftESPEnabled", "Gift")
-	apply("TripmineESPEnabled", "Tripmine")
-	apply("CadenceESPEnabled", "Cadence")
-	apply("AltarESPEnabled", "Altar")
-	apply("PlayerESPEnabled", "Player")
-	apply("EnemyESPEnabled", "Enemy")
-
-	if changed then
-		Logic.syncSimulatedUpgradeHud(self)
-		triggerInstantUpdate()
-	end
-end
 
 function Controller:SetAutoCollectEnabled(value)
 	self.AutoCollectEnabled = value
@@ -1205,6 +638,61 @@ function Controller:SetDefuseKitStack(value)
 	self.DefuseKitStack = value
 end
 
+local function restoreHooks()
+	local globals = getgenv()._NULLSCAPE_Globals
+	if not globals then return end
+
+	-- Restore GiftClientHandler hooks
+	pcall(function()
+		local PlayerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
+		local GiftClientHandlerModule = PlayerScripts and PlayerScripts:FindFirstChild("GiftClientHandler")
+		if GiftClientHandlerModule then
+			local success, GiftClientHandler = pcall(require, GiftClientHandlerModule)
+			if success and typeof(GiftClientHandler) == "table" then
+				if globals.GiftClientNewHooked and globals.OriginalGiftClientNew then
+					GiftClientHandler.new = globals.OriginalGiftClientNew
+					globals.GiftClientNewHooked = nil
+					globals.OriginalGiftClientNew = nil
+				end
+				if globals.GiftClientDestroyHooked and globals.OriginalGiftClientDestroy then
+					GiftClientHandler.DestroyGift = globals.OriginalGiftClientDestroy
+					globals.GiftClientDestroyHooked = nil
+					globals.OriginalGiftClientDestroy = nil
+				end
+			end
+		end
+	end)
+
+	-- Restore UpgradeHandler hooks
+	pcall(function()
+		local ClientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+		local UpgradeHandlerModule = ClientModules and ClientModules:FindFirstChild("UpgradeHandler")
+		if UpgradeHandlerModule then
+			local success, UpgradeHandler = pcall(require, UpgradeHandlerModule)
+			if success and typeof(UpgradeHandler) == "table" then
+				if globals.IsUpgradeEnabledHooked and globals.OriginalIsUpgradeEnabled then
+					if typeof(hookfunction) == "function" then
+						pcall(hookfunction, UpgradeHandler.IsUpgradeEnabled, globals.OriginalIsUpgradeEnabled)
+					else
+						UpgradeHandler.IsUpgradeEnabled = globals.OriginalIsUpgradeEnabled
+					end
+					globals.IsUpgradeEnabledHooked = nil
+					globals.OriginalIsUpgradeEnabled = nil
+				end
+				if globals.GetUpgradeStackHooked and globals.OriginalGetUpgradeStack then
+					if typeof(hookfunction) == "function" then
+						pcall(hookfunction, UpgradeHandler.GetUpgradeStack, globals.OriginalGetUpgradeStack)
+					else
+						UpgradeHandler.GetUpgradeStack = globals.OriginalGetUpgradeStack
+					end
+					globals.GetUpgradeStackHooked = nil
+					globals.OriginalGetUpgradeStack = nil
+				end
+			end
+		end
+	end)
+end
+
 -- Hàm dọn dẹp tài nguyên (GC) khi tắt hoặc hủy UI
 function Controller:CleanUp()
 	self.Destroyed = true
@@ -1255,6 +743,10 @@ function Controller:CleanUp()
 
 	GC.cleanAll()
 
+	if self.Destroyed then
+		pcall(restoreHooks)
+	end
+
 	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
 	local globals = getgenv()._NULLSCAPE_Globals
 	if globals and globals.activeUpgradeController == self then
@@ -1262,114 +754,8 @@ function Controller:CleanUp()
 	end
 end
 
-local function findPoolFolders()
-	local folders = {}
-	local itemPools = workspace:FindFirstChild("Item_Pools")
-	if itemPools then
-		for _, child in ipairs(itemPools:GetChildren()) do
-			if child:IsA("Folder") and string.find(child.Name:lower(), "shell") then
-				table.insert(folders, child)
-			end
-		end
-	end
-	for _, child in ipairs(workspace:GetChildren()) do
-		if child:IsA("Folder") and string.find(child.Name:lower(), "shell") then
-			table.insert(folders, child)
-		end
-	end
-	return folders
-end
-
-local function scanActiveGiftsFromPools()
-	local activeGifts = {}
-	local folders = findPoolFolders()
-
-	for _, folder in ipairs(folders) do
-		local folderNameLower = folder.Name:lower()
-		local shellType = "Gift"
-
-		if string.find(folderNameLower, "tripmine") then
-			shellType = "Tripmine"
-		elseif string.find(folderNameLower, "golden") then
-			shellType = "GoldenGift"
-		elseif string.find(folderNameLower, "passage") then
-			shellType = "PassageGift"
-		end
-
-		for _, shell in ipairs(folder:GetChildren()) do
-			local weld = shell:FindFirstChildWhichIsA("Weld") or shell:FindFirstChild("Weld")
-			local part1 = weld and weld.Part1
-
-			if part1 and part1.Parent and part1:IsDescendantOf(workspace) then
-				if part1.Transparency < 0.99 then
-					local color = Logic.ESPColors.Gift
-					if shellType == "Tripmine" then
-						color = Logic.ESPColors.Tripmine
-					elseif shellType == "GoldenGift" then
-						color = Logic.ESPColors.GoldenGift
-					elseif shellType == "PassageGift" then
-						color = Logic.ESPColors.PassageGift
-					end
-
-					table.insert(activeGifts, {
-						id = part1:GetDebugId(),
-						part = part1,
-						model = part1,
-						color = color,
-						type = shellType,
-						rawObj = nil,
-					})
-				end
-			end
-		end
-	end
-
-	return activeGifts
-end
-
-local function startGiftPoolObserver()
-	task.spawn(function()
-		while not Controller.Destroyed do
-			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
-				safeControllerCleanUp()
-				break
-			end
-			local shouldScanPools = not Controller.inLobby and (isFeatureSimulating("Gift") or isFeatureSimulating("Tripmine"))
-			if shouldScanPools then
-				local poolGifts = scanActiveGiftsFromPools()
-				local newGifts = {}
-				local seen = {}
-
-				for _, g in ipairs(Controller.ActiveGifts) do
-					if g.rawObj and not g.rawObj.Collected and not g.rawObj.Destroyed then
-						table.insert(newGifts, g)
-						seen[g.part or g.id] = true
-					end
-				end
-
-				for _, pg in ipairs(poolGifts) do
-					local key = pg.part or pg.id
-					if not seen[key] then
-						seen[key] = true
-						table.insert(newGifts, pg)
-					end
-				end
-
-				Controller.ActiveGifts = newGifts
-				updateRunningState()
-			end
-			task.wait(shouldScanPools and GIFT_POOL_SCAN_INTERVAL or 1.2)
-		end
-	end)
-end
-
--- Đăng ký các dispatcher cho các hooks
-getgenv()._NULLSCAPE_Globals.onGiftCreated = function(giftObj)
-	pcall(registerGiftObj, giftObj)
-end
-getgenv()._NULLSCAPE_Globals.onGiftDestroyed = function(id)
-	pcall(unregisterGiftById, id)
-end
+getgenv()._NULLSCAPE_Globals.onGiftCreated = function(giftObj) end
+getgenv()._NULLSCAPE_Globals.onGiftDestroyed = function(id) end
 
 getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local args = { ... }
@@ -1457,109 +843,6 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	return false
 end
 
-local function setupGiftClientHook()
-	task.spawn(function()
-		print("[NULLSCAPE Radar] Bắt đầu tìm kiếm ClientModules...")
-		local ClientModules = ReplicatedFirst:FindFirstChild("ClientModules")
-			or ReplicatedStorage:FindFirstChild("ClientModules")
-		if not ClientModules then
-			pcall(function()
-				ClientModules = ReplicatedFirst:WaitForChild("ClientModules", 5)
-			end)
-			if not ClientModules then
-				pcall(function()
-					ClientModules = ReplicatedStorage:WaitForChild("ClientModules", 5)
-				end)
-			end
-		end
-
-		if not ClientModules then
-			warn(
-				"[NULLSCAPE Radar] LỖI: Không tìm thấy thư mục ClientModules ở cả ReplicatedFirst và ReplicatedStorage."
-			)
-			return
-		end
-
-		print("[NULLSCAPE Radar] Đã tìm thấy ClientModules tại: " .. ClientModules:GetFullName())
-
-		local GiftClient = ClientModules:FindFirstChild("GiftClient") or ClientModules:WaitForChild("GiftClient", 5)
-		local GiftClientHandlerModule = GiftClient
-			and (GiftClient:FindFirstChild("GiftClientHandler") or GiftClient:WaitForChild("GiftClientHandler", 5))
-
-		if not GiftClientHandlerModule then
-			warn("[NULLSCAPE Radar] LỖI: Không tìm thấy module GiftClientHandler.")
-			return
-		end
-
-		local success, GiftClientHandler = pcall(require, GiftClientHandlerModule)
-		if success and typeof(GiftClientHandler) == "table" then
-			print("[NULLSCAPE Radar] Hook GiftClientHandler thành công!")
-
-			-- Đăng ký các gift hiện có
-			local existingCount = 0
-			if GiftClientHandler.Gifts then
-				for _, giftObj in pairs(GiftClientHandler.Gifts) do
-					pcall(registerGiftObj, giftObj)
-					existingCount = existingCount + 1
-				end
-			end
-			print("[NULLSCAPE Radar] Đã đăng ký " .. tostring(existingCount) .. " Hộp quà hiện có.")
-
-			-- Hook hàm new
-			-- Hook hàm new
-			if not getgenv()._NULLSCAPE_Globals.GiftClientNewHooked then
-				local originalNew = GiftClientHandler.new
-				getgenv()._NULLSCAPE_Globals.OriginalGiftClientNew = originalNew
-
-				GiftClientHandler.new = function(...)
-					local orig = getgenv()._NULLSCAPE_Globals.OriginalGiftClientNew
-					if typeof(orig) ~= "function" then
-						return nil
-					end
-
-					local ok, giftObj = pcall(orig, ...)
-					if not ok then
-						warn("[NULLSCAPE Radar] GiftClientHandler.new original failed: " .. tostring(giftObj))
-						return nil
-					end
-
-					if giftObj then
-						local cb = getgenv()._NULLSCAPE_Globals.onGiftCreated
-						if typeof(cb) == "function" then
-							local cbOk, cbErr = pcall(cb, giftObj)
-							if not cbOk then
-								warn("[NULLSCAPE Radar] onGiftCreated failed: " .. tostring(cbErr))
-							end
-						end
-					end
-					return giftObj
-				end
-				getgenv()._NULLSCAPE_Globals.GiftClientNewHooked = true
-				print("[NULLSCAPE Radar] Đã hook hàm GiftClientHandler.new")
-			end
-
-			-- Hook hàm DestroyGift
-			if not getgenv()._NULLSCAPE_Globals.GiftClientDestroyHooked then
-				local originalDestroyGift = GiftClientHandler.DestroyGift
-				getgenv()._NULLSCAPE_Globals.OriginalGiftClientDestroy = originalDestroyGift
-
-				GiftClientHandler.DestroyGift = function(id, ...)
-					local cb = getgenv()._NULLSCAPE_Globals.onGiftDestroyed
-					if cb then
-						pcall(cb, id)
-					end
-					local orig = getgenv()._NULLSCAPE_Globals.OriginalGiftClientDestroy
-					return orig(id, ...)
-				end
-				getgenv()._NULLSCAPE_Globals.GiftClientDestroyHooked = true
-				print("[NULLSCAPE Radar] Đã hook hàm GiftClientHandler.DestroyGift")
-			end
-		else
-			warn("[NULLSCAPE Radar] LỖI: Không thể require GiftClientHandler: " .. tostring(GiftClientHandler))
-		end
-	end)
-end
-
 -- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
 getgenv()._NULLSCAPE_Globals.activeUpgradeController = Controller
 
@@ -1571,8 +854,6 @@ Logic.bindUpgradeWatcher(Controller, function()
 	end
 end)
 startObservingFolders()
-setupGiftClientHook()
-startGiftPoolObserver()
 updateRunningState()
 startUtilityLoop()
 

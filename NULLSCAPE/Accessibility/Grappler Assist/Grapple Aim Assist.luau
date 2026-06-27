@@ -501,7 +501,7 @@ function Logic.clearLandingIntent()
 end
 
 function Logic.isJumpPadCommitGuardActive()
-    return Logic.isAutomationSuppressedByIntent()
+    return time() <= (Logic.JumpPadCommitGuardUntil or 0)
 end
 
 function Logic.markJumpPadCommit(grapple, jumpPadPart)

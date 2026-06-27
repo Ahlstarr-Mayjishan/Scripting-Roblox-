@@ -100,12 +100,7 @@ function Logic.initialize()
 	end)
 
 	globals.InfiniteAirJumpListenerConnected = true
-	
-	-- Register to the active controller's permanent connections if possible
-	local controller = globals.activeAccessibilityController
-	if controller and controller.PermanentConnections then
-		table.insert(controller.PermanentConnections, conn)
-	end
+	globals.InfiniteAirJumpConnection = conn
 
 	return true
 end

@@ -367,6 +367,7 @@ SettingsTab:CreateButton({
 			getgenv().Rayfield = nil
 			getgenv().Client = nil
 			getgenv().loadModule = nil
+			getgenv()._NULLSCAPE_Globals = nil
 
 			-- 5. Xóa sạch dữ liệu trong bảng Client chính
 			table.clear(Client)
