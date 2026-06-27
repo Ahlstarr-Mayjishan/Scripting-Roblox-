@@ -155,6 +155,11 @@ function Controller:CleanUp()
 		end
 		table.clear(self.PermanentConnections)
 	end
+
+	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
+	if globals and globals.activeAccessibilityController == self then
+		globals.activeAccessibilityController = nil
+	end
 end
 
 -- Thiết lập cấu hình tự động nhảy

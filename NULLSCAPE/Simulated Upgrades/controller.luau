@@ -1242,6 +1242,12 @@ function Controller:CleanUp()
 	end
 
 	GC.cleanAll()
+
+	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
+	local globals = getgenv()._NULLSCAPE_Globals
+	if globals and globals.activeUpgradeController == self then
+		globals.activeUpgradeController = nil
+	end
 end
 
 local function findPoolFolders()

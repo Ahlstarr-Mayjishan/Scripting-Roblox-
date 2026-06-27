@@ -170,6 +170,9 @@ end
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
 function Controller:CleanUp()
 	disconnectFolderObservations()
+	pcall(function()
+		Executor.disableSpecialImmunity()
+	end)
 	GC.cleanAll()
 	self.EnemiesFolder = nil
 
@@ -192,6 +195,12 @@ function Controller:CleanUp()
 			end
 		end
 		table.clear(self.PermanentConnections)
+	end
+
+	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
+	local globals = getgenv()._NULLSCAPE_Globals
+	if globals and globals.activeEntitiesController == self then
+		globals.activeEntitiesController = nil
 	end
 end
 
@@ -579,7 +588,8 @@ local function processEntity(enemy)
 				if not enemy or not enemy.Parent then
 					break
 				end
-				actualHead = enemy:FindFirstChild("Head", true) or enemy:FindFirstChild("head", true) or enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+				local horse = string.find(enemy.Name, "Springer") and enemy:FindFirstChild("horse")
+				actualHead = (horse and horse:FindFirstChild("Head")) or enemy:FindFirstChild("Head", true) or enemy:FindFirstChild("head", true) or enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
 				if actualHead then
 					break
 				end
@@ -625,10 +635,19 @@ local function processEntity(enemy)
 				local template = findNativeEnemyESPTemplate()
 				if template then
 					local cloned = template:Clone()
-					cloned.Adornee = enemy
+					local horse = string.find(enemy.Name, "Springer") and enemy:FindFirstChild("horse")
+					local springerHead = horse and horse:FindFirstChild("Head")
+					cloned.Adornee = springerHead or actualHead or enemy
 					cloned.Enabled = true
+					cloned.AlwaysOnTop = true
 					local headPart = enemy:FindFirstChild("head")
-					cloned.Size = headPart and headPart:IsA("BillboardGui") and headPart.Size or UDim2.new(4, 0, 4, 0)
+					if string.find(enemy.Name, "Springer") then
+						cloned.Size = UDim2.fromOffset(180, 44)
+						cloned.StudsOffset = Vector3.new(0, 6.5, 0)
+						cloned.StudsOffsetWorldSpace = Vector3.new(0, 1.5, 0)
+					else
+						cloned.Size = headPart and headPart:IsA("BillboardGui") and headPart.Size or UDim2.fromScale(4, 4)
+					end
 					
 					local label = cloned:FindFirstChild("Label", true)
 					if label and label:IsA("TextLabel") then
@@ -637,6 +656,12 @@ local function processEntity(enemy)
 							label.Text = StupidNames[math.random(1, #StupidNames)]
 						else
 							label.Text = getEnemyDisplayName(enemy)
+						end
+						if string.find(enemy.Name, "Springer") then
+							label.TextScaled = false
+							label.TextSize = 24
+							label.TextStrokeTransparency = 0.15
+							label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 						end
 					end
 					cloned.Parent = enemy

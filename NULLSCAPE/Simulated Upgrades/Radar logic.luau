@@ -188,32 +188,37 @@ local function isAltarValid(t)
 	end
 	return true
 end
+local springerCache = setmetatable({}, { __mode = "k" })
+local visualPartCache = setmetatable({}, { __mode = "k" })
 
 local function isSpringerEnemy(enemy)
 	if not enemy then
 		return false
 	end
-
-	return string.find(enemy.Name:lower(), "springer") ~= nil
+	if springerCache[enemy] ~= nil then
+		return springerCache[enemy]
+	end
+	local res = string.find(enemy.Name:lower(), "springer") ~= nil
+	springerCache[enemy] = res
+	return res
 end
 
-
 local function hasWorkingNativeEnemyESP(enemy)
-	for _, child in ipairs(enemy:GetDescendants()) do
-		if (child.Name == "ESP" or child.Name == "ESPCrayon") and child:IsA("BillboardGui") then
-			local enabledOk = child.Enabled ~= false
-			local adornee = child.Adornee
-			local adorneeOk = adornee ~= nil and adornee.Parent ~= nil
-			if not adorneeOk and child.Parent and child.Parent:IsA("BasePart") then
-				adorneeOk = true
-			end
-			if enabledOk and adorneeOk then
-				return true
-			end
+	local child = enemy:FindFirstChild("ESP") or enemy:FindFirstChild("ESPCrayon")
+	if child and child:IsA("BillboardGui") then
+		local enabledOk = child.Enabled ~= false
+		local adornee = child.Adornee
+		local adorneeOk = adornee ~= nil and adornee.Parent ~= nil
+		if not adorneeOk and child.Parent and child.Parent:IsA("BasePart") then
+			adorneeOk = true
+		end
+		if enabledOk and adorneeOk then
+			return true
 		end
 	end
 	return false
 end
+
 local function shouldFallbackEnemyESP(enemy)
 	if not enemy or not enemy.Parent then
 		return false
@@ -245,91 +250,111 @@ local function findEnemyVisualPart(enemy, hrp)
 	if not enemy or not enemy.Parent then
 		return nil
 	end
+	if visualPartCache[enemy] then
+		return visualPartCache[enemy]
+	end
 
 	if enemy:IsA("BasePart") then
+		visualPartCache[enemy] = enemy
 		return enemy
 	end
+
+	local resolved = nil
 
 	-- Springer keeps its visual head under horse.Head while the root model holds shockwaves/collision.
 	if isSpringerEnemy(enemy) then
 		local horse = enemy:FindFirstChild("horse")
 		local springerHead = horse and horse:FindFirstChild("Head")
 		if springerHead and springerHead:IsA("BasePart") then
-			return springerHead
+			resolved = springerHead
 		end
 	end
 
-	-- Search for Head/head (case-insensitive and recursive if nested inside sub-models), resolving BillboardGuis if needed
-	local head = enemy:FindFirstChild("Head") or enemy:FindFirstChild("head")
-	if head then
-		if head:IsA("BasePart") then
-			return head
-		elseif head:IsA("BillboardGui") then
-			local ad = head.Adornee or head.Parent
-			if ad and ad:IsA("BasePart") then
-				return ad
-			end
-		end
-	end
-
-	for _, child in ipairs(enemy:GetDescendants()) do
-		if child.Name == "Head" or child.Name == "head" then
-			if child:IsA("BasePart") then
-				head = child
-				break
-			elseif child:IsA("BillboardGui") then
-				local ad = child.Adornee or child.Parent
+	if not resolved then
+		-- Search for Head/head (case-insensitive and recursive if nested inside sub-models), resolving BillboardGuis if needed
+		local head = enemy:FindFirstChild("Head") or enemy:FindFirstChild("head")
+		if head then
+			if head:IsA("BasePart") then
+				resolved = head
+			elseif head:IsA("BillboardGui") then
+				local ad = head.Adornee or head.Parent
 				if ad and ad:IsA("BasePart") then
-					head = ad
-					break
+					resolved = ad
 				end
 			end
 		end
 	end
 
-	if head and head:IsA("BasePart") then
-		return head
-	end
-
-	-- Fallback to PrimaryPart
-	if enemy:IsA("Model") and enemy.PrimaryPart then
-		return enemy.PrimaryPart
-	end
-
-	-- Fallback: Tìm bất kỳ BasePart nào trong mô hình
-	local firstPart = enemy:FindFirstChildWhichIsA("BasePart", true)
-	if firstPart then
-		return firstPart
-	end
-
-	-- Try to find HumanoidRootPart or Torso (recursive)
-	local root = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChild("Torso")
-	if not root then
-		root = enemy:FindFirstChild("HumanoidRootPart", true) or enemy:FindFirstChild("Torso", true)
-	end
-	if root and root:IsA("BasePart") then
-		return root
-	end
-
-	-- Shockwave fallback for Springer
-	local shockwave = enemy:FindFirstChild("SpringerShockwave", true)
-	if shockwave and shockwave:IsA("BasePart") then
-		return shockwave
-	end
-
-	local closestPart = nil
-	local closestDistance = math.huge
-	for _, descendant in ipairs(enemy:GetDescendants()) do
-		if descendant:IsA("BasePart") then
-			local distance = hrp and (hrp.Position - descendant.Position).Magnitude or 0
-			if distance < closestDistance then
-				closestDistance = distance
-				closestPart = descendant
+	if not resolved then
+		for _, child in ipairs(enemy:GetDescendants()) do
+			if child.Name == "Head" or child.Name == "head" then
+				if child:IsA("BasePart") then
+					resolved = child
+					break
+				elseif child:IsA("BillboardGui") then
+					local ad = child.Adornee or child.Parent
+					if ad and ad:IsA("BasePart") then
+						resolved = ad
+						break
+					end
+				end
 			end
 		end
 	end
 
-	return closestPart
+	if not resolved then
+		-- Fallback to PrimaryPart
+		if enemy:IsA("Model") and enemy.PrimaryPart then
+			resolved = enemy.PrimaryPart
+		end
+	end
+
+	if not resolved then
+		-- Fallback: Tìm bất kỳ BasePart nào trong mô hình
+		local firstPart = enemy:FindFirstChildWhichIsA("BasePart", true)
+		if firstPart then
+			resolved = firstPart
+		end
+	end
+
+	if not resolved then
+		-- Try to find HumanoidRootPart or Torso (recursive)
+		local root = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChild("Torso")
+		if not root then
+			root = enemy:FindFirstChild("HumanoidRootPart", true) or enemy:FindFirstChild("Torso", true)
+		end
+		if root and root:IsA("BasePart") then
+			resolved = root
+		end
+	end
+
+	if not resolved then
+		-- Shockwave fallback for Springer
+		local shockwave = enemy:FindFirstChild("SpringerShockwave", true)
+		if shockwave and shockwave:IsA("BasePart") then
+			resolved = shockwave
+		end
+	end
+
+	if not resolved then
+		local closestPart = nil
+		local closestDistance = math.huge
+		for _, descendant in ipairs(enemy:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				local distance = hrp and (hrp.Position - descendant.Position).Magnitude or 0
+				if distance < closestDistance then
+					closestDistance = distance
+					closestPart = descendant
+				end
+			end
+		end
+		resolved = closestPart
+	end
+
+	if resolved then
+		visualPartCache[enemy] = resolved
+	end
+	return resolved
 end
 
 local function isSafeEnemyVisualPart(part, hrp)
@@ -665,6 +690,10 @@ local function getEnemyFallbackParent(enemy, part)
 end
 
 local function getEnemyFallbackSize(enemy, gui)
+	if isSpringerEnemy(enemy) then
+		return UDim2.fromOffset(180, 44)
+	end
+
 	local headGui = enemy and (enemy:FindFirstChild("head", true) or enemy:FindFirstChild("Head", true))
 	if headGui and headGui:IsA("BillboardGui") then
 		return headGui.Size
@@ -675,6 +704,30 @@ local function getEnemyFallbackSize(enemy, gui)
 	end
 
 	return UDim2.fromScale(4, 4)
+end
+
+local function configureEnemyFallbackGui(enemy, gui)
+	if not (gui and gui:IsA("BillboardGui")) then
+		return
+	end
+
+	gui.AlwaysOnTop = true
+	gui.MaxDistance = 1200
+
+	if isSpringerEnemy(enemy) then
+		gui.Size = UDim2.fromOffset(180, 44)
+		gui.StudsOffset = Vector3.new(0, 6.5, 0)
+		gui.StudsOffsetWorldSpace = Vector3.new(0, 1.5, 0)
+
+		local label = gui:FindFirstChild("Label", true)
+		if label and label:IsA("TextLabel") then
+			label.TextScaled = false
+			label.TextSize = 24
+			label.Font = Enum.Font.Code
+			label.TextStrokeTransparency = 0.15
+			label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		end
+	end
 end
 
 local function updateNativeLikeEnemyFallbacks(saved, desired)
@@ -718,6 +771,7 @@ local function updateNativeLikeEnemyFallbacks(saved, desired)
 		pcall(function()
 			gui.Size = getEnemyFallbackSize(enemy, gui)
 		end)
+		configureEnemyFallbackGui(enemy, gui)
 		setEnemyESPLabel(gui, getEnemyDisplayName(enemy), data.Color)
 	end
 end
