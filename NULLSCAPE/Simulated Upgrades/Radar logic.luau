@@ -744,28 +744,6 @@ local function updateCustomESPStyles(controller, gc, hrp)
 		end
 	end
 
-	if canSimulate(controller, "Enemy") then
-		local enemies = workspace:FindFirstChild("Enemies")
-		if enemies then
-			local color = controller.EnemyESPColor or Color3.fromRGB(255, 128, 0)
-			for _, enemy in ipairs(enemies:GetChildren()) do
-				local ignoredNames = {
-					nilEnemy = true,
-					nilMirage = true,
-					Celestial = true,
-					MothSpectator = true,
-					CatalystHand = true,
-				}
-				if not ignoredNames[enemy.Name] and (enemy:IsA("Model") or enemy:FindFirstChildWhichIsA("BasePart", true) ~= nil) then
-					local part = findEnemyVisualPart(enemy, hrp)
-					if isSafeEnemyVisualPart(part, hrp) then
-						addCustomVisual(style, highlights, billboards, part, enemy, color)
-					end
-				end
-			end
-		end
-	end
-
 	addModelEnemyFallback(controller, enemyFallbacks, hrp)
 
 	applyCustomBillboards(saved, billboards)

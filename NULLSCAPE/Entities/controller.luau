@@ -524,6 +524,27 @@ local function processEntity(enemy)
 		return
 	end
 
+	-- Tạo phần đầu giả lập "head" (chữ thường) cho thực thể 3D để kích hoạt hệ thống ESP nguyên bản của game
+	if enemy:IsA("Model") and not enemy:FindFirstChild("head") then
+		local actualHead = enemy:FindFirstChild("Head", true) or enemy:FindFirstChild("head", true) or enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+		if actualHead then
+			local fakeHead = Instance.new("Part")
+			fakeHead.Name = "head"
+			fakeHead.Size = Vector3.new(2, 2, 2)
+			fakeHead.Transparency = 1
+			fakeHead.CanCollide = false
+			fakeHead.Anchored = false
+			fakeHead.Parent = enemy
+
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = fakeHead
+			weld.Part1 = actualHead
+			weld.Parent = fakeHead
+
+			fakeHead.CFrame = actualHead.CFrame
+		end
+	end
+
 	-- Tránh việc đăng ký nhiều lần trùng lặp cho cùng một thực thể
 	if GC.EntityConnections and GC.EntityConnections[enemy] then
 		return
