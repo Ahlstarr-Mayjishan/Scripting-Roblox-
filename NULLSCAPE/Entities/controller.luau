@@ -8,8 +8,30 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Executor = getgenv().loadModule("NULLSCAPE/Entities/executor.luau")
 local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
+local SpecialImmunity = getgenv().loadModule("NULLSCAPE/Entities/SpecialImmunity.luau")
+local Executor = {
+	enableImmunity = function(gc, enemy)
+		if TouchInterest then TouchInterest.enableImmunity(gc, enemy) end
+	end,
+	disableImmunityForType = function(gc, entityName)
+		if TouchInterest then TouchInterest.disableImmunityForType(gc, entityName) end
+		if SpecialImmunity then SpecialImmunity.disableForType(entityName) end
+	end,
+	restoreAll = function(gc)
+		if TouchInterest then TouchInterest.restoreAll(gc) end
+		if SpecialImmunity then SpecialImmunity.disable() end
+	end,
+	enableSpecialImmunity = function()
+		if SpecialImmunity then return SpecialImmunity.enable() end
+	end,
+	disableSpecialImmunityForType = function(entityName)
+		if SpecialImmunity then SpecialImmunity.disableForType(entityName) end
+	end,
+	disableSpecialImmunity = function()
+		if SpecialImmunity then SpecialImmunity.disable() end
+	end,
+}
 local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
 local RemoteBlocking = getgenv().loadModule("NULLSCAPE/Entities/RemoteBlocking.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
@@ -512,7 +534,7 @@ local function findNativeEnemyESPTemplate()
 		while #stack > 0 and scanned < maxDescendants do
 			local inst = table.remove(stack)
 			if inst and inst.Parent then
-				scanned += 1
+				scanned = scanned + 1
 				if (inst.Name == "ESP" or inst.Name == "ESPCrayon") and inst:IsA("BillboardGui") then
 					return inst
 				end
@@ -965,7 +987,7 @@ function Controller:ObserveFolder(folder)
 			end
 			debugPrint("ObserveFolder: Processing existing child:", child.Name)
 			processEntity(child)
-			processedThisSlice += 1
+			processedThisSlice = processedThisSlice + 1
 			if processedThisSlice >= ENTITY_PROCESS_BATCH_SIZE then
 				processedThisSlice = 0
 				task.wait()
@@ -1127,6 +1149,7 @@ local function initializeICBMHook()
 		["DiedFunc"] = true,
 		["Died"] = true,
 		["OblivionEvent"] = true,
+		["BroSecureMethod"] = true,
 	}
 
 	local function handleRemoteCall(self, ...)

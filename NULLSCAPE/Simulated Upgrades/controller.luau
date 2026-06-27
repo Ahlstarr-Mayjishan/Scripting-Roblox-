@@ -487,7 +487,7 @@ local function observeItemPools(folder)
 				end
 			end
 
-			scannedThisSlice += 1
+			scannedThisSlice = scannedThisSlice + 1
 			if scannedThisSlice >= OBSERVE_REGISTER_BATCH_SIZE then
 				scannedThisSlice = 0
 				task.wait()
@@ -526,7 +526,7 @@ local function startObservingFolders()
 					break
 				end
 				registerFn(obj)
-				processedThisSlice += 1
+				processedThisSlice = processedThisSlice + 1
 				if processedThisSlice >= OBSERVE_REGISTER_BATCH_SIZE then
 					processedThisSlice = 0
 					task.wait()

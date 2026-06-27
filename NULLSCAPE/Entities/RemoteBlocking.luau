@@ -136,13 +136,12 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         return false
     end
 
-    -- Operator is entirely client-driven and reports its kill through this shared RemoteFunction.
-    -- Match both the remote and cause exactly so unrelated deaths still reach the server.
-    if controller.OperatorImmune == true
-        and remote.ClassName == "RemoteFunction"
-        and remote.Name == "DiedFunc"
-        and args[1] == "Operator" then
-        return true
+    -- Operator is entirely client-driven and reports its kill through the BroSecureMethod RemoteEvent or DiedFunc.
+    if controller.OperatorImmune == true then
+        if (remote.Name == "BroSecureMethod" and args[1] == 1112)
+            or (remote.ClassName == "RemoteFunction" and remote.Name == "DiedFunc" and args[1] == "Operator") then
+            return true
+        end
     end
 
     if controller.KolonaImmune == true

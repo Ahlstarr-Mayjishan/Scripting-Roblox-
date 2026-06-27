@@ -616,7 +616,7 @@ local function findNativeEnemyESPTemplate()
 		while #stack > 0 and scanned < maxDescendants do
 			local inst = table.remove(stack)
 			if inst and inst.Parent then
-				scanned += 1
+				scanned = scanned + 1
 				if (inst.Name == "ESP" or inst.Name == "ESPCrayon") and inst:IsA("BillboardGui") then
 					return inst
 				end
