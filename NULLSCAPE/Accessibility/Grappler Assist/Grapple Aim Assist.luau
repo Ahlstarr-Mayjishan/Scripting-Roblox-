@@ -157,6 +157,12 @@ local CFG = {
     VOID_RESCUE_PREDICT_TIME = 0.42,
     VOID_RESCUE_TARGET_UPWARD_BONUS = -58,
     VOID_RESCUE_LOW_TARGET_PENALTY = 95,
+    SHARK_TAIL_VOID_SAVER_TRIGGER_BUFFER = 46,
+    SHARK_TAIL_VOID_SAVER_USE_BUFFER = 28,
+    SHARK_TAIL_VOID_SAVER_MIN_SPEED = 42,
+    SHARK_TAIL_VOID_SAVER_MAX_UP_SPEED = 18,
+    SHARK_TAIL_VOID_SAVER_LATERAL_OFFSET = 38,
+    SHARK_TAIL_VOID_SAVER_FORWARD_OFFSET = 52,
     TERRAIN_SURFACE_SCREEN_WEIGHT = 110,
     TERRAIN_SURFACE_DISTANCE_WEIGHT = 0.035,
     TERRAIN_UPWARD_RESCUE_BONUS = -36,
@@ -1311,9 +1317,18 @@ local function getTerrainVoidFallState(grapple)
     return updateTerrainFallContext(grapple)
 end
 
-local function getVoidKillPlaneY()
+local function getKillVoidPart()
     local killVoid = Workspace:FindFirstChild("KillVoid")
     if killVoid and killVoid:IsA("BasePart") then
+        return killVoid
+    end
+
+    return nil
+end
+
+local function getVoidKillPlaneY()
+    local killVoid = getKillVoidPart()
+    if killVoid then
         return killVoid.Position.Y
     end
 
@@ -2038,6 +2053,130 @@ end
 
 local function scanMapVoidAnchor(grapple, options)
     return MapSense.findBestVoidAnchor(getMapSenseDeps(), grapple, options)
+end
+
+local function canUseKillVoidSharkTailSaver(grapple, requireUseWindow)
+    local movement = grapple and grapple.Movement
+    local rootPart = grapple and grapple.RootPart
+    if not (grapple and movement and rootPart and hasClassCapability(grapple, "SharkTail")) then
+        return false
+    end
+    if not (isVoidRescueEnabled() and isSharkTailHelperEnabled() and isInAir(grapple)) then
+        return false
+    end
+    if not (hasUpgrade(movement, "NinjaBelt") and hasUpgrade(movement, "SharkTail")) then
+        return false
+    end
+    if grapple.sharkTailDisable == true then
+        return false
+    end
+    if requireUseWindow and grapple.allowSharkTail ~= true then
+        return false
+    end
+
+    local killY = getVoidKillPlaneY()
+    if not killY then
+        return false
+    end
+
+    local velocity = rootPart.Velocity
+    local buffer = requireUseWindow and CFG.SHARK_TAIL_VOID_SAVER_USE_BUFFER or CFG.SHARK_TAIL_VOID_SAVER_TRIGGER_BUFFER
+    if rootPart.Position.Y > killY + buffer then
+        return false
+    end
+    if velocity.Y > CFG.SHARK_TAIL_VOID_SAVER_MAX_UP_SPEED then
+        return false
+    end
+
+    return getHorizontalVelocity(rootPart).Magnitude >= CFG.SHARK_TAIL_VOID_SAVER_MIN_SPEED
+end
+
+local function getKillVoidSaverDirections(grapple)
+    local function flatUnit(vector)
+        local flat = vector and Vector3.new(vector.X, 0, vector.Z)
+        if not flat or flat.Magnitude <= 0.05 then
+            return nil
+        end
+        return flat.Unit
+    end
+
+    local rootPart = grapple and grapple.RootPart
+    local horizontal = getHorizontalVelocity(rootPart)
+    local forward = flatUnit(horizontal)
+    if not forward then
+        local camera = Workspace.CurrentCamera
+        forward = flatUnit(camera and camera.CFrame.LookVector)
+    end
+    if not forward then
+        forward = Vector3.new(1, 0, 0)
+    end
+
+    local side = forward:Cross(Vector3.yAxis)
+    if side.Magnitude <= 0.05 then
+        side = Vector3.new(0, 0, 1)
+    else
+        side = side.Unit
+    end
+
+    return {
+        forward * CFG.SHARK_TAIL_VOID_SAVER_FORWARD_OFFSET + side * CFG.SHARK_TAIL_VOID_SAVER_LATERAL_OFFSET,
+        forward * CFG.SHARK_TAIL_VOID_SAVER_FORWARD_OFFSET - side * CFG.SHARK_TAIL_VOID_SAVER_LATERAL_OFFSET,
+        side * CFG.SHARK_TAIL_VOID_SAVER_LATERAL_OFFSET,
+        -side * CFG.SHARK_TAIL_VOID_SAVER_LATERAL_OFFSET,
+    }
+end
+
+local function scanKillVoidSharkTailAnchor(grapple, options)
+    if not canUseKillVoidSharkTailSaver(grapple, false) then
+        return nil
+    end
+
+    local killVoid = getKillVoidPart()
+    local rootPart = grapple and grapple.RootPart
+    if not (killVoid and rootPart) then
+        return nil
+    end
+
+    local maxRange = getAssistRange(grapple, typeof(options) == "table" and options.driveMode == true)
+    local bestResult = nil
+    local bestDistance = math.huge
+    for _, offset in ipairs(getKillVoidSaverDirections(grapple)) do
+        local targetPosition = Vector3.new(rootPart.Position.X, killVoid.Position.Y, rootPart.Position.Z) + offset
+        local direction = targetPosition - rootPart.Position
+        local distance = direction.Magnitude
+        if distance > 0 and distance <= maxRange then
+            local result = Workspace:Raycast(rootPart.Position, direction, grapple.grappleParams)
+            if result and (result.Instance == killVoid or result.Instance:IsDescendantOf(killVoid)) and distance < bestDistance then
+                bestResult = result
+                bestDistance = distance
+            end
+        end
+    end
+
+    if not bestResult then
+        return nil
+    end
+
+    Logic.LastAssistDebug = {
+        Reason = "KillVoidSharkTailAnchor",
+        Target = "KillVoid",
+        Distance = bestDistance,
+    }
+
+    if typeof(options) == "table" and options.returnDecision == true then
+        return {
+            Result = bestResult,
+            Instance = bestResult.Instance,
+            Name = "KillVoid",
+            Distance = bestDistance,
+            ScreenScore = 0,
+            Score = -220,
+            Reason = "KillVoidSharkTailAnchor",
+            VoidDanger = true,
+        }
+    end
+
+    return bestResult
 end
 
 local function chooseRandomCandidate(validResults, preferredName)
@@ -2912,7 +3051,8 @@ local function tryPanicRescue(grapple)
     end
     local previewResult
     if voidDanger then
-        previewResult = scanMapVoidAnchor(grapple, { driveMode = true, returnDecision = true })
+        previewResult = scanKillVoidSharkTailAnchor(grapple, { driveMode = true, returnDecision = true })
+            or scanMapVoidAnchor(grapple, { driveMode = true, returnDecision = true })
     end
     previewResult = previewResult or scanNamedTargets(grapple, { driveMode = true })
     if not previewResult and voidDanger then
@@ -3016,7 +3156,8 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
     else
         local mapResult
         if isVoidRescueWindowActive() or isVoidRescueDanger(grapple) then
-            mapResult = scanMapVoidAnchor(grapple, { driveMode = true })
+            mapResult = scanKillVoidSharkTailAnchor(grapple, { driveMode = true })
+                or scanMapVoidAnchor(grapple, { driveMode = true })
         end
         assistedResult = mapResult or scanNamedTargets(grapple) or scanScreenSurface(grapple)
     end
@@ -3286,7 +3427,26 @@ local function tryUseSharkTail(grapple)
     return false
 end
 
+local function tryVoidSharkTailSaver(grapple)
+    if not canUseKillVoidSharkTailSaver(grapple, true) then
+        return false
+    end
+    if not isVoidRescueDanger(grapple) then
+        return false
+    end
+
+    Logic.LastAssistDebug = {
+        Reason = "VoidSharkTailSaver",
+        Target = "KillVoid",
+    }
+    return tryUseSharkTail(grapple)
+end
+
 local function planSmartSharkTail(grapple)
+    if tryVoidSharkTailSaver(grapple) then
+        return true
+    end
+
     local config = getSharkTailStyleConfig()
     local now = time()
     if Logic.SharkTailPlannedAt > now then

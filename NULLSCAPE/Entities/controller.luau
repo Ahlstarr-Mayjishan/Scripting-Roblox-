@@ -561,17 +561,24 @@ local function processEntity(enemy)
 		local function onChildAdded(child)
 			if child.Name == "ESP" or child.Name == "ESPCrayon" then
 				if child:IsA("BillboardGui") then
-					task.defer(function()
-						if not enemy or not enemy.Parent then return end
-						local rootPart = enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+					-- Fix horizontal stretched border for Springer instantly to prevent visual glitches
+					if string.find(enemy.Name:lower(), "springer") then
+						pcall(function() child.Size = UDim2.new(4, 0, 4, 0) end)
+					end
+
+					task.spawn(function()
+						-- Wait for physical parts of the enemy model to replicate/load (up to 3 seconds)
+						local rootPart = nil
+						for i = 1, 60 do
+							if not enemy or not enemy.Parent then return end
+							rootPart = enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+							if rootPart then break end
+							task.wait(0.05)
+						end
+
 						if rootPart then
 							if child.Adornee == enemy or child.Adornee == nil then
 								pcall(function() child.Adornee = rootPart end)
-							end
-
-							-- Fix horizontal stretched border for Springer (due to wide eye billboard sizes)
-							if string.find(enemy.Name:lower(), "springer") then
-								pcall(function() child.Size = UDim2.new(4, 0, 4, 0) end)
 							end
 
 							-- Defensively hide native ESP when enemy is spawning far below the map (Y < -50)

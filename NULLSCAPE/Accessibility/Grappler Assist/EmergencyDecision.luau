@@ -49,6 +49,10 @@ local function getAssistResultPosition(result)
 end
 
 local function getAssistResultTargetName(deps, result)
+    if isAssistDecision(result) and (result.Name == "KillVoid" or result.Reason == "KillVoidSharkTailAnchor") then
+        return "KillVoid"
+    end
+
     local instance = getAssistResultInstance(result)
     if instance and deps.isRescueTargetName(instance.Name) then
         return instance.Name
@@ -187,6 +191,9 @@ function EmergencyDecision.createDecision(deps, grapple, rescueResult)
             score = score + 14
         elseif snapshot.RescueTargetName == "GrapplePoint" then
             score = score + 6
+        elseif snapshot.RescueTargetName == "KillVoid" and snapshot.VoidDanger then
+            score = score + 28
+            reason = "KillVoidSharkTailAnchor"
         end
     elseif type(snapshot.TerrainReason) == "string" and string.find(snapshot.TerrainReason, "Terrain", 1, true) then
         local terrainScore = tonumber(snapshot.TerrainScore) or 80

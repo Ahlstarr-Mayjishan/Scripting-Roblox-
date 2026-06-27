@@ -1,77 +1,78 @@
 -- [[
 --  NULLSCAPE - Infinite Air Jump
---  Replenishes one native DoubleJump charge before each air-jump attempt.
+--  Uses robust UserInputService listening to allow endless jumping in the air.
 -- ]]
 
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logic = {}
 
 local function getGlobals()
-    local env = getgenv()
-    env._NULLSCAPE_Globals = env._NULLSCAPE_Globals or {}
-    return env._NULLSCAPE_Globals
+	local env = getgenv()
+	env._NULLSCAPE_Globals = env._NULLSCAPE_Globals or {}
+	return env._NULLSCAPE_Globals
 end
 
-local function shouldRefill()
-    local controller = getGlobals().activeAccessibilityController
-    return controller and controller.InfiniteAirJumpEnabled == true
+local function shouldJump()
+	local controller = getGlobals().activeAccessibilityController
+	return controller and controller.InfiniteAirJumpEnabled == true
 end
 
-local function refillNativeCharge(doubleJump)
-    if not shouldRefill() or typeof(doubleJump) ~= "table" then
-        return
-    end
+local function doAirJump()
+	local character = Players.LocalPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	if humanoid and humanoid.Parent and rootPart then
+		local state = humanoid:GetState()
+		if state ~= Enum.HumanoidStateType.Running 
+			and state ~= Enum.HumanoidStateType.Landed 
+			and state ~= Enum.HumanoidStateType.Dead then
+			-- Refill native charges so game's UI and internals remain happy
+			pcall(function()
+				local playerScripts = Players.LocalPlayer:FindFirstChild("PlayerScripts")
+				local movement = playerScripts and playerScripts:FindFirstChild("Movement")
+				if movement then
+					-- If there is a native double jump object, try to refill it
+					local doubleJump = movement:FindFirstChild("DoubleJump")
+					if doubleJump and typeof(doubleJump) == "table" and doubleJump.AvailableJumps then
+						doubleJump.AvailableJumps.DoubleJump = 1
+					end
+				end
+			end)
 
-    local availableJumps = doubleJump.AvailableJumps
-    if typeof(availableJumps) ~= "table" then
-        return
-    end
-
-    availableJumps.DoubleJump = math.max(tonumber(availableJumps.DoubleJump) or 0, 1)
+			-- Force Roblox physics state change to initiate another jump
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+		end
+	end
 end
 
 function Logic.initialize()
-    local globals = getGlobals()
-    if globals.InfiniteAirJumpHooked then
-        return true
-    end
+	local globals = getGlobals()
+	if globals.InfiniteAirJumpListenerConnected then
+		return true
+	end
 
-    local movement = ReplicatedStorage:FindFirstChild("Movement")
-    local moduleScript = movement and movement:FindFirstChild("DoubleJump")
-    if not moduleScript or not moduleScript:IsA("ModuleScript") then
-        return false
-    end
+	-- Connect to InputBegan to capture new jumps in the air
+	local conn = UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then return end
+		if input.KeyCode == Enum.KeyCode.Space then
+			if shouldJump() then
+				doAirJump()
+			end
+		end
+	end)
 
-    local success, doubleJumpModule = pcall(require, moduleScript)
-    if not success or typeof(doubleJumpModule) ~= "table" or typeof(doubleJumpModule.TryDoubleJump) ~= "function" then
-        return false
-    end
+	globals.InfiniteAirJumpListenerConnected = true
+	
+	-- Register to the active controller's permanent connections if possible
+	local controller = globals.activeAccessibilityController
+	if controller and controller.PermanentConnections then
+		table.insert(controller.PermanentConnections, conn)
+	end
 
-    local hookSuccess = pcall(function()
-        if typeof(hookfunction) == "function" then
-            local oldTryDoubleJump
-            oldTryDoubleJump = hookfunction(doubleJumpModule.TryDoubleJump, function(self, ...)
-                refillNativeCharge(self)
-                return oldTryDoubleJump(self, ...)
-            end)
-            globals.OriginalTryDoubleJump = oldTryDoubleJump
-        else
-            local oldTryDoubleJump = doubleJumpModule.TryDoubleJump
-            globals.OriginalTryDoubleJump = oldTryDoubleJump
-            doubleJumpModule.TryDoubleJump = function(self, ...)
-                refillNativeCharge(self)
-                return oldTryDoubleJump(self, ...)
-            end
-        end
-    end)
-
-    if not hookSuccess then
-        return false
-    end
-
-    globals.InfiniteAirJumpHooked = true
-    return true
+	return true
 end
 
 return Logic
