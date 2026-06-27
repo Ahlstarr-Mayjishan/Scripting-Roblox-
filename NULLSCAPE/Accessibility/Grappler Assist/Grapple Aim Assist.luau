@@ -153,6 +153,11 @@ local CFG = {
     TERRAIN_VOID_GRACE_MIN_FALL_SPEED = 70,
     TERRAIN_VOID_GRACE_DROP_DISTANCE = 24,
     TERRAIN_VOID_FALL_SPEED = 22,
+    TERRAIN_WALL_SLAM_MIN_SPEED = 115,
+    TERRAIN_WALL_SLAM_PROBE_DISTANCE = 7,
+    TERRAIN_WALL_SLAM_NORMAL_Y_MAX = 0.38,
+    TERRAIN_WALL_SLAM_ALIGNMENT = 0.62,
+    TERRAIN_WALL_SLAM_MEMORY = 0.35,
     TERRAIN_VOID_FORWARD_PROBE_DISTANCE = 30,
     TERRAIN_VOID_SIDE_PROBE_DISTANCE = 10,
     TERRAIN_VOID_DROP_DISTANCE = 11,
@@ -170,6 +175,17 @@ local CFG = {
     MAP_ANCHOR_SCREEN_WEIGHT = 36,
     MAP_ANCHOR_UPWARD_BONUS = -62,
     MAP_ANCHOR_LOW_PENALTY = 135,
+    MAP_ANCHOR_SWING_IDEAL_DISTANCE = 72,
+    MAP_ANCHOR_SWING_MIN_DISTANCE = 38,
+    MAP_ANCHOR_SWING_DISTANCE_WEIGHT = 0.42,
+    MAP_ANCHOR_SWING_LATERAL_MIN = 16,
+    MAP_ANCHOR_SWING_LATERAL_IDEAL = 42,
+    MAP_ANCHOR_SWING_LATERAL_WEIGHT = 0.65,
+    MAP_ANCHOR_SWING_FORWARD_BONUS = -24,
+    MAP_ANCHOR_SWING_BEHIND_PENALTY = 70,
+    MAP_ANCHOR_SWING_CLEARANCE = 7,
+    MAP_ANCHOR_SWING_CLEARANCE_BONUS = -18,
+    MAP_ANCHOR_SWING_NARROW_PENALTY = 55,
     PANIC_RESCUE_GROUND_CHECK_HEIGHT = 10,
     PANIC_RESCUE_GROUND_CHECK_DEPTH = 90,
     PANIC_INPUT_WINDOW = 0.42,
@@ -414,6 +430,14 @@ local function isVoidRescueEnabled()
         and controller.GrappleAssistSuiteEnabled == true
         and controller.GrappleEmergencyProtectionEnabled == true
         and controller.GrappleVoidRescueEnabled ~= false
+end
+
+local function isWallSlamRescueEnabled()
+    local controller = getController()
+    return controller
+        and controller.GrappleAssistSuiteEnabled == true
+        and controller.GrappleEmergencyProtectionEnabled == true
+        and controller.GrappleWallSlamRescueEnabled == true
 end
 
 local function getAdaptInputKeyCode()
@@ -1127,8 +1151,16 @@ local function getFloorHit(position, params)
     return Workspace:Raycast(origin, direction, params)
 end
 
+local function getWallHit(position, direction, params)
+    if not (position and direction and direction.Magnitude > 0) then
+        return nil
+    end
+
+    return Workspace:Raycast(position, direction, params)
+end
+
 local function updateTerrainFallContext(grapple)
-    if not (grapple and hasClassCapability(grapple, "VoidRescue") and isVoidRescueEnabled()) then
+    if not (grapple and hasClassCapability(grapple, "VoidRescue") and (isVoidRescueEnabled() or isWallSlamRescueEnabled())) then
         Logic.TerrainFallState = nil
         return nil
     end
@@ -1153,6 +1185,10 @@ local function updateTerrainFallContext(grapple)
         hasFloorBelow = function(position)
             return hasFloorBelow(position, params)
         end,
+        getWallHit = function(position, direction)
+            return getWallHit(position, direction, params)
+        end,
+        isWallSlamRescueEnabled = isWallSlamRescueEnabled,
     }, grapple, Logic.TerrainFallState)
 
     Logic.TerrainFallState = state

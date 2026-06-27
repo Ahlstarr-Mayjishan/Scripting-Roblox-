@@ -76,6 +76,7 @@ local Controller = {
 	GrappleRescueAssistEnabled = false,
 	GrappleEmergencyProtectionEnabled = false,
 	GrappleVoidRescueEnabled = true,
+	GrappleWallSlamRescueEnabled = false,
 	GrappleEmergencyProtectionMode = "Manual",
 	GrappleEmergencySpeedThreshold = 220,
 	GrappleEmergencyFallThreshold = 125,
@@ -282,6 +283,7 @@ function Controller:HasAnyGrappleAssistFeature()
 		or self.GrappleRescueAssistEnabled
 		or self.GrappleEmergencyProtectionEnabled
 		or (self.GrappleEmergencyProtectionEnabled and self.GrappleVoidRescueEnabled)
+		or (self.GrappleEmergencyProtectionEnabled and self.GrappleWallSlamRescueEnabled)
 		or self.GrappleAntiBonkEnabled
 		or self.GrappleSmartReelEnabled
 		or self.GrappleSharkTailHelperEnabled
@@ -378,6 +380,14 @@ function Controller:SetGrappleVoidRescue(value)
 
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleVoidRescueEnabled = false
+	end
+end
+
+function Controller:SetGrappleWallSlamRescue(value)
+	self.GrappleWallSlamRescueEnabled = value == true
+
+	if not self:RefreshGrappleAssistHook() then
+		self.GrappleWallSlamRescueEnabled = false
 	end
 end
 

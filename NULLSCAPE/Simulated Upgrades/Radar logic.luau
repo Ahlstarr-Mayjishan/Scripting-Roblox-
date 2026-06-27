@@ -246,20 +246,33 @@ local function findEnemyVisualPart(enemy, hrp)
 		return enemy
 	end
 
-	local head = enemy:FindFirstChild("head")
+	-- Search for Head/head (case-insensitive and recursive if nested inside sub-models)
+	local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("Head")
+	if not head then
+		head = enemy:FindFirstChild("Head", true) or enemy:FindFirstChild("head", true)
+	end
 	if head and head:IsA("BasePart") then
 		return head
 	end
 
+	-- Try to find HumanoidRootPart or Torso (recursive)
+	local root = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChild("Torso")
+	if not root then
+		root = enemy:FindFirstChild("HumanoidRootPart", true) or enemy:FindFirstChild("Torso", true)
+	end
+	if root and root:IsA("BasePart") then
+		return root
+	end
+
+	-- Fallback to PrimaryPart
+	if enemy:IsA("Model") and enemy.PrimaryPart then
+		return enemy.PrimaryPart
+	end
+
+	-- Shockwave fallback for Springer
 	local shockwave = enemy:FindFirstChild("SpringerShockwave", true)
 	if shockwave and shockwave:IsA("BasePart") then
 		return shockwave
-	end
-
-	if enemy:IsA("Model") then
-		if enemy.PrimaryPart then
-			return enemy.PrimaryPart
-		end
 	end
 
 	local closestPart = nil
@@ -476,13 +489,21 @@ local function applyCustomHighlights(saved, desired)
 	for targetObject, color in pairs(desired) do
 		local hl = saved.Highlights[targetObject]
 		if not hl or not hl.Parent then
+			local adornee = targetObject
+			if targetObject:IsA("BasePart") then
+				local model = targetObject:FindFirstAncestorOfClass("Model")
+				if model then
+					adornee = model
+				end
+			end
+
 			hl = Instance.new("Highlight")
 			hl.Name = "NULLSCAPE_CustomHighlight"
 			hl.FillTransparency = 1
 			hl.OutlineTransparency = 0
 			hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-			hl.Adornee = targetObject
-			hl.Parent = targetObject
+			hl.Adornee = adornee
+			hl.Parent = adornee
 			saved.Highlights[targetObject] = hl
 		end
 		hl.OutlineColor = color
@@ -718,6 +739,28 @@ local function updateCustomESPStyles(controller, gc, hrp)
 						and Color3.new(1, 0, 0)
 						or (controller.PlayerESPColor or Color3.fromRGB(255, 255, 255))
 					addCustomVisual(style, highlights, billboards, charHRP, character, color)
+				end
+			end
+		end
+	end
+
+	if canSimulate(controller, "Enemy") then
+		local enemies = workspace:FindFirstChild("Enemies")
+		if enemies then
+			local color = controller.EnemyESPColor or Color3.fromRGB(255, 128, 0)
+			for _, enemy in ipairs(enemies:GetChildren()) do
+				local ignoredNames = {
+					nilEnemy = true,
+					nilMirage = true,
+					Celestial = true,
+					MothSpectator = true,
+					CatalystHand = true,
+				}
+				if not ignoredNames[enemy.Name] and (enemy:IsA("Model") or enemy:FindFirstChildWhichIsA("BasePart", true) ~= nil) then
+					local part = findEnemyVisualPart(enemy, hrp)
+					if isSafeEnemyVisualPart(part, hrp) then
+						addCustomVisual(style, highlights, billboards, part, enemy, color)
+					end
 				end
 			end
 		end

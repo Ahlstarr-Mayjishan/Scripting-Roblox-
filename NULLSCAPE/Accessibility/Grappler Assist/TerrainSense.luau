@@ -90,8 +90,12 @@ function TerrainSense.scoreSurface(deps, grapple, result, screenScore, driveMode
     return score, reason
 end
 
-local function getFlatUnit(vector)
-    local flat = vector and Vector3.new(vector.X, 0, vector.Z)
+local function addProbePosition(positions, position)
+    table.insert(positions, position)
+end
+
+local function getFlatNormalUnit(normal)
+    local flat = normal and Vector3.new(normal.X, 0, normal.Z)
     if not flat or flat.Magnitude <= 0.05 then
         return nil
     end
@@ -99,8 +103,43 @@ local function getFlatUnit(vector)
     return flat.Unit
 end
 
-local function addProbePosition(positions, position)
-    table.insert(positions, position)
+local function detectWallSlamRisk(deps, grapple, state, now, horizontalUnit, horizontalSpeed)
+    local cfg = deps.CFG
+    if not (deps.isWallSlamRescueEnabled and deps.isWallSlamRescueEnabled()) then
+        return false, nil
+    end
+    if not (horizontalUnit and horizontalSpeed >= cfg.TERRAIN_WALL_SLAM_MIN_SPEED) then
+        if state.LastWallSlamAt and now - state.LastWallSlamAt <= cfg.TERRAIN_WALL_SLAM_MEMORY then
+            return true, state.LastWallSlamHit
+        end
+        return false, nil
+    end
+
+    local rootPart = grapple and grapple.RootPart
+    local getWallHit = deps.getWallHit
+    if not (rootPart and getWallHit) then
+        return false, nil
+    end
+
+    local hit = getWallHit(rootPart.Position, horizontalUnit * cfg.TERRAIN_WALL_SLAM_PROBE_DISTANCE)
+    local normal = hit and hit.Normal
+    if not normal or math.abs(normal.Y) > cfg.TERRAIN_WALL_SLAM_NORMAL_Y_MAX then
+        return false, nil
+    end
+
+    local flatNormal = getFlatNormalUnit(normal)
+    if not flatNormal then
+        return false, nil
+    end
+
+    local impactAlignment = horizontalUnit:Dot(-flatNormal)
+    if impactAlignment < cfg.TERRAIN_WALL_SLAM_ALIGNMENT then
+        return false, nil
+    end
+
+    state.LastWallSlamAt = now
+    state.LastWallSlamHit = hit
+    return true, hit
 end
 
 function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
@@ -125,6 +164,9 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
         state.SinceSafeFloor = 0
         state.IntentGrace = false
         state.IntentGraceAllowsRescue = false
+        state.LastWallSlamAt = nil
+        state.LastWallSlamHit = nil
+        state.WallSlamRisk = false
         state.LastEvaluatedAt = now
         return state
     end
@@ -138,9 +180,15 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
     local droppedBeyondGrace = state.LastSafePosition
         and rootPart.Position.Y <= state.LastSafePosition.Y - graceDropDistance
     local graceAllowsRescue = fallSpeed >= graceFallSpeed or droppedBeyondGrace == true
+    local horizontalVelocity = Vector3.new(velocity.X, 0, velocity.Z)
+    local horizontalSpeed = horizontalVelocity.Magnitude
+    local wallSlamScan = deps.isWallSlamRescueEnabled
+        and deps.isWallSlamRescueEnabled()
+        and horizontalSpeed >= cfg.TERRAIN_WALL_SLAM_MIN_SPEED
     local shouldFullScan = state.Danger == true
         or recentGroundSlip
         or fallSpeed >= cfg.TERRAIN_VOID_FULL_SCAN_FALL_SPEED
+        or wallSlamScan
     if not shouldFullScan then
         state.Danger = false
         state.Reason = "AirborneLight"
@@ -148,13 +196,15 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
         state.NoFloorBelow = true
         state.SinceSafeFloor = sinceSafeFloor
         state.FallSpeed = fallSpeed
+        state.HorizontalSpeed = horizontalSpeed
+        state.WallSlamRisk = false
         state.IntentGrace = intentGrace and not graceAllowsRescue
         state.IntentGraceAllowsRescue = graceAllowsRescue
         state.LastEvaluatedAt = now
         return state
     end
 
-    local horizontalUnit = getFlatUnit(velocity)
+    local horizontalUnit = horizontalSpeed > 0.05 and horizontalVelocity.Unit or nil
     local positions = {}
     if horizontalUnit then
         local sideUnit = horizontalUnit:Cross(Vector3.yAxis)
@@ -178,11 +228,15 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
         and rootPart.Position.Y <= state.LastSafePosition.Y - cfg.TERRAIN_VOID_DROP_DISTANCE
     local terrainLost = unsafeSamples >= cfg.TERRAIN_VOID_MIN_UNSAFE_SAMPLES
     local noFloorBelow = unsafeSamples > 0
+    local wallSlamRisk = detectWallSlamRisk(deps, grapple, state, now, horizontalUnit, horizontalSpeed)
 
     local danger = false
     local reason = "Airborne"
     local suppressForIntent = terrainLost and falling and intentGrace and not graceAllowsRescue
-    if suppressForIntent then
+    if wallSlamRisk and terrainLost then
+        danger = true
+        reason = "WallSlamVoidRisk"
+    elseif suppressForIntent then
         reason = "RecentGroundIntentGrace"
     elseif terrainLost and falling and recentGroundSlip then
         danger = true
@@ -201,6 +255,8 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
     state.NoFloorBelow = noFloorBelow
     state.SinceSafeFloor = sinceSafeFloor
     state.FallSpeed = fallSpeed
+    state.HorizontalSpeed = horizontalSpeed
+    state.WallSlamRisk = wallSlamRisk
     state.IntentGrace = suppressForIntent
     state.IntentGraceAllowsRescue = graceAllowsRescue
     state.LastEvaluatedAt = now

@@ -36,6 +36,23 @@ local function getCandidateName(deps, instance, part)
     return nil
 end
 
+local function getFlatUnit(vector)
+    local flat = vector and Vector3.new(vector.X, 0, vector.Z)
+    if not flat or flat.Magnitude <= 0.05 then
+        return nil
+    end
+
+    return flat.Unit
+end
+
+local function isTargetHit(result, targetInstance, targetPart)
+    if not result or not result.Instance then
+        return false
+    end
+
+    return result.Instance == targetPart or result.Instance:IsDescendantOf(targetInstance)
+end
+
 local function addAnchor(deps, anchors, seen, instance)
     if not (instance and instance.Parent) or seen[instance] then
         return
@@ -99,6 +116,83 @@ function MapSense.refresh(deps, force)
     return anchors
 end
 
+local function getSwingClearanceScore(deps, grapple, candidate, position, anchorUnit)
+    local cfg = deps.CFG
+    local workspace = deps.Workspace
+    local rootPart = grapple and grapple.RootPart
+    if not (workspace and rootPart and anchorUnit) then
+        return 0
+    end
+
+    local side = anchorUnit:Cross(Vector3.yAxis)
+    if side.Magnitude <= 0.05 then
+        return 0
+    end
+
+    side = side.Unit
+    local function isOffsetClear(sideSign)
+        local offset = side * (cfg.MAP_ANCHOR_SWING_CLEARANCE or 7) * sideSign
+        local origin = rootPart.Position + offset
+        local direction = position + offset - origin
+        local result = workspace:Raycast(origin, direction, grapple.grappleParams)
+        return not result or isTargetHit(result, candidate.Instance, candidate.Part)
+    end
+
+    local clearRays = (isOffsetClear(-1) and 1 or 0) + (isOffsetClear(1) and 1 or 0)
+    if clearRays >= 2 then
+        return cfg.MAP_ANCHOR_SWING_CLEARANCE_BONUS or -18
+    elseif clearRays == 1 then
+        return 0
+    end
+
+    return cfg.MAP_ANCHOR_SWING_NARROW_PENALTY or 55
+end
+
+local function getSwingRoomScore(deps, grapple, candidate, position, distance)
+    local cfg = deps.CFG
+    local rootPart = grapple and grapple.RootPart
+    local velocity = rootPart and rootPart.Velocity
+    if not (rootPart and velocity) then
+        return 0
+    end
+
+    local anchorOffset = position - rootPart.Position
+    local anchorUnit = getFlatUnit(anchorOffset)
+    if not anchorUnit then
+        return 0
+    end
+
+    local velocityUnit = getFlatUnit(velocity)
+    local score = 0
+    local minDistance = cfg.MAP_ANCHOR_SWING_MIN_DISTANCE or 38
+    local idealDistance = cfg.MAP_ANCHOR_SWING_IDEAL_DISTANCE or 72
+    if distance < minDistance then
+        score = score + (minDistance - distance) * (cfg.MAP_ANCHOR_SWING_DISTANCE_WEIGHT or 0.42)
+    else
+        score = score + math.abs(distance - idealDistance) * (cfg.MAP_ANCHOR_SWING_DISTANCE_WEIGHT or 0.42) * 0.25
+    end
+
+    if velocityUnit then
+        local forwardDot = anchorUnit:Dot(velocityUnit)
+        if forwardDot >= 0.18 then
+            score = score + (cfg.MAP_ANCHOR_SWING_FORWARD_BONUS or -24) * math.min(forwardDot, 1)
+        elseif forwardDot < -0.15 then
+            score = score + (cfg.MAP_ANCHOR_SWING_BEHIND_PENALTY or 70) * math.min(math.abs(forwardDot), 1)
+        end
+
+        local lateral = math.abs(anchorOffset:Dot(velocityUnit:Cross(Vector3.yAxis).Unit))
+        local lateralMin = cfg.MAP_ANCHOR_SWING_LATERAL_MIN or 16
+        local lateralIdeal = cfg.MAP_ANCHOR_SWING_LATERAL_IDEAL or 42
+        if lateral < lateralMin then
+            score = score + (lateralMin - lateral) * (cfg.MAP_ANCHOR_SWING_LATERAL_WEIGHT or 0.65)
+        else
+            score = score + math.abs(lateral - lateralIdeal) * (cfg.MAP_ANCHOR_SWING_LATERAL_WEIGHT or 0.65) * 0.18
+        end
+    end
+
+    return score + getSwingClearanceScore(deps, grapple, candidate, position, anchorUnit)
+end
+
 local function getAnchorScore(deps, grapple, candidate, position, distance, screenScore)
     local cfg = deps.CFG
     local rootPart = grapple and grapple.RootPart
@@ -125,7 +219,7 @@ local function getAnchorScore(deps, grapple, candidate, position, distance, scre
         score = score - 14
     end
 
-    return score
+    return score + getSwingRoomScore(deps, grapple, candidate, position, distance)
 end
 
 function MapSense.findBestVoidAnchor(deps, grapple, options)

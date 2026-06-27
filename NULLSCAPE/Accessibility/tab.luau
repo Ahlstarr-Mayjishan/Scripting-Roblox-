@@ -255,6 +255,16 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateToggle({
+		Name = "Wall Slam Rescue",
+		Info = "Optional void rescue for high-speed side impacts. It only reacts when you are moving fast into a wall-like face and the path below is unsafe.",
+		CurrentValue = Controller.GrappleWallSlamRescueEnabled or false,
+		Flag = "GrappleWallSlamRescueToggle",
+		Callback = function(Value)
+			Controller:SetGrappleWallSlamRescue(Value)
+		end,
+	})
+
 	Tab:CreateDropdown({
 		Name = "Emergency Rescue Mode",
 		Info = "Manual needs repeated panic Grapple inputs. Smart Auto reads fall path, input control, speed, and rescue target quality. Automatic uses the same checks with a lower threshold.",
