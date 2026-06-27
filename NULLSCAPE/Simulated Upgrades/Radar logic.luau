@@ -283,6 +283,12 @@ local function findEnemyVisualPart(enemy, hrp)
 		return enemy.PrimaryPart
 	end
 
+	-- Fallback: Tìm bất kỳ BasePart nào trong mô hình
+	local firstPart = enemy:FindFirstChildWhichIsA("BasePart", true)
+	if firstPart then
+		return firstPart
+	end
+
 	-- Try to find HumanoidRootPart or Torso (recursive)
 	local root = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChild("Torso")
 	if not root then

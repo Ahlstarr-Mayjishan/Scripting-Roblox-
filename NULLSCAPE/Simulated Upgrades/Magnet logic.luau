@@ -1,7 +1,8 @@
 --!nocheck
 -- [[
---  NULLSCAPE - Gift, Instrument, and Medal Magnet / Auto Collect
---  Handles multi-target collection (Gifts, Instruments, Medals) with range filters and safety checks.
+--  NULLSCAPE - Gift and Instrument Magnet / Auto Collect
+--  Handles multi-target collection (Gifts, Instruments) with range filters and safety checks.
+--  (Medal collection has been moved to manual blink-teleport keybind by user request)
 -- ]]
 
 local Magnet = {}
@@ -126,37 +127,6 @@ local function addCandidate(validGifts, seenRawObjects, rawObj, hrpPos, range)
 	})
 end
 
-local function findMedal()
-	local char = LocalPlayer.Character
-	if char and char:FindFirstChild("Medal") then
-		return nil
-	end
-	local medal = workspace:FindFirstChild("Medal")
-	if medal then
-		if medal:IsA("BasePart") then
-			return medal
-		elseif medal:IsA("Model") then
-			local handle = medal:FindFirstChild("Handle") or medal:FindFirstChildWhichIsA("BasePart", true)
-			if handle then
-				return handle
-			end
-		end
-	end
-
-	for _, child in ipairs(workspace:GetChildren()) do
-		if child.Name == "Medal" then
-			if child:IsA("BasePart") then
-				return child
-			end
-			local handle = child:FindFirstChild("Handle") or child:FindFirstChildWhichIsA("BasePart", true)
-			if handle then
-				return handle
-			end
-		end
-	end
-	return nil
-end
-
 function Magnet.update(controller, hrp)
 	if not controller.AutoCollectEnabled then
 		return
@@ -168,7 +138,6 @@ function Magnet.update(controller, hrp)
 	local targets = controller.AutoCollectTargets or {}
 	local hasGiftTarget = table.find(targets, "Gift/GoldenGift") ~= nil
 	local hasInstrumentTarget = table.find(targets, "Instrument (Cadence)") ~= nil
-	local hasMedalTarget = table.find(targets, "Medal") ~= nil
 
 	local mode = controller.AutoCollectMode or "Legit"
 	local hrpPos = hrp.Position
@@ -231,47 +200,6 @@ function Magnet.update(controller, hrp)
 							firetouchinterest(orb, hrp, 1)
 						end
 					end)
-				end
-			end
-		end
-	end
-
-	-- 3. MEDAL COLLECTION & SUBMISSION
-	if hasMedalTarget then
-		local char = LocalPlayer.Character
-		if char then
-			local carriesMedal = char:FindFirstChild("Medal") ~= nil
-			if carriesMedal then
-				-- Auto-submit to Beacon if within 30 studs
-				local beacon = workspace:FindFirstChild("Beacon")
-				local beaconPart = beacon and beacon:FindFirstChildWhichIsA("BasePart", true)
-				if beaconPart then
-					local distToBeacon = (beaconPart.Position - hrpPos).Magnitude
-					if distToBeacon <= 30 then
-						pcall(function()
-							if typeof(firetouchinterest) == "function" then
-								firetouchinterest(beaconPart, hrp, 0)
-								task.wait()
-								firetouchinterest(beaconPart, hrp, 1)
-							end
-						end)
-					end
-				end
-			else
-				-- Auto-pickup Medal
-				local medalRange = controller.AutoCollectMedalRange or 0
-				local medal = findMedal()
-				if medal then
-					local distToMedal = (medal.Position - hrpPos).Magnitude
-					if medalRange == 0 or distToMedal <= medalRange then
-						pcall(function()
-							if typeof(firetouchinterest) == "function" then
-								firetouchinterest(medal, hrp, 0)
-								task.wait()
-								firetouchinterest(medal, hrp, 1)
-							end
-						end)
-					end
 				end
 			end
 		end

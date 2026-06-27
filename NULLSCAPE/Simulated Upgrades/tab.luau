@@ -112,8 +112,8 @@ return function(Client, Controller)
 
 	Tab:CreateDropdown({
 		Name = "Collection Targets",
-		Options = { "Gift/GoldenGift", "Instrument (Cadence)", "Medal" },
-		CurrentOption = Controller.AutoCollectTargets or { "Gift/GoldenGift", "Instrument (Cadence)", "Medal" },
+		Options = { "Gift/GoldenGift", "Instrument (Cadence)" },
+		CurrentOption = Controller.AutoCollectTargets or { "Gift/GoldenGift", "Instrument (Cadence)" },
 		MultipleOptions = true,
 		Flag = "AutoCollectTargetsDropdown",
 		Callback = function(Options)
@@ -138,7 +138,7 @@ return function(Client, Controller)
 
 	if Tab.CreateLabel then
 		Tab:CreateLabel(
-			"Note: 0 range represents Infinite (Map-wide) pick up. \n - Gifts have a server-side limit of 30 studs. \n - Medal and Instrument have no limit (0 = infinite range)."
+			"Note: 0 range represents Infinite (Map-wide) pick up. \n - Gifts have a server-side limit of 30 studs. \n - Instrument has no limit (0 = infinite range)."
 		)
 	end
 
@@ -155,18 +155,6 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateSlider({
-		Name = "Collection Medal Range",
-		Range = { 0, 30 },
-		CurrentValue = Controller.AutoCollectMedalRange or 0,
-		Increment = 1,
-		ValueName = "Studs (0=Inf)",
-		Flag = "AutoCollectMedalRangeSlider",
-		Callback = function(Value)
-			Controller:SetAutoCollectMedalRange(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
 		Name = "Collection Instrument Range",
 		Range = { 0, 30 },
 		CurrentValue = Controller.AutoCollectInstrumentRange or 0,
@@ -175,6 +163,16 @@ return function(Client, Controller)
 		Flag = "AutoCollectInstrumentRangeSlider",
 		Callback = function(Value)
 			Controller:SetAutoCollectInstrumentRange(Value)
+		end,
+	})
+
+	Tab:CreateKeybind({
+		Name = "Collect / Submit Medal Keybind",
+		CurrentKeybind = Controller.CollectMedalKeybind or "V",
+		HoldToTrigger = false,
+		Flag = "CollectMedalKeybind",
+		Callback = function(Keybind)
+			Controller:TriggerMedalAction()
 		end,
 	})
 

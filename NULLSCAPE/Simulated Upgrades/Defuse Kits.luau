@@ -15,13 +15,13 @@ local BLOCKER_MODE = "Blocker"
 local BARRIER_MODE = "Barrier"
 local BLOCKER_FOLDER_NAME = "NULLSCAPE_TripmineBlockers"
 local BLOCKER_SCAN_RADIUS = 90
-local BLOCKER_BASE_RADIUS = 5.75
-local BLOCKER_REPEL_PADDING = 2
+local BLOCKER_BASE_RADIUS = 2.25
+local BLOCKER_REPEL_PADDING = 0.75
 local BLOCKER_REPEL_SPEED = 34
 local BLOCKER_REPEL_VERTICAL_LIFT = 2.5
-local BLOCKER_RADIUS_TOUCH_PADDING = 1.25
-local BLOCKER_COLLISION_HEIGHT = 6.5
-local BLOCKER_VERTICAL_OFFSET = 3
+local BLOCKER_RADIUS_TOUCH_PADDING = 0.65
+local BLOCKER_COLLISION_HEIGHT = 4.25
+local BLOCKER_VERTICAL_OFFSET = 1.8
 local ACTIVE_WATCH_INTERVAL = 0.08
 local IDLE_WATCH_INTERVAL = 0.35
 
@@ -120,7 +120,7 @@ end
 
 local function getBlockerRadius(gift)
     local size = tonumber(gift and gift.Size) or 1
-    return math.clamp(BLOCKER_BASE_RADIUS * size + BLOCKER_RADIUS_TOUCH_PADDING, 5.5, 16)
+    return math.clamp(BLOCKER_BASE_RADIUS * size + BLOCKER_RADIUS_TOUCH_PADDING, 2.75, 8)
 end
 
 local function getBlockerTransparency(dist, radius)
@@ -128,11 +128,11 @@ local function getBlockerTransparency(dist, radius)
         return 0.96
     end
 
-    if dist <= radius + 4 then
+    if dist <= radius + 1.5 then
         return 0.94
     end
 
-    if dist <= radius + 12 then
+    if dist <= radius + 4 then
         return 0.98
     end
 

@@ -569,6 +569,9 @@ local function processEntity(enemy)
 				if rootPart and rootPart:IsA("BillboardGui") then
 					rootPart = rootPart.Adornee or rootPart.Parent
 				end
+				if not rootPart or not rootPart:IsA("BasePart") then
+					rootPart = enemy:FindFirstChildWhichIsA("BasePart", true)
+				end
 				if rootPart and rootPart:IsA("BasePart") then
 					pcall(function() enemy.PrimaryPart = rootPart end)
 				end

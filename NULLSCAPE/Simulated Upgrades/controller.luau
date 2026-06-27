@@ -36,10 +36,10 @@ local Controller = {
 	AutoCollectEnabled = false,
 	AutoCollectRange = 20,
 	AutoCollectGiftRange = 20,
-	AutoCollectMedalRange = 0,
 	AutoCollectInstrumentRange = 0,
-	AutoCollectTargets = { "Gift/GoldenGift", "Instrument (Cadence)", "Medal" },
+	AutoCollectTargets = { "Gift/GoldenGift", "Instrument (Cadence)" },
 	AutoCollectMode = "Legit",
+	CollectMedalKeybind = "V",
 
 	MatrixTetrahedronEnabled = false, -- Mô phỏng Matrix Tetrahedron di chuyển instant acceleration
 	MomentumReduction = 1.0, -- Lực Momentum Reduction tùy biến (mặc định 100%)
@@ -1001,8 +1001,117 @@ function Controller:SetAutoCollectGiftRange(value)
 	self.AutoCollectRange = value
 end
 
-function Controller:SetAutoCollectMedalRange(value)
-	self.AutoCollectMedalRange = value
+function Controller:SetCollectMedalKeybind(value)
+	self.CollectMedalKeybind = value
+end
+
+function Controller:TriggerMedalAction()
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then
+		return
+	end
+
+	local carriesMedal = char:FindFirstChild("Medal") ~= nil
+	if carriesMedal then
+		-- Auto-submit to Beacon
+		local beacon = workspace:FindFirstChild("Beacon")
+		local beaconPart = beacon and beacon:FindFirstChildWhichIsA("BasePart", true)
+		if beaconPart then
+			local distToBeacon = (beaconPart.Position - hrp.Position).Magnitude
+			if distToBeacon <= 30 then
+				pcall(function()
+					if typeof(firetouchinterest) == "function" then
+						firetouchinterest(beaconPart, hrp, 0)
+						task.wait()
+						firetouchinterest(beaconPart, hrp, 1)
+						if getgenv().Rayfield then
+							getgenv().Rayfield:Notify({
+								Title = "Medal Action",
+								Content = "Medal submitted successfully!",
+								Duration = 2,
+							})
+						end
+					end
+				end)
+			else
+				if getgenv().Rayfield then
+					getgenv().Rayfield:Notify({
+						Title = "Medal Action",
+						Content = "Too far from Beacon! (Distance: " .. string.format("%.1f", distToBeacon) .. " studs, limit: 30)",
+						Duration = 3,
+					})
+				end
+			end
+		else
+			if getgenv().Rayfield then
+				getgenv().Rayfield:Notify({
+					Title = "Medal Action",
+					Content = "Beacon not found in workspace!",
+					Duration = 2.5,
+				})
+			end
+		end
+	else
+		-- Auto-pickup Medal using Blink Pick / Proximity Teleportation
+		-- Search for Medal
+		local function findMedal()
+			local medal = workspace:FindFirstChild("Medal")
+			if medal then
+				if medal:IsA("BasePart") then
+					return medal
+				elseif medal:IsA("Model") then
+					local handle = medal:FindFirstChild("Handle") or medal:FindFirstChildWhichIsA("BasePart", true)
+					if handle then
+						return handle
+					end
+				end
+			end
+			for _, child in ipairs(workspace:GetChildren()) do
+				if child.Name == "Medal" then
+					if child:IsA("BasePart") then
+						return child
+					end
+					local handle = child:FindFirstChild("Handle") or child:FindFirstChildWhichIsA("BasePart", true)
+					if handle then
+						return handle
+					end
+				end
+			end
+			return nil
+		end
+
+		local medal = findMedal()
+		if medal then
+			pcall(function()
+				local oldCFrame = hrp.CFrame
+				local oldAnchored = hrp.Anchored
+				
+				-- Safe blink pick: Anchors root and teleports right on top of the Medal handle for 0.05s
+				hrp.Anchored = true
+				hrp.CFrame = medal.CFrame * CFrame.new(0, 1.5, 0)
+				task.wait(0.05)
+				hrp.CFrame = oldCFrame
+				hrp.Anchored = oldAnchored
+				
+				if getgenv().Rayfield then
+					getgenv().Rayfield:Notify({
+						Title = "Medal Action",
+						Content = "Attempted Medal pick up!",
+						Duration = 2,
+					})
+				end
+			end)
+		else
+			if getgenv().Rayfield then
+				getgenv().Rayfield:Notify({
+					Title = "Medal Action",
+					Content = "Medal not found in workspace!",
+					Duration = 2.5,
+				})
+			end
+		end
+	end
 end
 
 function Controller:SetAutoCollectInstrumentRange(value)
