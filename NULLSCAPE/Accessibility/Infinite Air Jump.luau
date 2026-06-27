@@ -13,11 +13,19 @@ local Logic = {}
 
 local HOOK_REFRESH_INTERVAL = 0.25
 local BAR_REFRESH_INTERVAL = 0.45
+local JUMP_REQUEST_DEBOUNCE = 0.08
+local FALLBACK_JUMP_POWER = 38
 
 local function getGlobals()
 	local env = getgenv()
 	env._NULLSCAPE_Globals = env._NULLSCAPE_Globals or {}
 	return env._NULLSCAPE_Globals
+end
+
+local function setStatus(text)
+	local globals = getGlobals()
+	globals.InfiniteAirJumpStatus = tostring(text or "ready")
+	globals.InfiniteAirJumpStatusAt = os.clock()
 end
 
 local function shouldJump()
@@ -51,6 +59,7 @@ end
 
 local function findMovementCoreInstance()
 	if typeof(getgc) ~= "function" then
+		setStatus("getgc unavailable")
 		return nil
 	end
 
@@ -62,7 +71,9 @@ local function findMovementCoreInstance()
 			and rawget(value, "Humanoid")
 			and rawget(value, "RootPart")
 		then
-			if not character or value.Character == character then
+			local rootPart = rawget(value, "RootPart")
+			if not character or value.Character == character or (rootPart and rootPart.Parent == character) then
+				getGlobals().InfiniteAirJumpLastMovement = value
 				return value
 			end
 		end
@@ -72,12 +83,25 @@ local function findMovementCoreInstance()
 end
 
 local function getActiveDoubleJump()
+	local globals = getGlobals()
+	local cachedDoubleJump = globals.InfiniteAirJumpHookedDoubleJump or globals.InfiniteAirJumpLastDoubleJump
+	if typeof(cachedDoubleJump) == "table" then
+		local movement = rawget(cachedDoubleJump, "Movement")
+		local character = Players.LocalPlayer.Character
+		if isMovementAlive(movement) and (not character or not movement or movement.Character == character) then
+			return cachedDoubleJump
+		end
+	end
+
 	local movement = findMovementCoreInstance()
 	if movement and typeof(movement.DoubleJump) == "table" then
+		globals.InfiniteAirJumpLastMovement = movement
+		globals.InfiniteAirJumpLastDoubleJump = movement.DoubleJump
 		return movement.DoubleJump
 	end
 
 	if typeof(getgc) ~= "function" then
+		setStatus("getgc unavailable")
 		return nil
 	end
 
@@ -90,11 +114,13 @@ local function getActiveDoubleJump()
 		then
 			local movementValue = rawget(value, "Movement")
 			if not character or not movementValue or movementValue.Character == character then
+				globals.InfiniteAirJumpLastDoubleJump = value
 				return value
 			end
 		end
 	end
 
+	setStatus("DoubleJump not found")
 	return nil
 end
 
@@ -192,11 +218,13 @@ end
 local function tryNativeAirJump()
 	local doubleJump = getActiveDoubleJump()
 	if not doubleJump then
+		setStatus("DoubleJump missing")
 		return false
 	end
 
 	local movement = rawget(doubleJump, "Movement")
 	if not (isMovementAlive(movement) and isAirborne(movement)) then
+		setStatus("not airborne")
 		return false
 	end
 
@@ -210,15 +238,71 @@ local function tryNativeAirJump()
 			playDoubleJumpAnimation(doubleJump)
 			sustainVirtualJump(doubleJump, true)
 			local afterY = movement and movement.RootPart and movement.RootPart.Velocity.Y or nil
-			return beforeY == nil or afterY == nil or afterY > beforeY - 0.01
+			local moved = beforeY == nil or afterY == nil or afterY > beforeY - 0.01
+			setStatus(moved and "native jump" or "native blocked")
+			return moved
 		end
+		setStatus("native error")
 	end
 
 	return false
 end
 
+local function tryFallbackAirJump()
+	local character = Players.LocalPlayer.Character
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	if not (humanoid and rootPart) then
+		setStatus("character missing")
+		return false
+	end
+	if humanoid:GetState() == Enum.HumanoidStateType.Dead then
+		setStatus("dead")
+		return false
+	end
+	if humanoid.FloorMaterial ~= Enum.Material.Air then
+		setStatus("grounded")
+		return false
+	end
+
+	local doubleJump = getActiveDoubleJump()
+	if doubleJump then
+		sustainVirtualJump(doubleJump, true)
+		playDoubleJumpAnimation(doubleJump)
+	end
+
+	local velocity = rootPart.AssemblyLinearVelocity or rootPart.Velocity
+	local boostedVelocity = Vector3.new(velocity.X, math.max(velocity.Y, FALLBACK_JUMP_POWER), velocity.Z)
+	pcall(function()
+		rootPart.AssemblyLinearVelocity = boostedVelocity
+	end)
+	pcall(function()
+		rootPart.Velocity = boostedVelocity
+	end)
+	pcall(function()
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	end)
+
+	setStatus("fallback jump")
+	return true
+end
+
 local function doAirJump()
-	tryNativeAirJump()
+	if not tryNativeAirJump() then
+		tryFallbackAirJump()
+	end
+end
+
+local function requestAirJump()
+	local globals = getGlobals()
+	local currentTime = os.clock()
+	if currentTime - (globals.InfiniteAirJumpLastRequestAt or 0) < JUMP_REQUEST_DEBOUNCE then
+		return
+	end
+
+	globals.InfiniteAirJumpLastRequestAt = currentTime
+	refreshHook(false)
+	doAirJump()
 end
 
 local function hookDoubleJump(doubleJump)
@@ -266,6 +350,7 @@ local function refreshHook(forceBarRefresh)
 		if shouldJump() then
 			sustainVirtualJump(doubleJump, forceBarRefresh == true)
 		end
+		setStatus("hooked")
 	end
 end
 
@@ -305,9 +390,17 @@ function Logic.initialize()
 		end
 		if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonA then
 			if shouldJump() then
-				refreshHook(false)
-				doAirJump()
+				requestAirJump()
 			end
+		end
+	end)
+
+	local jumpRequestConnection = UserInputService.JumpRequest:Connect(function()
+		if UserInputService:GetFocusedTextBox() then
+			return
+		end
+		if shouldJump() then
+			requestAirJump()
 		end
 	end)
 
@@ -329,6 +422,7 @@ function Logic.initialize()
 
 	globals.InfiniteAirJumpListenerConnected = true
 	globals.InfiniteAirJumpConnection = inputConnection
+	globals.InfiniteAirJumpJumpRequestConnection = jumpRequestConnection
 	globals.InfiniteAirJumpCharacterConnection = characterConnection
 
 	return true
@@ -341,6 +435,12 @@ function Logic.disable()
 			globals.InfiniteAirJumpConnection:Disconnect()
 		end)
 		globals.InfiniteAirJumpConnection = nil
+	end
+	if globals.InfiniteAirJumpJumpRequestConnection then
+		pcall(function()
+			globals.InfiniteAirJumpJumpRequestConnection:Disconnect()
+		end)
+		globals.InfiniteAirJumpJumpRequestConnection = nil
 	end
 	if globals.InfiniteAirJumpCharacterConnection then
 		pcall(function()
@@ -363,7 +463,14 @@ function Logic.disable()
 	globals.InfiniteAirJumpOriginalTryDoubleJump = nil
 	globals.InfiniteAirJumpLastHookRefresh = nil
 	globals.InfiniteAirJumpLastBarRefresh = nil
+	globals.InfiniteAirJumpLastRequestAt = nil
+	globals.InfiniteAirJumpLastMovement = nil
+	globals.InfiniteAirJumpLastDoubleJump = nil
 	globals.InfiniteAirJumpListenerConnected = nil
+end
+
+function Logic.getStatus()
+	return getGlobals().InfiniteAirJumpStatus or "pending"
 end
 
 return Logic

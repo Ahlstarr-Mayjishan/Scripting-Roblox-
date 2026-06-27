@@ -147,6 +147,26 @@ return function(Client, Controller)
 			Controller:SetInfiniteAirJump(Value)
 		end,
 	})
+
+	local infiniteAirJumpStatusLabel = nil
+	if Tab.CreateLabel then
+		infiniteAirJumpStatusLabel =
+			Tab:CreateLabel("Infinite Air Jump Status: " .. tostring(Controller:GetInfiniteAirJumpStatus() or "pending"))
+		task.spawn(function()
+			while infiniteAirJumpStatusLabel and Client and not Client.Destroyed do
+				task.wait(1)
+				if infiniteAirJumpStatusLabel and typeof(infiniteAirJumpStatusLabel.Set) == "function" then
+					pcall(function()
+						infiniteAirJumpStatusLabel:Set(
+							"Infinite Air Jump Status: "
+								.. tostring(Controller:GetInfiniteAirJumpStatus() or "pending")
+						)
+					end)
+				end
+			end
+		end)
+	end
+
 	Tab:CreateToggle({
 		Name = "Anti Bonk",
 		Info = "Suppresses all DiveBonk/stun states from diving or sliding into obstacles completely.",

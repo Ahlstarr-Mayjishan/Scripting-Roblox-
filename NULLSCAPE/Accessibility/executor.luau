@@ -68,6 +68,20 @@ function Executor.disableInfiniteAirJump()
     callModule("InfiniteAirJump", "disable")
 end
 
+function Executor.getInfiniteAirJumpStatus()
+    local module = loadAccessibilityModule("InfiniteAirJump")
+    if module and typeof(module.getStatus) == "function" then
+        local success, result = pcall(function()
+            return module.getStatus()
+        end)
+        if success then
+            return tostring(result)
+        end
+    end
+
+    return "pending"
+end
+
 function Executor.initializeAntiBonk()
     return callModule("AntiBonk", "initialize")
 end

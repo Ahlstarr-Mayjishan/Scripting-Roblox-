@@ -136,6 +136,26 @@ local _LocalPlayer = Players.LocalPlayer
 local inLobby = true
 local folderConnections = {}
 
+local function getGlobals()
+	local env = getgenv()
+	env._NULLSCAPE_Globals = env._NULLSCAPE_Globals or {}
+	return env._NULLSCAPE_Globals
+end
+
+local function isControllerActiveOrUnclaimed(controller)
+	local globals = getGlobals()
+	return globals.activeAccessibilityController == controller or globals.activeAccessibilityController == nil
+end
+
+local function claimActiveController(controller)
+	local globals = getGlobals()
+	if globals.activeAccessibilityController == nil then
+		globals.activeAccessibilityController = controller
+	end
+
+	return globals.activeAccessibilityController == controller
+end
+
 -- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
 local function isInMatch()
 	local inRoundVal = ReplicatedStorage:FindFirstChild("InRound")
@@ -168,8 +188,9 @@ end
 -- Hàm dọn dẹp tài nguyên
 function Controller:CleanUp()
 	disconnectFolderObservations()
-	local globals = getgenv()._NULLSCAPE_Globals
-	if self.Destroyed or (globals and globals.activeAccessibilityController ~= self) then
+	local globals = getGlobals()
+	local finalCleanup = self.Destroyed or (globals.activeAccessibilityController ~= nil and globals.activeAccessibilityController ~= self)
+	if finalCleanup then
 		callExecutor("disableRailAssist")
 		callExecutor("disableGrappleAimAssist")
 	end
@@ -193,7 +214,7 @@ function Controller:CleanUp()
 	end
 
 	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
-	if globals and globals.activeAccessibilityController == self then
+	if self.Destroyed and globals and globals.activeAccessibilityController == self then
 		globals.activeAccessibilityController = nil
 	end
 end
@@ -241,15 +262,29 @@ function Controller:SetInfiniteAirJump(value)
 	end
 end
 
+function Controller:GetInfiniteAirJumpStatus()
+	local method = Executor and Executor.getInfiniteAirJumpStatus
+	if typeof(method) ~= "function" then
+		return "pending"
+	end
+
+	local success, result = pcall(method)
+	if not success then
+		return "status error"
+	end
+
+	return tostring(result)
+end
+
 function Controller:ReapplyRespawnFeatures()
 	if self.Destroyed then
 		return
 	end
 
-	local globals = getgenv()._NULLSCAPE_Globals
-	if globals and globals.activeAccessibilityController ~= self then
+	if not isControllerActiveOrUnclaimed(self) then
 		return
 	end
+	claimActiveController(self)
 
 	if self.InfiniteAirJumpEnabled then
 		callExecutor("initializeInfiniteAirJump")
@@ -753,10 +788,11 @@ local function startObservingFolders()
 		if Controller.Destroyed then
 			return
 		end
-		if getgenv()._NULLSCAPE_Globals.activeAccessibilityController ~= Controller then
+		if not isControllerActiveOrUnclaimed(Controller) then
 			Controller:CleanUp()
 			return
 		end
+		claimActiveController(Controller)
 		if child.Name == "Enemies" and child:IsA("Folder") then
 			Controller:ObserveFolder(child)
 		end
@@ -810,10 +846,11 @@ local function scheduleRespawnFeatureRefresh()
 		if Controller.Destroyed then
 			return
 		end
-		if getgenv()._NULLSCAPE_Globals.activeAccessibilityController ~= Controller then
+		if not isControllerActiveOrUnclaimed(Controller) then
 			Controller:CleanUp()
 			return
 		end
+		claimActiveController(Controller)
 		Controller:ReapplyRespawnFeatures()
 	end
 
@@ -822,7 +859,7 @@ local function scheduleRespawnFeatureRefresh()
 	task.delay(1.6, refreshLater)
 end
 
-getgenv()._NULLSCAPE_Globals.activeAccessibilityController = Controller
+getGlobals().activeAccessibilityController = Controller
 
 -- Khởi tạo ban đầu khi nạp script
 if not inLobby then
@@ -845,12 +882,13 @@ task.spawn(function()
 		return
 	end
 	if inRoundVal and inRoundVal:IsA("BoolValue") then
-		if getgenv()._NULLSCAPE_Globals.activeAccessibilityController ~= Controller then
+		if not isControllerActiveOrUnclaimed(Controller) then
 			pcall(function()
 				Controller:CleanUp()
 			end)
 			return
 		end
+		claimActiveController(Controller)
 		setInLobby(not inRoundVal.Value)
 
 		local conn
@@ -863,7 +901,7 @@ task.spawn(function()
 				end
 				return
 			end
-			if getgenv()._NULLSCAPE_Globals.activeAccessibilityController ~= Controller then
+			if not isControllerActiveOrUnclaimed(Controller) then
 				pcall(function()
 					Controller:CleanUp()
 				end)
@@ -874,6 +912,7 @@ task.spawn(function()
 				end
 				return
 			end
+			claimActiveController(Controller)
 			setInLobby(not val)
 		end)
 		table.insert(Controller.PermanentConnections, conn)
