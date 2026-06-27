@@ -1,50 +1,99 @@
+local function resolveController(Client, Controller)
+	if typeof(Controller) == "table" then
+		return Controller
+	end
+
+	if Client and typeof(Client.Modules) == "table" and typeof(Client.Modules.EntitiesController) == "table" then
+		return Client.Modules.EntitiesController
+	end
+
+	local globals = getgenv and getgenv()._NULLSCAPE_Globals
+	if globals and typeof(globals.activeEntitiesController) == "table" then
+		return globals.activeEntitiesController
+	end
+
+	if getgenv and typeof(getgenv().loadModule) == "function" then
+		local success, loadedController = pcall(function()
+			return getgenv().loadModule("NULLSCAPE/Entities/controller.luau")
+		end)
+		if success and typeof(loadedController) == "table" then
+			if Client and typeof(Client.Modules) == "table" then
+				Client.Modules.EntitiesController = loadedController
+			end
+			return loadedController
+		end
+	end
+
+	return nil
+end
+
+local function getFlag(Controller, flagName)
+	local activeController = resolveController(nil, Controller)
+	return activeController and activeController[flagName] == true
+end
+
+local function setImmunity(Controller, entityName, value)
+	local activeController = resolveController(nil, Controller)
+	if activeController and typeof(activeController.SetImmunity) == "function" then
+		activeController:SetImmunity(entityName, value)
+	else
+		warn("[NULLSCAPE] Entities controller is not ready; ignored immunity toggle for " .. tostring(entityName))
+	end
+end
+
 return function(Client, Controller)
+	Controller = resolveController(Client, Controller)
+	if not Controller then
+		warn("[NULLSCAPE] Entities tab loaded without controller; toggles will retry on use")
+		Controller = {}
+	end
+
 	local Tab = Client.Window:CreateTab("Entities", 4483362458)
 
 	Tab:CreateSection("Entities List - Touch Immunity")
 
 	Tab:CreateToggle({
 		Name = "Baby",
-		CurrentValue = Controller.BabyImmune,
+		CurrentValue = getFlag(Controller, "BabyImmune"),
 		Flag = "ImmunityBabyToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Baby", Value)
+			setImmunity(Controller, "Baby", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Bell",
-		CurrentValue = Controller.BellImmune,
+		CurrentValue = getFlag(Controller, "BellImmune"),
 		Flag = "ImmunityBellToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Bell", Value)
+			setImmunity(Controller, "Bell", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Flesh",
-		CurrentValue = Controller.FleshImmune,
+		CurrentValue = getFlag(Controller, "FleshImmune"),
 		Flag = "ImmunityFleshToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Flesh", Value)
+			setImmunity(Controller, "Flesh", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Mart",
-		CurrentValue = Controller.MartImmune,
+		CurrentValue = getFlag(Controller, "MartImmune"),
 		Flag = "ImmunityMartToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Mart", Value)
+			setImmunity(Controller, "Mart", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Telefragger",
-		CurrentValue = Controller.TelefraggerImmune,
+		CurrentValue = getFlag(Controller, "TelefraggerImmune"),
 		Flag = "ImmunityTelefraggerToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Telefragger", Value)
+			setImmunity(Controller, "Telefragger", Value)
 		end,
 	})
 
@@ -52,73 +101,73 @@ return function(Client, Controller)
 
 	Tab:CreateToggle({
 		Name = "ICBM",
-		CurrentValue = Controller.ICBMImmune,
+		CurrentValue = getFlag(Controller, "ICBMImmune"),
 		Flag = "ImmunityICBMToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("ICBM", Value)
+			setImmunity(Controller, "ICBM", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Guardian",
-		CurrentValue = Controller.GuardianImmune,
+		CurrentValue = getFlag(Controller, "GuardianImmune"),
 		Flag = "ImmunityGuardianToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Guardian", Value)
+			setImmunity(Controller, "Guardian", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Operator",
-		CurrentValue = Controller.OperatorImmune,
+		CurrentValue = getFlag(Controller, "OperatorImmune"),
 		Flag = "ImmunityOperatorToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Operator", Value)
+			setImmunity(Controller, "Operator", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Springer",
-		CurrentValue = Controller.SpringerImmune,
+		CurrentValue = getFlag(Controller, "SpringerImmune"),
 		Flag = "ImmunitySpringerToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Springer", Value)
+			setImmunity(Controller, "Springer", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Cadence",
-		CurrentValue = Controller.CadenceImmune,
+		CurrentValue = getFlag(Controller, "CadenceImmune"),
 		Flag = "ImmunityCadenceToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Cadence", Value)
+			setImmunity(Controller, "Cadence", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Celestial",
-		CurrentValue = Controller.CelestialImmune,
+		CurrentValue = getFlag(Controller, "CelestialImmune"),
 		Flag = "ImmunityCelestialToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Celestial", Value)
+			setImmunity(Controller, "Celestial", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Scrapmaw",
-		CurrentValue = Controller.ScrapmawImmune,
+		CurrentValue = getFlag(Controller, "ScrapmawImmune"),
 		Flag = "ImmunityScrapmawToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Scrapmaw", Value)
+			setImmunity(Controller, "Scrapmaw", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Catalyst",
-		CurrentValue = Controller.CatalystImmune,
+		CurrentValue = getFlag(Controller, "CatalystImmune"),
 		Flag = "ImmunityCatalystToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Catalyst", Value)
+			setImmunity(Controller, "Catalyst", Value)
 		end,
 	})
 
@@ -126,82 +175,82 @@ return function(Client, Controller)
 
 	Tab:CreateToggle({
 		Name = "Kolona",
-		CurrentValue = Controller.KolonaImmune,
+		CurrentValue = getFlag(Controller, "KolonaImmune"),
 		Flag = "ImmunityKolonaToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Kolona", Value)
+			setImmunity(Controller, "Kolona", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Oblivion",
-		CurrentValue = Controller.OblivionImmune,
+		CurrentValue = getFlag(Controller, "OblivionImmune"),
 		Flag = "ImmunityOblivionToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Oblivion", Value)
+			setImmunity(Controller, "Oblivion", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "ShadowBaby",
-		CurrentValue = Controller.ShadowBabyImmune,
+		CurrentValue = getFlag(Controller, "ShadowBabyImmune"),
 		Flag = "ImmunityShadowBabyToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("ShadowBaby", Value)
+			setImmunity(Controller, "ShadowBaby", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Quartz",
-		CurrentValue = Controller.QuartzImmune,
+		CurrentValue = getFlag(Controller, "QuartzImmune"),
 		Flag = "ImmunityQuartzToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Quartz", Value)
+			setImmunity(Controller, "Quartz", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Sigil",
-		CurrentValue = Controller.SigilImmune,
+		CurrentValue = getFlag(Controller, "SigilImmune"),
 		Flag = "ImmunitySigilToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Sigil", Value)
+			setImmunity(Controller, "Sigil", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Slicer",
-		CurrentValue = Controller.SlicerImmune,
+		CurrentValue = getFlag(Controller, "SlicerImmune"),
 		Flag = "ImmunitySlicerToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Slicer", Value)
+			setImmunity(Controller, "Slicer", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Voidbreaker",
-		CurrentValue = Controller.VoidbreakerImmune,
+		CurrentValue = getFlag(Controller, "VoidbreakerImmune"),
 		Flag = "ImmunityVoidbreakerToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Voidbreaker", Value)
+			setImmunity(Controller, "Voidbreaker", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Razorbloom Phase",
-		CurrentValue = Controller.RazorbloomImmune,
+		CurrentValue = getFlag(Controller, "RazorbloomImmune"),
 		Flag = "ImmunityRazorbloomToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Razorbloom", Value)
+			setImmunity(Controller, "Razorbloom", Value)
 		end,
 	})
 
 	Tab:CreateToggle({
 		Name = "Void Implosion",
-		CurrentValue = Controller.VoidImplosionImmune,
+		CurrentValue = getFlag(Controller, "VoidImplosionImmune"),
 		Flag = "ImmunityVoidImplosionToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("VoidImplosion", Value)
+			setImmunity(Controller, "VoidImplosion", Value)
 		end,
 	})
 
@@ -209,10 +258,10 @@ return function(Client, Controller)
 
 	Tab:CreateToggle({
 		Name = "Husk",
-		CurrentValue = Controller.SkinwalkerImmune,
+		CurrentValue = getFlag(Controller, "SkinwalkerImmune"),
 		Flag = "ImmunitySkinwalkerToggle",
 		Callback = function(Value)
-			Controller:SetImmunity("Skinwalker", Value)
+			setImmunity(Controller, "Skinwalker", Value)
 		end,
 	})
 
@@ -221,7 +270,7 @@ return function(Client, Controller)
 	Tab:CreateDropdown({
 		Name = "Immunity Effect",
 		Options = { "Legit", "Blatant" },
-		CurrentOption = Controller.SpringerImmunityMode or "Legit",
+		CurrentOption = (resolveController(Client, Controller) and resolveController(Client, Controller).SpringerImmunityMode) or "Legit",
 		MultipleOptions = false,
 		Flag = "SpringerImmunityModeDropdown",
 		Callback = function(Option)
@@ -229,7 +278,10 @@ return function(Client, Controller)
 			if typeof(Option) == "table" then
 				selected = Option[1]
 			end
-			Controller:SetSpringerImmunityMode(selected)
+			local activeController = resolveController(Client, Controller)
+			if activeController and typeof(activeController.SetSpringerImmunityMode) == "function" then
+				activeController:SetSpringerImmunityMode(selected)
+			end
 		end,
 	})
 end

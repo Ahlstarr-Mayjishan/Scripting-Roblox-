@@ -85,7 +85,13 @@ pcall(function()
 			ImmunityRazorbloomToggle = false,
 			ImmunityVoidImplosionToggle = false,
 			ImmunityCadenceToggle = false,
+			ImmunityCatalystToggle = false,
+			ImmunityCelestialToggle = false,
+			ImmunityOperatorToggle = false,
+			ImmunityScrapmawToggle = false,
 			SpringerAutoJumpToggle = false,
+			InfiniteAirJumpToggle = false,
+			AntiBonkToggle = false,
 			GrapplerStaminaModeDropdown = "Off",
 			RailAssistSuiteToggle = false,
 			RailAutoToggle = false,
@@ -94,8 +100,12 @@ pcall(function()
 			RailAutoCaptureRangeSlider = 4,
 			GrappleAssistSuiteToggle = false,
 			GrappleAimAssistToggle = false,
+			GrappleAimAssistStrengthDropdown = "Balanced",
 			GrappleRescueAssistToggle = false,
 			GrappleEmergencyProtectionToggle = false,
+			GrappleVoidRescueToggle = true,
+			GrappleWallSlamRescueToggle = false,
+			GrappleEmergencyProtectionModeDropdown = "Manual",
 			GrappleEmergencySpeedThresholdSlider = 220,
 			GrappleEmergencyFallThresholdSlider = 125,
 			GrappleAntiBonkToggle = false,
@@ -120,6 +130,7 @@ pcall(function()
 			AutoCollectTargetsDropdown = { "Gift/GoldenGift", "Instrument (Cadence)" },
 			AutoCollectRangeSlider = 20,
 			AutoCollectInstrumentRangeSlider = 0,
+			CollectMedalKeybind = "V",
 			CollectMedalKeybindKeybind = "V",
 			TripmineBarrierToggle = false,
 			SimulateDefuseKitToggle = false,
@@ -142,14 +153,32 @@ pcall(function()
 		local currentSettings = {}
 		if isfile(file) then
 			local content = readfile(file)
-			pcall(function()
-				currentSettings = HttpService:JSONDecode(content)
+			local success, decoded = pcall(function()
+				return HttpService:JSONDecode(content)
 			end)
+			if success and type(decoded) == "table" then
+				currentSettings = decoded
+			end
 		end
 
+		local aliases = {
+			AntiBonkToggle = "GrappleAntiBonkToggle",
+			CollectMedalKeybind = "CollectMedalKeybindKeybind",
+		}
+
 		local updated = false
+		for newKey, oldKey in pairs(aliases) do
+			if currentSettings[newKey] == nil and currentSettings[oldKey] ~= nil then
+				currentSettings[newKey] = currentSettings[oldKey]
+				updated = true
+			end
+		end
+
 		for k, v in pairs(defaultSettings) do
 			if currentSettings[k] == nil then
+				currentSettings[k] = v
+				updated = true
+			elseif type(currentSettings[k]) ~= type(v) then
 				currentSettings[k] = v
 				updated = true
 			end
