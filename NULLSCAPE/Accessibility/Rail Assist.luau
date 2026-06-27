@@ -11,9 +11,21 @@ local RunService = game:GetService("RunService")
 local Logic = {
     Connections = {},
     RailParts = {},
+    Telefraggers = {},
     LastAutoRailAt = 0,
     LastScanAt = 0,
+    LastTelefraggerScanAt = 0,
 }
+
+local RAIL_SCAN_INTERVAL = 0.08
+local RAIL_NEAR_CAPTURE_DISTANCE = 2.75
+local RAIL_FAST_APPROACH_SPEED = 28
+local RAIL_NEAR_CAPTURE_COOLDOWN = 0.18
+local RAIL_FAST_CAPTURE_COOLDOWN = 0.35
+local TELEFRAGGER_SCAN_INTERVAL = 0.18
+local TELEFRAGGER_BLOCK_DISTANCE = 58
+local TELEFRAGGER_BLOCK_LATERAL_DISTANCE = 13
+local TELEFRAGGER_INDICATOR_DISTANCE = 75
 
 local function getGlobals()
     local env = getgenv()
@@ -150,6 +162,161 @@ local function flatten(vector)
     return Vector3.new(vector.X, 0, vector.Z)
 end
 
+local function getApproachSpeed(rootPart, worldPosition)
+    local toPoint = worldPosition - rootPart.Position
+    if toPoint.Magnitude <= 0.05 then
+        return 0
+    end
+
+    local velocity = rootPart.AssemblyLinearVelocity or rootPart.Velocity
+    return velocity:Dot(toPoint.Unit)
+end
+
+local function getSafeUnit(vector, fallback)
+    if vector.Magnitude > 0.05 then
+        return vector.Unit
+    end
+
+    return fallback
+end
+
+local function getRailTravelDirection(rootPart, railPart)
+    local railDirection = getSafeUnit(flatten(railPart.CFrame.LookVector), nil)
+    if not railDirection then
+        railDirection = getSafeUnit(flatten(rootPart.CFrame.LookVector), Vector3.new(0, 0, -1))
+    end
+
+    local velocity = flatten(rootPart.AssemblyLinearVelocity or rootPart.Velocity)
+    local lookDirection = getSafeUnit(flatten(rootPart.CFrame.LookVector), railDirection)
+    local referenceDirection = velocity.Magnitude > 2 and velocity.Unit or lookDirection
+    if railDirection:Dot(referenceDirection) < 0 then
+        railDirection = -railDirection
+    end
+
+    return railDirection
+end
+
+local function getTelefraggerPart(enemy)
+    if not (enemy and enemy.Parent) then
+        return nil
+    end
+
+    local preferredNames = { "Mirror", "Surface", "HighlightGlass", "IndicatorPart", "HumanoidRootPart", "RootPart", "head", "Head" }
+    for _, name in ipairs(preferredNames) do
+        local part = enemy:FindFirstChild(name, true)
+        if part and part:IsA("BasePart") then
+            return part
+        end
+    end
+
+    if enemy:IsA("BasePart") then
+        return enemy
+    end
+
+    if enemy:IsA("Model") and enemy.PrimaryPart then
+        return enemy.PrimaryPart
+    end
+
+    return enemy:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function hasActiveTelefraggerIndicator(enemy)
+    if not (enemy and enemy.Parent) then
+        return false
+    end
+
+    for _, name in ipairs({ "Mirror", "Surface", "HighlightGlass" }) do
+        local part = enemy:FindFirstChild(name, true)
+        if part and part:IsA("BasePart") and part.Transparency < 0.95 then
+            return true
+        end
+    end
+
+    local indicatorPart = enemy:FindFirstChild("IndicatorPart", true)
+    if indicatorPart then
+        for _, descendant in ipairs(indicatorPart:GetDescendants()) do
+            if descendant:IsA("Beam") and descendant.Enabled ~= false then
+                return true
+            end
+
+            if descendant:IsA("ParticleEmitter") and descendant.Enabled ~= false then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+local function refreshTelefraggerCache()
+    local now = time()
+    if now - Logic.LastTelefraggerScanAt < TELEFRAGGER_SCAN_INTERVAL then
+        return
+    end
+
+    Logic.LastTelefraggerScanAt = now
+    table.clear(Logic.Telefraggers)
+
+    local enemiesFolder = Workspace:FindFirstChild("Enemies")
+    if not enemiesFolder then
+        return
+    end
+
+    for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+        if string.find(string.lower(enemy.Name), "telefragger", 1, true) then
+            table.insert(Logic.Telefraggers, enemy)
+        end
+    end
+end
+
+local function isTelefraggerThreatOnRail(rootPart, railPart)
+    refreshTelefraggerCache()
+
+    if #Logic.Telefraggers <= 0 then
+        return false
+    end
+
+    local travelDirection = getRailTravelDirection(rootPart, railPart)
+    local rootPosition = rootPart.Position
+
+    for i = #Logic.Telefraggers, 1, -1 do
+        local enemy = Logic.Telefraggers[i]
+        local enemyPart = getTelefraggerPart(enemy)
+        if not enemyPart then
+            table.remove(Logic.Telefraggers, i)
+            continue
+        end
+
+        local offset = flatten(enemyPart.Position - rootPosition)
+        local distance = offset.Magnitude
+        local aheadDistance = offset:Dot(travelDirection)
+        local lateralDistance = (offset - travelDirection * aheadDistance).Magnitude
+        local hasIndicator = hasActiveTelefraggerIndicator(enemy)
+
+        if aheadDistance > -4 and aheadDistance <= TELEFRAGGER_BLOCK_DISTANCE and lateralDistance <= TELEFRAGGER_BLOCK_LATERAL_DISTANCE then
+            return true
+        end
+
+        if hasIndicator and distance <= TELEFRAGGER_INDICATOR_DISTANCE then
+            return true
+        end
+    end
+
+    return false
+end
+
+local function getRailCaptureCooldown(distance, approachSpeed)
+    if distance <= RAIL_NEAR_CAPTURE_DISTANCE then
+        return RAIL_NEAR_CAPTURE_COOLDOWN
+    end
+
+    if approachSpeed >= RAIL_FAST_APPROACH_SPEED then
+        return math.min(getAutoRailDelay(), RAIL_FAST_CAPTURE_COOLDOWN)
+    end
+
+    return getAutoRailDelay()
+end
+
 local function isPointInFrontHemisphere(rootPart, worldPosition)
     local toPoint = flatten(worldPosition - rootPart.Position)
     if toPoint.Magnitude <= 0.05 then
@@ -168,14 +335,22 @@ end
 local function findBestRailPart(rootPart)
     local bestPart = nil
     local bestDistance = math.huge
+    local bestApproachSpeed = 0
+    local bestScore = math.huge
     local captureRange = getAutoRailCaptureRange()
 
     for part in pairs(Logic.RailParts) do
         if part and part.Parent then
             local nearestPoint = clampPointToPart(part, rootPart.Position)
             local distance = (nearestPoint - rootPart.Position).Magnitude
-            if distance <= captureRange and distance < bestDistance and isPointInFrontHemisphere(rootPart, nearestPoint) then
+            local approachSpeed = getApproachSpeed(rootPart, nearestPoint)
+            local isCaptureReady = distance <= RAIL_NEAR_CAPTURE_DISTANCE or approachSpeed > 4
+            local score = distance - math.max(approachSpeed, 0) * 0.035
+
+            if distance <= captureRange and isCaptureReady and score < bestScore and isPointInFrontHemisphere(rootPart, nearestPoint) then
                 bestDistance = distance
+                bestApproachSpeed = approachSpeed
+                bestScore = score
                 bestPart = part
             end
         else
@@ -183,7 +358,7 @@ local function findBestRailPart(rootPart)
         end
     end
 
-    return bestPart
+    return bestPart, bestDistance, bestApproachSpeed
 end
 
 local function canAutoRail(movement)
@@ -213,23 +388,30 @@ local function canAutoRail(movement)
         return false
     end
 
-    if time() - Logic.LastAutoRailAt < getAutoRailDelay() then
-        return false
-    end
 
     return true
 end
 
 local function autoRailStep()
     local movement = getLocalMovement()
-    if not canAutoRail(movement) or time() - Logic.LastScanAt < 0.08 then
+    if not canAutoRail(movement) or time() - Logic.LastScanAt < RAIL_SCAN_INTERVAL then
         return
     end
 
     Logic.LastScanAt = time()
 
-    local railPart = findBestRailPart(movement.RootPart)
+    local railPart, distance, approachSpeed = findBestRailPart(movement.RootPart)
     if railPart and typeof(movement.FollowRail) == "function" then
+        local cooldown = getRailCaptureCooldown(distance, approachSpeed)
+        if time() - Logic.LastAutoRailAt < cooldown then
+            return
+        end
+
+        if isTelefraggerThreatOnRail(movement.RootPart, railPart) then
+            Logic.LastAutoRailAt = time() - math.max(cooldown - 0.2, 0)
+            return
+        end
+
         Logic.LastAutoRailAt = time()
         movement:FollowRail(railPart)
     end
@@ -320,8 +502,10 @@ function Logic.disable()
 
     Logic.LastAutoRailAt = 0
     Logic.LastScanAt = 0
+    Logic.LastTelefraggerScanAt = 0
     clearConnections()
     table.clear(Logic.RailParts)
+    table.clear(Logic.Telefraggers)
 end
 
 return Logic

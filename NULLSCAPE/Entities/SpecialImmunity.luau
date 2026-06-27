@@ -172,6 +172,27 @@ local function disableRazorbloom(razorbloom)
     pcall(function()
         bindable:Fire("Disable")
     end)
+
+    -- Force clean up to prevent it from getting stuck on the player's head (delay to 1.5s to preserve the departure animation)
+    task.delay(1.5, function()
+        if razorbloom and razorbloom.Parent then
+            pcall(function()
+                -- Clear any weld/attachment holding it to the head
+                local char = Players.LocalPlayer.Character
+                local head = char and char:FindFirstChild("Head")
+                if head then
+                    for _, child in ipairs(head:GetChildren()) do
+                        if child:IsA("Weld") or child:IsA("WeldConstraint") then
+                            if child.Part0 == razorbloom or child.Part1 == razorbloom then
+                                child:Destroy()
+                            end
+                        end
+                    end
+                end
+                razorbloom:Destroy()
+            end)
+        end
+    end)
 end
 
 local function applyRazorbloomBypass()
