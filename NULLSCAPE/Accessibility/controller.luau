@@ -121,7 +121,7 @@ local Controller = {
 	GrappleSharkTailMode = "Manual",
 	GrappleSharkTailStyle = "Balanced",
 	GrappleMomentumGuardEnabled = false,
-	GrappleAirControlMultiplier = 1.1,
+	GrappleAirControlMultiplier = 0,
 	GrappleReelPullMultiplier = 1.1,
 	GrappleSharkTailPullMultiplier = 1.1,
 	GrappleJumpPadUsesBypassEnabled = false,
@@ -626,7 +626,7 @@ function Controller:SetGrappleJumpPadUsesBypass(value)
 end
 
 function Controller:SetGrappleAirControlMultiplier(value)
-	self.GrappleAirControlMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
+	self.GrappleAirControlMultiplier = math.clamp(tonumber(value) or 0, 0, 10)
 end
 
 function Controller:SetGrappleReelPullMultiplier(value)

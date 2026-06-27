@@ -558,10 +558,10 @@ end
 function Logic.getAirControlMultiplier()
     local controller = Logic.getController()
     if not (controller and controller.GrappleAssistSuiteEnabled == true) then
-        return 1
+        return 0
     end
 
-    return math.clamp(tonumber(controller.GrappleAirControlMultiplier) or 1, 1, 5)
+    return math.clamp(tonumber(controller.GrappleAirControlMultiplier) or 0, 0, 10)
 end
 
 function Logic.getReelPullMultiplier()
@@ -3897,8 +3897,8 @@ end
 
 local function applyAirControlMultiplier(grapple, dt)
 
-    local multiplier = Logic.getAirControlMultiplier()
-    if multiplier <= 1 then
+    local controlLevel = Logic.getAirControlMultiplier()
+    if controlLevel <= 0 then
         return
     end
 
@@ -3913,11 +3913,36 @@ local function applyAirControlMultiplier(grapple, dt)
         return
     end
 
+    local dtClamped = math.clamp(tonumber(dt) or 0, 0, 1 / 20)
+    if dtClamped <= 0 then
+        return
+    end
+
+    local levelAlpha = math.clamp(controlLevel / 10, 0, 1)
+    local velocity = rootPart.Velocity
+    local horizontalVelocity = Vector3.new(velocity.X, 0, velocity.Z)
     local graceWingsMultiplier = hasUpgrade(movement, "GraceWings") and 1.5 or 1
     local movementSpeedMultiplier = tonumber(movement.movementSpeedMulti) or 1
-    local extraForce = playerMoveDirection * 12 * graceWingsMultiplier * (multiplier - 1) * dt * movementSpeedMultiplier
 
-    rootPart.Velocity = rootPart.Velocity + extraForce
+    local desiredSpeed = math.clamp(
+        32 + (controlLevel * 8 * movementSpeedMultiplier * graceWingsMultiplier),
+        32,
+        controlLevel >= 10 and 145 or 118
+    )
+    local desiredHorizontal = playerMoveDirection.Unit * desiredSpeed
+    local steerAlpha = math.clamp((0.18 + levelAlpha * 0.72) * dtClamped * 60, 0, controlLevel >= 10 and 1 or 0.92)
+    local nextHorizontal = horizontalVelocity:Lerp(desiredHorizontal, steerAlpha)
+
+    local gravityCancel = math.clamp((controlLevel - 5) / 5, 0, 1)
+    local nextY = velocity.Y
+    if gravityCancel > 0 then
+        nextY += Workspace.Gravity * gravityCancel * dtClamped
+        if controlLevel >= 10 and nextY < -8 then
+            nextY = math.max(nextY, -8)
+        end
+    end
+
+    rootPart.Velocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
 end
 
 local function applySmartReelLandingAssist(grapple)

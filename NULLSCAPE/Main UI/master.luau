@@ -115,7 +115,7 @@ pcall(function()
 			GrappleSharkTailModeDropdown = "Manual",
 			GrappleSharkTailStyleDropdown = "Balanced",
 			GrappleMomentumGuardToggle = false,
-			GrappleAirControlMultiplierSlider = 1.1,
+			GrappleAirControlMultiplierSlider = 0,
 			GrappleReelPullMultiplierSlider = 1.1,
 			GrappleSharkTailPullMultiplierSlider = 1.1,
 			GrappleJumpPadUsesBypassToggle = false,
@@ -182,6 +182,14 @@ pcall(function()
 				currentSettings[k] = v
 				updated = true
 			end
+		end
+
+		if type(currentSettings.GrappleAirControlMultiplierSlider) == "number"
+			and currentSettings.GrappleAirControlMultiplierSlider > 0
+			and currentSettings.GrappleAirControlMultiplierSlider <= 1.1
+		then
+			currentSettings.GrappleAirControlMultiplierSlider = 0
+			updated = true
 		end
 
 		if updated or not isfile(file) then

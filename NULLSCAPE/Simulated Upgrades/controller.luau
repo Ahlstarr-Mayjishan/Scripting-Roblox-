@@ -108,6 +108,26 @@ end
 local hasInRoundValue = false
 local folderConnections = {}
 
+local function getGlobals()
+	local env = getgenv()
+	env._NULLSCAPE_Globals = env._NULLSCAPE_Globals or {}
+	return env._NULLSCAPE_Globals
+end
+
+local function isControllerActiveOrUnclaimed(controller)
+	local globals = getGlobals()
+	return globals.activeUpgradeController == controller or globals.activeUpgradeController == nil
+end
+
+local function claimActiveController(controller)
+	local globals = getGlobals()
+	if globals.activeUpgradeController == nil then
+		globals.activeUpgradeController = controller
+	end
+
+	return globals.activeUpgradeController == controller
+end
+
 -- Stubs for backward/compatibility reference
 local function triggerInstantUpdate() end
 local function updateRunningState() end
@@ -147,10 +167,11 @@ startMatchLoops = function()
 
 	task.spawn(function()
 		while not Controller.Destroyed and checkActiveState() do
-			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+			if not isControllerActiveOrUnclaimed(Controller) then
 				safeControllerCleanUp()
 				break
 			end
+			claimActiveController(Controller)
 			local char = LocalPlayer.Character
 			local hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if hrp then
@@ -179,10 +200,11 @@ local function startUtilityLoop()
 	utilityLoopActive = true
 	task.spawn(function()
 		while not Controller.Destroyed do
-			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+			if not isControllerActiveOrUnclaimed(Controller) then
 				safeControllerCleanUp()
 				break
 			end
+			claimActiveController(Controller)
 			local char = LocalPlayer.Character
 			local hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if hrp and not Controller.inLobby then
@@ -256,6 +278,7 @@ local function setInLobby(val)
 		startObservingFolders()
 		updateRunningState()
 		startUtilityLoop()
+		Controller:ReapplyRespawnFeatures()
 	end
 end
 
@@ -590,6 +613,7 @@ end
 -- Bật/tắt rào cản vật lý mìn (Tripmine Barrier)
 function Controller:SetTripmineBarrier(value)
 	self.TripmineBarrierEnabled = value
+	startUtilityLoop()
 end
 
 -- Thiết lập chế độ chống mìn (Passthrough / PreDetonate / Barrier)
@@ -609,6 +633,7 @@ end
 
 function Controller:SetChargerTripmineAssist(value)
 	self.ChargerTripmineAssistEnabled = value
+	startUtilityLoop()
 end
 
 function Controller:SetChargerTripmineMode(value)
@@ -636,6 +661,54 @@ end
 -- Điều chỉnh số stack Defuse Kit mô phỏng
 function Controller:SetDefuseKitStack(value)
 	self.DefuseKitStack = value
+end
+
+function Controller:ReapplyRespawnFeatures()
+	if self.Destroyed then
+		return
+	end
+	if not isControllerActiveOrUnclaimed(self) then
+		return
+	end
+	claimActiveController(self)
+	startUtilityLoop()
+	if not self.inLobby then
+		if self.TripmineBarrierEnabled or self.ChargerTripmineAssistEnabled then
+			pcall(function()
+				Executor.updateBarriers(self, GC)
+			end)
+		end
+		if self.MatrixTetrahedronEnabled and MatrixTetrahedron then
+			pcall(function()
+				MatrixTetrahedron.setReduction(self.MomentumReduction or 1.0)
+				MatrixTetrahedron.start(self, GC)
+			end)
+		end
+		if self.GraceWingsEnabled and GraceWings then
+			pcall(function()
+				GraceWings.setMultiplier(self.GraceWingsAirControlMultiplier or 1.1)
+				GraceWings.start(self, GC)
+			end)
+		end
+		if self.AdvancedGravityCoilEnabled and AdvancedGravityCoil then
+			pcall(function()
+				AdvancedGravityCoil.setJumpPower(self.AdvancedGravityCoilJumpPower or 28)
+				AdvancedGravityCoil.start(self, GC)
+			end)
+		end
+		if self.BetterJumpPadEnabled and BetterJumpPad then
+			pcall(function()
+				BetterJumpPad.setJumpPadPower(self.BetterJumpPadPower or 100)
+				BetterJumpPad.start(self, GC)
+			end)
+		end
+		if self.SpeedBuffsEnabled and SpeedBuffs then
+			pcall(function()
+				SpeedBuffs.setSelectedBuffs(self.SpeedBuffSelections or {})
+				SpeedBuffs.start(self, GC)
+			end)
+		end
+	end
 end
 
 local function restoreHooks()
@@ -695,42 +768,48 @@ end
 
 -- Hàm dọn dẹp tài nguyên (GC) khi tắt hoặc hủy UI
 function Controller:CleanUp()
-	self.Destroyed = true
-	self.GraceWingsEnabled = false
-	self.AdvancedGravityCoilEnabled = false
-	self.BetterJumpPadEnabled = false
-	self.SpeedBuffsEnabled = false
+	local globals = getGlobals()
+	local finalCleanup = self.Destroyed or (globals.activeUpgradeController ~= nil and globals.activeUpgradeController ~= self)
 	disconnectFolderObservations()
 	stopRenderStepped()
 
-	if MatrixTetrahedron then
+	if finalCleanup then
+		self.GraceWingsEnabled = false
+		self.AdvancedGravityCoilEnabled = false
+		self.BetterJumpPadEnabled = false
+		self.SpeedBuffsEnabled = false
+	end
+
+	if finalCleanup and MatrixTetrahedron then
 		pcall(function()
 			MatrixTetrahedron.stop()
 		end)
 	end
-	if GraceWings then
+	if finalCleanup and GraceWings then
 		pcall(function()
 			GraceWings.stop()
 		end)
 	end
-	if AdvancedGravityCoil then
+	if finalCleanup and AdvancedGravityCoil then
 		pcall(function()
 			AdvancedGravityCoil.stop()
 		end)
 	end
-	if BetterJumpPad then
+	if finalCleanup and BetterJumpPad then
 		pcall(function()
 			BetterJumpPad.stop()
 		end)
 	end
-	if SpeedBuffs then
+	if finalCleanup and SpeedBuffs then
 		pcall(function()
 			SpeedBuffs.stop()
 		end)
 	end
-	refreshUpgradeServerState()
+	if finalCleanup then
+		refreshUpgradeServerState()
+	end
 
-	if self.PermanentConnections then
+	if finalCleanup and self.PermanentConnections then
 		for _, conn in ipairs(self.PermanentConnections) do
 			if conn then
 				pcall(function()
@@ -743,13 +822,12 @@ function Controller:CleanUp()
 
 	GC.cleanAll()
 
-	if self.Destroyed then
+	if finalCleanup then
 		pcall(restoreHooks)
 	end
 
 	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
-	local globals = getgenv()._NULLSCAPE_Globals
-	if globals and globals.activeUpgradeController == self then
+	if self.Destroyed and globals and globals.activeUpgradeController == self then
 		globals.activeUpgradeController = nil
 	end
 end
@@ -844,7 +922,7 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 end
 
 -- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
-getgenv()._NULLSCAPE_Globals.activeUpgradeController = Controller
+getGlobals().activeUpgradeController = Controller
 
 -- Khởi tạo ban đầu khi nạp script
 Logic.syncSimulatedUpgradeHud(Controller)
@@ -857,6 +935,29 @@ startObservingFolders()
 updateRunningState()
 startUtilityLoop()
 
+local function scheduleRespawnFeatureRefresh()
+	local function refreshLater()
+		if Controller.Destroyed then
+			return
+		end
+		if not isControllerActiveOrUnclaimed(Controller) then
+			safeControllerCleanUp()
+			return
+		end
+		claimActiveController(Controller)
+		Controller:ReapplyRespawnFeatures()
+	end
+
+	task.defer(refreshLater)
+	task.delay(0.5, refreshLater)
+	task.delay(1.5, refreshLater)
+end
+
+local characterRefreshConnection = LocalPlayer.CharacterAdded:Connect(function()
+	scheduleRespawnFeatureRefresh()
+end)
+table.insert(Controller.PermanentConnections, characterRefreshConnection)
+
 -- Lắng nghe sự kiện đổi trạng thái game thời gian thực
 task.spawn(function()
 	local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
@@ -865,10 +966,11 @@ task.spawn(function()
 	end
 	if inRoundVal and inRoundVal:IsA("BoolValue") then
 		hasInRoundValue = true
-		if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+		if not isControllerActiveOrUnclaimed(Controller) then
 			pcall(safeControllerCleanUp)
 			return
 		end
+		claimActiveController(Controller)
 		setInLobby(not inRoundVal.Value)
 
 		local conn
@@ -879,13 +981,14 @@ task.spawn(function()
 				end
 				return
 			end
-			if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+			if not isControllerActiveOrUnclaimed(Controller) then
 				pcall(safeControllerCleanUp)
 				if conn then
 					pcall(function() conn:Disconnect() end)
 				end
 				return
 			end
+			claimActiveController(Controller)
 			setInLobby(not val)
 		end)
 		table.insert(Controller.PermanentConnections, conn)
@@ -899,10 +1002,11 @@ task.spawn(function()
 		if Controller.Destroyed or hasInRoundValue or typeof(Controller) ~= "table" or not Controller.CleanUp then
 			break
 		end
-		if getgenv()._NULLSCAPE_Globals.activeUpgradeController ~= Controller then
+		if not isControllerActiveOrUnclaimed(Controller) then
 			pcall(safeControllerCleanUp)
 			break
 		end
+		claimActiveController(Controller)
 		setInLobby(not isInMatch())
 	end
 end)

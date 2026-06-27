@@ -27,7 +27,7 @@ local DEFAULTS = {
 	GrappleSharkTailStyle = "Balanced",
 	GrappleMomentumGuardEnabled = false,
 	GrappleJumpPadUsesBypassEnabled = false,
-	GrappleAirControlMultiplier = 1.1,
+	GrappleAirControlMultiplier = 0,
 	GrappleReelPullMultiplier = 1.1,
 	GrappleSharkTailPullMultiplier = 1.1,
 	GrappleAimAssistTargetPriority = "GrapplePoint",
@@ -562,11 +562,11 @@ return function(Client, Controller)
 
 	Tab:CreateSlider({
 		Name = "Grapple Air Control",
-		Info = "Multiplies the extra air steering force while actively grappling. It does not create a new grapple target.",
-		Range = { 1.1, 5 },
-		Increment = 0.1,
-		Suffix = "x",
-		CurrentValue = Controller.GrappleAirControlMultiplier or 1.1,
+		Info = "0 returns control to the game. 1-9 adds progressively freer grapple steering. 10 strongly overrides gravity and horizontal drift while grappling.",
+		Range = { 0, 10 },
+		Increment = 1,
+		Suffix = "/10",
+		CurrentValue = Controller.GrappleAirControlMultiplier or 0,
 		Flag = "GrappleAirControlMultiplierSlider",
 		Callback = function(Value)
 			Controller:SetGrappleAirControlMultiplier(Value)
