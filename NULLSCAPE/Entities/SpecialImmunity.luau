@@ -4,7 +4,6 @@
 --  Handles entities that do not fit the generic TouchInterest core.
 -- ]]
 
-local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 
@@ -13,6 +12,7 @@ local Logic = {
     SavedVoidbreakerHitbox = nil,
     SavedGuardianHitbox = nil,
     RazorbloomDisabled = setmetatable({}, { __mode = "k" }),
+    LoopToken = nil,
 }
 
 local SPECIAL_FLAGS = {
@@ -210,13 +210,19 @@ function Logic.enable()
     end
 
     Logic.Enabled = true
-    table.insert(Logic.Connections, RunService.RenderStepped:Connect(function()
-        if anySpecialEnabled() then
-            applyVoidbreakerHitboxBypass()
-            applyGuardianProjectileBypass()
-            applyRazorbloomBypass()
+    local loopToken = {}
+    Logic.LoopToken = loopToken
+    task.spawn(function()
+        while Logic.Enabled and Logic.LoopToken == loopToken do
+            local active = anySpecialEnabled()
+            if active then
+                applyVoidbreakerHitboxBypass()
+                applyGuardianProjectileBypass()
+                applyRazorbloomBypass()
+            end
+            task.wait(active and 0.25 or 1.0)
         end
-    end))
+    end)
 
     table.insert(Logic.Connections, Workspace.ChildAdded:Connect(function(child)
         if child.Name == "PlayerVoidbreakerHitbox" then
@@ -278,6 +284,7 @@ function Logic.disable()
     end
     table.clear(Logic.Connections)
     Logic.Enabled = false
+    Logic.LoopToken = nil
     Logic.restoreVoidbreakerHitbox()
     Logic.restoreGuardianHitbox()
     Logic.RazorbloomDisabled = setmetatable({}, { __mode = "k" })

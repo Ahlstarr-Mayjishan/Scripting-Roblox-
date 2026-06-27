@@ -530,33 +530,52 @@ local function findNativeEnemyESPTemplate()
 	if globals and globals.NativeEnemyESPTemplate and globals.NativeEnemyESPTemplate.Parent then
 		return globals.NativeEnemyESPTemplate
 	end
+	if globals and globals.NativeEnemyESPTemplateMissAt and time() - globals.NativeEnemyESPTemplateMissAt < 2 then
+		return nil
+	end
+
+	local function searchDescendantsBudgeted(root, maxDescendants)
+		if not root then
+			return nil
+		end
+
+		local stack = root:GetChildren()
+		local scanned = 0
+		while #stack > 0 and scanned < maxDescendants do
+			local inst = table.remove(stack)
+			if inst and inst.Parent then
+				scanned += 1
+				if (inst.Name == "ESP" or inst.Name == "ESPCrayon") and inst:IsA("BillboardGui") then
+					return inst
+				end
+
+				local children = inst:GetChildren()
+				for i = #children, 1, -1 do
+					table.insert(stack, children[i])
+				end
+			end
+		end
+
+		return nil
+	end
 
 	local players = game:GetService("Players")
 	local localPlayer = players.LocalPlayer
 	local playerScripts = localPlayer and localPlayer:FindFirstChild("PlayerScripts")
-	if playerScripts then
-		for _, inst in ipairs(playerScripts:GetDescendants()) do
-			if (inst.Name == "ESP" or inst.Name == "ESPCrayon") and inst:IsA("BillboardGui") then
-				if globals then
-					globals.NativeEnemyESPTemplate = inst
-				end
-				return inst
-			end
+	local template = searchDescendantsBudgeted(playerScripts, 2500)
+	if not template then
+		template = searchDescendantsBudgeted(workspace:FindFirstChild("Enemies"), 2500)
+	end
+	if template then
+		if globals then
+			globals.NativeEnemyESPTemplate = template
 		end
+		return template
 	end
 
-	local enemies = workspace:FindFirstChild("Enemies")
-	if enemies then
-		for _, inst in ipairs(enemies:GetDescendants()) do
-			if (inst.Name == "ESP" or inst.Name == "ESPCrayon") and inst:IsA("BillboardGui") then
-				if globals then
-					globals.NativeEnemyESPTemplate = inst
-				end
-				return inst
-			end
-		end
+	if globals then
+		globals.NativeEnemyESPTemplateMissAt = time()
 	end
-
 	return nil
 end
 

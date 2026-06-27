@@ -464,10 +464,28 @@ unregisterAltar = function(altarObj)
 end
 
 local function observeItemPools(folder)
-	for _, obj in ipairs(folder:GetDescendants()) do
-		registerGift(obj)
-		registerInstrument(obj)
-	end
+	task.spawn(function()
+		local stack = folder:GetChildren()
+		local scannedThisSlice = 0
+		while #stack > 0 and folder.Parent and not Controller.Destroyed do
+			local obj = table.remove(stack)
+			if obj and obj.Parent then
+				registerGift(obj)
+				registerInstrument(obj)
+
+				local children = obj:GetChildren()
+				for i = #children, 1, -1 do
+					table.insert(stack, children[i])
+				end
+			end
+
+			scannedThisSlice += 1
+			if scannedThisSlice >= 250 then
+				scannedThisSlice = 0
+				task.wait()
+			end
+		end
+	end)
 
 	local addedConn = folder.DescendantAdded:Connect(function(obj)
 		registerGift(obj)

@@ -97,14 +97,29 @@ local function unregisterRailPart(part)
     Logic.RailParts[part] = nil
 end
 
-local function rebuildRailCache()
-    table.clear(Logic.RailParts)
+local function scanRailPartsBudgeted(maxDescendants)
+    local stack = Workspace:GetChildren()
+    local scanned = 0
 
-    for _, descendant in ipairs(Workspace:GetDescendants()) do
-        if isRailPart(descendant) then
-            Logic.RailParts[descendant] = true
+    while #stack > 0 and scanned < maxDescendants do
+        local current = table.remove(stack)
+        if current and current.Parent then
+            scanned = scanned + 1
+            if isRailPart(current) then
+                Logic.RailParts[current] = true
+            end
+
+            local children = current:GetChildren()
+            for i = #children, 1, -1 do
+                table.insert(stack, children[i])
+            end
         end
     end
+end
+
+local function rebuildRailCache()
+    table.clear(Logic.RailParts)
+    scanRailPartsBudgeted(12000)
 end
 
 local function watchRailParts()
