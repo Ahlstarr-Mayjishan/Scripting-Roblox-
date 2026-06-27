@@ -564,8 +564,28 @@ local function processEntity(enemy)
 					task.defer(function()
 						if not enemy or not enemy.Parent then return end
 						local rootPart = enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
-						if rootPart and (child.Adornee == enemy or child.Adornee == nil) then
-							pcall(function() child.Adornee = rootPart end)
+						if rootPart then
+							if child.Adornee == enemy or child.Adornee == nil then
+								pcall(function() child.Adornee = rootPart end)
+							end
+
+							-- Fix horizontal stretched border for Springer (due to wide eye billboard sizes)
+							if string.find(enemy.Name:lower(), "springer") then
+								pcall(function() child.Size = UDim2.new(4, 0, 4, 0) end)
+							end
+
+							-- Defensively hide native ESP when enemy is spawning far below the map (Y < -50)
+							local function updateVisibility()
+								if not rootPart or not rootPart.Parent then return end
+								local isBelowMap = rootPart.Position.Y < -50
+								pcall(function() child.Enabled = not isBelowMap end)
+							end
+
+							updateVisibility()
+							local posConn = rootPart:GetPropertyChangedSignal("Position"):Connect(updateVisibility)
+							child.Destroying:Connect(function()
+								posConn:Disconnect()
+							end)
 						end
 					end)
 				end

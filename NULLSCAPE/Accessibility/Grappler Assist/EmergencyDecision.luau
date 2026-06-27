@@ -151,7 +151,7 @@ function EmergencyDecision.createDecision(deps, grapple, rescueResult)
 
     score = score + snapshot.UnsafeSamples * 18
     score = score + math.clamp((snapshot.HorizontalSpeed - cfg.AUTO_RESCUE_SPEED) / 120, 0, 1) * 24
-    score = score + math.clamp((snapshot.FallSpeed - deps.getEmergencyFallThreshold()) / 120, 0, 1) * 34
+    score = score + math.clamp((snapshot.FallSpeed - deps.getEmergencyFallThreshold(grapple)) / 120, 0, 1) * 34
 
     if snapshot.InputDirection and snapshot.VelocityDirection and not snapshot.PanicPressure then
         local controlDot = snapshot.InputDirection:Dot(snapshot.VelocityDirection)

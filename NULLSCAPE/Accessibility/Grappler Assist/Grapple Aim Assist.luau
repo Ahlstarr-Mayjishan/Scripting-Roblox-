@@ -5,6 +5,7 @@
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
@@ -76,6 +77,16 @@ local Logic = {
     SmartReelLandingAssistUntil = 0,
     SmartReelLandingTargetPosition = nil,
     SmartReelLandingPlaneY = nil,
+    MovementIntentState = "Freefall",
+    MovementIntentUntil = 0,
+    MovementIntentReason = nil,
+    JumpPadCommitGuardUntil = 0,
+    LastJumpPadCommitAt = 0,
+    LastJumpPadCommitPart = nil,
+    LastGravityProfileAt = 0,
+    LastGravityProfile = nil,
+    CurseHandler = nil,
+    CurseHandlerLoaded = false,
 }
 
 local VALID_TARGETS = {
@@ -100,6 +111,14 @@ local RANGE_OPTIONS = {
 }
 
 local GRAPPLER_CLASS_ID = ClassProfiles.GRAPPLER_CLASS_ID
+
+local MOVEMENT_INTENT = {
+    Freefall = "Freefall",
+    JumpPadCommit = "JumpPadCommit",
+    VoidRescue = "VoidRescue",
+    LandingAssist = "LandingAssist",
+    Reeling = "Reeling",
+}
 
 local CFG = {
     ADAPT_INPUT_PULSE_DURATION = 0.05,
@@ -289,6 +308,17 @@ local CFG = {
     SMART_REEL_LANDING_UP_SPEED_MIN = 28,
     SMART_REEL_LANDING_UP_SPEED_MAX = 92,
     SMART_REEL_LANDING_BLEND = 0.38,
+    LOW_GRAVITY_PROFILE_TTL = 0.45,
+    LOW_GRAVITY_FALL_THRESHOLD_SCALE = 0.72,
+    LOW_GRAVITY_VOID_BUFFER_BONUS = 18,
+    LOW_GRAVITY_VOID_PREDICT_BONUS = 0.28,
+    LOW_GRAVITY_LANDING_FALL_SPEED = 6,
+    LOW_GRAVITY_LANDING_MIN_BELOW = 6,
+    LOW_GRAVITY_LANDING_MAX_DISTANCE = 86,
+    LOW_GRAVITY_LANDING_SCORE_BONUS = 12,
+    JUMPPAD_COMMIT_GUARD_BASE = 0.62,
+    JUMPPAD_COMMIT_GUARD_FAST = 0.95,
+    JUMPPAD_COMMIT_FAST_SPEED = 120,
     SMART_REEL_PLAYER_CONTROL_PENALTY = 24,
     SMART_REEL_BAD_INPUT_PENALTY = 34,
     SMART_REEL_AUTO_MIN_DOT = -0.2,
@@ -353,6 +383,9 @@ local isInAir
 local hasAdaptDriveTarget
 local isPanicRescueDanger
 local getCachedPanicRescueDanger
+local getGravityAssistProfile
+local getEffectiveEmergencyFallThreshold
+local isJumpPadInstance
 
 local function getGlobals()
     local env = getgenv()
@@ -429,6 +462,68 @@ end
 local function isJumpPadUsesBypassEnabled()
     local controller = getController()
     return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleJumpPadUsesBypassEnabled == true
+end
+
+local function setMovementIntent(state, duration, reason)
+    local now = time()
+    local untilTime = now + math.max(tonumber(duration) or 0, 0)
+    if untilTime < (Logic.MovementIntentUntil or 0) and Logic.MovementIntentState == state then
+        return
+    end
+
+    Logic.MovementIntentState = state or MOVEMENT_INTENT.Freefall
+    Logic.MovementIntentUntil = untilTime
+    Logic.MovementIntentReason = reason
+end
+
+local function getMovementIntentState()
+    if time() > (Logic.MovementIntentUntil or 0) then
+        Logic.MovementIntentState = MOVEMENT_INTENT.Freefall
+        Logic.MovementIntentReason = nil
+        return MOVEMENT_INTENT.Freefall
+    end
+
+    return Logic.MovementIntentState or MOVEMENT_INTENT.Freefall
+end
+
+local function isMovementIntent(state)
+    return getMovementIntentState() == state
+end
+
+local function isAutomationSuppressedByIntent()
+    return isMovementIntent(MOVEMENT_INTENT.JumpPadCommit)
+end
+
+local function clearLandingIntent()
+    Logic.SmartReelLandingAssistUntil = 0
+    Logic.SmartReelLandingTargetPosition = nil
+    Logic.SmartReelLandingPlaneY = nil
+    if isMovementIntent(MOVEMENT_INTENT.LandingAssist) then
+        setMovementIntent(MOVEMENT_INTENT.Freefall, 0, nil)
+    end
+end
+
+local function isJumpPadCommitGuardActive()
+    return isAutomationSuppressedByIntent()
+end
+
+local function markJumpPadCommit(grapple, jumpPadPart)
+    if not isJumpPadInstance(jumpPadPart) then
+        return
+    end
+
+    local rootPart = grapple and grapple.RootPart
+    local speed = getHorizontalVelocity(rootPart).Magnitude
+    local guardDuration = speed >= CFG.JUMPPAD_COMMIT_FAST_SPEED and CFG.JUMPPAD_COMMIT_GUARD_FAST or CFG.JUMPPAD_COMMIT_GUARD_BASE
+    local now = time()
+
+    Logic.LastJumpPadCommitAt = now
+    Logic.LastJumpPadCommitPart = jumpPadPart
+    Logic.JumpPadCommitGuardUntil = math.max(Logic.JumpPadCommitGuardUntil or 0, now + guardDuration)
+    Logic.EmergencyRescueLockUntil = math.max(Logic.EmergencyRescueLockUntil or 0, now + guardDuration)
+    Logic.LastSmartReelStartAt = math.max(Logic.LastSmartReelStartAt or 0, now)
+    setMovementIntent(MOVEMENT_INTENT.JumpPadCommit, guardDuration, "JumpPadStart")
+    clearLandingIntent()
 end
 
 local function isVoidRescueEnabled()
@@ -729,6 +824,10 @@ end
 
 local function isEmergencyRescueRecastBlocked(grapple, ignoreTimeLock)
     if not ignoreTimeLock and time() <= (Logic.EmergencyRescueLockUntil or 0) then
+        return true
+    end
+
+    if not ignoreTimeLock and isJumpPadCommitGuardActive() then
         return true
     end
 
@@ -1239,19 +1338,21 @@ local function getVoidDangerState(grapple)
     end
 
     local y = rootPart.Position.Y
+    local gravityProfile = getGravityAssistProfile(grapple)
+    local voidBufferBonus = gravityProfile.VoidBufferBonus or 0
     if killY then
-        if y <= killY + CFG.VOID_RESCUE_HARD_BUFFER then
+        if y <= killY + CFG.VOID_RESCUE_HARD_BUFFER + voidBufferBonus * 0.35 then
             return true, "BelowKillPlane"
         end
 
-        if y <= killY + CFG.VOID_RESCUE_KILL_PLANE_BUFFER then
-            return true, "NearKillPlane"
+        if y <= killY + CFG.VOID_RESCUE_KILL_PLANE_BUFFER + voidBufferBonus then
+            return true, gravityProfile.Active and "LowGravityNearKillPlane" or "NearKillPlane"
         end
 
-        if velocity.Y < -8 then
-            local projectedY = y + velocity.Y * CFG.VOID_RESCUE_PREDICT_TIME
-            if projectedY <= killY + CFG.VOID_RESCUE_HARD_BUFFER then
-                return true, "ProjectedKillPlane"
+        if velocity.Y < (gravityProfile.Active and -2 or -8) then
+            local projectedY = y + velocity.Y * (CFG.VOID_RESCUE_PREDICT_TIME + (gravityProfile.VoidPredictBonus or 0))
+            if projectedY <= killY + CFG.VOID_RESCUE_HARD_BUFFER + voidBufferBonus * 0.5 then
+                return true, gravityProfile.Active and "LowGravityProjectedKillPlane" or "ProjectedKillPlane"
             end
         end
     end
@@ -1271,6 +1372,9 @@ end
 
 local function markVoidRescueWindow()
     Logic.VoidRescueUntil = time() + CFG.VOID_RESCUE_WINDOW
+    if not isMovementIntent(MOVEMENT_INTENT.JumpPadCommit) then
+        setMovementIntent(MOVEMENT_INTENT.VoidRescue, CFG.VOID_RESCUE_WINDOW, "VoidDanger")
+    end
 end
 
 local function isVoidRescueWindowActive()
@@ -1361,7 +1465,7 @@ function isPanicRescueDanger(grapple)
 
     local panicPressure = isPanicPressureActive()
     local speedDanger = getHorizontalVelocity(rootPart).Magnitude >= getEmergencySpeedThreshold()
-    local fallDanger = velocity.Y <= -getEmergencyFallThreshold()
+    local fallDanger = velocity.Y <= -getEffectiveEmergencyFallThreshold(grapple)
     if not (speedDanger or fallDanger) then
         return false
     end
@@ -1403,6 +1507,76 @@ local function hasUpgrade(movement, upgradeName)
         return movement:HasUpgrade(upgradeName)
     end)
     return success and result == true
+end
+
+local function getCurseHandler()
+    if Logic.CurseHandlerLoaded then
+        return Logic.CurseHandler
+    end
+
+    Logic.CurseHandlerLoaded = true
+    local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+    local moduleScript = clientModules and clientModules:FindFirstChild("CurseHandler")
+    if not moduleScript then
+        return nil
+    end
+
+    local success, result = pcall(require, moduleScript)
+    if success and typeof(result) == "table" then
+        Logic.CurseHandler = result
+    end
+
+    return Logic.CurseHandler
+end
+
+local function isCurseEnabled(curseName)
+    local curseHandler = getCurseHandler()
+    if not (curseHandler and typeof(curseHandler.IsCurseEnabled) == "function") then
+        return false
+    end
+
+    local success, result = pcall(function()
+        return curseHandler.IsCurseEnabled(curseName)
+    end)
+    return success and result == true
+end
+
+function getGravityAssistProfile(grapple)
+    local now = time()
+    if Logic.LastGravityProfile and now - (Logic.LastGravityProfileAt or 0) < CFG.LOW_GRAVITY_PROFILE_TTL then
+        return Logic.LastGravityProfile
+    end
+
+    local movement = grapple and grapple.Movement
+    local levelValue = ReplicatedStorage:FindFirstChild("Level")
+    local level = levelValue and tonumber(levelValue.Value) or 0
+    local lowerGravity = isCurseEnabled("LowerGravity")
+    local advancedCoil = hasUpgrade(movement, "AdvancedGravityCoil")
+    local highriseGravity = level >= 23
+    local active = lowerGravity or advancedCoil or highriseGravity
+
+    local profile = {
+        Active = active,
+        LowerGravity = lowerGravity,
+        AdvancedGravityCoil = advancedCoil,
+        HighriseGravity = highriseGravity,
+        FallThresholdScale = active and CFG.LOW_GRAVITY_FALL_THRESHOLD_SCALE or 1,
+        VoidBufferBonus = active and CFG.LOW_GRAVITY_VOID_BUFFER_BONUS or 0,
+        VoidPredictBonus = active and CFG.LOW_GRAVITY_VOID_PREDICT_BONUS or 0,
+        LandingFallSpeed = active and CFG.LOW_GRAVITY_LANDING_FALL_SPEED or CFG.SMART_REEL_LANDING_FALL_SPEED,
+        LandingMinBelow = active and CFG.LOW_GRAVITY_LANDING_MIN_BELOW or CFG.SMART_REEL_LANDING_PLANE_MIN_BELOW,
+        LandingMaxDistance = active and CFG.LOW_GRAVITY_LANDING_MAX_DISTANCE or CFG.SMART_REEL_LANDING_MAX_DISTANCE,
+        LandingScoreBonus = active and CFG.LOW_GRAVITY_LANDING_SCORE_BONUS or 0,
+    }
+
+    Logic.LastGravityProfileAt = now
+    Logic.LastGravityProfile = profile
+    return profile
+end
+
+function getEffectiveEmergencyFallThreshold(grapple)
+    local profile = getGravityAssistProfile(grapple)
+    return getEmergencyFallThreshold() * (profile.FallThresholdScale or 1)
 end
 
 function getHorizontalVelocity(rootPart)
@@ -1603,7 +1777,7 @@ local function isBellInstance(instance)
     return instance and instance.Name == "Bell"
 end
 
-local function isJumpPadInstance(instance)
+function isJumpPadInstance(instance)
     return instance and instance.Name == "JumpPad" and instance:IsA("BasePart")
 end
 
@@ -2180,7 +2354,7 @@ local function getGrapplerEmergencyDecisionDeps()
         getHorizontalVelocity = getHorizontalVelocity,
         isPanicPressureActive = isPanicPressureActive,
         getEmergencyProtectionMode = getEmergencyProtectionMode,
-        getEmergencyFallThreshold = getEmergencyFallThreshold,
+        getEmergencyFallThreshold = getEffectiveEmergencyFallThreshold,
         getPlayerIntentSuppression = getPlayerIntentSuppression,
         isRescueTargetName = isRescueTargetName,
     }
@@ -2713,6 +2887,9 @@ local function tryPanicRescue(grapple)
     if not (grapple and movement and isInAir(grapple)) then
         return false
     end
+    if isJumpPadCommitGuardActive() then
+        return false
+    end
     local voidDanger = isVoidRescueDanger(grapple)
     if isEmergencyRescueRecastBlocked(grapple, voidDanger) then
         return false
@@ -2827,6 +3004,9 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 
     local movement = grapple and grapple.Movement
     if not (grapple and movement and grapple.specialHeld and not movement.grappling and isInAir(grapple)) then
+        return result, direction
+    end
+    if isJumpPadCommitGuardActive() then
         return result, direction
     end
 
@@ -3301,9 +3481,10 @@ local function getSmartReelScore(grapple, manual)
         and state.Distance > CFG.SMART_REEL_EXIT_DISTANCE
         and (overshootRisk or routeWorsening)
     local targetHeight = state.TargetPosition.Y - rootPart.Position.Y
-    local landingPullNeeded = targetHeight >= CFG.SMART_REEL_LANDING_PLANE_MIN_BELOW
-        and velocity.Y <= -CFG.SMART_REEL_LANDING_FALL_SPEED
-        and state.Distance <= CFG.SMART_REEL_LANDING_MAX_DISTANCE
+    local gravityProfile = getGravityAssistProfile(grapple)
+    local landingPullNeeded = targetHeight >= gravityProfile.LandingMinBelow
+        and velocity.Y <= -gravityProfile.LandingFallSpeed
+        and state.Distance <= gravityProfile.LandingMaxDistance
         and state.Distance > CFG.SMART_REEL_EXIT_DISTANCE
 
     state.ClosingSpeed = closingSpeed
@@ -3377,8 +3558,8 @@ local function getSmartReelScore(grapple, manual)
     end
 
     if landingPullNeeded then
-        score = score + 30
-        reason = "LandingPull"
+        score = score + 30 + (gravityProfile.LandingScoreBonus or 0)
+        reason = gravityProfile.Active and "LowGravityLandingPull" or "LandingPull"
     end
 
     if manual and not panic and targetHeight > CFG.SMART_REEL_LOW_ARC_HEIGHT and velocity.Y > CFG.SMART_REEL_LOW_ARC_UP_SPEED then
@@ -3413,6 +3594,9 @@ end
 
 local function canStartSmartReel(grapple, manual)
     local now = time()
+    if not manual and isJumpPadCommitGuardActive() then
+        return false
+    end
     if not manual and now - (Logic.LastSmartReelStartAt or 0) < CFG.SMART_REEL_START_COOLDOWN then
         return false
     end
@@ -3457,14 +3641,13 @@ local function startSmartReel(grapple, manual)
 
     local decision = Logic.LastSmartReelDecision
     local state = decision and decision.State
-    if decision and decision.Reason == "LandingPull" and state and state.TargetPosition then
+    if decision and (decision.Reason == "LandingPull" or decision.Reason == "LowGravityLandingPull") and state and state.TargetPosition then
         Logic.SmartReelLandingAssistUntil = time() + CFG.SMART_REEL_LANDING_ASSIST_DURATION
         Logic.SmartReelLandingTargetPosition = state.TargetPosition
         Logic.SmartReelLandingPlaneY = state.TargetPosition.Y
+        setMovementIntent(MOVEMENT_INTENT.LandingAssist, CFG.SMART_REEL_LANDING_ASSIST_DURATION, decision.Reason)
     else
-        Logic.SmartReelLandingAssistUntil = 0
-        Logic.SmartReelLandingTargetPosition = nil
-        Logic.SmartReelLandingPlaneY = nil
+        clearLandingIntent()
     end
 
     if grapple.SFX and grapple.SFX.PlaySound then
@@ -3596,7 +3779,7 @@ local function applySmartReelLandingAssist(grapple)
 
     local heightToPlane = planeY - rootPart.Position.Y
     if heightToPlane <= 1 then
-        Logic.SmartReelLandingAssistUntil = 0
+        clearLandingIntent()
         return false
     end
 
@@ -3829,6 +4012,9 @@ function Logic.enable()
                 maintainJumpPadUsesBypass()
             end
             local jumpPadTarget = result and result.Instance
+            if isJumpPadInstance(jumpPadTarget) then
+                markJumpPadCommit(self, jumpPadTarget)
+            end
             if hasClassCapability(self, "JumpPadBypass") and isJumpPadUsesBypassEnabled() and isJumpPadInstance(jumpPadTarget) then
                 normalizeJumpPadForReuse(jumpPadTarget)
             end
@@ -3909,11 +4095,13 @@ function Logic.enable()
                     sharkTailPlanned = planSmartSharkTail(self)
                 end
 
-                if not sharkTailPlanned and isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Automatic" then
+                if not sharkTailPlanned and not isJumpPadCommitGuardActive() and isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Automatic" then
                     startSmartReel(self, false)
                 end
 
-                tryPanicRescue(self)
+                if not isJumpPadCommitGuardActive() then
+                    tryPanicRescue(self)
+                end
                 tryAutoMomentumRescue(self)
                 maintainAdaptInputHold(self)
             end
@@ -4032,6 +4220,12 @@ function Logic.disable()
     Logic.SmartReelLandingAssistUntil = 0
     Logic.SmartReelLandingTargetPosition = nil
     Logic.SmartReelLandingPlaneY = nil
+    Logic.MovementIntentState = MOVEMENT_INTENT.Freefall
+    Logic.MovementIntentUntil = 0
+    Logic.MovementIntentReason = nil
+    Logic.JumpPadCommitGuardUntil = 0
+    Logic.LastJumpPadCommitAt = 0
+    Logic.LastJumpPadCommitPart = nil
     Logic.BellBypassToken = Logic.BellBypassToken + 1
     releaseBellBypass()
     restoreJumpPadBypassParts()

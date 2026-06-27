@@ -367,6 +367,11 @@ local function isSafeEnemyVisualPart(part, hrp)
 		return false
 	end
 
+	-- Hide custom ESP if the enemy is currently in the void/lobby/spawning state (Y < -50)
+	if pos.Y < -50 then
+		return false
+	end
+
 	local size = part.Size
 	if size.X > 1000 or size.Y > 1000 or size.Z > 1000 then
 		return false
