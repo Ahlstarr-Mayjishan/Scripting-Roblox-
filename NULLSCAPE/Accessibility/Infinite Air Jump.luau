@@ -27,10 +27,15 @@ local function getActiveAnimator()
 	end
 	for _, v in ipairs(getgc(true)) do
 		if typeof(v) == "table" and rawget(v, "PlayAnimation") and rawget(v, "Animations") then
-			local doubleJumpAnim = v.Animations.DoubleJump
-			if doubleJumpAnim and typeof(doubleJumpAnim) == "Instance" and doubleJumpAnim:IsA("AnimationTrack") then
-				return v
-			end
+			-- Log all animations to developer console for troubleshooting
+			pcall(function()
+				local keys = {}
+				for k, _ in pairs(v.Animations) do
+					table.insert(keys, tostring(k))
+				end
+				print("[NULLSCAPE Debug] Animations: " .. table.concat(keys, ", "))
+			end)
+			return v
 		end
 	end
 	return nil
@@ -68,7 +73,20 @@ local function doAirJump()
 			local animator = getActiveAnimator()
 			if animator then
 				pcall(function()
-					animator:PlayAnimation("DoubleJump")
+					local anims = animator.Animations
+					if typeof(anims) == "table" then
+						if anims.DoubleJump then
+							animator:PlayAnimation("DoubleJump")
+						elseif anims.DoubleJumpFlip then
+							animator:PlayAnimation("DoubleJumpFlip")
+						elseif anims.Double then
+							animator:PlayAnimation("Double")
+						else
+							animator:PlayAnimation("DoubleJump")
+						end
+					else
+						animator:PlayAnimation("DoubleJump")
+					end
 				end)
 			end
 			

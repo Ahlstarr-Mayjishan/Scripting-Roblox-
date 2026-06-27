@@ -4120,6 +4120,9 @@ local function ensureDiveBonkHook(globals)
     globals.GrappleAimAssistOriginalDiveBonk = originalDiveBonk
 
     movementCore.DiveBonk = function(self, ...)
+        if globals.activeGrappleAimAssist ~= Logic then
+            return originalDiveBonk(self, ...)
+        end
         if shouldSuppressGrappleBonk(self) then
             self.diveBonked = false
             self.bonkedOffPlayer = false
@@ -4149,6 +4152,9 @@ function Logic.enable()
     globals.GrappleAimAssistOriginalCast = originalCast
 
     grappleModule.Cast = function(self, forceRefresh, ...)
+        if globals.activeGrappleAimAssist ~= Logic then
+            return originalCast(self, forceRefresh, ...)
+        end
         return assistedCast(self, forceRefresh, originalCast, ...)
     end
 
@@ -4157,6 +4163,9 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalStart = originalStart
 
         grappleModule.Start = function(self, result, ...)
+            if globals.activeGrappleAimAssist ~= Logic then
+                return originalStart(self, result, ...)
+            end
             Logic.LastKnownGrapple = self
             refillStamina(self)
             if hasClassCapability(self, "JumpPadBypass") then
@@ -4189,6 +4198,9 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalAltSpecialAction = originalAltSpecialAction
 
         grappleModule.AltSpecialAction = function(self, state, ...)
+            if globals.activeGrappleAimAssist ~= Logic then
+                return originalAltSpecialAction(self, state, ...)
+            end
             if Logic.isSuiteEnabled() and hasAnyGrappleAssistCapability(self) and state == Enum.UserInputState.Begin then
                 local shouldManualSharkTail = Logic.isSharkTailHelperEnabled()
                     and getModeValue("GrappleSharkTailMode") == "Manual"
@@ -4211,6 +4223,9 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalSharkTail = originalSharkTail
 
         grappleModule.SharkTail = function(self, ...)
+            if globals.activeGrappleAimAssist ~= Logic then
+                return originalSharkTail(self, ...)
+            end
             local previousVelocity = self and self.RootPart and self.RootPart.Velocity
             local result = originalSharkTail(self, ...)
             applySharkTailPullMultiplier(self, previousVelocity)
@@ -4223,6 +4238,9 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalStep = originalStep
 
         grappleModule.Step = function(self, dt, ...)
+            if globals.activeGrappleAimAssist ~= Logic then
+                return originalStep(self, dt, ...)
+            end
             Logic.LastKnownGrapple = self
             refillStamina(self)
             if hasClassCapability(self, "JumpPadBypass") then
@@ -4286,6 +4304,9 @@ function Logic.enable()
         globals.GrappleAimAssistOriginalEnd = originalEnd
 
         grappleModule.End = function(self, ...)
+            if globals.activeGrappleAimAssist ~= Logic then
+                return originalEnd(self, ...)
+            end
             Logic.LastKnownGrapple = self
             if hasClassCapability(self, "MomentumGuard") then
                 Logic.markGrappleBonkGrace(self, 0.45)
@@ -4297,6 +4318,7 @@ function Logic.enable()
     end
 
     globals.GrappleAimAssistHooked = true
+    globals.activeGrappleAimAssist = Logic
     watchAdaptInput()
     watchCandidateFolder()
     table.insert(Logic.Connections, RunService.Heartbeat:Connect(panicRescueWatchdog))
@@ -4305,6 +4327,9 @@ end
 
 function Logic.disable()
     local globals = Logic.getGlobals()
+    if globals.activeGrappleAimAssist == Logic then
+        globals.activeGrappleAimAssist = nil
+    end
     local grappleModule = getGrappleModule()
     if grappleModule and globals.GrappleAimAssistOriginalCast then
         grappleModule.Cast = globals.GrappleAimAssistOriginalCast
