@@ -90,6 +90,10 @@ function Logic.enableImmunity(gc, enemy)
     if not enemy or not (enemy:IsA("Model") or enemy:IsA("BasePart")) then return end
     
     local controller = gc.Controller or (getgenv().Client and getgenv().Client.Modules and getgenv().Client.Modules.EntitiesController)
+    if controller and controller.inLobby then
+        return
+    end
+    
     local checkFunc = Logic.getImmunityCheck(enemy.Name, controller)
     
     if checkFunc and checkFunc() then

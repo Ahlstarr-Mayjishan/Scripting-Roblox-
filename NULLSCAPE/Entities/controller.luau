@@ -139,6 +139,7 @@ local function createCadenceUI()
 end
 
 local inLobby = not isInMatch() -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
+Controller.inLobby = inLobby
 local hasInRoundValue = false
 local folderConnections = {} -- key: folder -> value: list of connections
 local workspaceConnections = {} -- list of workspace-level connections
@@ -896,6 +897,7 @@ local function setInLobby(val)
 		return
 	end
 	inLobby = val
+	Controller.inLobby = val
 
 	pcall(function()
 		TouchInterest.setInLobbyState(val)
@@ -920,20 +922,30 @@ local function initializeStatusEffectHook()
 			if typeof(hookfunction) == "function" then
 				local oldConnect
 				oldConnect = hookfunction(StatusEffectChanged.OnClientEvent.Connect, function(self, callback)
-					table.insert(activeCallbacks, callback)
-					local newCallback = function(statusName, isActive, ...)
-						local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-						if
-							activeCtrl
-							and activeCtrl.SpringerImmunityMode == "Blatant"
-							and statusName ~= "Medal"
-							and statusName ~= "Overtuned"
-						then
-							return
+					local isTarget = false
+					pcall(function()
+						isTarget = (self == StatusEffectChanged.OnClientEvent)
+					end)
+					
+					if isTarget then
+						if not table.find(activeCallbacks, callback) then
+							table.insert(activeCallbacks, callback)
 						end
-						return callback(statusName, isActive, ...)
+						local newCallback = function(statusName, isActive, ...)
+							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+							if
+								activeCtrl
+								and activeCtrl.SpringerImmunityMode == "Blatant"
+								and statusName ~= "Medal"
+								and statusName ~= "Overtuned"
+							then
+								return
+							end
+							return callback(statusName, isActive, ...)
+						end
+						return oldConnect(self, newCallback)
 					end
-					return oldConnect(self, newCallback)
+					return oldConnect(self, callback)
 				end)
 			end
 		end)

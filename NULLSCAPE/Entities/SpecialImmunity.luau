@@ -34,12 +34,15 @@ end
 
 local function isEnabled(name)
     local controller = getController()
+    if not controller or controller.inLobby then
+        return false
+    end
     if name == "Guardian" then
-        return controller and controller.GuardianImmune == true
+        return controller.GuardianImmune == true
     end
 
     local flag = SPECIAL_FLAGS[name]
-    return controller and flag and controller[flag] == true
+    return flag and controller[flag] == true
 end
 
 local function anySpecialEnabled()

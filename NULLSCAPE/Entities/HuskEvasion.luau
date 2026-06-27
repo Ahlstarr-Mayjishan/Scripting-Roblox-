@@ -30,6 +30,11 @@ function Logic.enableHuskImmunity(gc, enemy)
 	if not enemy or not enemy:IsA("Model") then
 		return
 	end
+	
+	local controller = gc.Controller or (getgenv().Client and getgenv().Client.Modules and getgenv().Client.Modules.EntitiesController)
+	if controller and controller.inLobby then
+		return
+	end
 	if
 		not Logic.isHuskEntity(enemy.Name)
 		and not (enemy:GetAttribute("OriginalName") and Logic.isHuskEntity(enemy:GetAttribute("OriginalName")))

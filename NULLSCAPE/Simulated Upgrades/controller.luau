@@ -32,6 +32,7 @@ local Controller = {
 	AltarFilter = { "All" },
 	ESPStyle = "Highlight", -- Mặc định: "Highlight" hoặc "Dot"
 	Destroyed = false,
+	inLobby = true,
 
 	AutoCollectEnabled = false,
 	AutoCollectRange = 20,
@@ -104,6 +105,7 @@ local function isInMatch()
 end
 
 local inLobby = not isInMatch() -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
+Controller.inLobby = inLobby
 local function refreshUpgradeServerState()
 	task.spawn(function()
 		local ClientModules = ReplicatedFirst:FindFirstChild("ClientModules")
@@ -649,7 +651,7 @@ local function startUtilityLoop()
 			end
 			local char = LocalPlayer.Character
 			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if hrp then
+			if hrp and not Controller.inLobby then
 				if Controller.AutoCollectEnabled then
 					pcall(function()
 						Executor.updateMagnet(Controller, hrp)
@@ -708,6 +710,7 @@ local function setInLobby(val)
 		return
 	end
 	inLobby = val
+	Controller.inLobby = val
 	if val then
 		if not Controller.RadarEnabled then
 			pcall(function()
@@ -1006,6 +1009,17 @@ function Controller:SetCollectMedalKeybind(value)
 end
 
 function Controller:TriggerMedalAction()
+	if self.inLobby then
+		if getgenv().Rayfield then
+			getgenv().Rayfield:Notify({
+				Title = "Medal Action",
+				Content = "Cannot collect Medal while in lobby!",
+				Duration = 2,
+			})
+		end
+		return
+	end
+
 	local char = LocalPlayer.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	if not hrp then

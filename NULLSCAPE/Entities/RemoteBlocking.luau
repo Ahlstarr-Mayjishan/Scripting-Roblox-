@@ -128,7 +128,7 @@ for _, data in pairs(Logic.Config) do
 end
 
 function Logic.shouldBlockRemoteCall(remote, args, controller)
-    if not controller then
+    if not controller or controller.inLobby then
         return false
     end
 
