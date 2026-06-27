@@ -488,6 +488,10 @@ local function findNativeEnemyESPTemplate()
 	if not template then
 		template = searchDescendantsBudgeted(workspace:FindFirstChild("Enemies"), 2500)
 	end
+	if not template then
+		local starterPlayer = game:GetService("StarterPlayer")
+		template = searchDescendantsBudgeted(starterPlayer and starterPlayer:FindFirstChild("StarterPlayerScripts"), 2500)
+	end
 	if template then
 		if globals then
 			globals.EntitiesNativeEnemyESPTemplate = template

@@ -246,10 +246,15 @@ local function findEnemyVisualPart(enemy, hrp)
 		return enemy
 	end
 
-	-- Search for Head/head (case-insensitive and recursive if nested inside sub-models)
-	local head = enemy:FindFirstChild("head") or enemy:FindFirstChild("Head")
-	if not head then
-		head = enemy:FindFirstChild("Head", true) or enemy:FindFirstChild("head", true)
+	-- Search for Head/head (case-insensitive and recursive if nested inside sub-models), ignoring non-BaseParts
+	local head = enemy:FindFirstChild("Head")
+	if not head or not head:IsA("BasePart") then
+		for _, child in ipairs(enemy:GetDescendants()) do
+			if (child.Name == "Head" or child.Name == "head") and child:IsA("BasePart") then
+				head = child
+				break
+			end
+		end
 	end
 	if head and head:IsA("BasePart") then
 		return head
@@ -565,6 +570,10 @@ local function findNativeEnemyESPTemplate()
 	local template = searchDescendantsBudgeted(playerScripts, 2500)
 	if not template then
 		template = searchDescendantsBudgeted(workspace:FindFirstChild("Enemies"), 2500)
+	end
+	if not template then
+		local starterPlayer = game:GetService("StarterPlayer")
+		template = searchDescendantsBudgeted(starterPlayer and starterPlayer:FindFirstChild("StarterPlayerScripts"), 2500)
 	end
 	if template then
 		if globals then
