@@ -1,6 +1,7 @@
 -- [[
 --  NULLSCAPE - Infinite Air Jump
---  Uses robust UserInputService listening to allow endless jumping in the air.
+--  Uses robust UserInputService listening to allow endless jumping in the air,
+--  with automatic GC discovery to play native animations, sounds, and particle effects.
 -- ]]
 
 local Players = game:GetService("Players")
@@ -20,6 +21,33 @@ local function shouldJump()
 	return controller and controller.InfiniteAirJumpEnabled == true
 end
 
+local function getActiveAnimator()
+	if typeof(getgc) ~= "function" then
+		return nil
+	end
+	for _, v in ipairs(getgc(true)) do
+		if typeof(v) == "table" and rawget(v, "PlayAnimation") and rawget(v, "Animations") then
+			local doubleJumpAnim = v.Animations.DoubleJump
+			if doubleJumpAnim and typeof(doubleJumpAnim) == "Instance" and doubleJumpAnim:IsA("AnimationTrack") then
+				return v
+			end
+		end
+	end
+	return nil
+end
+
+local function getActiveDoubleJump()
+	if typeof(getgc) ~= "function" then
+		return nil
+	end
+	for _, v in ipairs(getgc(true)) do
+		if typeof(v) == "table" and rawget(v, "UsedDoubleJump") and rawget(v, "AvailableJumps") then
+			return v
+		end
+	end
+	return nil
+end
+
 local function doAirJump()
 	local character = Players.LocalPlayer.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -29,21 +57,38 @@ local function doAirJump()
 		if state ~= Enum.HumanoidStateType.Running 
 			and state ~= Enum.HumanoidStateType.Landed 
 			and state ~= Enum.HumanoidStateType.Dead then
-			-- Refill native charges so game's UI and internals remain happy
-			pcall(function()
-				local playerScripts = Players.LocalPlayer:FindFirstChild("PlayerScripts")
-				local movement = playerScripts and playerScripts:FindFirstChild("Movement")
-				if movement then
-					-- If there is a native double jump object, try to refill it
-					local doubleJump = movement:FindFirstChild("DoubleJump")
-					if doubleJump and typeof(doubleJump) == "table" and doubleJump.AvailableJumps then
-						doubleJump.AvailableJumps.DoubleJump = 1
+			
+			local doubleJump = getActiveDoubleJump()
+			local triggered = false
+			
+			if doubleJump and doubleJump.AvailableJumps then
+				pcall(function()
+					-- Refill all jump types (DoubleJump, PocketBell, Wicked, etc.)
+					for k, _ in pairs(doubleJump.AvailableJumps) do
+						doubleJump.AvailableJumps[k] = 1
 					end
-				end
-			end)
+					-- Call native TryDoubleJump!
+					doubleJump:TryDoubleJump()
+					triggered = true
+				end)
+			end
 
-			-- Force Roblox physics state change to initiate another jump
-			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			if not triggered then
+				-- Fallback to manual physics jump if native method fails/unavailable
+				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+				
+				local animator = getActiveAnimator()
+				if animator then
+					pcall(function()
+						animator:PlayAnimation("DoubleJump")
+					end)
+				end
+				if doubleJump then
+					pcall(function()
+						doubleJump:UsedDoubleJump()
+					end)
+				end
+			end
 		end
 	end
 end
