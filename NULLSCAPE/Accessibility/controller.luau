@@ -156,15 +156,9 @@ function Controller:CleanUp()
 		table.clear(self.PermanentConnections)
 	end
 
-	-- Dọn dẹp kết nối nhảy vô hạn nếu hủy hoàn toàn
+	-- Don dep ket noi nhay vo han neu huy hoan toan
 	if self.Destroyed and (not globals or globals.activeAccessibilityController == self or globals.activeAccessibilityController == nil) then
-		if globals and globals.InfiniteAirJumpConnection then
-			pcall(function()
-				globals.InfiniteAirJumpConnection:Disconnect()
-			end)
-			globals.InfiniteAirJumpConnection = nil
-			globals.InfiniteAirJumpListenerConnected = nil
-		end
+		Executor.disableInfiniteAirJump()
 	end
 
 	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
@@ -201,6 +195,9 @@ function Controller:SetInfiniteAirJump(value)
 	end
 
 	self.InfiniteAirJumpEnabled = value
+	if not self.InfiniteAirJumpEnabled then
+		Executor.disableInfiniteAirJump()
+	end
 
 	if getgenv().Rayfield then
 		getgenv().Rayfield:Notify({

@@ -383,12 +383,15 @@ SettingsTab:CreateButton({
 
 local moduleCache = {}
 local function loadModule(path)
-	if moduleCache[path] then
+	if moduleCache[path] ~= nil then
 		return moduleCache[path]
 	end
 
+	local isLocal = not not (isfile and readfile and isfile(path))
+	warn("[NULLSCAPE] Loading module: " .. tostring(path) .. " (local=" .. tostring(isLocal) .. ")")
+
 	local source
-	if isfile and readfile and isfile(path) then
+	if isLocal then
 		source = readfile(path)
 	else
 		local githubRawUrl = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
@@ -407,6 +410,10 @@ local function loadModule(path)
 	local success, result = xpcall(chunk, traceback)
 	if not success then
 		error("[NULLSCAPE] Runtime failed in " .. tostring(path) .. ":\n" .. tostring(result), 2)
+	end
+
+	if result == nil then
+		warn("[NULLSCAPE] WARNING: Module " .. tostring(path) .. " returned nil!")
 	end
 
 	moduleCache[path] = result

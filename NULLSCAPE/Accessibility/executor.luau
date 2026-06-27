@@ -20,6 +20,12 @@ function Executor.initializeInfiniteAirJump()
     return InfiniteAirJump.initialize()
 end
 
+function Executor.disableInfiniteAirJump()
+    if typeof(InfiniteAirJump.disable) == "function" then
+        InfiniteAirJump.disable()
+    end
+end
+
 function Executor.initializeAntiBonk()
     return AntiBonk.initialize()
 end
