@@ -6,6 +6,7 @@
 -- ]]
 
 local Players = game:GetService("Players")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
@@ -134,9 +135,97 @@ local function findNamedAnimation(root)
 	return nil
 end
 
+local function getInventoryHandler()
+	local globals = getGlobals()
+	if typeof(globals.InfiniteAirJumpInventoryHandler) == "table" then
+		return globals.InfiniteAirJumpInventoryHandler
+	end
+
+	local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+	local core = clientModules and clientModules:FindFirstChild("Core")
+	local playerData = core and core:FindFirstChild("PlayerData")
+	local inventoryHandlerModule = playerData and playerData:FindFirstChild("InventoryHandler")
+	if not inventoryHandlerModule then
+		return nil
+	end
+
+	local success, inventoryHandler = pcall(require, inventoryHandlerModule)
+	if success and typeof(inventoryHandler) == "table" then
+		globals.InfiniteAirJumpInventoryHandler = inventoryHandler
+		return inventoryHandler
+	end
+
+	return nil
+end
+
+local function getCosmetics()
+	local globals = getGlobals()
+	if typeof(globals.InfiniteAirJumpCosmetics) == "table" then
+		return globals.InfiniteAirJumpCosmetics
+	end
+
+	local cosmeticsModule = ReplicatedStorage:FindFirstChild("Cosmetics")
+	if not cosmeticsModule then
+		return nil
+	end
+
+	local success, cosmetics = pcall(require, cosmeticsModule)
+	if success and typeof(cosmetics) == "table" then
+		globals.InfiniteAirJumpCosmetics = cosmetics
+		return cosmetics
+	end
+
+	return nil
+end
+
+local function getEquippedAnimationPackId()
+	local inventoryHandler = getInventoryHandler()
+	if not (inventoryHandler and typeof(inventoryHandler.GetEquipped) == "function") then
+		return ""
+	end
+
+	local success, equipped = pcall(function()
+		return inventoryHandler.GetEquipped("AnimationPack")
+	end)
+	if not success then
+		return ""
+	end
+
+	return tostring(equipped or "")
+end
+
+local function getEquippedAnimationPackRoot()
+	local equipped = getEquippedAnimationPackId()
+	if equipped == "" then
+		return nil, equipped
+	end
+
+	local cosmetics = getCosmetics()
+	if not (cosmetics and typeof(cosmetics.GetById) == "function") then
+		return nil, equipped
+	end
+
+	local success, cosmetic = pcall(function()
+		return cosmetics.GetById(equipped)
+	end)
+	if success and typeof(cosmetic) == "table" then
+		local animations = cosmetic.Animations
+		if typeof(animations) == "Instance" then
+			return animations, equipped
+		end
+	end
+
+	return nil, equipped
+end
+
 local function resolveDoubleJumpAnimationId()
 	local globals = getGlobals()
-	if type(globals.InfiniteAirJumpAnimationId) == "string" and globals.InfiniteAirJumpAnimationId ~= "" then
+	local equippedRoot, equippedPackId = getEquippedAnimationPackRoot()
+	local cacheKey = equippedPackId ~= "" and equippedPackId or "Default"
+	if globals.InfiniteAirJumpAnimationKey == cacheKey
+		and type(globals.InfiniteAirJumpAnimationId) == "string"
+		and globals.InfiniteAirJumpAnimationId ~= ""
+	then
 		return globals.InfiniteAirJumpAnimationId
 	end
 
@@ -145,6 +234,7 @@ local function resolveDoubleJumpAnimationId()
 	local animationInstances = animationsFolder and animationsFolder:FindFirstChild("Instances")
 	local defaultAnimations = animationInstances and animationInstances:FindFirstChild("Default")
 	local roots = {
+		equippedRoot,
 		defaultAnimations,
 		localPlayer.Character,
 		localPlayer:FindFirstChild("PlayerScripts"),
@@ -153,11 +243,14 @@ local function resolveDoubleJumpAnimationId()
 	for _, root in ipairs(roots) do
 		local animation = findNamedAnimation(root)
 		if animation then
+			globals.InfiniteAirJumpAnimationKey = cacheKey
 			globals.InfiniteAirJumpAnimationId = animation.AnimationId
 			return animation.AnimationId
 		end
 	end
 
+	globals.InfiniteAirJumpAnimationKey = nil
+	globals.InfiniteAirJumpAnimationId = nil
 	return nil
 end
 
@@ -340,6 +433,8 @@ function Logic.initialize()
 		globals.InfiniteAirJumpLastBarRefresh = 0
 		globals.InfiniteAirJumpLastDoubleJump = nil
 		globals.InfiniteAirJumpLastMovement = nil
+		globals.InfiniteAirJumpAnimationKey = nil
+		globals.InfiniteAirJumpAnimationId = nil
 		setStatus("bypass ready")
 	end)
 
@@ -383,6 +478,9 @@ function Logic.disable()
 	globals.InfiniteAirJumpLastRequestAt = nil
 	globals.InfiniteAirJumpLastMovement = nil
 	globals.InfiniteAirJumpLastDoubleJump = nil
+	globals.InfiniteAirJumpAnimationKey = nil
+	globals.InfiniteAirJumpAnimationId = nil
+	globals.InfiniteAirJumpLastAnimationTrack = nil
 	globals.InfiniteAirJumpListenerConnected = nil
 end
 
