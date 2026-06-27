@@ -14,7 +14,7 @@ local LocalPlayer = Players.LocalPlayer
 local BLOCKER_MODE = "Blocker"
 local BARRIER_MODE = "Barrier"
 local BLOCKER_FOLDER_NAME = "NULLSCAPE_TripmineBlockers"
-local BLOCKER_SCAN_RADIUS = 90
+local BLOCKER_SCAN_RADIUS = 64
 local BLOCKER_BASE_RADIUS = 2.25
 local BLOCKER_REPEL_PADDING = 0.75
 local BLOCKER_REPEL_SPEED = 34
@@ -22,7 +22,10 @@ local BLOCKER_REPEL_VERTICAL_LIFT = 2.5
 local BLOCKER_RADIUS_TOUCH_PADDING = 0.65
 local BLOCKER_COLLISION_HEIGHT = 4.25
 local BLOCKER_VERTICAL_OFFSET = 1.8
-local ACTIVE_WATCH_INTERVAL = 0.08
+local BLOCKER_CREATE_PADDING = 3
+local BLOCKER_APPROACH_PADDING = 2.5
+local BLOCKER_MAX_ACTIVE = 4
+local ACTIVE_WATCH_INTERVAL = 0.12
 local IDLE_WATCH_INTERVAL = 0.35
 
 local activeController = nil
@@ -173,6 +176,50 @@ local function isTripmineGiftActive(gift)
     return getGiftPosition(gift) ~= nil
 end
 
+local function getHorizontal(vector)
+    return Vector3.new(vector.X, 0, vector.Z)
+end
+
+local function getTripmineThreatScore(hrp, giftPos, dist, radius)
+    local velocity = getHorizontal(hrp.AssemblyLinearVelocity or hrp.Velocity)
+    local speed = velocity.Magnitude
+    local score = dist
+
+    if speed > 8 then
+        local travel = velocity.Unit * math.clamp(speed * 0.28, 4, 18)
+        local projectedPos = hrp.Position + travel
+        local projectedDist = (getHorizontal(projectedPos - giftPos)).Magnitude
+        local toMine = getHorizontal(giftPos - hrp.Position)
+        local ahead = toMine.Magnitude > 0.05 and velocity.Unit:Dot(toMine.Unit) or 0
+
+        if ahead > 0.25 and projectedDist <= radius + BLOCKER_APPROACH_PADDING then
+            score = math.min(score, projectedDist - speed * 0.02)
+        end
+    end
+
+    return score
+end
+
+local function shouldCreateBlocker(hrp, giftPos, dist, radius)
+    if dist <= radius + BLOCKER_CREATE_PADDING then
+        return true
+    end
+
+    local velocity = getHorizontal(hrp.AssemblyLinearVelocity or hrp.Velocity)
+    if velocity.Magnitude <= 12 then
+        return false
+    end
+
+    local toMine = getHorizontal(giftPos - hrp.Position)
+    if toMine.Magnitude <= 0.05 or velocity.Unit:Dot(toMine.Unit) <= 0.25 then
+        return false
+    end
+
+    local projectedPos = hrp.Position + velocity.Unit * math.clamp(velocity.Magnitude * 0.28, 4, 18)
+    local projectedDist = (getHorizontal(projectedPos - giftPos)).Magnitude
+    return projectedDist <= radius + BLOCKER_APPROACH_PADDING
+end
+
 local function ensureBlocker(giftId, gift, giftPos, dist)
     if typeof(giftPos) ~= "Vector3" then
         destroyBlocker(giftId)
@@ -249,21 +296,44 @@ local function updateBlockers()
     end
 
     local hrpPos = hrp.Position
+    local candidates = {}
     local seen = {}
+
     for giftId, gift in pairs(GCH.Gifts) do
         if isTripmineGiftActive(gift) then
             local giftPos = getGiftPosition(gift)
             local dist = (hrpPos - giftPos).Magnitude
-            if dist <= BLOCKER_SCAN_RADIUS then
-                seen[giftId] = true
-                ensureBlocker(giftId, gift, giftPos, dist)
-                applyTripmineRepel(hrp, gift, dist)
+            local radius = getBlockerRadius(gift)
+
+            if dist <= BLOCKER_SCAN_RADIUS and shouldCreateBlocker(hrp, giftPos, dist, radius) then
+                table.insert(candidates, {
+                    GiftId = giftId,
+                    Gift = gift,
+                    Position = giftPos,
+                    Distance = dist,
+                    Score = getTripmineThreatScore(hrp, giftPos, dist, radius),
+                })
             else
                 destroyBlocker(giftId)
             end
         else
             destroyBlocker(giftId)
         end
+    end
+
+    table.sort(candidates, function(a, b)
+        return a.Score < b.Score
+    end)
+
+    for i, candidate in ipairs(candidates) do
+        if i > BLOCKER_MAX_ACTIVE then
+            destroyBlocker(candidate.GiftId)
+            continue
+        end
+
+        seen[candidate.GiftId] = true
+        ensureBlocker(candidate.GiftId, candidate.Gift, candidate.Position, candidate.Distance)
+        applyTripmineRepel(hrp, candidate.Gift, candidate.Distance)
     end
 
     for giftId in pairs(blockerParts) do

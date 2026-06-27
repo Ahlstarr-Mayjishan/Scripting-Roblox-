@@ -161,6 +161,62 @@ pcall(function()
 	end
 end)
 
+-- Defensively patch Rayfield's Notification template to prevent "Icon is not a valid member of Frame" crash
+task.spawn(function()
+	local function patchRayfieldGui(gui)
+		if not gui or not (gui:IsA("ScreenGui") and string.find(gui.Name:lower(), "rayfield")) then
+			return
+		end
+
+		local notifications = gui:WaitForChild("Notifications", 10)
+		if not notifications then
+			return
+		end
+
+		local function patchNotification(notif)
+			if notif:IsA("Frame") and not notif:FindFirstChild("Icon") then
+				local dummyIcon = Instance.new("ImageLabel")
+				dummyIcon.Name = "Icon"
+				dummyIcon.Image = ""
+				dummyIcon.BackgroundTransparency = 1
+				dummyIcon.ImageTransparency = 1
+				dummyIcon.Visible = false
+				dummyIcon.Parent = notif
+			end
+		end
+
+		local template = notifications:WaitForChild("Template", 5)
+		if template then
+			patchNotification(template)
+		end
+
+		local conn = notifications.ChildAdded:Connect(patchNotification)
+		gui.Destroying:Connect(function()
+			conn:Disconnect()
+		end)
+
+		for _, child in ipairs(notifications:GetChildren()) do
+			patchNotification(child)
+		end
+	end
+
+	local CoreGui = game:GetService("CoreGui")
+	local PlayerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui", 10)
+
+	if CoreGui then
+		CoreGui.ChildAdded:Connect(patchRayfieldGui)
+		for _, child in ipairs(CoreGui:GetChildren()) do
+			task.spawn(patchRayfieldGui, child)
+		end
+	end
+	if PlayerGui then
+		PlayerGui.ChildAdded:Connect(patchRayfieldGui)
+		for _, child in ipairs(PlayerGui:GetChildren()) do
+			task.spawn(patchRayfieldGui, child)
+		end
+	end
+end)
+
 local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
 

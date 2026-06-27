@@ -199,10 +199,14 @@ end
 
 
 local function hasWorkingNativeEnemyESP(enemy)
-	for _, child in ipairs(enemy:GetChildren()) do
+	for _, child in ipairs(enemy:GetDescendants()) do
 		if (child.Name == "ESP" or child.Name == "ESPCrayon") and child:IsA("BillboardGui") then
 			local enabledOk = child.Enabled ~= false
-			local adorneeOk = child.Adornee ~= nil and child.Adornee.Parent ~= nil
+			local adornee = child.Adornee
+			local adorneeOk = adornee ~= nil and adornee.Parent ~= nil
+			if not adorneeOk and child.Parent and child.Parent:IsA("BasePart") then
+				adorneeOk = true
+			end
 			if enabledOk and adorneeOk then
 				return true
 			end
@@ -244,6 +248,15 @@ local function findEnemyVisualPart(enemy, hrp)
 
 	if enemy:IsA("BasePart") then
 		return enemy
+	end
+
+	-- Springer keeps its visual head under horse.Head while the root model holds shockwaves/collision.
+	if isSpringerEnemy(enemy) then
+		local horse = enemy:FindFirstChild("horse")
+		local springerHead = horse and horse:FindFirstChild("Head")
+		if springerHead and springerHead:IsA("BasePart") then
+			return springerHead
+		end
 	end
 
 	-- Search for Head/head (case-insensitive and recursive if nested inside sub-models), resolving BillboardGuis if needed
@@ -640,6 +653,30 @@ local function setEnemyESPLabel(gui, text, color)
 	end
 end
 
+local function getEnemyFallbackParent(enemy, part)
+	if isSpringerEnemy(enemy) then
+		local horse = enemy:FindFirstChild("horse")
+		if horse then
+			return horse
+		end
+	end
+
+	return enemy or (part and part.Parent)
+end
+
+local function getEnemyFallbackSize(enemy, gui)
+	local headGui = enemy and (enemy:FindFirstChild("head", true) or enemy:FindFirstChild("Head", true))
+	if headGui and headGui:IsA("BillboardGui") then
+		return headGui.Size
+	end
+
+	if gui and gui:IsA("BillboardGui") and typeof(gui.Size) == "UDim2" then
+		return gui.Size
+	end
+
+	return UDim2.fromScale(4, 4)
+end
+
 local function updateNativeLikeEnemyFallbacks(saved, desired)
 	if not saved.NativeEnemyFallbacks then
 		saved.NativeEnemyFallbacks = {}
@@ -668,7 +705,7 @@ local function updateNativeLikeEnemyFallbacks(saved, desired)
 			else
 				gui = createFallbackEnemyESP()
 			end
-			gui.Parent = enemy
+			gui.Parent = getEnemyFallbackParent(enemy, data.Part)
 			saved.NativeEnemyFallbacks[enemy] = gui
 		end
 
@@ -679,7 +716,7 @@ local function updateNativeLikeEnemyFallbacks(saved, desired)
 			gui.Enabled = true
 		end)
 		pcall(function()
-			gui.Size = data.Part.Size
+			gui.Size = getEnemyFallbackSize(enemy, gui)
 		end)
 		setEnemyESPLabel(gui, getEnemyDisplayName(enemy), data.Color)
 	end
