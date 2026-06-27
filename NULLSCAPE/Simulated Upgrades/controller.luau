@@ -35,6 +35,10 @@ local Controller = {
 
 	AutoCollectEnabled = false,
 	AutoCollectRange = 20,
+	AutoCollectGiftRange = 20,
+	AutoCollectMedalRange = 0,
+	AutoCollectInstrumentRange = 0,
+	AutoCollectTargets = { "Gift/GoldenGift", "Instrument (Cadence)", "Medal" },
 	AutoCollectMode = "Legit",
 
 	MatrixTetrahedronEnabled = false, -- Mô phỏng Matrix Tetrahedron di chuyển instant acceleration
@@ -989,6 +993,24 @@ end
 
 function Controller:SetAutoCollectRange(value)
 	self.AutoCollectRange = value
+	self.AutoCollectGiftRange = value
+end
+
+function Controller:SetAutoCollectGiftRange(value)
+	self.AutoCollectGiftRange = value
+	self.AutoCollectRange = value
+end
+
+function Controller:SetAutoCollectMedalRange(value)
+	self.AutoCollectMedalRange = value
+end
+
+function Controller:SetAutoCollectInstrumentRange(value)
+	self.AutoCollectInstrumentRange = value
+end
+
+function Controller:SetAutoCollectTargets(value)
+	self.AutoCollectTargets = value or {}
 end
 
 -- Thiết lập chế độ Auto Collect (Legit / Blatant)

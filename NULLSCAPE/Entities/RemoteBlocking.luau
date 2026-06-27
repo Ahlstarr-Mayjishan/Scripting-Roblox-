@@ -96,8 +96,25 @@ Logic.Config = {
         Remotes = { "Died" },
         Keywords = { "VoidImplosion" },
         LegitKeywords = { "VoidImplosion" }
+    },
+    ["Celestial"] = {
+        ControllerFlag = "CelestialImmune",
+        Remotes = { "Died" },
+        Keywords = { "Celestial" },
+        LegitKeywords = { "Celestial" }
+    },
+    ["Scrapmaw"] = {
+        ControllerFlag = "ScrapmawImmune",
+        Remotes = { "Died" },
+        Keywords = { "Scrapmaw" },
+        LegitKeywords = { "Scrapmaw" }
+    },
+    ["Skinwalker"] = {
+        ControllerFlag = "SkinwalkerImmune",
+        Remotes = { "Died" },
+        Keywords = { "Skinwalker" },
+        LegitKeywords = { "Skinwalker" }
     }
-    -- Thêm cấu hình chặn Remote cho thực thể mới tại đây
 }
 
 -- Bảng tra cứu nhanh tên các RemoteEvent cần chặn (Tự động xây dựng từ cấu hình để tối ưu O(1))

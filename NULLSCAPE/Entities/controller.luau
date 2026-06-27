@@ -36,6 +36,9 @@ local Controller = {
 	RazorbloomImmune = false,
 	CadenceImmune = false,
 	VoidImplosionImmune = false,
+	CelestialImmune = false,
+	ScrapmawImmune = false,
+	CatalystImmune = false,
 	SpringerImmunityMode = "Legit",
 	Destroyed = false,
 
@@ -314,6 +317,12 @@ function Controller:SetImmunity(entityName, value)
 		end
 	elseif entityName == "Cadence" then
 		self.CadenceImmune = value
+	elseif entityName == "Celestial" then
+		self.CelestialImmune = value
+	elseif entityName == "Scrapmaw" then
+		self.ScrapmawImmune = value
+	elseif entityName == "Catalyst" then
+		self.CatalystImmune = value
 	elseif isSpecialImmunityEntity(entityName) then
 		self[SPECIAL_IMMUNITY_FLAGS[entityName]] = value == true
 		if value then
@@ -387,6 +396,7 @@ function Controller:SetImmunity(entityName, value)
 			or entityName == "ShadowGuardian"
 			or entityName == "Sigil"
 			or entityName == "Cadence"
+			or entityName == "Catalyst"
 		then
 			Executor.disableImmunityForType(GC, entityName)
 		elseif entityName == "Skinwalker" then

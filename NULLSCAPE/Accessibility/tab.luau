@@ -44,6 +44,8 @@ return function(Client, Controller)
 		end,
 	})
 
+
+
 	Tab:CreateSection("Rail Assist")
 
 	Tab:CreateToggle({

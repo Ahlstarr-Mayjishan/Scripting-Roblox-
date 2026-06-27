@@ -95,6 +95,33 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateToggle({
+		Name = "Celestial",
+		CurrentValue = Controller.CelestialImmune,
+		Flag = "ImmunityCelestialToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Celestial", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Scrapmaw",
+		CurrentValue = Controller.ScrapmawImmune,
+		Flag = "ImmunityScrapmawToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Scrapmaw", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Catalyst",
+		CurrentValue = Controller.CatalystImmune,
+		Flag = "ImmunityCatalystToggle",
+		Callback = function(Value)
+			Controller:SetImmunity("Catalyst", Value)
+		end,
+	})
+
 	Tab:CreateSection("Entities - Special Immunity")
 
 	Tab:CreateToggle({

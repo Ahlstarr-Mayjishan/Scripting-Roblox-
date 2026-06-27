@@ -195,6 +195,8 @@ function Controller:SetInfiniteAirJump(value)
 	end
 end
 
+
+
 function Controller:RefreshRailAssistHook()
 	if self.RailAssistSuiteEnabled then
 		if not Executor.enableRailAssist() then

@@ -117,7 +117,10 @@ pcall(function()
 			MomentumReductionSlider = 100, -- Mặc định là 100% giảm quán tính
 			SpeedBuffSelectionsDropdown = {},
 			AutoCollectGiftsToggle = false,
+			AutoCollectTargetsDropdown = { "Gift/GoldenGift", "Instrument (Cadence)", "Medal" },
 			AutoCollectRangeSlider = 20,
+			AutoCollectMedalRangeSlider = 0,
+			AutoCollectInstrumentRangeSlider = 0,
 			TripmineBarrierToggle = false,
 			SimulateDefuseKitToggle = false,
 			DefuseKitStackSlider = 3,

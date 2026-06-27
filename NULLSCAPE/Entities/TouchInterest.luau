@@ -18,6 +18,7 @@ Logic.Config = {
     ["ShadowGuardian"] = "GuardianImmune",
     ["Sigil"] = "SigilImmune",
     ["Cadence"] = "CadenceImmune",
+    ["Catalyst"] = "CatalystImmune",
     -- Thêm thực thể TouchInterest mới tại đây, ví dụ:
     -- ["Demon"] = "DemonImmune",
 }
