@@ -526,12 +526,20 @@ local function getEnemyDisplayName(enemy)
 end
 
 local function findNativeEnemyESPTemplate()
+	local globals = getgenv()._NULLSCAPE_Globals
+	if globals and globals.NativeEnemyESPTemplate and globals.NativeEnemyESPTemplate.Parent then
+		return globals.NativeEnemyESPTemplate
+	end
+
 	local players = game:GetService("Players")
 	local localPlayer = players.LocalPlayer
 	local playerScripts = localPlayer and localPlayer:FindFirstChild("PlayerScripts")
 	if playerScripts then
 		for _, inst in ipairs(playerScripts:GetDescendants()) do
 			if (inst.Name == "ESP" or inst.Name == "ESPCrayon") and inst:IsA("BillboardGui") then
+				if globals then
+					globals.NativeEnemyESPTemplate = inst
+				end
 				return inst
 			end
 		end
@@ -541,6 +549,9 @@ local function findNativeEnemyESPTemplate()
 	if enemies then
 		for _, inst in ipairs(enemies:GetDescendants()) do
 			if (inst.Name == "ESP" or inst.Name == "ESPCrayon") and inst:IsA("BillboardGui") then
+				if globals then
+					globals.NativeEnemyESPTemplate = inst
+				end
 				return inst
 			end
 		end
@@ -594,7 +605,11 @@ local function updateNativeLikeEnemyFallbacks(saved, desired)
 	for enemy, data in pairs(desired) do
 		local gui = saved.NativeEnemyFallbacks[enemy]
 		if not gui or not gui.Parent then
-			local template = findNativeEnemyESPTemplate()
+			local template = saved.NativeEnemyESPTemplate
+			if not (template and template.Parent) then
+				template = findNativeEnemyESPTemplate()
+				saved.NativeEnemyESPTemplate = template
+			end
 			if template then
 				gui = template:Clone()
 				gui.Name = "NULLSCAPE_NativeEnemyESP"

@@ -120,6 +120,7 @@ end
 
 local hasInRoundValue = false
 local matchLoopsActive = false
+local instantUpdateQueued = false
 local folderConnections = {}
 
 -- Forward references cho việc quản lý các loop
@@ -157,7 +158,11 @@ local function checkActiveState()
 end
 
 local function setFeatureToggle(fieldName, value)
-	Controller[fieldName] = value == true
+	local nextValue = value == true
+	if Controller[fieldName] == nextValue then
+		return
+	end
+	Controller[fieldName] = nextValue
 	Logic.syncSimulatedUpgradeHud(Controller)
 	triggerInstantUpdate()
 end
@@ -682,14 +687,24 @@ end
 
 -- Hàm trigger cập nhật ESP tức thì khi thay đổi cấu hình
 triggerInstantUpdate = function()
-	updateRunningState()
-	local char = LocalPlayer.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if hrp and checkActiveState() then
-		pcall(function()
-			Executor.updateESPStyles(Controller, GC, hrp)
-		end)
+	if instantUpdateQueued then
+		return
 	end
+	instantUpdateQueued = true
+	task.defer(function()
+		instantUpdateQueued = false
+		if Controller.Destroyed then
+			return
+		end
+		updateRunningState()
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp and checkActiveState() then
+			pcall(function()
+				Executor.updateESPStyles(Controller, GC, hrp)
+			end)
+		end
+	end)
 end
 
 -- Bật/tắt radar tổng
@@ -763,6 +778,31 @@ function Controller:SetEnemyESP(value, color)
 end
 
 -- Bật/tắt Auto Collect
+function Controller:SetESPSelections(selections)
+	selections = typeof(selections) == "table" and selections or {}
+	local changed = false
+
+	local function apply(fieldName, optionName)
+		local nextValue = table.find(selections, optionName) ~= nil
+		if self[fieldName] ~= nextValue then
+			self[fieldName] = nextValue
+			changed = true
+		end
+	end
+
+	apply("GiftESPEnabled", "Gift")
+	apply("TripmineESPEnabled", "Tripmine")
+	apply("CadenceESPEnabled", "Cadence")
+	apply("AltarESPEnabled", "Altar")
+	apply("PlayerESPEnabled", "Player")
+	apply("EnemyESPEnabled", "Enemy")
+
+	if changed then
+		Logic.syncSimulatedUpgradeHud(self)
+		triggerInstantUpdate()
+	end
+end
+
 function Controller:SetAutoCollectEnabled(value)
 	self.AutoCollectEnabled = value
 end

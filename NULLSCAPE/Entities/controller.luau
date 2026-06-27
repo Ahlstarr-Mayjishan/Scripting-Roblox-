@@ -519,6 +519,45 @@ function Controller:StartSkinwalkerEvasion()
 end
 
 -- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
+local function findNativeEnemyESPTemplate()
+	local players = game:GetService("Players")
+	local localPlayer = players.LocalPlayer
+	local playerScripts = localPlayer and localPlayer:FindFirstChild("PlayerScripts")
+	if playerScripts then
+		for _, inst in ipairs(playerScripts:GetDescendants()) do
+			if (inst.Name == "ESP" or inst.Name == "ESPCrayon") and inst:IsA("BillboardGui") then
+				return inst
+			end
+		end
+	end
+
+	local enemies = workspace:FindFirstChild("Enemies")
+	if enemies then
+		for _, inst in ipairs(enemies:GetDescendants()) do
+			if (inst.Name == "ESP" or inst.Name == "ESPCrayon") and inst:IsA("BillboardGui") then
+				return inst
+			end
+		end
+	end
+
+	return nil
+end
+
+local function getEnemyDisplayName(enemy)
+	local nameLower = enemy.Name:lower()
+	if nameLower == "shadowguardian" then
+		return "voidboundguardian"
+	elseif nameLower == "shadowbaby" then
+		return "voidboundbaby"
+	elseif nameLower == "skinwalker" then
+		return "husk"
+	elseif nameLower == "mirage" then
+		return "???"
+	end
+	return nameLower
+end
+
+-- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
 local function processEntity(enemy)
 	if not enemy or not (enemy:IsA("Model") or enemy:IsA("BasePart")) or enemy.Name == "Skinwalkers" then
 		return
@@ -526,23 +565,60 @@ local function processEntity(enemy)
 
 	-- Tạo phần đầu giả lập "head" (chữ thường) cho thực thể 3D để kích hoạt hệ thống ESP nguyên bản của game
 	if enemy:IsA("Model") and not enemy:FindFirstChild("head") then
-		local actualHead = enemy:FindFirstChild("Head", true) or enemy:FindFirstChild("head", true) or enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
-		if actualHead then
-			local fakeHead = Instance.new("Part")
-			fakeHead.Name = "head"
-			fakeHead.Size = Vector3.new(2, 2, 2)
-			fakeHead.Transparency = 1
-			fakeHead.CanCollide = false
-			fakeHead.Anchored = false
-			fakeHead.Parent = enemy
+		task.spawn(function()
+			-- Chờ cho đến khi các bộ phận chính của thực thể được tải đầy đủ
+			local actualHead = enemy:WaitForChild("Head", 5) or enemy:WaitForChild("head", 5)
+			if not actualHead then
+				local horse = enemy:WaitForChild("horse", 5)
+				if horse then
+					actualHead = horse:WaitForChild("Head", 5) or horse:WaitForChild("head", 5)
+				end
+			end
+			if not actualHead then
+				actualHead = enemy:FindFirstChildWhichIsA("BasePart", true)
+			end
 
-			local weld = Instance.new("WeldConstraint")
-			weld.Part0 = fakeHead
-			weld.Part1 = actualHead
-			weld.Parent = fakeHead
+			if actualHead and enemy.Parent and not enemy:FindFirstChild("head") then
+				local fakeHead = Instance.new("Part")
+				fakeHead.Name = "head"
+				fakeHead.Size = Vector3.new(2, 2, 2)
+				fakeHead.Transparency = 1
+				fakeHead.CanCollide = false
+				fakeHead.Anchored = false
+				fakeHead.Parent = enemy
 
-			fakeHead.CFrame = actualHead.CFrame
-		end
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = fakeHead
+				weld.Part1 = actualHead
+				weld.Parent = fakeHead
+
+				fakeHead.CFrame = actualHead.CFrame
+
+				-- Chờ một chút để xem hệ thống gốc của game có tự động gắn ESP hay không
+				task.wait(0.2)
+				if enemy.Parent and not (enemy:FindFirstChild("ESP") or enemy:FindFirstChild("ESPCrayon")) then
+					-- Nếu script gốc của game bỏ lỡ hoặc không kịp gắn, chúng ta tự gắn thủ công bằng template gốc
+					local template = findNativeEnemyESPTemplate()
+					if template then
+						local cloned = template:Clone()
+						cloned.Adornee = enemy
+						cloned.Enabled = true
+						cloned.Size = fakeHead.Size
+						
+						local label = cloned:FindFirstChild("Label", true)
+						if label and label:IsA("TextLabel") then
+							if cloned.Name == "ESPCrayon" then
+								local StupidNames = { "bingle", "dangle", "glorp", "zorp", "splurg", "boing", "sproing", "floop" }
+								label.Text = StupidNames[math.random(1, #StupidNames)]
+							else
+								label.Text = getEnemyDisplayName(enemy)
+							end
+						end
+						cloned.Parent = enemy
+					end
+				end
+			end
+		end)
 	end
 
 	-- Tránh việc đăng ký nhiều lần trùng lặp cho cùng một thực thể

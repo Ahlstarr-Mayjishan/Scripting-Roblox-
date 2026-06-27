@@ -27,23 +27,22 @@ return function(Client, Controller)
 		MultipleOptions = true,
 		Flag = "ESPSelectionDropdown",
 		Callback = function(SelectedOptions)
+			if isSettingESP then
+				return
+			end
 			if typeof(SelectedOptions) ~= "table" then
 				SelectedOptions = {}
 			end
-			local giftSelected = table.find(SelectedOptions, "Gift") ~= nil
-			local tripmineSelected = table.find(SelectedOptions, "Tripmine") ~= nil
-			local cadenceSelected = table.find(SelectedOptions, "Cadence") ~= nil
-			local altarSelected = table.find(SelectedOptions, "Altar") ~= nil
-			local playerSelected = table.find(SelectedOptions, "Player") ~= nil
-			local enemySelected = table.find(SelectedOptions, "Enemy") ~= nil
-
-			Controller:SetGiftESP(giftSelected)
-			Controller:SetTripmineESP(tripmineSelected)
-			Controller:SetCadenceESP(cadenceSelected)
-			Controller:SetAltarESP(altarSelected)
-			-- Player/Enemy dùng cơ chế highlight tạm thời 8s của game gốc
-			Controller:SetPlayerESP(playerSelected)
-			Controller:SetEnemyESP(enemySelected)
+			if typeof(Controller.SetESPSelections) == "function" then
+				Controller:SetESPSelections(SelectedOptions)
+			else
+				Controller:SetGiftESP(table.find(SelectedOptions, "Gift") ~= nil)
+				Controller:SetTripmineESP(table.find(SelectedOptions, "Tripmine") ~= nil)
+				Controller:SetCadenceESP(table.find(SelectedOptions, "Cadence") ~= nil)
+				Controller:SetAltarESP(table.find(SelectedOptions, "Altar") ~= nil)
+				Controller:SetPlayerESP(table.find(SelectedOptions, "Player") ~= nil)
+				Controller:SetEnemyESP(table.find(SelectedOptions, "Enemy") ~= nil)
+			end
 
 			if not isSettingESP and ESPSelection then
 				isSettingESP = true
