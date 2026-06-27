@@ -48,6 +48,8 @@ local function getActiveDoubleJump()
 	return nil
 end
 
+local JUMP_TYPES = { "Highrise", "MedalStatus", "DoubleJump", "PocketBell", "Wicked", "Spirit" }
+
 local function doAirJump()
 	local character = Players.LocalPlayer.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -59,22 +61,27 @@ local function doAirJump()
 			and state ~= Enum.HumanoidStateType.Dead then
 			
 			local doubleJump = getActiveDoubleJump()
-			local triggered = false
+			local hasNativeJumpUpgrade = false
 			
 			if doubleJump and doubleJump.AvailableJumps then
-				pcall(function()
-					-- Refill all jump types (DoubleJump, PocketBell, Wicked, etc.)
-					for k, _ in pairs(doubleJump.AvailableJumps) do
-						doubleJump.AvailableJumps[k] = 1
+				for _, jumpType in ipairs(JUMP_TYPES) do
+					if doubleJump.AvailableJumps[jumpType] ~= nil then
+						hasNativeJumpUpgrade = true
+						doubleJump.AvailableJumps[jumpType] = 1
 					end
-					-- Call native TryDoubleJump!
+				end
+			end
+
+			local triggered = false
+			if hasNativeJumpUpgrade and doubleJump then
+				pcall(function()
 					doubleJump:TryDoubleJump()
 					triggered = true
 				end)
 			end
 
 			if not triggered then
-				-- Fallback to manual physics jump if native method fails/unavailable
+				-- Fallback to manual physics jump if native method fails/unavailable or no upgrade bought
 				humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 				
 				local animator = getActiveAnimator()

@@ -262,6 +262,7 @@ local Window = Rayfield:CreateWindow({
 		Enabled = true,
 		FolderName = "NULLSCAPE",
 		FileName = "master_settings",
+		AutoSave = true,
 	},
 	Discord = {
 		Enabled = false,

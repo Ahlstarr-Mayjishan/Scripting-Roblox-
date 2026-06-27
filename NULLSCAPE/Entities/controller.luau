@@ -1137,6 +1137,80 @@ local function initializeStatusEffectHook()
 		end
 	end)
 
+	-- Hook SettingsHandler to bypass camera shakes, blurs, and flash effects natively
+	pcall(function()
+		local ReplicatedFirst = game:GetService("ReplicatedFirst")
+		local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+		local core = clientModules and clientModules:FindFirstChild("Core")
+		local playerData = core and core:FindFirstChild("PlayerData")
+		local settingsModule = playerData and playerData:FindFirstChild("SettingsHandler")
+		if settingsModule and settingsModule:IsA("ModuleScript") then
+			local SettingsHandler = require(settingsModule)
+			if typeof(SettingsHandler) == "table" then
+				if typeof(SettingsHandler.Get) == "function" and not globals.SettingsHooked then
+					local oldGet = SettingsHandler.Get
+					SettingsHandler.Get = function(keys, ...)
+						local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+						if activeCtrl and activeCtrl.SpringerImmunityMode == "Blatant" then
+							if typeof(keys) == "table" then
+								if keys[1] == "Graphics" and (keys[2] == "NoBlur" or keys[2] == "Photosensitivity" or keys[2] == "NoVFXWobble") then
+									return true
+								end
+							end
+						end
+						return oldGet(keys, ...)
+					end
+					
+					if typeof(SettingsHandler.GetSettings) == "function" then
+						local oldGetSettings = SettingsHandler.GetSettings
+						SettingsHandler.GetSettings = function(...)
+							local settingsTable = oldGetSettings(...)
+							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+							if activeCtrl and activeCtrl.SpringerImmunityMode == "Blatant" then
+								if typeof(settingsTable) == "table" then
+									settingsTable.Graphics = settingsTable.Graphics or {}
+									settingsTable.Graphics.NoBlur = true
+									settingsTable.Graphics.Photosensitivity = true
+									settingsTable.Graphics.NoVFXWobble = true
+								end
+							end
+							return settingsTable
+						end
+					end
+					
+					globals.SettingsHooked = true
+				end
+			end
+		end
+	end)
+
+	-- Khởi chạy vòng lặp ngầm để liên tục khử kích thước Blur và các hiệu ứng méo/đỏ màn hình
+	task.spawn(function()
+		while true do
+			task.wait(0.2)
+			local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+			if activeCtrl and activeCtrl.SpringerImmunityMode == "Blatant" then
+				pcall(function()
+					local lighting = game:GetService("Lighting")
+					local blur = lighting:FindFirstChild("Blur")
+					if blur and blur:IsA("BlurEffect") and blur.Size > 0 then
+						blur.Size = 0
+					end
+					
+					for _, name in ipairs({"Flesh", "Fire", "Oblivion", "IceExampleEffect"}) do
+						local cc = lighting:FindFirstChild(name)
+						if cc and cc:IsA("ColorCorrectionEffect") then
+							cc.Brightness = 0
+							cc.Contrast = 0
+							cc.Saturation = 0
+							cc.TintColor = Color3.fromRGB(255, 255, 255)
+						end
+					end
+				end)
+			end
+		end
+	end)
+
 	globals.StatusEffectHooked = true
 end
 
