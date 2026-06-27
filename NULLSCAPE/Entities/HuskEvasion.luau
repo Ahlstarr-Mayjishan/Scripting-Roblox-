@@ -43,8 +43,6 @@ function Logic.enableHuskImmunity(gc, enemy)
 
     for _, part in ipairs(enemy:GetDescendants()) do
         if part:IsA("BasePart") then
-            pcall(function() part.CanTouch = false end)
-
             if not gc.SavedPartsData[part] then
                 gc.SavedPartsData[part] = {
                     originalCanTouch = part.CanTouch,
@@ -52,6 +50,7 @@ function Logic.enableHuskImmunity(gc, enemy)
                     enemyName        = originalName
                 }
             end
+            pcall(function() part.CanTouch = false end)
 
             if part.Name == "head" then
                 pcall(function() part.Name = "SafeHead" end)
@@ -76,7 +75,6 @@ function Logic.onHuskDescendantAdded(gc, enemy, part)
     local originalName = enemy:GetAttribute("OriginalName") or enemy.Name
 
     if part:IsA("BasePart") then
-        pcall(function() part.CanTouch = false end)
         if not gc.SavedPartsData[part] then
             gc.SavedPartsData[part] = {
                 originalCanTouch = part.CanTouch,
@@ -84,6 +82,7 @@ function Logic.onHuskDescendantAdded(gc, enemy, part)
                 enemyName        = originalName
             }
         end
+        pcall(function() part.CanTouch = false end)
         if part.Name == "head" then
             pcall(function() part.Name = "SafeHead" end)
         end

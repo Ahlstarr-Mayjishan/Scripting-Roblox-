@@ -19,15 +19,22 @@ local COLLECT_COOLDOWN = 0.45
 local NEAR_PASS_DISTANCE = 6
 local AUTO_LOOKAHEAD_SECONDS = 0.55
 local AUTO_MIN_APPROACH_SPEED = 28
+local ACTIVE_WATCH_INTERVAL = 0.08
+local IDLE_WATCH_INTERVAL = 0.35
 
 local activeController = nil
 local watcherRunning = false
+local watcherToken = {}
 local cachedGCH = nil
 local iframeObject = nil
 local processedMines = {}
 local passthroughState = {}
 local logs = {}
 local lastCollectAt = {}
+
+local globals = getgenv()._NULLSCAPE_Globals or {}
+getgenv()._NULLSCAPE_Globals = globals
+globals.ChargerTripmineWatcherToken = watcherToken
 
 local function isChargerAssistMode(mode)
     return mode == AUTO_MODE or mode == PASSTHROUGH_MODE or mode == PREDETONATE_MODE
@@ -185,15 +192,23 @@ local function startWatcher()
     watcherRunning = true
 
     task.spawn(function()
-        while true do
-            task.wait(0.05)
-
+        local cleanedIdle = false
+        while not globals or globals.ChargerTripmineWatcherToken == watcherToken do
             local mode = activeController and activeController.ChargerTripmineMode
-            if not (activeController and activeController.ChargerTripmineAssistEnabled and isChargerAssistMode(mode)) then
-                removeIframes()
-                clearState()
+            local active = activeController and activeController.ChargerTripmineAssistEnabled and isChargerAssistMode(mode)
+            task.wait(active and ACTIVE_WATCH_INTERVAL or IDLE_WATCH_INTERVAL)
+
+            mode = activeController and activeController.ChargerTripmineMode
+            active = activeController and activeController.ChargerTripmineAssistEnabled and isChargerAssistMode(mode)
+            if not active then
+                if not cleanedIdle then
+                    removeIframes()
+                    clearState()
+                    cleanedIdle = true
+                end
                 continue
             end
+            cleanedIdle = false
 
             addIframes()
 
@@ -280,6 +295,9 @@ local function startWatcher()
                 end
             end
         end
+        removeIframes()
+        clearState()
+        watcherRunning = false
     end)
 end
 

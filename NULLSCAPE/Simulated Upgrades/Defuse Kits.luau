@@ -19,13 +19,20 @@ local BLOCKER_BASE_RADIUS = 7.5
 local BLOCKER_REPEL_PADDING = 4
 local BLOCKER_REPEL_SPEED = 46
 local BLOCKER_REPEL_VERTICAL_LIFT = 4
+local ACTIVE_WATCH_INTERVAL = 0.08
+local IDLE_WATCH_INTERVAL = 0.35
 
 local activeController = nil
 local watcherRunning = false
+local watcherToken = {}
 local iframeObject = nil
 local cachedGCH = nil
 local blockerFolder = nil
 local blockerParts = {}
+
+local globals = getgenv()._NULLSCAPE_Globals or {}
+getgenv()._NULLSCAPE_Globals = globals
+globals.TripmineBarrierWatcherToken = watcherToken
 
 local function hasIframes()
     return iframeObject ~= nil and iframeObject.Parent ~= nil
@@ -215,14 +222,19 @@ local function startWatcher()
     watcherRunning = true
 
     task.spawn(function()
-        while true do
-            task.wait(0.05)
+        local cleanedIdle = false
+        while not globals or globals.TripmineBarrierWatcherToken == watcherToken do
+            task.wait(activeController and activeController.TripmineBarrierEnabled and ACTIVE_WATCH_INTERVAL or IDLE_WATCH_INTERVAL)
 
             if not activeController or not activeController.TripmineBarrierEnabled then
-                removeIframes()
-                clearBlockers()
+                if not cleanedIdle then
+                    removeIframes()
+                    clearBlockers()
+                    cleanedIdle = true
+                end
                 continue
             end
+            cleanedIdle = false
 
             local mode = activeController.TripmineMode or BARRIER_MODE
             if mode == BARRIER_MODE or mode == BLOCKER_MODE then
@@ -239,6 +251,9 @@ local function startWatcher()
                 clearBlockers()
             end
         end
+        removeIframes()
+        clearBlockers()
+        watcherRunning = false
     end)
 end
 

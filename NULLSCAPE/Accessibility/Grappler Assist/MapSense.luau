@@ -72,6 +72,30 @@ local function addAnchor(deps, anchors, seen, instance)
     })
 end
 
+local function scanChildrenBudgeted(deps, anchors, seen, roots, maxDescendants, maxAnchors)
+    local stack = {}
+    for _, root in ipairs(roots) do
+        table.insert(stack, root)
+    end
+
+    local scanned = 0
+    while #stack > 0 and scanned < maxDescendants and #anchors < maxAnchors do
+        local current = table.remove(stack)
+        if current and current.Parent then
+            scanned = scanned + 1
+            addAnchor(deps, anchors, seen, current)
+            if #anchors >= maxAnchors then
+                break
+            end
+
+            local children = current:GetChildren()
+            for i = #children, 1, -1 do
+                table.insert(stack, children[i])
+            end
+        end
+    end
+end
+
 function MapSense.refresh(deps, force)
     local workspace = deps.Workspace
     if not workspace then
@@ -94,9 +118,9 @@ function MapSense.refresh(deps, force)
     local anchors = MapSense.Anchors
     local maxDescendants = cfg.MAP_ANCHOR_SCAN_MAX_DESCENDANTS or 9000
     local maxAnchors = cfg.MAP_ANCHOR_MAX_CANDIDATES or 320
-    local scanned = 0
 
-    for _, child in ipairs(workspace:GetChildren()) do
+    local workspaceChildren = workspace:GetChildren()
+    for _, child in ipairs(workspaceChildren) do
         addAnchor(deps, anchors, seen, child)
         if #anchors >= maxAnchors then
             break
@@ -104,13 +128,7 @@ function MapSense.refresh(deps, force)
     end
 
     if #anchors < maxAnchors then
-        for _, descendant in ipairs(workspace:GetDescendants()) do
-            scanned = scanned + 1
-            if scanned > maxDescendants or #anchors >= maxAnchors then
-                break
-            end
-            addAnchor(deps, anchors, seen, descendant)
-        end
+        scanChildrenBudgeted(deps, anchors, seen, workspaceChildren, maxDescendants, maxAnchors)
     end
 
     return anchors
@@ -148,7 +166,23 @@ local function getSwingClearanceScore(deps, grapple, candidate, position, anchor
     return cfg.MAP_ANCHOR_SWING_NARROW_PENALTY or 55
 end
 
-local function getSwingRoomScore(deps, grapple, candidate, position, distance)
+local function getAnchorSurfaceScore(deps, result)
+    local cfg = deps.CFG
+    local normal = result and result.Normal
+    if not normal then
+        return 0
+    end
+
+    if normal.Y <= -0.25 then
+        return cfg.MAP_ANCHOR_SWING_UNDERSIDE_PENALTY or 105
+    elseif math.abs(normal.Y) <= 0.45 then
+        return cfg.MAP_ANCHOR_SWING_WALL_BONUS or -14
+    end
+
+    return 0
+end
+
+local function getSwingRoomScore(deps, grapple, candidate, position, distance, result)
     local cfg = deps.CFG
     local rootPart = grapple and grapple.RootPart
     local velocity = rootPart and rootPart.Velocity
@@ -164,6 +198,21 @@ local function getSwingRoomScore(deps, grapple, candidate, position, distance)
 
     local velocityUnit = getFlatUnit(velocity)
     local score = 0
+    local flatDistance = Vector3.new(anchorOffset.X, 0, anchorOffset.Z).Magnitude
+    local flatMin = cfg.MAP_ANCHOR_SWING_FLAT_MIN or 28
+    local flatIdeal = cfg.MAP_ANCHOR_SWING_FLAT_IDEAL or 58
+    if flatDistance < flatMin then
+        score = score + (flatMin - flatDistance) * (cfg.MAP_ANCHOR_SWING_FLAT_WEIGHT or 1.15)
+    else
+        score = score + math.abs(flatDistance - flatIdeal) * (cfg.MAP_ANCHOR_SWING_FLAT_WEIGHT or 1.15) * 0.16
+    end
+
+    local verticalRatio = math.abs(anchorOffset.Y) / math.max(flatDistance, 1)
+    local maxVerticalRatio = cfg.MAP_ANCHOR_SWING_VERTICAL_RATIO_MAX or 1.35
+    if verticalRatio > maxVerticalRatio then
+        score = score + (verticalRatio - maxVerticalRatio) * (cfg.MAP_ANCHOR_SWING_VERTICAL_RATIO_PENALTY or 82)
+    end
+
     local minDistance = cfg.MAP_ANCHOR_SWING_MIN_DISTANCE or 38
     local idealDistance = cfg.MAP_ANCHOR_SWING_IDEAL_DISTANCE or 72
     if distance < minDistance then
@@ -190,10 +239,12 @@ local function getSwingRoomScore(deps, grapple, candidate, position, distance)
         end
     end
 
-    return score + getSwingClearanceScore(deps, grapple, candidate, position, anchorUnit)
+    return score
+        + getAnchorSurfaceScore(deps, result)
+        + getSwingClearanceScore(deps, grapple, candidate, position, anchorUnit)
 end
 
-local function getAnchorScore(deps, grapple, candidate, position, distance, screenScore)
+local function getAnchorScore(deps, grapple, candidate, position, distance, screenScore, result)
     local cfg = deps.CFG
     local rootPart = grapple and grapple.RootPart
     if not rootPart then
@@ -219,7 +270,7 @@ local function getAnchorScore(deps, grapple, candidate, position, distance, scre
         score = score - 14
     end
 
-    return score + getSwingRoomScore(deps, grapple, candidate, position, distance)
+    return score + getSwingRoomScore(deps, grapple, candidate, position, distance, result)
 end
 
 function MapSense.findBestVoidAnchor(deps, grapple, options)
@@ -258,7 +309,7 @@ function MapSense.findBestVoidAnchor(deps, grapple, options)
 
             local result, distance = deps.isLineClear(grapple, candidate.Instance, part, position, maxRange)
             if result and deps.isUsableResult(grapple, result) and deps.isPathSafeForHitbox(grapple, candidate.Instance, part, position, maxRange) then
-                local score = getAnchorScore(deps, grapple, candidate, position, distance, screenScore)
+                local score = getAnchorScore(deps, grapple, candidate, position, distance, screenScore, result)
                 if score < bestScore then
                     bestResult = result
                     bestInstance = candidate.Instance

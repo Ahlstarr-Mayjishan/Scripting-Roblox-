@@ -302,9 +302,6 @@ function Controller:SetImmunity(entityName, value)
 		self.OperatorImmune = value
 	elseif entityName == "Skinwalker" then
 		self.SkinwalkerImmune = value
-		if value then
-			Controller:StartSkinwalkerEvasion()
-		end
 	elseif entityName == "Springer" then
 		self.SpringerImmune = value
 
@@ -446,76 +443,7 @@ function Controller:SetSpringerImmunityMode(mode)
 	end
 end
 
-local skinwalkerThread = nil
 function Controller:StartSkinwalkerEvasion()
-	if skinwalkerThread then
-		return
-	end
-	skinwalkerThread = task.spawn(function()
-		while self.SkinwalkerImmune and not self.Destroyed do
-			if getgenv()._NULLSCAPE_Globals.activeEntitiesController ~= Controller then
-				Controller:CleanUp()
-				break
-			end
-			task.wait(0.01) -- Chạy cực nhanh để dịch chuyển tránh chạm
-			local LocalPlayer = game:GetService("Players").LocalPlayer
-			local char = LocalPlayer and LocalPlayer.Character
-			local root = char and char:FindFirstChild("HumanoidRootPart")
-			if root then
-				local function findEnemyPart(enemy)
-					local head = enemy:FindFirstChild("head")
-					if head and head:IsA("BasePart") then
-						return head
-					end
-
-					local rootPart = enemy:FindFirstChild("HumanoidRootPart")
-					if rootPart and rootPart:IsA("BasePart") then
-						return rootPart
-					end
-
-					if enemy:IsA("BasePart") then
-						return enemy
-					end
-
-					return enemy:FindFirstChildWhichIsA("BasePart", true)
-				end
-
-				local function checkAndEvade(enemy)
-					if string.find(enemy.Name, "Skinwalker") or string.find(enemy.Name, "Husk") then
-						local enemyPart = findEnemyPart(enemy)
-						if enemyPart then
-							local offset = root.Position - enemyPart.Position
-							local distance = offset.Magnitude
-							if distance < 9 then
-								-- Đẩy lùi player ra xa để tránh va chạm vật lý/server-side
-								local direction = offset
-								if direction.Magnitude == 0 then
-									direction = Vector3.new(0, 0, 1)
-								else
-									direction = direction.Unit
-								end
-								root.CFrame = root.CFrame + direction * 3
-							end
-						end
-					end
-				end
-
-				local enemies = workspace:FindFirstChild("Enemies")
-				if enemies then
-					for _, enemy in ipairs(enemies:GetChildren()) do
-						checkAndEvade(enemy)
-					end
-				end
-				local skinwalkersFolder = workspace:FindFirstChild("Skinwalkers")
-				if skinwalkersFolder then
-					for _, enemy in ipairs(skinwalkersFolder:GetChildren()) do
-						checkAndEvade(enemy)
-					end
-				end
-			end
-		end
-		skinwalkerThread = nil
-	end)
 end
 
 -- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
@@ -566,16 +494,17 @@ local function processEntity(enemy)
 	-- Tạo phần đầu giả lập "head" (chữ thường) cho thực thể 3D để kích hoạt hệ thống ESP nguyên bản của game
 	if enemy:IsA("Model") and not enemy:FindFirstChild("head") then
 		task.spawn(function()
-			-- Chờ cho đến khi các bộ phận chính của thực thể được tải đầy đủ
-			local actualHead = enemy:WaitForChild("Head", 5) or enemy:WaitForChild("head", 5)
-			if not actualHead then
-				local horse = enemy:WaitForChild("horse", 5)
-				if horse then
-					actualHead = horse:WaitForChild("Head", 5) or horse:WaitForChild("head", 5)
+			-- Tìm kiếm đệ quy phần đầu hoặc phần thân khả dụng của quái vật 3D một cách không đồng bộ
+			local actualHead
+			for i = 1, 30 do -- Thử tối đa 30 lần (30 * 0.05s = 1.5s) để khớp với nhịp tải phần tử của game
+				if not enemy or not enemy.Parent then
+					break
 				end
-			end
-			if not actualHead then
-				actualHead = enemy:FindFirstChildWhichIsA("BasePart", true)
+				actualHead = enemy:FindFirstChild("Head", true) or enemy:FindFirstChild("head", true) or enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+				if actualHead then
+					break
+				end
+				task.wait(0.05) -- Chờ một nhịp cực ngắn trước khi kiểm tra lại
 			end
 
 			if actualHead and enemy.Parent and not enemy:FindFirstChild("head") then

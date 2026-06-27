@@ -590,7 +590,7 @@ startMatchLoops = function()
 					Executor.updateESPStyles(Controller, GC, hrp)
 				end)
 			end
-			task.wait(0.1)
+			task.wait(hasUtilityWork() and 0.12 or 0.6)
 		end
 		matchLoopsActive = false
 		-- Xóa visuals cũ khi dừng loop (hủy cả các mũi tên chỉ hướng)
@@ -603,6 +603,17 @@ end
 
 
 local utilityLoopActive = false
+local function hasUtilityWork()
+	return Controller.AutoCollectEnabled
+		or Controller.TripmineBarrierEnabled
+		or Controller.ChargerTripmineAssistEnabled
+		or Controller.MatrixTetrahedronEnabled
+		or Controller.GraceWingsEnabled
+		or Controller.AdvancedGravityCoilEnabled
+		or Controller.BetterJumpPadEnabled
+		or Controller.SpeedBuffsEnabled
+end
+
 local function startUtilityLoop()
 	if utilityLoopActive then
 		return
@@ -617,12 +628,16 @@ local function startUtilityLoop()
 			local char = LocalPlayer.Character
 			local hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if hrp then
-				pcall(function()
-					Executor.updateMagnet(Controller, hrp)
-				end)
-				pcall(function()
-					Executor.updateBarriers(Controller, GC)
-				end)
+				if Controller.AutoCollectEnabled then
+					pcall(function()
+						Executor.updateMagnet(Controller, hrp)
+					end)
+				end
+				if Controller.TripmineBarrierEnabled or Controller.ChargerTripmineAssistEnabled then
+					pcall(function()
+						Executor.updateBarriers(Controller, GC)
+					end)
+				end
 
 				-- Tự động kích hoạt lại Matrix Tetrahedron nếu được bật nhưng chưa hook (phòng hờ load trễ/lobby)
 				if Controller.MatrixTetrahedronEnabled and MatrixTetrahedron and not MatrixTetrahedron.Hooked then
@@ -659,7 +674,7 @@ local function startUtilityLoop()
 					end)
 				end
 			end
-			task.wait(0.1)
+			task.wait(hasUtilityWork() and 0.12 or 0.6)
 		end
 		utilityLoopActive = false
 	end)
@@ -1137,7 +1152,8 @@ local function startGiftPoolObserver()
 				safeControllerCleanUp()
 				break
 			end
-			if isFeatureSimulating("Gift") or isFeatureSimulating("Tripmine") then
+			local shouldScanPools = isFeatureSimulating("Gift") or isFeatureSimulating("Tripmine")
+			if shouldScanPools then
 				local poolGifts = scanActiveGiftsFromPools()
 
 				-- Hợp nhất dữ liệu quét pool với ActiveGifts hiện tại (tránh trùng lặp)
@@ -1167,7 +1183,7 @@ local function startGiftPoolObserver()
 				Controller.ActiveGifts = newGifts
 				updateRunningState()
 			end
-			task.wait(0.2)
+			task.wait(shouldScanPools and 0.35 or 1.0)
 		end
 	end)
 end
