@@ -58,11 +58,8 @@ local function doAirJump()
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 	if humanoid and humanoid.Parent and rootPart then
-		local state = humanoid:GetState()
-		if state ~= Enum.HumanoidStateType.Running 
-			and state ~= Enum.HumanoidStateType.Landed 
-			and state ~= Enum.HumanoidStateType.Dead then
-			
+		-- Check if character is in the air and not dead
+		if humanoid.FloorMaterial == Enum.Material.Air and humanoid:GetState() ~= Enum.HumanoidStateType.Dead then
 			-- Perform pure physics jump
 			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 			
@@ -109,7 +106,7 @@ function Logic.initialize()
 
 	-- Connect to InputBegan to capture new jumps in the air
 	local conn = UserInputService.InputBegan:Connect(function(input, processed)
-		if processed then return end
+		if UserInputService:GetFocusedTextBox() then return end
 		if input.KeyCode == Enum.KeyCode.Space then
 			if shouldJump() then
 				doAirJump()
