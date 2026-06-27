@@ -450,6 +450,13 @@ function Logic.clearVisuals(gc, keepArrows)
 	end
 
 	if not keepArrows then
+		if hudRemovedConnection then
+			pcall(function()
+				hudRemovedConnection:Disconnect()
+			end)
+			hudRemovedConnection = nil
+		end
+
 		if saved.HighlightPoolFolder then
 			pcall(function()
 				saved.HighlightPoolFolder:Destroy()
@@ -1006,7 +1013,7 @@ for featureKey, cfg in pairs(Logic.FEATURES) do
 end
 
 local SIM_ATTR = "NULLSCAPE_Simulated"
-local hudWatcherBound = false
+local hudRemovedConnection = nil
 
 local function getUpgradesFolder()
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1085,20 +1092,29 @@ function Logic.syncSimulatedUpgradeHud(controller)
 end
 
 local function bindSimulatedUpgradeHudWatcher(controller)
-	if hudWatcherBound then
+	if hudRemovedConnection and hudRemovedConnection.Connected then
 		return
 	end
 
 	local upgrades = getUpgradesFolder()
 	if not upgrades then
-		task.defer(function()
-			bindSimulatedUpgradeHudWatcher(controller)
+		task.spawn(function()
+			task.wait(1)
+			if controller and not controller.Destroyed then
+				bindSimulatedUpgradeHudWatcher(controller)
+			end
 		end)
 		return
 	end
 
-	hudWatcherBound = true
-	upgrades.ChildRemoved:Connect(function(child)
+	if hudRemovedConnection then
+		pcall(function()
+			hudRemovedConnection:Disconnect()
+		end)
+		hudRemovedConnection = nil
+	end
+
+	hudRemovedConnection = upgrades.ChildRemoved:Connect(function(child)
 		if child:GetAttribute(SIM_ATTR) then
 			task.defer(function()
 				if controller and not controller.Destroyed then
