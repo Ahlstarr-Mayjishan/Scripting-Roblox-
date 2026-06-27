@@ -1346,16 +1346,30 @@ end
 -- Lắng nghe sự kiện đổi trạng thái game thời gian thực
 task.spawn(function()
 	local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
+	if Controller.Destroyed or not Controller.PermanentConnections then
+		return
+	end
 	if inRoundVal and inRoundVal:IsA("BoolValue") then
 		hasInRoundValue = true
+		if getgenv()._NULLSCAPE_Globals.activeEntitiesController ~= Controller then
+			pcall(function() Controller:CleanUp() end)
+			return
+		end
 		setInLobby(not inRoundVal.Value)
 
-		local conn = inRoundVal.Changed:Connect(function(val)
-			if Controller.Destroyed then
+		local conn
+		conn = inRoundVal.Changed:Connect(function(val)
+			if Controller.Destroyed or not Controller.CleanUp then
+				if conn then
+					pcall(function() conn:Disconnect() end)
+				end
 				return
 			end
 			if getgenv()._NULLSCAPE_Globals.activeEntitiesController ~= Controller then
-				Controller:CleanUp()
+				pcall(function() Controller:CleanUp() end)
+				if conn then
+					pcall(function() conn:Disconnect() end)
+				end
 				return
 			end
 			setInLobby(not val)
@@ -1368,11 +1382,11 @@ end)
 task.spawn(function()
 	while not Controller.Destroyed and not hasInRoundValue do
 		task.wait(3.0)
-		if Controller.Destroyed or hasInRoundValue then
+		if Controller.Destroyed or hasInRoundValue or not Controller.CleanUp then
 			break
 		end
 		if getgenv()._NULLSCAPE_Globals.activeEntitiesController ~= Controller then
-			Controller:CleanUp()
+			pcall(function() Controller:CleanUp() end)
 			break
 		end
 		setInLobby(not isInMatch())

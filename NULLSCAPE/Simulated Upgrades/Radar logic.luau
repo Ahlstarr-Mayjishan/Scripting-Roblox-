@@ -874,6 +874,14 @@ end
 
 Logic.isNativelyOwned = isNativelyOwned
 
+local function canSimulate(controller, featureKey)
+	local cfg = Logic.FEATURES[featureKey]
+	if not cfg or not controller then
+		return false
+	end
+	return controller[cfg.toggle] == true
+end
+
 local function updateCustomESPStyles(controller, gc, hrp)
 	Logic.syncSimulatedUpgradeHud(controller)
 
@@ -1015,12 +1023,6 @@ end
 local SIM_ATTR = "NULLSCAPE_Simulated"
 local hudRemovedConnection = nil
 
-local function getUpgradesFolder()
-	local ReplicatedStorage = game:GetService("ReplicatedStorage")
-	local upgradeFolder = ReplicatedStorage:FindFirstChild("UpgradeFolder")
-	return upgradeFolder and upgradeFolder:FindFirstChild("Upgrades")
-end
-
 local function collectDesiredSimulatedUpgrades(controller)
 	local desired = {}
 	if not controller then
@@ -1092,37 +1094,7 @@ function Logic.syncSimulatedUpgradeHud(controller)
 end
 
 local function bindSimulatedUpgradeHudWatcher(controller)
-	if hudRemovedConnection and hudRemovedConnection.Connected then
-		return
-	end
-
-	local upgrades = getUpgradesFolder()
-	if not upgrades then
-		task.spawn(function()
-			task.wait(1)
-			if controller and not controller.Destroyed then
-				bindSimulatedUpgradeHudWatcher(controller)
-			end
-		end)
-		return
-	end
-
-	if hudRemovedConnection then
-		pcall(function()
-			hudRemovedConnection:Disconnect()
-		end)
-		hudRemovedConnection = nil
-	end
-
-	hudRemovedConnection = upgrades.ChildRemoved:Connect(function(child)
-		if child:GetAttribute(SIM_ATTR) then
-			task.defer(function()
-				if controller and not controller.Destroyed then
-					Logic.syncSimulatedUpgradeHud(controller)
-				end
-			end)
-		end
-	end)
+	-- No-op to prevent infinite creation-destruction loops with game anti-cheat/UI scripts
 end
 
 function Logic.isSimulationToggleOn(controller, featureKey)
