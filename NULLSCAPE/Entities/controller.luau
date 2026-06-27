@@ -563,7 +563,23 @@ local function processEntity(enemy)
 				if child:IsA("BillboardGui") then
 					-- Fix horizontal stretched border for Springer instantly to prevent visual glitches
 					if string.find(enemy.Name:lower(), "springer") then
-						pcall(function() child.Size = UDim2.new(4, 0, 4, 0) end)
+						pcall(function()
+							child.Size = UDim2.new(4, 0, 4, 0)
+							local function formatSquare(obj)
+								if obj:IsA("GuiObject") then
+									obj.Size = UDim2.new(1, 0, 1, 0)
+									if obj:IsA("Frame") then
+										obj.Position = UDim2.new(0, 0, 0, 0)
+									end
+								elseif obj:IsA("UIAspectRatioConstraint") then
+									obj.AspectRatio = 1
+								end
+							end
+							for _, desc in ipairs(child:GetDescendants()) do
+								formatSquare(desc)
+							end
+							child.DescendantAdded:Connect(formatSquare)
+						end)
 					end
 
 					task.spawn(function()
