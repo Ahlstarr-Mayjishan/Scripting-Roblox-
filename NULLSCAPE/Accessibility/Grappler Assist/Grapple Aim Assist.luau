@@ -15,6 +15,13 @@ local EmergencyDecision = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler
 local TerrainSense = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TerrainSense.luau")
 local IntentModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/IntentModel.luau")
 local MapSense = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/MapSense.luau")
+local HealthMonitor = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/HealthMonitor.luau")
+
+local function packValues(...)
+    local values = { ... }
+    values.n = select("#", ...)
+    return values
+end
 
 local Logic = {
     Connections = {},
@@ -4126,6 +4133,9 @@ end
 
 function Logic.enable()
     local globals = Logic.getGlobals()
+    if HealthMonitor and typeof(HealthMonitor.reset) == "function" then
+        HealthMonitor.reset()
+    end
     if globals.GrappleAimAssistHooked then
         ensureDiveBonkHook(globals)
         watchAdaptInput()
@@ -4146,7 +4156,12 @@ function Logic.enable()
         if globals.activeGrappleAimAssist ~= Logic then
             return originalCast(self, forceRefresh, ...)
         end
-        return assistedCast(self, forceRefresh, originalCast, ...)
+        local assistedResults = packValues(HealthMonitor.try("CastAssist", assistedCast, self, forceRefresh, originalCast, ...))
+        if assistedResults[1] then
+            return table.unpack(assistedResults, 2, assistedResults.n)
+        end
+
+        return originalCast(self, forceRefresh, ...)
     end
 
     if typeof(grappleModule.Start) == "function" then
@@ -4196,12 +4211,18 @@ function Logic.enable()
                 local shouldManualSharkTail = Logic.isSharkTailHelperEnabled()
                     and getModeValue("GrappleSharkTailMode") == "Manual"
                     and shouldUseSmartSharkTail(self, true)
-                if shouldManualSharkTail and tryUseSharkTail(self) then
-                    return nil
+                if shouldManualSharkTail then
+                    local ok, used = HealthMonitor.try("ManualSharkTail", tryUseSharkTail, self)
+                    if ok and used then
+                        return nil
+                    end
                 end
 
-                if Logic.isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Manual" and startSmartReel(self, true) then
-                    return nil
+                if Logic.isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Manual" then
+                    local ok, started = HealthMonitor.try("ManualSmartReel", startSmartReel, self, true)
+                    if ok and started then
+                        return nil
+                    end
                 end
             end
 
@@ -4219,7 +4240,7 @@ function Logic.enable()
             end
             local previousVelocity = self and self.RootPart and self.RootPart.Velocity
             local result = originalSharkTail(self, ...)
-            applySharkTailPullMultiplier(self, previousVelocity)
+            HealthMonitor.try("SharkTailPull", applySharkTailPullMultiplier, self, previousVelocity)
             return result
         end
     end
@@ -4233,13 +4254,13 @@ function Logic.enable()
                 return originalStep(self, dt, ...)
             end
             Logic.LastKnownGrapple = self
-            refillStamina(self)
+            HealthMonitor.try("RefillStamina", refillStamina, self)
             if hasClassCapability(self, "JumpPadBypass") then
-                maintainJumpPadUsesBypass()
+                HealthMonitor.try("JumpPadBypass", maintainJumpPadUsesBypass)
             end
-            maintainBellBypass(self)
+            HealthMonitor.try("BellBypass", maintainBellBypass, self)
             if Logic.isSuiteEnabled() and hasAnyGrappleAssistCapability(self) then
-                updateTerrainFallContext(self)
+                HealthMonitor.try("TerrainSense", updateTerrainFallContext, self)
             end
             if hasClassCapability(self, "MomentumGuard") and self.Movement and (self.Movement.grappling or self.jumpPadReel) then
                 Logic.markGrappleBonkGrace(self, 0.45)
@@ -4247,43 +4268,44 @@ function Logic.enable()
 
             if Logic.isSuiteEnabled() and hasAnyGrappleAssistCapability(self) and Logic.isInAir(self) then
                 if hasClassCapability(self, "AimAssist") then
-                    updateAdaptInputMode(self)
+                    HealthMonitor.try("AdaptInputMode", updateAdaptInputMode, self)
                 end
 
                 local sharkTailPlanned = false
                 if Logic.isSharkTailHelperEnabled() and getModeValue("GrappleSharkTailMode") == "Automatic" then
-                    sharkTailPlanned = planSmartSharkTail(self)
+                    local ok, planned = HealthMonitor.try("AutoSharkTail", planSmartSharkTail, self)
+                    sharkTailPlanned = ok and planned == true
                 end
 
                 if not sharkTailPlanned and not Logic.isJumpPadCommitGuardActive() and Logic.isSmartReelEnabled() and getModeValue("GrappleSmartReelMode") == "Automatic" then
-                    startSmartReel(self, false)
+                    HealthMonitor.try("AutoSmartReel", startSmartReel, self, false)
                 end
 
                 if not Logic.isJumpPadCommitGuardActive() then
-                    tryPanicRescue(self)
+                    HealthMonitor.try("PanicRescue", tryPanicRescue, self)
                 end
-                tryAutoMomentumRescue(self)
-                maintainAdaptInputHold(self)
+                HealthMonitor.try("AutoMomentumRescue", tryAutoMomentumRescue, self)
+                HealthMonitor.try("AdaptInputHold", maintainAdaptInputHold, self)
             end
 
             Logic.CurrentGrappleStep = self
-            local restoreCollisionCheck = beginGrappleCollisionBypass(self)
+            local _, restoreCollisionCheck = HealthMonitor.try("CollisionBypass", beginGrappleCollisionBypass, self)
             local success, stepResult = pcall(originalStep, self, dt, ...)
             Logic.CurrentGrappleStep = nil
             if restoreCollisionCheck then
-                restoreCollisionCheck()
+                HealthMonitor.try("CollisionBypassRestore", restoreCollisionCheck)
             end
             if not success then
                 error(stepResult, 0)
             end
-            maintainBellBypass(self)
-            refillStamina(self)
-            applyReelPullMultiplier(self)
-            applyAirControlMultiplier(self, dt)
-            applyMomentumGuard(self)
-            applyPanicStabilize(self)
-            applySharkTailStabilize(self)
-            updateAdaptRecast(self)
+            HealthMonitor.try("BellBypass", maintainBellBypass, self)
+            HealthMonitor.try("RefillStamina", refillStamina, self)
+            HealthMonitor.try("ReelPull", applyReelPullMultiplier, self)
+            HealthMonitor.try("AirControl", applyAirControlMultiplier, self, dt)
+            HealthMonitor.try("MomentumGuard", applyMomentumGuard, self)
+            HealthMonitor.try("PanicStabilize", applyPanicStabilize, self)
+            HealthMonitor.try("SharkTailStabilize", applySharkTailStabilize, self)
+            HealthMonitor.try("AdaptRecast", updateAdaptRecast, self)
             return stepResult
         end
     end
@@ -4318,6 +4340,9 @@ end
 
 function Logic.disable()
     local globals = Logic.getGlobals()
+    if HealthMonitor and typeof(HealthMonitor.reset) == "function" then
+        HealthMonitor.reset()
+    end
     if globals.activeGrappleAimAssist == Logic then
         globals.activeGrappleAimAssist = nil
     end
@@ -4432,6 +4457,14 @@ end
 
 function Logic.getLastAdaptInputPressed()
     return Logic.LastAdaptInputPressed
+end
+
+function Logic.getHealthStatus()
+    if HealthMonitor and typeof(HealthMonitor.getStatus) == "function" then
+        return HealthMonitor.getStatus()
+    end
+
+    return "Core OK"
 end
 
 return Logic

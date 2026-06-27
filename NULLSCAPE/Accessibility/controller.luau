@@ -213,7 +213,10 @@ function Controller:SetSpringerAutoJump(value)
 end
 
 function Controller:SetInfiniteAirJump(value)
-	if value and not callExecutor("initializeInfiniteAirJump") then
+	local enabled = value == true
+	self.InfiniteAirJumpEnabled = enabled
+
+	if enabled and not callExecutor("initializeInfiniteAirJump") then
 		self.InfiniteAirJumpEnabled = false
 		if getgenv().Rayfield then
 			getgenv().Rayfield:Notify({
@@ -225,7 +228,6 @@ function Controller:SetInfiniteAirJump(value)
 		return
 	end
 
-	self.InfiniteAirJumpEnabled = value
 	if not self.InfiniteAirJumpEnabled then
 		callExecutor("disableInfiniteAirJump")
 	end
@@ -233,13 +235,34 @@ function Controller:SetInfiniteAirJump(value)
 	if getgenv().Rayfield then
 		getgenv().Rayfield:Notify({
 			Title = "Accessibility Config",
-			Content = (value and "Activated" or "Disabled") .. " Infinite Air Jump",
+			Content = (enabled and "Activated" or "Disabled") .. " Infinite Air Jump",
 			Duration = 2,
 		})
 	end
 end
 
+function Controller:ReapplyRespawnFeatures()
+	if self.Destroyed then
+		return
+	end
 
+	local globals = getgenv()._NULLSCAPE_Globals
+	if globals and globals.activeAccessibilityController ~= self then
+		return
+	end
+
+	if self.InfiniteAirJumpEnabled then
+		callExecutor("initializeInfiniteAirJump")
+	end
+
+	if self.AntiBonkEnabled then
+		callExecutor("initializeAntiBonk")
+	end
+
+	self:RefreshGrappleAssistHook()
+	self:RefreshRailAssistHook()
+	self:updateSpringerAutoJumpState()
+end
 
 function Controller:RefreshRailAssistHook()
 	if self.RailAssistSuiteEnabled then
@@ -337,19 +360,33 @@ function Controller:HasAnyGrappleAssistFeature()
 end
 
 function Controller:RefreshGrappleAssistHook()
-	if (self.GrappleAssistSuiteEnabled and self:HasAnyGrappleAssistFeature()) or self.GrapplerStaminaMode == "Infinite Stamina" then
-		if not callExecutor("enableGrappleAimAssist") then
-			return false
+    if (self.GrappleAssistSuiteEnabled and self:HasAnyGrappleAssistFeature()) or self.GrapplerStaminaMode == "Infinite Stamina" then
+        if not callExecutor("enableGrappleAimAssist") then
+            return false
 		end
 	else
 		callExecutor("disableGrappleAimAssist")
 	end
 
-	return true
+    return true
+end
+
+function Controller:GetGrappleAssistHealthStatus()
+    local method = Executor and Executor.getGrappleAimAssistHealthStatus
+    if typeof(method) ~= "function" then
+        return "Core pending"
+    end
+
+    local success, result = pcall(method)
+    if not success then
+        return "Core status error"
+    end
+
+    return tostring(result)
 end
 
 function Controller:SetGrappleAssistSuite(value)
-	self.GrappleAssistSuiteEnabled = value == true
+    self.GrappleAssistSuiteEnabled = value == true
 
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleAssistSuiteEnabled = false
@@ -763,10 +800,28 @@ local function setInLobby(val)
 		Controller:CleanUp()
 	else
 		Controller:updateSpringerAutoJumpState()
+		Controller:ReapplyRespawnFeatures()
 	end
 end
 
 -- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
+local function scheduleRespawnFeatureRefresh()
+	local function refreshLater()
+		if Controller.Destroyed then
+			return
+		end
+		if getgenv()._NULLSCAPE_Globals.activeAccessibilityController ~= Controller then
+			Controller:CleanUp()
+			return
+		end
+		Controller:ReapplyRespawnFeatures()
+	end
+
+	task.defer(refreshLater)
+	task.delay(0.6, refreshLater)
+	task.delay(1.6, refreshLater)
+end
+
 getgenv()._NULLSCAPE_Globals.activeAccessibilityController = Controller
 
 -- Khởi tạo ban đầu khi nạp script
@@ -775,6 +830,15 @@ if not inLobby then
 end
 
 -- Lắng nghe sự kiện đổi trạng thái game thời gian thực
+if not inLobby then
+	Controller:ReapplyRespawnFeatures()
+end
+
+local characterRefreshConnection = Players.LocalPlayer.CharacterAdded:Connect(function()
+	scheduleRespawnFeatureRefresh()
+end)
+table.insert(Controller.PermanentConnections, characterRefreshConnection)
+
 task.spawn(function()
 	local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
 	if Controller.Destroyed or not Controller.PermanentConnections then

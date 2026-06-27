@@ -88,6 +88,20 @@ function Executor.disableGrappleAimAssist()
     callModule("GrappleAimAssist", "disable")
 end
 
+function Executor.getGrappleAimAssistHealthStatus()
+    local module = loadAccessibilityModule("GrappleAimAssist")
+    if module and typeof(module.getHealthStatus) == "function" then
+        local success, result = pcall(function()
+            return module.getHealthStatus()
+        end)
+        if success then
+            return tostring(result)
+        end
+    end
+
+    return "Core pending"
+end
+
 function Executor.enableRailAssist()
     return callModule("RailAssist", "enable")
 end

@@ -71,7 +71,7 @@ local function createControllerProxy(Client, Controller)
 			if activeController then
 				local value = activeController[key]
 				if value ~= nil then
-					if typeof(value) == "function" and type(key) == "string" and string.sub(key, 1, 3) == "Set" then
+					if typeof(value) == "function" and type(key) == "string" then
 						return function(_, ...)
 							local latestController = resolveController(Client, Controller) or activeController
 							local latestMethod = latestController and latestController[key]
@@ -84,14 +84,17 @@ local function createControllerProxy(Client, Controller)
 				end
 			end
 
-			if type(key) == "string" and string.sub(key, 1, 3) == "Set" then
+			if type(key) == "string" and (string.sub(key, 1, 3) == "Set" or string.sub(key, 1, 3) == "Get") then
 				return function(_, ...)
 					local latestController = resolveController(Client, Controller)
 					local latestMethod = latestController and latestController[key]
 					if typeof(latestMethod) == "function" then
 						return latestMethod(latestController, ...)
 					end
-					warn("[NULLSCAPE] Accessibility controller is not ready; ignored " .. tostring(key))
+					if string.sub(key, 1, 3) == "Set" then
+						warn("[NULLSCAPE] Accessibility controller is not ready; ignored " .. tostring(key))
+					end
+					return nil
 				end
 			end
 
@@ -226,6 +229,26 @@ return function(Client, Controller)
 			Controller:SetGrappleAssistSuite(Value)
 		end,
 	})
+
+	local grappleHealthLabel = nil
+	if Tab.CreateLabel then
+		grappleHealthLabel = Tab:CreateLabel(
+			"Grappler Assist Status: " .. tostring(Controller:GetGrappleAssistHealthStatus() or "Core pending")
+		)
+		task.spawn(function()
+			while grappleHealthLabel and Client and not Client.Destroyed do
+				task.wait(2)
+				if grappleHealthLabel and typeof(grappleHealthLabel.Set) == "function" then
+					pcall(function()
+						grappleHealthLabel:Set(
+							"Grappler Assist Status: "
+								.. tostring(Controller:GetGrappleAssistHealthStatus() or "Core pending")
+						)
+					end)
+				end
+			end
+		end)
+	end
 
 	if Tab.CreateLabel then
 		adaptInputStatusLabel =
