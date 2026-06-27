@@ -430,6 +430,17 @@ function Controller:SetSpringerImmunityMode(mode)
 		end)
 	end
 
+	if mode == "Blatant" then
+		-- Tự động dọn dẹp toàn bộ debuff đang có trên người chơi
+		pcall(function()
+			for _, debuffName in ipairs({ "Flesh", "Panic", "Concussion", "Fire", "Insanity" }) do
+				for _, callback in ipairs(activeCallbacks) do
+					pcall(callback, debuffName, false)
+				end
+			end
+		end)
+	end
+
 	if self.SpringerImmune then
 		if mode == "Blatant" then
 			-- Tắt toàn bộ sóng đang tồn tại
@@ -535,8 +546,7 @@ local function processEntity(enemy)
 		return
 	end
 
-	-- Tạo phần đầu giả lập "head" (chữ thường) dạng BillboardGui cho thực thể 3D để khớp kiểu dữ liệu UDim2.Size của game gốc
-	if enemy:IsA("Model") and not enemy:FindFirstChild("head") then
+	if enemy:IsA("Model") then
 		task.spawn(function()
 			-- Tìm kiếm đệ quy phần đầu hoặc phần thân khả dụng của quái vật 3D một cách không đồng bộ
 			local actualHead
@@ -551,38 +561,57 @@ local function processEntity(enemy)
 				task.wait(0.05) -- Chờ một nhịp cực ngắn trước khi kiểm tra lại
 			end
 
-			if actualHead and enemy.Parent and not enemy:FindFirstChild("head") then
-				-- Nguyên bản game sử dụng BillboardGui (sprite) tên là "head" cho thực thể 2D
-				-- Do đó thuộc tính Size của nó là UDim2 chứ không phải Vector3. Ta cần tạo BillboardGui giả lập để tránh lỗi gán v2.Size = head.Size trong code game gốc gây crash.
-				local fakeHead = Instance.new("BillboardGui")
-				fakeHead.Name = "head"
-				fakeHead.Size = UDim2.new(4, 0, 4, 0)
-				fakeHead.Adornee = actualHead
-				fakeHead.AlwaysOnTop = true
-				fakeHead.Parent = enemy
+			if not enemy or not enemy.Parent then return end
 
-				-- Chờ một chút để xem hệ thống gốc của game có tự động gắn ESP hay không
-				task.wait(0.2)
-				if enemy.Parent and not (enemy:FindFirstChild("ESP") or enemy:FindFirstChild("ESPCrayon")) then
-					-- Nếu script gốc của game bỏ lỡ hoặc không kịp gắn, chúng ta tự gắn thủ công bằng template gốc
-					local template = findNativeEnemyESPTemplate()
-					if template then
-						local cloned = template:Clone()
-						cloned.Adornee = enemy
-						cloned.Enabled = true
-						cloned.Size = fakeHead.Size
-						
-						local label = cloned:FindFirstChild("Label", true)
-						if label and label:IsA("TextLabel") then
-							if cloned.Name == "ESPCrayon" then
-								local StupidNames = { "bingle", "dangle", "glorp", "zorp", "splurg", "boing", "sproing", "floop" }
-								label.Text = StupidNames[math.random(1, #StupidNames)]
-							else
-								label.Text = getEnemyDisplayName(enemy)
-							end
+			-- Gán PrimaryPart nếu model thiếu (Cực kỳ quan trọng để BillboardGui ESP của game gốc hiển thị)
+			if not enemy.PrimaryPart then
+				local rootPart = actualHead
+				if rootPart and rootPart:IsA("BillboardGui") then
+					rootPart = rootPart.Adornee or rootPart.Parent
+				end
+				if rootPart and rootPart:IsA("BasePart") then
+					pcall(function() enemy.PrimaryPart = rootPart end)
+				end
+			end
+
+			-- Tạo phần đầu giả lập "head" (chữ thường) dạng BillboardGui cho thực thể 3D để khớp kiểu dữ liệu UDim2.Size của game gốc
+			if not enemy:FindFirstChild("head") then
+				local rootPart = actualHead
+				if rootPart and rootPart:IsA("BillboardGui") then
+					rootPart = rootPart.Adornee or rootPart.Parent
+				end
+				if rootPart and rootPart:IsA("BasePart") then
+					local fakeHead = Instance.new("BillboardGui")
+					fakeHead.Name = "head"
+					fakeHead.Size = UDim2.new(4, 0, 4, 0)
+					fakeHead.Adornee = rootPart
+					fakeHead.AlwaysOnTop = true
+					fakeHead.Parent = enemy
+				end
+			end
+
+			-- Chờ một chút để xem hệ thống gốc của game có tự động gắn ESP hay không
+			task.wait(0.2)
+			if enemy.Parent and not (enemy:FindFirstChild("ESP") or enemy:FindFirstChild("ESPCrayon")) then
+				-- Nếu script gốc của game bỏ lỡ hoặc không kịp gắn, chúng ta tự gắn thủ công bằng template gốc
+				local template = findNativeEnemyESPTemplate()
+				if template then
+					local cloned = template:Clone()
+					cloned.Adornee = enemy
+					cloned.Enabled = true
+					local headPart = enemy:FindFirstChild("head")
+					cloned.Size = headPart and headPart:IsA("BillboardGui") and headPart.Size or UDim2.new(4, 0, 4, 0)
+					
+					local label = cloned:FindFirstChild("Label", true)
+					if label and label:IsA("TextLabel") then
+						if cloned.Name == "ESPCrayon" then
+							local StupidNames = { "bingle", "dangle", "glorp", "zorp", "splurg", "boing", "sproing", "floop" }
+							label.Text = StupidNames[math.random(1, #StupidNames)]
+						else
+							label.Text = getEnemyDisplayName(enemy)
 						end
-						cloned.Parent = enemy
 					end
+					cloned.Parent = enemy
 				end
 			end
 		end)
@@ -877,6 +906,77 @@ local function setInLobby(val)
 	end
 end
 
+local activeCallbacks = {}
+
+-- Hook hệ thống trạng thái (Status Effects) để miễn nhiễm debuff ở chế độ Blatant
+local function initializeStatusEffectHook()
+	local StatusEffectChanged = ReplicatedStorage:FindFirstChild("Events")
+		and ReplicatedStorage.Events:FindFirstChild("StatusEffectChanged")
+	if StatusEffectChanged and StatusEffectChanged:IsA("RemoteEvent") then
+		pcall(function()
+			if typeof(hookfunction) == "function" then
+				local oldConnect
+				oldConnect = hookfunction(StatusEffectChanged.OnClientEvent.Connect, function(self, callback)
+					table.insert(activeCallbacks, callback)
+					local newCallback = function(statusName, isActive, ...)
+						local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+						if
+							activeCtrl
+							and activeCtrl.SpringerImmunityMode == "Blatant"
+							and statusName ~= "Medal"
+							and statusName ~= "Overtuned"
+						then
+							return
+						end
+						return callback(statusName, isActive, ...)
+					end
+					return oldConnect(self, newCallback)
+				end)
+			end
+		end)
+	end
+
+	pcall(function()
+		local ReplicatedFirst = game:GetService("ReplicatedFirst")
+		local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+		local handlerModule = clientModules and clientModules:FindFirstChild("StatusEffectHandler")
+		if handlerModule and handlerModule:IsA("ModuleScript") then
+			local StatusEffectHandler = require(handlerModule)
+			if typeof(StatusEffectHandler) == "table" and typeof(StatusEffectHandler.HasStatus) == "function" then
+				if typeof(hookfunction) == "function" then
+					local oldHasStatus
+					oldHasStatus = hookfunction(StatusEffectHandler.HasStatus, function(statusName, ...)
+						local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+						if
+							activeCtrl
+							and activeCtrl.SpringerImmunityMode == "Blatant"
+							and statusName ~= "Medal"
+							and statusName ~= "Overtuned"
+						then
+							return false
+						end
+						return oldHasStatus(statusName, ...)
+					end)
+				else
+					local oldHasStatus = StatusEffectHandler.HasStatus
+					StatusEffectHandler.HasStatus = function(statusName, ...)
+						local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+						if
+							activeCtrl
+							and activeCtrl.SpringerImmunityMode == "Blatant"
+							and statusName ~= "Medal"
+							and statusName ~= "Overtuned"
+						then
+							return false
+						end
+						return oldHasStatus(statusName, ...)
+					end
+				end
+			end
+		end
+	end)
+end
+
 -- Hook để chặn RemoteEvent báo tử của thực thể Client-side (như ICBM và Springer) một cách an toàn
 local function initializeICBMHook()
 	-- Xây dựng bảng tra cứu nhanh O(1) tên các RemoteEvent cần chặn
@@ -1055,5 +1155,6 @@ task.spawn(function()
 end)
 
 task.spawn(initializeICBMHook)
+task.spawn(initializeStatusEffectHook)
 
 return Controller

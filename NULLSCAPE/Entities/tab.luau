@@ -219,7 +219,7 @@ return function(Client, Controller)
 	Tab:CreateSection("Settings")
 
 	Tab:CreateDropdown({
-		Name = "Immunity Mode",
+		Name = "Immunity Effect",
 		Options = { "Legit", "Blatant" },
 		CurrentOption = Controller.SpringerImmunityMode or "Legit",
 		MultipleOptions = false,

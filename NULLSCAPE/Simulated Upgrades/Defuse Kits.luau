@@ -14,11 +14,14 @@ local LocalPlayer = Players.LocalPlayer
 local BLOCKER_MODE = "Blocker"
 local BARRIER_MODE = "Barrier"
 local BLOCKER_FOLDER_NAME = "NULLSCAPE_TripmineBlockers"
-local BLOCKER_SCAN_RADIUS = 180
-local BLOCKER_BASE_RADIUS = 7.5
-local BLOCKER_REPEL_PADDING = 4
-local BLOCKER_REPEL_SPEED = 46
-local BLOCKER_REPEL_VERTICAL_LIFT = 4
+local BLOCKER_SCAN_RADIUS = 90
+local BLOCKER_BASE_RADIUS = 5.75
+local BLOCKER_REPEL_PADDING = 2
+local BLOCKER_REPEL_SPEED = 34
+local BLOCKER_REPEL_VERTICAL_LIFT = 2.5
+local BLOCKER_RADIUS_TOUCH_PADDING = 1.25
+local BLOCKER_COLLISION_HEIGHT = 6.5
+local BLOCKER_VERTICAL_OFFSET = 3
 local ACTIVE_WATCH_INTERVAL = 0.08
 local IDLE_WATCH_INTERVAL = 0.35
 
@@ -117,11 +120,60 @@ end
 
 local function getBlockerRadius(gift)
     local size = tonumber(gift and gift.Size) or 1
-    return math.clamp(BLOCKER_BASE_RADIUS * size, 6, 24)
+    return math.clamp(BLOCKER_BASE_RADIUS * size + BLOCKER_RADIUS_TOUCH_PADDING, 5.5, 16)
 end
 
-local function ensureBlocker(giftId, gift)
+local function getBlockerTransparency(dist, radius)
+    if type(dist) ~= "number" then
+        return 0.96
+    end
+
+    if dist <= radius + 4 then
+        return 0.94
+    end
+
+    if dist <= radius + 12 then
+        return 0.98
+    end
+
+    return 1
+end
+
+local function getGiftPosition(gift)
     local giftPos = gift and gift.Position
+    if typeof(giftPos) == "Vector3" then
+        return giftPos
+    end
+
+    local model = gift and gift.Model
+    if typeof(model) == "Instance" and model.Parent then
+        if model:IsA("BasePart") then
+            return model.Position
+        end
+
+        local part = model:FindFirstChildWhichIsA("BasePart", true)
+        if part and part.Parent then
+            return part.Position
+        end
+    end
+
+    return nil
+end
+
+local function isTripmineGiftActive(gift)
+    if not gift or not gift.Tripmine or gift.Collected or gift.Destroyed or gift.ClientCollected then
+        return false
+    end
+
+    local model = gift.Model
+    if typeof(model) == "Instance" and not model.Parent then
+        return false
+    end
+
+    return getGiftPosition(gift) ~= nil
+end
+
+local function ensureBlocker(giftId, gift, giftPos, dist)
     if typeof(giftPos) ~= "Vector3" then
         destroyBlocker(giftId)
         return nil
@@ -132,7 +184,7 @@ local function ensureBlocker(giftId, gift)
     if not (part and part.Parent) then
         part = Instance.new("Part")
         part.Name = "TripmineBlocker_" .. tostring(giftId)
-        part.Shape = Enum.PartType.Ball
+        part.Shape = Enum.PartType.Cylinder
         part.Anchored = true
         part.CanCollide = true
         part.CanTouch = false
@@ -140,19 +192,20 @@ local function ensureBlocker(giftId, gift)
         part.CastShadow = false
         part.Material = Enum.Material.ForceField
         part.Color = Color3.fromRGB(255, 0, 170)
-        part.Transparency = 0.58
+        part.Transparency = 1
         part.Parent = getBlockerFolder()
         blockerParts[giftId] = part
     end
 
     local diameter = radius * 2
-    part.Size = Vector3.new(diameter, diameter, diameter)
-    part.CFrame = CFrame.new(giftPos)
+    part.Size = Vector3.new(diameter, BLOCKER_COLLISION_HEIGHT, diameter)
+    part.CFrame = CFrame.new(giftPos + Vector3.new(0, BLOCKER_VERTICAL_OFFSET, 0))
+    part.Transparency = getBlockerTransparency(dist, radius)
     return part
 end
 
 local function applyTripmineRepel(hrp, gift, dist)
-    local giftPos = gift and gift.Position
+    local giftPos = getGiftPosition(gift)
     if not (hrp and typeof(giftPos) == "Vector3") then
         return
     end
@@ -198,13 +251,18 @@ local function updateBlockers()
     local hrpPos = hrp.Position
     local seen = {}
     for giftId, gift in pairs(GCH.Gifts) do
-        if gift.Tripmine and not gift.Collected and typeof(gift.Position) == "Vector3" then
-            local dist = (hrpPos - gift.Position).Magnitude
+        if isTripmineGiftActive(gift) then
+            local giftPos = getGiftPosition(gift)
+            local dist = (hrpPos - giftPos).Magnitude
             if dist <= BLOCKER_SCAN_RADIUS then
                 seen[giftId] = true
-                ensureBlocker(giftId, gift)
+                ensureBlocker(giftId, gift, giftPos, dist)
                 applyTripmineRepel(hrp, gift, dist)
+            else
+                destroyBlocker(giftId)
             end
+        else
+            destroyBlocker(giftId)
         end
     end
 

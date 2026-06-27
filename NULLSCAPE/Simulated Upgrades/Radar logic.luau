@@ -246,18 +246,41 @@ local function findEnemyVisualPart(enemy, hrp)
 		return enemy
 	end
 
-	-- Search for Head/head (case-insensitive and recursive if nested inside sub-models), ignoring non-BaseParts
-	local head = enemy:FindFirstChild("Head")
-	if not head or not head:IsA("BasePart") then
-		for _, child in ipairs(enemy:GetDescendants()) do
-			if (child.Name == "Head" or child.Name == "head") and child:IsA("BasePart") then
-				head = child
-				break
+	-- Search for Head/head (case-insensitive and recursive if nested inside sub-models), resolving BillboardGuis if needed
+	local head = enemy:FindFirstChild("Head") or enemy:FindFirstChild("head")
+	if head then
+		if head:IsA("BasePart") then
+			return head
+		elseif head:IsA("BillboardGui") then
+			local ad = head.Adornee or head.Parent
+			if ad and ad:IsA("BasePart") then
+				return ad
 			end
 		end
 	end
+
+	for _, child in ipairs(enemy:GetDescendants()) do
+		if child.Name == "Head" or child.Name == "head" then
+			if child:IsA("BasePart") then
+				head = child
+				break
+			elseif child:IsA("BillboardGui") then
+				local ad = child.Adornee or child.Parent
+				if ad and ad:IsA("BasePart") then
+					head = ad
+					break
+				end
+			end
+		end
+	end
+
 	if head and head:IsA("BasePart") then
 		return head
+	end
+
+	-- Fallback to PrimaryPart
+	if enemy:IsA("Model") and enemy.PrimaryPart then
+		return enemy.PrimaryPart
 	end
 
 	-- Try to find HumanoidRootPart or Torso (recursive)
@@ -267,11 +290,6 @@ local function findEnemyVisualPart(enemy, hrp)
 	end
 	if root and root:IsA("BasePart") then
 		return root
-	end
-
-	-- Fallback to PrimaryPart
-	if enemy:IsA("Model") and enemy.PrimaryPart then
-		return enemy.PrimaryPart
 	end
 
 	-- Shockwave fallback for Springer
