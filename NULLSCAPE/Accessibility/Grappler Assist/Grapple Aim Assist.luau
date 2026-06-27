@@ -1626,7 +1626,7 @@ local function getStaminaRatio(grapple)
 end
 
 local function refillStamina(grapple)
-    if not (hasClassCapability(grapple, "StaminaAssist") and Logic.isInfiniteStamina()) or typeof(grapple) ~= "table" then
+    if not Logic.isInfiniteStamina() or typeof(grapple) ~= "table" then
         return
     end
 
@@ -3889,9 +3889,6 @@ local function applySharkTailStabilize(grapple)
 end
 
 local function applyAirControlMultiplier(grapple, dt)
-    if not hasClassCapability(grapple, "AirControl") then
-        return
-    end
 
     local multiplier = Logic.getAirControlMultiplier()
     if multiplier <= 1 then
@@ -3976,9 +3973,6 @@ local function applySmartReelLandingAssist(grapple)
 end
 
 local function applyReelPullMultiplier(grapple)
-    if not hasClassCapability(grapple, "SmartReel") then
-        return
-    end
 
     local rootPart = grapple and grapple.RootPart
     if not (grapple and rootPart and grapple.jumpPadReel) then
@@ -3998,9 +3992,6 @@ local function applyReelPullMultiplier(grapple)
 end
 
 local function applySharkTailPullMultiplier(grapple, previousVelocity)
-    if not hasClassCapability(grapple, "SharkTail") then
-        return
-    end
 
     local multiplier = Logic.getSharkTailPullMultiplier()
     if multiplier <= 1 then
