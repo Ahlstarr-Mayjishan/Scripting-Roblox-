@@ -590,6 +590,17 @@ local function startObservingFolders()
 	end
 end
 
+local function hasUtilityWork()
+	return Controller.AutoCollectEnabled
+		or Controller.TripmineBarrierEnabled
+		or Controller.ChargerTripmineAssistEnabled
+		or Controller.MatrixTetrahedronEnabled
+		or Controller.GraceWingsEnabled
+		or Controller.AdvancedGravityCoilEnabled
+		or Controller.BetterJumpPadEnabled
+		or Controller.SpeedBuffsEnabled
+end
+
 -- RenderStepped connection management
 stopRenderStepped = function()
 end
@@ -627,16 +638,6 @@ end
 
 
 local utilityLoopActive = false
-local function hasUtilityWork()
-	return Controller.AutoCollectEnabled
-		or Controller.TripmineBarrierEnabled
-		or Controller.ChargerTripmineAssistEnabled
-		or Controller.MatrixTetrahedronEnabled
-		or Controller.GraceWingsEnabled
-		or Controller.AdvancedGravityCoilEnabled
-		or Controller.BetterJumpPadEnabled
-		or Controller.SpeedBuffsEnabled
-end
 
 local function startUtilityLoop()
 	if utilityLoopActive then

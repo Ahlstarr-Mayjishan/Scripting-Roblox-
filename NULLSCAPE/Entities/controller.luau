@@ -548,6 +548,30 @@ local function processEntity(enemy)
 	end
 
 	if enemy:IsA("Model") then
+		-- Tự động đổi Adornee của ESP / ESPCrayon sang PrimaryPart để tránh lỗi hiển thị khi Adornee là Model không có PrimaryPart từ server
+		local function onChildAdded(child)
+			if child.Name == "ESP" or child.Name == "ESPCrayon" then
+				if child:IsA("BillboardGui") then
+					task.defer(function()
+						if not enemy or not enemy.Parent then return end
+						local rootPart = enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+						if rootPart and (child.Adornee == enemy or child.Adornee == nil) then
+							pcall(function() child.Adornee = rootPart end)
+						end
+					end)
+				end
+			end
+		end
+
+		local conn = enemy.ChildAdded:Connect(onChildAdded)
+		if GC.registerEntityConnection then
+			GC.registerEntityConnection(enemy, conn)
+		end
+
+		for _, child in ipairs(enemy:GetChildren()) do
+			onChildAdded(child)
+		end
+
 		task.spawn(function()
 			-- Tìm kiếm đệ quy phần đầu hoặc phần thân khả dụng của quái vật 3D một cách không đồng bộ
 			local actualHead
