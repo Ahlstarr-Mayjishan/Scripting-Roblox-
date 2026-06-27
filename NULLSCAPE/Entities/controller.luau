@@ -178,7 +178,6 @@ local hasInRoundValue = false
 local folderConnections = {} -- key: folder -> value: list of connections
 local workspaceConnections = {} -- list of workspace-level connections
 local processedEntities = setmetatable({}, { __mode = "k" })
-local ENTITY_PROCESS_BATCH_SIZE = 4
 
 -- Ngắt các kết nối quan sát thư mục và workspace
 local function disconnectFolderObservations()
@@ -234,9 +233,9 @@ function Controller:CleanUp()
 		table.clear(self.PermanentConnections)
 	end
 
-	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
+	-- Keep the active controller during lobby cleanup; only full destroy may release it.
 	local globals = getgenv()._NULLSCAPE_Globals
-	if globals and globals.activeEntitiesController == self then
+	if self.Destroyed and globals and globals.activeEntitiesController == self then
 		globals.activeEntitiesController = nil
 	end
 end
@@ -977,23 +976,11 @@ function Controller:ObserveFolder(folder)
 	table.insert(conns, childRemovedConn)
 
 	-- 3. Xử lý các thực thể đã có sẵn trong thư mục
-	local existingChildren = folder:GetChildren()
-	debugPrint("ObserveFolder: Existing children in:", folder.Name, "| count:", #existingChildren)
-	task.spawn(function()
-		local processedThisSlice = 0
-		for _, child in ipairs(existingChildren) do
-			if Controller.Destroyed or (folderConnections[folder] and folderConnections[folder] ~= conns) or not folder.Parent then
-				break
-			end
-			debugPrint("ObserveFolder: Processing existing child:", child.Name)
-			processEntity(child)
-			processedThisSlice = processedThisSlice + 1
-			if processedThisSlice >= ENTITY_PROCESS_BATCH_SIZE then
-				processedThisSlice = 0
-				task.wait()
-			end
-		end
-	end)
+	debugPrint("ObserveFolder: Existing children in:", folder.Name, "| count:", #folder:GetChildren())
+	for _, child in ipairs(folder:GetChildren()) do
+		debugPrint("ObserveFolder: Processing existing child:", child.Name)
+		processEntity(child)
+	end
 
 	-- 4. Cơ chế tự động GC khi thư mục bị xóa/hủy khỏi Workspace
 	local destroyingConn = folder.AncestryChanged:Connect(function(_, parent)
@@ -1349,12 +1336,6 @@ local function initializeICBMHook()
 end
 
 -- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
-local previousEntitiesController = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-if previousEntitiesController and previousEntitiesController ~= Controller and typeof(previousEntitiesController.CleanUp) == "function" then
-	pcall(function()
-		previousEntitiesController:CleanUp()
-	end)
-end
 getgenv()._NULLSCAPE_Globals.activeEntitiesController = Controller
 
 -- Khởi tạo ban đầu khi nạp script

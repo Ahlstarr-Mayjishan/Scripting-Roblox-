@@ -128,8 +128,8 @@ local hasInRoundValue = false
 local matchLoopsActive = false
 local instantUpdateQueued = false
 local folderConnections = {}
-local OBSERVE_REGISTER_BATCH_SIZE = 80
-local GIFT_POOL_SCAN_INTERVAL = 0.85
+local OBSERVE_REGISTER_BATCH_SIZE = 180
+local GIFT_POOL_SCAN_INTERVAL = 0.45
 
 -- Forward references cho việc quản lý các loop
 local startMatchLoops, stopRenderStepped
@@ -522,7 +522,7 @@ local function startObservingFolders()
 		task.spawn(function()
 			local processedThisSlice = 0
 			for _, obj in ipairs(CollectionService:GetTagged(tagName)) do
-				if Controller.Destroyed or Controller.inLobby then
+				if Controller.Destroyed then
 					break
 				end
 				registerFn(obj)
@@ -1561,12 +1561,6 @@ local function setupGiftClientHook()
 end
 
 -- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
-local previousUpgradeController = getgenv()._NULLSCAPE_Globals.activeUpgradeController
-if previousUpgradeController and previousUpgradeController ~= Controller and typeof(previousUpgradeController.CleanUp) == "function" then
-	pcall(function()
-		previousUpgradeController:CleanUp()
-	end)
-end
 getgenv()._NULLSCAPE_Globals.activeUpgradeController = Controller
 
 -- Khởi tạo ban đầu khi nạp script
@@ -1576,9 +1570,7 @@ Logic.bindUpgradeWatcher(Controller, function()
 		triggerInstantUpdate()
 	end
 end)
-if not inLobby then
-	startObservingFolders()
-end
+startObservingFolders()
 setupGiftClientHook()
 startGiftPoolObserver()
 updateRunningState()
