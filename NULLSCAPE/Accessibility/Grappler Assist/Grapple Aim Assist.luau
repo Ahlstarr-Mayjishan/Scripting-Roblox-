@@ -4843,7 +4843,7 @@ local function applyTrajectoryAntiBonk(grapple)
     return applied == true
 end
 
-local function ensureDiveBonkHook(globals)
+function Logic.ensureDiveBonkHook(globals)
     if globals.GrappleAimAssistOriginalDiveBonk then
         return
     end
@@ -4870,7 +4870,7 @@ local function ensureDiveBonkHook(globals)
     end
 end
 
-local function resetRuntimeState(grapple, reason)
+function Logic.resetRuntimeState(grapple, reason)
     Logic.CurrentGrappleStep = nil
     Logic.LastKnownGrapple = grapple
     Logic.LastGrappleMovement = grapple and grapple.Movement or nil
@@ -4970,10 +4970,10 @@ end
 
 function Logic.enable()
     local globals = Logic.getGlobals()
-    resetRuntimeState(nil, "Enable")
+    Logic.resetRuntimeState(nil, "Enable")
     if globals.GrappleAimAssistHooked then
         globals.activeGrappleAimAssist = Logic
-        ensureDiveBonkHook(globals)
+        Logic.ensureDiveBonkHook(globals)
         watchAdaptInput()
         watchCandidateFolder()
         return true
@@ -5093,7 +5093,7 @@ function Logic.enable()
                 and (self.Character ~= Logic.LastRuntimeCharacter
                     or self.RootPart ~= Logic.LastRuntimeRootPart
                     or self.Movement ~= Logic.LastRuntimeMovement) then
-                resetRuntimeState(self, "RuntimeChanged")
+                Logic.resetRuntimeState(self, "RuntimeChanged")
             end
             Logic.LastKnownGrapple = self
             HealthMonitor.try("RefillStamina", refillStamina, self)
@@ -5157,7 +5157,7 @@ function Logic.enable()
         end
     end
 
-    ensureDiveBonkHook(globals)
+    Logic.ensureDiveBonkHook(globals)
 
     if typeof(grappleModule.End) == "function" then
         local originalEnd = grappleModule.End
