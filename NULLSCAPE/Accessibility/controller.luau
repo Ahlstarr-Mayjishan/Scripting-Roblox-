@@ -115,6 +115,7 @@ local Controller = {
 	GrappleAimAssistRangePriority = "Nearest",
 	GrappleAimAssistStrength = "Balanced",
 	GrappleMapModelDebugEnabled = false,
+	GrappleMapModel3DDebugEnabled = false,
 	AntiBonkEnabled = false,
 	GrappleSmartReelEnabled = false,
 	GrappleSmartReelMode = "Manual",
@@ -205,6 +206,7 @@ function Controller:CleanUp()
 		self.GrappleMomentumGuardEnabled = false
 		self.GrappleJumpPadUsesBypassEnabled = false
 		self.GrappleMapModelDebugEnabled = false
+		self.GrappleMapModel3DDebugEnabled = false
 		callExecutor("disableRailAssist")
 		callExecutor("disableGrappleAimAssist")
 		callExecutor("disableAntiBonk")
@@ -413,6 +415,7 @@ function Controller:HasAnyGrappleAssistFeature()
 		or self.GrappleMomentumGuardEnabled
 		or self.GrappleJumpPadUsesBypassEnabled
 		or self.GrappleMapModelDebugEnabled
+		or self.GrappleMapModel3DDebugEnabled
 end
 
 function Controller:RefreshGrappleAssistHook()
@@ -457,11 +460,29 @@ function Controller:SetGrappleMapModelDebug(value)
 	callExecutor("setGrappleMapModelDebug", self.GrappleMapModelDebugEnabled)
 end
 
+function Controller:SetGrappleMapModel3DDebug(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
+	self.GrappleMapModel3DDebugEnabled = value == true
+	if self.GrappleMapModel3DDebugEnabled then
+		self.GrappleAssistSuiteEnabled = true
+	end
+
+	if not self:RefreshGrappleAssistHook() then
+		self.GrappleMapModel3DDebugEnabled = false
+		self.GrappleAssistSuiteEnabled = previousSuite
+		return
+	end
+
+	callExecutor("setGrappleMapModel3DDebug", self.GrappleMapModel3DDebugEnabled)
+end
+
 function Controller:SetGrappleAssistSuite(value)
     self.GrappleAssistSuiteEnabled = value == true
 	if not self.GrappleAssistSuiteEnabled then
 		self.GrappleMapModelDebugEnabled = false
+		self.GrappleMapModel3DDebugEnabled = false
 		callExecutor("setGrappleMapModelDebug", false)
+		callExecutor("setGrappleMapModel3DDebug", false)
 	end
 
 	if not self:RefreshGrappleAssistHook() then

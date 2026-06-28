@@ -34,6 +34,7 @@ local DEFAULTS = {
 	GrappleAimAssistRangePriority = "Nearest",
 	GrappleAdaptInputKey = "T",
 	GrappleMapModelDebugEnabled = false,
+	GrappleMapModel3DDebugEnabled = false,
 }
 
 local function resolveController(Client, Controller)
@@ -283,6 +284,16 @@ return function(Client, Controller)
 		Flag = "GrappleMapModelDebugToggle",
 		Callback = function(Value)
 			Controller:SetGrappleMapModelDebug(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Map Model 3D Debug",
+		Info = "Renders the chunk cache directly in the world. Use for testing only; it is intentionally visible.",
+		CurrentValue = Controller.GrappleMapModel3DDebugEnabled or false,
+		Flag = "GrappleMapModel3DDebugToggle",
+		Callback = function(Value)
+			Controller:SetGrappleMapModel3DDebug(Value)
 		end,
 	})
 

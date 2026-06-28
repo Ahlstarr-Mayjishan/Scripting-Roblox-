@@ -402,6 +402,9 @@ local CFG = {
     MAP_MODEL_KILL_MARGIN = 12,
     MAP_MODEL_MAX_PARTS_PER_CHUNK = 90,
     MAP_MODEL_MAX_ANCHORS_PER_CHUNK = 36,
+    MAP_MODEL_DEBUG_3D_RENDER_INTERVAL = 0.24,
+    MAP_MODEL_DEBUG_3D_MAX_MARKERS = 160,
+    MAP_MODEL_DEBUG_3D_CHUNK_HEIGHT = 4,
     MAP_ANCHOR_THREAT_MAX_DISTANCE = 38,
     SAFE_LANDING_MAX_THREAT_SCORE = 52,
     CONTROLLED_LANDING_PROBE_TIME = 0.72,
@@ -5469,6 +5472,18 @@ end
 function Logic.setMapModelDebugEnabled(value)
     if Logic.MapModel and Logic.MapModel.setDebugEnabled then
         Logic.MapModel.setDebugEnabled(value == true)
+    end
+end
+
+function Logic.setMapModelDebugMode(mode)
+    if Logic.MapModel and Logic.MapModel.setDebugMode then
+        Logic.MapModel.setDebugMode(mode)
+    end
+end
+
+function Logic.setMapModel3DDebugEnabled(value)
+    if Logic.MapModel and Logic.MapModel.setDebug3DEnabled then
+        Logic.MapModel.setDebug3DEnabled(value == true)
     end
 end
 

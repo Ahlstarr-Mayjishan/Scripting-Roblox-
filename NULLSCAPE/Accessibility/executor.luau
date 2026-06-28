@@ -166,6 +166,14 @@ function Executor.setGrappleMapModelDebug(value)
     callModule("GrappleAimAssist", "setMapModelDebugEnabled", value == true)
 end
 
+function Executor.setGrappleMapModelDebugMode(mode)
+    callModule("GrappleAimAssist", "setMapModelDebugMode", mode)
+end
+
+function Executor.setGrappleMapModel3DDebug(value)
+    callModule("GrappleAimAssist", "setMapModel3DDebugEnabled", value == true)
+end
+
 function Executor.getGrappleAimAssistHealthStatus()
     local failure = getFailureText("GrappleAimAssist")
     if failure then
