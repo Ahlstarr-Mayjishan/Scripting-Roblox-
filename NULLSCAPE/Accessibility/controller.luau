@@ -130,6 +130,8 @@ local Controller = {
 
 	EnemiesFolder = nil,
 	PermanentConnections = {},
+	RespawnRefreshToken = 0,
+	LastReapplyAt = 0,
 }
 
 local _LocalPlayer = Players.LocalPlayer
@@ -291,6 +293,11 @@ function Controller:ReapplyRespawnFeatures()
 	if self.Destroyed then
 		return
 	end
+	local now = time()
+	if now - (self.LastReapplyAt or 0) < 0.12 then
+		return
+	end
+	self.LastReapplyAt = now
 
 	if not isControllerActiveOrUnclaimed(self) then
 		return
@@ -820,7 +827,8 @@ end
 
 -- Cập nhật động trạng thái Auto Jump của Springer dựa trên cài đặt và immunity mode
 function Controller:updateSpringerAutoJumpState()
-	local entitiesController = getgenv().loadModule("NULLSCAPE/Entities/controller.luau")
+	local globals = getGlobals()
+	local entitiesController = globals.activeEntitiesController
 	local isBlatant = entitiesController and entitiesController.SpringerImmunityMode == "Blatant"
 
 	if self.SpringerAutoJumpEnabled and not isBlatant then
@@ -853,8 +861,13 @@ end
 
 -- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
 local function scheduleRespawnFeatureRefresh()
+	Controller.RespawnRefreshToken = (Controller.RespawnRefreshToken or 0) + 1
+	local token = Controller.RespawnRefreshToken
 	local function refreshLater()
 		if Controller.Destroyed then
+			return
+		end
+		if token ~= Controller.RespawnRefreshToken then
 			return
 		end
 		if not isControllerActiveOrUnclaimed(Controller) then

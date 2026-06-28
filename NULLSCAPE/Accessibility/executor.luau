@@ -14,11 +14,54 @@ local MODULE_PATHS = {
 }
 
 local Modules = {}
+local ModuleFailures = {}
 local Executor = {}
+
+local LOAD_RETRY_COOLDOWN = 1.5
+local CALL_RETRY_COOLDOWN = 0.75
+
+local function getNow()
+    return time()
+end
+
+local function isQuarantined(name, kind)
+    local failure = ModuleFailures[name]
+    if not failure then
+        return false
+    end
+
+    local cooldown = kind == "call" and CALL_RETRY_COOLDOWN or LOAD_RETRY_COOLDOWN
+    return getNow() - (failure.At or 0) < cooldown
+end
+
+local function markFailure(name, phase, err)
+    ModuleFailures[name] = {
+        At = getNow(),
+        Phase = phase,
+        Error = tostring(err),
+    }
+end
+
+local function clearFailure(name)
+    ModuleFailures[name] = nil
+end
+
+local function getFailureText(name)
+    local failure = ModuleFailures[name]
+    if not failure then
+        return nil
+    end
+
+    return tostring(failure.Phase or "error") .. ": " .. tostring(failure.Error or "unknown")
+end
 
 local function loadAccessibilityModule(name)
     if typeof(Modules[name]) == "table" then
         return Modules[name]
+    end
+
+    if isQuarantined(name, "load") then
+        return nil
     end
 
     local path = MODULE_PATHS[name]
@@ -32,14 +75,20 @@ local function loadAccessibilityModule(name)
     if not success or typeof(module) ~= "table" then
         warn("[NULLSCAPE] Accessibility module failed: " .. tostring(path) .. " -> " .. tostring(module))
         Modules[name] = nil
+        markFailure(name, "load", module)
         return nil
     end
 
     Modules[name] = module
+    clearFailure(name)
     return module
 end
 
 local function callModule(name, methodName, ...)
+    if isQuarantined(name, "call") then
+        return false
+    end
+
     local module = loadAccessibilityModule(name)
     if not module or typeof(module[methodName]) ~= "function" then
         return false
@@ -50,9 +99,11 @@ local function callModule(name, methodName, ...)
     end, ...)
     if not success then
         warn("[NULLSCAPE] Accessibility call failed: " .. tostring(name) .. "." .. tostring(methodName) .. " -> " .. tostring(result))
+        markFailure(name, "call:" .. tostring(methodName), result)
         return false
     end
 
+    clearFailure(name)
     return result ~= false
 end
 
@@ -69,6 +120,11 @@ function Executor.disableInfiniteAirJump()
 end
 
 function Executor.getInfiniteAirJumpStatus()
+    local failure = getFailureText("InfiniteAirJump")
+    if failure then
+        return failure
+    end
+
     local module = loadAccessibilityModule("InfiniteAirJump")
     if module and typeof(module.getStatus) == "function" then
         local success, result = pcall(function()
@@ -103,6 +159,11 @@ function Executor.disableGrappleAimAssist()
 end
 
 function Executor.getGrappleAimAssistHealthStatus()
+    local failure = getFailureText("GrappleAimAssist")
+    if failure then
+        return failure
+    end
+
     local module = loadAccessibilityModule("GrappleAimAssist")
     if module and typeof(module.getHealthStatus) == "function" then
         local success, result = pcall(function()

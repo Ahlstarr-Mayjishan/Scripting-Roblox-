@@ -8,10 +8,10 @@
 --  - Gửi kết nối đăng ký qua GC và phát lệnh dọn dẹp giải phóng tài nguyên.
 -- ]]
 
+local getgenv = getgenv
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
-local CollectionService = game:GetService("CollectionService")
 local LocalPlayer = Players.LocalPlayer
 
 local Executor = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/executor.luau")
@@ -62,6 +62,8 @@ local Controller = {
 	DefuseKitStack = 3,
 
 	PermanentConnections = {},
+	RespawnRefreshToken = 0,
+	LastReapplyAt = 0,
 }
 
 local function safeControllerCleanUp()
@@ -132,8 +134,12 @@ end
 local function triggerInstantUpdate() end
 local function updateRunningState() end
 local function stopRenderStepped() end
-local function startMatchLoops() end
-local function checkActiveState() return false end
+local function checkActiveState()
+	return false
+end
+local startMatchLoops
+local instantUpdateQueued = false
+local matchLoopsActive = false
 
 local function disconnectFolderObservations()
 	table.clear(folderConnections)
@@ -191,6 +197,12 @@ startMatchLoops = function()
 end
 
 
+updateRunningState = function()
+	if checkActiveState() then
+		startMatchLoops()
+	end
+end
+
 local utilityLoopActive = false
 
 local function startUtilityLoop()
@@ -205,6 +217,9 @@ local function startUtilityLoop()
 				break
 			end
 			claimActiveController(Controller)
+			if not hasUtilityWork() then
+				break
+			end
 			local char = LocalPlayer.Character
 			local hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if hrp and not Controller.inLobby then
@@ -667,6 +682,11 @@ function Controller:ReapplyRespawnFeatures()
 	if self.Destroyed then
 		return
 	end
+	local now = time()
+	if now - (self.LastReapplyAt or 0) < 0.12 then
+		return
+	end
+	self.LastReapplyAt = now
 	if not isControllerActiveOrUnclaimed(self) then
 		return
 	end
@@ -832,8 +852,8 @@ function Controller:CleanUp()
 	end
 end
 
-getgenv()._NULLSCAPE_Globals.onGiftCreated = function(giftObj) end
-getgenv()._NULLSCAPE_Globals.onGiftDestroyed = function(id) end
+getgenv()._NULLSCAPE_Globals.onGiftCreated = function(_giftObj) end
+getgenv()._NULLSCAPE_Globals.onGiftDestroyed = function(_id) end
 
 getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local args = { ... }
@@ -936,8 +956,13 @@ updateRunningState()
 startUtilityLoop()
 
 local function scheduleRespawnFeatureRefresh()
+	Controller.RespawnRefreshToken = (Controller.RespawnRefreshToken or 0) + 1
+	local token = Controller.RespawnRefreshToken
 	local function refreshLater()
 		if Controller.Destroyed then
+			return
+		end
+		if token ~= Controller.RespawnRefreshToken then
 			return
 		end
 		if not isControllerActiveOrUnclaimed(Controller) then
@@ -977,14 +1002,18 @@ task.spawn(function()
 		conn = inRoundVal.Changed:Connect(function(val)
 			if Controller.Destroyed or typeof(Controller) ~= "table" or not Controller.CleanUp then
 				if conn then
-					pcall(function() conn:Disconnect() end)
+					pcall(function()
+						conn:Disconnect()
+					end)
 				end
 				return
 			end
 			if not isControllerActiveOrUnclaimed(Controller) then
 				pcall(safeControllerCleanUp)
 				if conn then
-					pcall(function() conn:Disconnect() end)
+					pcall(function()
+						conn:Disconnect()
+					end)
 				end
 				return
 			end

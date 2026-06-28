@@ -4,6 +4,9 @@
 -- ]]
 
 -- Tự động dọn dẹp phiên chạy cũ trước khi chạy phiên mới
+local getgenv = getgenv
+local Game = game :: any
+
 if getgenv().Client then
 	pcall(function()
 		local oldClient = getgenv().Client
@@ -202,10 +205,8 @@ pcall(function()
 		end
 
 		for k, v in pairs(defaultSettings) do
-			if currentSettings[k] == nil then
-				currentSettings[k] = v
-				updated = true
-			elseif type(currentSettings[k]) ~= type(v) then
+			local currentValue = currentSettings[k]
+			if currentValue == nil or type(currentValue) ~= type(v) then
 				currentSettings[k] = v
 				updated = true
 			end
@@ -287,7 +288,7 @@ task.spawn(function()
 	end
 end)
 
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+local Rayfield = loadstring(Game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
 
 -- Dịch vụ Roblox phổ biến
@@ -386,6 +387,8 @@ task.spawn(function()
 end)
 
 local moduleCache = {}
+local moduleLoading = {}
+local NIL_MODULE = {}
 
 function Client:Destroy(reason)
 	if self.Destroying or self.Destroyed then
@@ -447,6 +450,9 @@ function Client:Destroy(reason)
 		if moduleCache then
 			table.clear(moduleCache)
 		end
+		if moduleLoading then
+			table.clear(moduleLoading)
+		end
 	end)
 
 	safeStep("release globals", function()
@@ -483,23 +489,51 @@ SettingsTab:CreateButton({
 
 local function loadModule(path)
 	if moduleCache[path] ~= nil then
-		return moduleCache[path]
+		local cached = moduleCache[path]
+		if cached == NIL_MODULE then
+			return nil
+		end
+		return cached
+	end
+
+	if moduleLoading[path] then
+		local globals = getgenv()._NULLSCAPE_Globals
+		if path == "NULLSCAPE/Accessibility/controller.luau" then
+			return globals and globals.activeAccessibilityController or nil
+		end
+		if path == "NULLSCAPE/Entities/controller.luau" then
+			return globals and globals.activeEntitiesController or nil
+		end
+		if path == "NULLSCAPE/Simulated Upgrades/controller.luau" then
+			return globals and globals.activeUpgradeController or nil
+		end
+		warn("[NULLSCAPE] Skipping re-entrant module load: " .. tostring(path))
+		return nil
 	end
 
 	local isLocal = not not (isfile and readfile and isfile(path))
 	warn("[NULLSCAPE] Loading module: " .. tostring(path) .. " (local=" .. tostring(isLocal) .. ")")
+	moduleLoading[path] = true
 
-	local source
-	if isLocal then
-		source = readfile(path)
-	else
+	local sourceSuccess, sourceResult = pcall(function()
+		if isLocal then
+			return readfile(path)
+		end
+
 		local githubRawUrl = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
 		local url = (githubRawUrl .. path):gsub(" ", "%%20")
-		source = game:HttpGet(url)
+		return Game:HttpGet(url)
+	end)
+	if not sourceSuccess then
+		moduleLoading[path] = nil
+		error("[NULLSCAPE] Failed to read module " .. tostring(path) .. ": " .. tostring(sourceResult), 2)
 	end
+
+	local source = sourceResult
 
 	local chunk, compileErr = loadstring(source)
 	if not chunk then
+		moduleLoading[path] = nil
 		error("[NULLSCAPE] Compile failed in " .. tostring(path) .. ": " .. tostring(compileErr), 2)
 	end
 
@@ -507,12 +541,15 @@ local function loadModule(path)
 		return tostring(message)
 	end
 	local success, result = xpcall(chunk, traceback)
+	moduleLoading[path] = nil
 	if not success then
 		error("[NULLSCAPE] Runtime failed in " .. tostring(path) .. ":\n" .. tostring(result), 2)
 	end
 
 	if result == nil then
 		warn("[NULLSCAPE] WARNING: Module " .. tostring(path) .. " returned nil!")
+		moduleCache[path] = NIL_MODULE
+		return nil
 	end
 
 	moduleCache[path] = result

@@ -184,11 +184,8 @@ local function getAccessibilityController()
 	if globals and globals.activeAccessibilityController then
 		return globals.activeAccessibilityController
 	end
-	
-	local success, result = pcall(function()
-		return getgenv().loadModule and getgenv().loadModule("NULLSCAPE/Accessibility/controller.luau")
-	end)
-	return success and result or nil
+
+	return nil
 end
 
 local inLobby = not isInMatch() -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
@@ -276,6 +273,7 @@ local function restoreHooks()
 			end
 		end
 		globals.StatusEffectHooked = nil
+		globals.StatusEffectLoopToken = nil
 		globals.OriginalOnClientEventConnect = nil
 		globals.OriginalHasStatus = nil
 	end
@@ -1322,10 +1320,18 @@ local function initializeStatusEffectHook()
 	end)
 
 	-- Khởi chạy vòng lặp ngầm để liên tục khử kích thước Blur và các hiệu ứng méo/đỏ màn hình
+	globals.StatusEffectHooked = true
+	local loopToken = {}
+	globals.StatusEffectLoopToken = loopToken
 	task.spawn(function()
-		while true do
-			task.wait(0.2)
+		while globals.StatusEffectHooked and globals.StatusEffectLoopToken == loopToken do
 			local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+			if activeCtrl and activeCtrl ~= Controller then
+				break
+			end
+			if activeCtrl and activeCtrl.Destroyed then
+				break
+			end
 			if activeCtrl and activeCtrl.SpringerImmunityMode == "Blatant" then
 				pcall(function()
 					local lighting = game:GetService("Lighting")
@@ -1345,10 +1351,9 @@ local function initializeStatusEffectHook()
 					end
 				end)
 			end
+			task.wait(activeCtrl and activeCtrl.SpringerImmunityMode == "Blatant" and 0.2 or 1.0)
 		end
 	end)
-
-	globals.StatusEffectHooked = true
 end
 
 -- Hook để chặn RemoteEvent báo tử của thực thể Client-side (như ICBM và Springer) một cách an toàn

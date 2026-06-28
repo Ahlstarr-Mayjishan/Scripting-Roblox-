@@ -1187,7 +1187,7 @@ local function watchAdaptInput()
         return
     end
 
-    table.insert(Logic.InputConnections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    table.insert(Logic.InputConnections, UserInputService.InputBegan:Connect(function(input, _gameProcessed)
         if Logic.isTextBoxFocused() or input.KeyCode ~= Logic.getAdaptInputKeyCode() then
             return
         end
@@ -3442,8 +3442,7 @@ local function getSoftOverrideResult(grapple, originalResult)
         return nil
     end
 
-    local originalScore, originalScreenScore, wrongAnchorPenalty, originalTargetNameCheck =
-        getDirectResultAssistScore(grapple, originalResult)
+    local originalScore = getDirectResultAssistScore(grapple, originalResult)
     local decisionScore = tonumber(decision.Score) or math.huge
     local decisionScreenScore = tonumber(decision.ScreenScore) or math.huge
     local strengthScale = getAimAssistStrengthScale()
