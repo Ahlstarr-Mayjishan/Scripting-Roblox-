@@ -3423,13 +3423,6 @@ local function getSoftOverrideResult(grapple, originalResult)
         return nil
     end
 
-    -- Nếu người chơi đang aim trực tiếp vào một mục tiêu hợp lệ (như JumpPad, GrapplePoint, Bell, TriaOrb),
-    -- tôn trọng ý định của họ và không tự động thay thế sang mục tiêu khác.
-    local originalTargetName = getResultTargetName(originalResult)
-    if originalTargetName then
-        return nil
-    end
-
     local decision = scanNamedTargets(grapple, {
         returnDecision = true,
         fullScan = true,
@@ -3437,7 +3430,15 @@ local function getSoftOverrideResult(grapple, originalResult)
     if not (decision and decision.Result) then
         return nil
     end
-    if isSameAssistTarget(originalResult, decision) then
+
+    local originalTargetName = getResultTargetName(originalResult)
+    local isSame = isSameAssistTarget(originalResult, decision)
+
+    if isSame then
+        -- Nếu cùng một mục tiêu (ví dụ đang aim vào JumpPad đó), cho phép snap thẳng vào tâm của nó
+        return decision.Result
+    elseif originalTargetName then
+        -- Nếu đang aim vào một mục tiêu hợp lệ khác, không tự động bẻ lái sang mục tiêu này
         return nil
     end
 
