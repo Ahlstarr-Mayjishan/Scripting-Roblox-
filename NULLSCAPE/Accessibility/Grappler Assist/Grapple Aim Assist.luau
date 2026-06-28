@@ -22,6 +22,7 @@ local PhysicsProfile = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler As
 local ThreatModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/ThreatModel.luau")
 local SafeLandingGuard = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SafeLandingGuard.luau")
 local TrajectoryAntiBonk = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TrajectoryAntiBonk.luau")
+local PredictionHorizon = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/PredictionHorizon.luau")
 
 local function packValues(...)
     local values = { ... }
@@ -107,6 +108,7 @@ local Logic = {
     LastThreatSnapshot = nil,
     LastLandingGuard = nil,
     LastAntiBonkPrediction = nil,
+    LastPredictionHorizon = nil,
     CurseHandler = nil,
     CurseHandlerLoaded = false,
 }
@@ -245,6 +247,25 @@ local CFG = {
     MAP_ANCHOR_SWING_CLEARANCE = 7,
     MAP_ANCHOR_SWING_CLEARANCE_BONUS = -18,
     MAP_ANCHOR_SWING_NARROW_PENALTY = 55,
+    MAP_ANCHOR_OPT_MIN_MOMENTUM_SPEED = 28,
+    MAP_ANCHOR_OPT_LOW_MOMENTUM_PENALTY = 18,
+    MAP_ANCHOR_OPT_NO_FLAT_ROOM_PENALTY = 55,
+    MAP_ANCHOR_OPT_LEAD_TIME = 0.42,
+    MAP_ANCHOR_OPT_LEAD_WEIGHT = 0.22,
+    MAP_ANCHOR_OPT_LATERAL_MIN = 18,
+    MAP_ANCHOR_OPT_LATERAL_IDEAL = 48,
+    MAP_ANCHOR_OPT_LATERAL_WEIGHT = 0.74,
+    MAP_ANCHOR_OPT_FORWARD_BONUS = -22,
+    MAP_ANCHOR_OPT_BACKWARD_PENALTY = 62,
+    MAP_ANCHOR_OPT_VERTICAL_MIN = 8,
+    MAP_ANCHOR_OPT_VERTICAL_MAX = 54,
+    MAP_ANCHOR_OPT_LOW_APEX_WEIGHT = 1.15,
+    MAP_ANCHOR_OPT_HIGH_APEX_WEIGHT = 0.55,
+    MAP_ANCHOR_OPT_APEX_BONUS = -18,
+    MAP_ANCHOR_OPT_PATH_WIDTH = 10,
+    MAP_ANCHOR_OPT_WIDE_PATH_BONUS = -24,
+    MAP_ANCHOR_OPT_PARTIAL_PATH_PENALTY = 10,
+    MAP_ANCHOR_OPT_NARROW_PATH_PENALTY = 80,
     PANIC_RESCUE_GROUND_CHECK_HEIGHT = 10,
     PANIC_RESCUE_GROUND_CHECK_DEPTH = 90,
     PANIC_INPUT_WINDOW = 0.42,
@@ -361,6 +382,13 @@ local CFG = {
     THREAT_SCAN_MAX_HAZARDS = 120,
     MAP_ANCHOR_THREAT_MAX_DISTANCE = 38,
     SAFE_LANDING_MAX_THREAT_SCORE = 52,
+    CONTROLLED_LANDING_PROBE_TIME = 0.72,
+    CONTROLLED_LANDING_MAX_TIME = 2.35,
+    CONTROLLED_LANDING_MAX_PROBE_DISTANCE = 96,
+    CONTROLLED_LANDING_COARSE_PROBE_DISTANCE = 180,
+    CONTROLLED_LANDING_MIN_HORIZONTAL_SPEED = 20,
+    VOID_RESCUE_MOMENTUM_GRACE_HEIGHT = 58,
+    VOID_RESCUE_MOMENTUM_MIN_FALL_SPEED = 30,
     TRAJECTORY_ANTIBONK_INTERVAL = 0.055,
     TRAJECTORY_ANTIBONK_LOOKAHEAD = 0.28,
     TRAJECTORY_ANTIBONK_MIN_SPEED = 112,
@@ -1360,6 +1388,8 @@ local function isSafeLandingFloorHit(result, killY)
     return true
 end
 
+local getPredictionHorizon
+
 local function getSafeLandingFloorHit(grapple, killY)
     local rootPart = grapple and grapple.RootPart
     local velocity = rootPart and rootPart.Velocity
@@ -1369,11 +1399,18 @@ local function getSafeLandingFloorHit(grapple, killY)
 
     local params = getEmergencyFloorRaycastParams(grapple)
     local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
+    local horizon = getPredictionHorizon and getPredictionHorizon(grapple) or nil
+    local tactical = tonumber(horizon and horizon.Tactical) or 0.72
+    local route = tonumber(horizon and horizon.Route) or 1.3
     local samples = {
         rootPart.Position,
         rootPart.Position + horizontal * 0.22,
         rootPart.Position + horizontal * 0.42,
+        rootPart.Position + horizontal * math.min(tactical, 1.2),
     }
+    if horizontal.Magnitude > 0.05 then
+        table.insert(samples, rootPart.Position + horizontal.Unit * math.clamp(horizontal.Magnitude * route, 32, CFG.CONTROLLED_LANDING_COARSE_PROBE_DISTANCE))
+    end
 
     local bestHit = nil
     local bestDistance = math.huge
@@ -1480,6 +1517,9 @@ local function getVoidKillPlaneY()
     return nil
 end
 
+local getSafeLandingGuard
+local isPanicPressureActive
+
 local function getVoidDangerState(grapple)
     if not (hasClassCapability(grapple, "VoidRescue") and Logic.isVoidRescueEnabled()) then
         return false, nil
@@ -1495,17 +1535,20 @@ local function getVoidDangerState(grapple)
     local y = rootPart.Position.Y
     local gravityProfile = Logic.getGravityAssistProfile(grapple)
     local voidBufferBonus = gravityProfile.VoidBufferBonus or 0
-    local safeLandingHit = getSafeLandingFloorHit(grapple, killY)
+    local landingGuard = getSafeLandingGuard and getSafeLandingGuard(grapple) or nil
+    local safeLandingHit = (landingGuard and landingGuard.Safe and landingGuard.Hit) or getSafeLandingFloorHit(grapple, killY)
     if killY then
         if y <= killY + CFG.VOID_RESCUE_HARD_BUFFER + voidBufferBonus * 0.35 then
             return true, "BelowKillPlane"
         end
 
         if safeLandingHit then
-            return false, "SafeLandingFloor"
+            return false, landingGuard and landingGuard.Reason or "SafeLandingFloor"
         end
 
-        if y <= killY + CFG.VOID_RESCUE_KILL_PLANE_BUFFER + voidBufferBonus then
+        local nearKillPlane = y <= killY + CFG.VOID_RESCUE_KILL_PLANE_BUFFER + voidBufferBonus
+        local enoughFallForMomentum = velocity.Y <= -CFG.VOID_RESCUE_MOMENTUM_MIN_FALL_SPEED
+        if nearKillPlane and enoughFallForMomentum then
             return true, gravityProfile.Active and "LowGravityNearKillPlane" or "NearKillPlane"
         end
 
@@ -1518,11 +1561,14 @@ local function getVoidDangerState(grapple)
     end
 
     if safeLandingHit then
-        return false, "SafeLandingFloor"
+        return false, landingGuard and landingGuard.Reason or "SafeLandingFloor"
     end
 
     local terrainState = getTerrainVoidFallState(grapple)
     if terrainState and terrainState.Danger then
+        if killY and y > killY + CFG.VOID_RESCUE_MOMENTUM_GRACE_HEIGHT + voidBufferBonus and not isPanicPressureActive() then
+            return false, "VoidMomentumGrace"
+        end
         return true, terrainState.Reason or "TerrainVoidDrop"
     end
 
@@ -1553,7 +1599,8 @@ local function getProjectedUnsafeSampleCount(grapple)
     end
 
     local killY = getVoidKillPlaneY()
-    if getSafeLandingFloorHit(grapple, killY) then
+    local landing = getSafeLandingGuard and getSafeLandingGuard(grapple) or nil
+    if (landing and landing.Safe) or getSafeLandingFloorHit(grapple, killY) then
         return 0, false
     end
 
@@ -1567,7 +1614,9 @@ local function getProjectedUnsafeSampleCount(grapple)
 
     local unsafeSamples = 0
     local params = getEmergencyFloorRaycastParams(grapple)
-    for _, lookahead in ipairs(CFG.PANIC_RESCUE_LOOKAHEADS) do
+    local horizon = getPredictionHorizon(grapple)
+    local lookaheads = PredictionHorizon and PredictionHorizon.getPanicLookaheads and PredictionHorizon.getPanicLookaheads(horizon) or CFG.PANIC_RESCUE_LOOKAHEADS
+    for _, lookahead in ipairs(lookaheads) do
         local projected = rootPart.Position + velocity * lookahead
         if not hasFloorBelow(projected, params) then
             unsafeSamples = unsafeSamples + 1
@@ -1603,7 +1652,7 @@ local function notePanicInput(grapple)
     end
 end
 
-local function isPanicPressureActive()
+isPanicPressureActive = function()
     return time() <= (Logic.PanicPressureUntil or 0)
 end
 
@@ -1614,6 +1663,11 @@ function Logic.isPanicRescueDanger(grapple)
 
     if isVoidRescueDanger(grapple) then
         return true
+    end
+
+    local landing = getSafeLandingGuard and getSafeLandingGuard(grapple) or nil
+    if landing and landing.Safe then
+        return false
     end
 
     local terrainState = getTerrainVoidFallState(grapple)
@@ -1767,6 +1821,30 @@ local function getPhysicsProfile(grapple, force)
     return profile
 end
 
+getPredictionHorizon = function(grapple)
+    if not (PredictionHorizon and PredictionHorizon.get) then
+        local rootPart = grapple and grapple.RootPart
+        local speed = Logic.getHorizontalVelocity(rootPart).Magnitude
+        local route = math.clamp(speed / 55, 1.2, 4.2)
+        local fallback = {
+            Speed = speed,
+            Short = math.clamp(route * 0.24, 0.25, 0.85),
+            Tactical = math.clamp(route * 0.58, 1.0, 2.2),
+            Route = route,
+            Coarse = math.clamp(route * 1.35, 2.0, 6.0),
+            Summary = string.format("H%.1f", route),
+        }
+        Logic.LastPredictionHorizon = fallback
+        return fallback
+    end
+
+    local horizon = PredictionHorizon.get({
+        now = time,
+    }, grapple, getPhysicsProfile(grapple))
+    Logic.LastPredictionHorizon = horizon
+    return horizon
+end
+
 local function getThreatModelDeps()
     return {
         Workspace = Workspace,
@@ -1805,24 +1883,43 @@ local function getLandingThreat(hit)
     return threat
 end
 
-local function getSafeLandingGuard(grapple)
+getSafeLandingGuard = function(grapple)
     if not (SafeLandingGuard and SafeLandingGuard.analyze) then
         return nil
     end
 
     local params = getEmergencyFloorRaycastParams(grapple)
+    local horizon = getPredictionHorizon(grapple)
     local landing = SafeLandingGuard.analyze({
         now = time,
         VelocityAssist = VelocityAssist,
         getPhysicsProfile = getPhysicsProfile,
+        getPredictionHorizon = getPredictionHorizon,
         getVoidKillPlaneY = getVoidKillPlaneY,
         getLandingThreat = getLandingThreat,
+        getInputDirection = function(innerGrapple)
+            return innerGrapple and innerGrapple.Movement and innerGrapple.Movement.PlayerMoveDirection
+        end,
+        canAirJump = function()
+            local controller = Logic.getController()
+            return controller and controller.InfiniteAirJumpEnabled == true
+        end,
         raycastFloor = function(position, depth)
-            return Workspace:Raycast(position, Vector3.new(0, -(depth or CFG.VOID_RESCUE_SAFE_LANDING_DEPTH), 0), params)
+            local height = CFG.PANIC_RESCUE_GROUND_CHECK_HEIGHT
+            return Workspace:Raycast(position + Vector3.new(0, height, 0), Vector3.new(0, -((depth or CFG.VOID_RESCUE_SAFE_LANDING_DEPTH) + height), 0), params)
+        end,
+        raycastCoarseFloor = function(position, depth)
+            local height = CFG.PANIC_RESCUE_GROUND_CHECK_HEIGHT * 1.5
+            return Workspace:Raycast(position + Vector3.new(0, height, 0), Vector3.new(0, -((depth or CFG.VOID_RESCUE_SAFE_LANDING_DEPTH) + height), 0), params)
         end,
     }, grapple, {
         Depth = CFG.VOID_RESCUE_SAFE_LANDING_DEPTH,
         MaxTime = CFG.VOID_RESCUE_SAFE_LANDING_MAX_TIME,
+        ControlledMaxTime = math.max(CFG.CONTROLLED_LANDING_MAX_TIME, horizon.Route or CFG.CONTROLLED_LANDING_MAX_TIME),
+        ControlProbeTime = math.max(CFG.CONTROLLED_LANDING_PROBE_TIME, horizon.Tactical or CFG.CONTROLLED_LANDING_PROBE_TIME),
+        MaxControlProbeDistance = CFG.CONTROLLED_LANDING_MAX_PROBE_DISTANCE,
+        MaxCoarseProbeDistance = CFG.CONTROLLED_LANDING_COARSE_PROBE_DISTANCE,
+        MinControlledHorizontalSpeed = CFG.CONTROLLED_LANDING_MIN_HORIZONTAL_SPEED,
         MinNormalY = CFG.VOID_RESCUE_SAFE_LANDING_NORMAL_Y,
         KillMargin = CFG.VOID_RESCUE_SAFE_LANDING_KILL_MARGIN,
         MaxThreatScore = CFG.SAFE_LANDING_MAX_THREAT_SCORE,
@@ -3337,6 +3434,10 @@ local function tryPanicRescue(grapple)
         return false
     end
     local voidDanger = isVoidRescueDanger(grapple)
+    local landing = getSafeLandingGuard and getSafeLandingGuard(grapple) or nil
+    if not voidDanger and landing and landing.Safe then
+        return false
+    end
     if isEmergencyRescueRecastBlocked(grapple, voidDanger) then
         return false
     end
@@ -3367,6 +3468,18 @@ local function tryPanicRescue(grapple)
     end
     if not previewResult then
         return false
+    end
+    if voidDanger and typeof(previewResult) == "table" then
+        Logic.LastAssistDebug = {
+            Reason = previewResult.Reason or "VoidAnchor",
+            Target = previewResult.Name or (previewResult.Instance and previewResult.Instance.Name) or "Surface",
+            Distance = previewResult.Distance,
+            Score = previewResult.Score,
+            Threat = previewResult.Threat and previewResult.Threat.Reason or nil,
+            ThreatScore = previewResult.Threat and previewResult.Threat.Score or nil,
+            AnchorReason = previewResult.Breakdown and previewResult.Breakdown.Reason or nil,
+            Evaluated = previewResult.Evaluated,
+        }
     end
 
     local instance = previewResult.Instance
@@ -4201,7 +4314,8 @@ local function applySafeLandingGuard(grapple)
             getLandingThreat = getLandingThreat,
             raycastFloor = function(position, depth)
                 local params = getEmergencyFloorRaycastParams(grapple)
-                return Workspace:Raycast(position, Vector3.new(0, -(depth or CFG.VOID_RESCUE_SAFE_LANDING_DEPTH), 0), params)
+                local height = CFG.PANIC_RESCUE_GROUND_CHECK_HEIGHT
+                return Workspace:Raycast(position + Vector3.new(0, height, 0), Vector3.new(0, -((depth or CFG.VOID_RESCUE_SAFE_LANDING_DEPTH) + height), 0), params)
             end,
         }, grapple, landing)
         if applied then
@@ -4929,6 +5043,7 @@ function Logic.disable()
     Logic.LastThreatSnapshot = nil
     Logic.LastLandingGuard = nil
     Logic.LastAntiBonkPrediction = nil
+    Logic.LastPredictionHorizon = nil
     Logic.AssistArbiterState = AssistArbiter and AssistArbiter.new and AssistArbiter.new() or nil
     if PhysicsProfile and PhysicsProfile.clear then
         PhysicsProfile.clear()
@@ -5005,6 +5120,7 @@ function Logic.getHealthStatus()
     local threatText = ThreatModel and ThreatModel.snapshot and ThreatModel.snapshot() or "Threat:pending"
     local landingText = SafeLandingGuard and SafeLandingGuard.snapshot and SafeLandingGuard.snapshot() or "Landing:pending"
     local bonkText = TrajectoryAntiBonk and TrajectoryAntiBonk.snapshot and TrajectoryAntiBonk.snapshot() or "Bonk:pending"
+    local horizonText = PredictionHorizon and PredictionHorizon.snapshot and PredictionHorizon.snapshot(Logic.LastPredictionHorizon) or "Horizon:pending"
     return tostring(baseStatus)
         .. " | "
         .. intentText
@@ -5018,6 +5134,8 @@ function Logic.getHealthStatus()
         .. tostring(landingText)
         .. " | "
         .. tostring(bonkText)
+        .. " | "
+        .. tostring(horizonText)
 end
 
 return Logic

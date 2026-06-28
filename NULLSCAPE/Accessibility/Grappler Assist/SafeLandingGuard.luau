@@ -54,11 +54,41 @@ function SafeLandingGuard.analyze(deps, grapple, options)
     local profile = deps.getPhysicsProfile and deps.getPhysicsProfile(grapple) or nil
     local depth = tonumber(options.Depth) or 190
     local horizontal = getHorizontal(velocity)
+    local inputDirection = deps.getInputDirection and deps.getInputDirection(grapple) or nil
+    local inputHorizontal = getHorizontal(inputDirection)
+    local inputUnit = inputHorizontal.Magnitude > 0.05 and inputHorizontal.Unit or nil
+    local horizontalSpeed = horizontal.Magnitude
+    local velocityUnit = horizontalSpeed > 0.05 and horizontal.Unit or nil
+    local horizon = deps.getPredictionHorizon and deps.getPredictionHorizon(grapple) or nil
+    local controlProbeTime = tonumber(options.ControlProbeTime) or tonumber(horizon and horizon.Tactical) or 0.72
+    local routeTime = tonumber(horizon and horizon.Route) or controlProbeTime
+    local controlProbeDistance = math.clamp(horizontalSpeed * controlProbeTime, 16, tonumber(options.MaxControlProbeDistance) or 96)
+    local coarseProbeDistance = math.clamp(horizontalSpeed * routeTime, 32, tonumber(options.MaxCoarseProbeDistance) or 180)
     local samples = {
         rootPart.Position,
         rootPart.Position + horizontal * 0.2,
         rootPart.Position + horizontal * 0.42,
     }
+    if velocityUnit then
+        table.insert(samples, rootPart.Position + velocityUnit * math.min(controlProbeDistance, 72))
+    end
+    if inputUnit then
+        table.insert(samples, rootPart.Position + inputUnit * controlProbeDistance)
+        if velocityUnit then
+            local blendedDirection = inputUnit + velocityUnit
+            if blendedDirection.Magnitude > 0.05 then
+                table.insert(samples, rootPart.Position + blendedDirection.Unit * math.min(controlProbeDistance * 0.85, 84))
+            end
+        end
+    end
+
+    local coarseSamples = {}
+    if velocityUnit then
+        table.insert(coarseSamples, rootPart.Position + velocityUnit * coarseProbeDistance)
+    end
+    if inputUnit then
+        table.insert(coarseSamples, rootPart.Position + inputUnit * coarseProbeDistance)
+    end
 
     local bestHit = nil
     local bestDistance = math.huge
@@ -72,6 +102,19 @@ function SafeLandingGuard.analyze(deps, grapple, options)
             end
         end
     end
+    if not bestHit and deps.raycastCoarseFloor then
+        for _, sample in ipairs(coarseSamples) do
+            local hit = deps.raycastCoarseFloor(sample, depth)
+            if hit and hit.Position then
+                local distance = rootPart.Position.Y - hit.Position.Y
+                if distance >= 0 and distance < bestDistance then
+                    bestHit = hit
+                    bestDistance = distance
+                    result.Coarse = true
+                end
+            end
+        end
+    end
 
     if not bestHit then
         result.Reason = "NoFloor"
@@ -80,10 +123,14 @@ function SafeLandingGuard.analyze(deps, grapple, options)
         local fallSpeed = math.max(-velocity.Y, 8)
         local timeToLanding = bestDistance / fallSpeed
         local maxTime = (tonumber(options.MaxTime) or 1.55) * (profile and profile.PredictionScale or 1)
+        local controlledMaxTime = (tonumber(options.ControlledMaxTime) or tonumber(horizon and horizon.Route) or 2.35) * (profile and profile.PredictionScale or 1)
         local normalOk = not bestHit.Normal or bestHit.Normal.Y >= (tonumber(options.MinNormalY) or 0.45)
         local killY = deps.getVoidKillPlaneY and deps.getVoidKillPlaneY() or nil
         local aboveKill = not killY or bestHit.Position.Y > killY + (tonumber(options.KillMargin) or 12)
         local threatOk = (tonumber(threat.Score) or 0) < (tonumber(options.MaxThreatScore) or 52)
+        local playerCanSteer = inputUnit ~= nil and horizontalSpeed >= (tonumber(options.MinControlledHorizontalSpeed) or 20)
+        local canAirJump = deps.canAirJump and deps.canAirJump(grapple) == true
+        local controlledLanding = (playerCanSteer or canAirJump) and timeToLanding <= controlledMaxTime
 
         result.Hit = bestHit
         result.Distance = bestDistance
@@ -91,10 +138,10 @@ function SafeLandingGuard.analyze(deps, grapple, options)
         result.ThreatScore = tonumber(threat.Score) or 0
         result.ThreatReason = threat.Reason
 
-        if normalOk and aboveKill and threatOk and timeToLanding <= maxTime then
+        if normalOk and aboveKill and threatOk and (timeToLanding <= maxTime or controlledLanding) then
             result.Safe = true
-            result.Intentional = true
-            result.Reason = "SafeLanding"
+            result.Intentional = controlledLanding or playerCanSteer
+            result.Reason = controlledLanding and (result.Coarse and "CoarseReachableLanding" or "ReachableLanding") or "SafeLanding"
         else
             result.Reason = threatOk and "UnsafeLandingGeometry" or tostring(threat.Reason or "LandingThreat")
         end
