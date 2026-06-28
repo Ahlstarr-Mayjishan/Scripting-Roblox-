@@ -7,39 +7,42 @@
 if getgenv().Client then
 	pcall(function()
 		local oldClient = getgenv().Client
-		oldClient.Destroyed = true
+		if typeof(oldClient) == "table" and typeof(oldClient.Destroy) == "function" then
+			oldClient:Destroy("Reload")
+		else
+			oldClient.Destroyed = true
 
-		if oldClient.Modules then
-			for _, module in pairs(oldClient.Modules) do
-				if typeof(module) == "table" then
-					module.Destroyed = true
-					if typeof(module.CleanUp) == "function" then
+			if oldClient.Modules then
+				for _, module in pairs(oldClient.Modules) do
+					if typeof(module) == "table" then
+						module.Destroyed = true
+						if typeof(module.CleanUp) == "function" then
+							pcall(function()
+								module:CleanUp()
+							end)
+						end
+					end
+				end
+			end
+
+			if oldClient.ActiveConnections then
+				for _, conn in pairs(oldClient.ActiveConnections) do
+					if conn then
 						pcall(function()
-							module:CleanUp()
+							conn:Disconnect()
 						end)
 					end
 				end
 			end
-		end
 
-		if oldClient.ActiveConnections then
-			for _, conn in pairs(oldClient.ActiveConnections) do
-				if conn then
-					pcall(function()
-						conn:Disconnect()
-					end)
-				end
+			if getgenv().Rayfield then
+				pcall(function()
+					getgenv().Rayfield:Destroy()
+				end)
 			end
-		end
-
-		if getgenv().Rayfield then
-			pcall(function()
-				getgenv().Rayfield:Destroy()
-			end)
 		end
 	end)
 end
-
 getgenv()._NULLSCAPE_Globals = getgenv()._NULLSCAPE_Globals or {}
 
 -- Đối tượng quản lý chung của Client
@@ -49,8 +52,32 @@ local Client = {
 	Modules = {},
 	ActiveConnections = {},
 	Destroyed = false,
+	Destroying = false,
 }
 getgenv().Client = Client
+
+local function safeDisconnect(conn)
+	if conn then
+		pcall(function()
+			conn:Disconnect()
+		end)
+	end
+end
+
+local function trackConnection(conn)
+	if conn and Client and type(Client.ActiveConnections) == "table" then
+		table.insert(Client.ActiveConnections, conn)
+	end
+	return conn
+end
+
+local function safeStep(label, callback)
+	local success, err = pcall(callback)
+	if not success then
+		warn("[NULLSCAPE] Destroy step failed: " .. tostring(label) .. " -> " .. tostring(err))
+	end
+	return success
+end
 
 -- Tạo hoặc tự động cập nhật file cấu hình mặc định để ngăn Rayfield in cảnh báo console
 pcall(function()
@@ -201,6 +228,9 @@ end)
 -- Defensively patch Rayfield's Notification template to prevent "Icon is not a valid member of Frame" crash
 task.spawn(function()
 	local function patchRayfieldGui(gui)
+		if Client.Destroyed then
+			return
+		end
 		if not gui or not (gui:IsA("ScreenGui") and string.find(gui.Name:lower(), "rayfield")) then
 			return
 		end
@@ -211,6 +241,9 @@ task.spawn(function()
 		end
 
 		local function patchNotification(notif)
+			if Client.Destroyed then
+				return
+			end
 			if notif:IsA("Frame") and not notif:FindFirstChild("Icon") then
 				local dummyIcon = Instance.new("ImageLabel")
 				dummyIcon.Name = "Icon"
@@ -227,10 +260,10 @@ task.spawn(function()
 			patchNotification(template)
 		end
 
-		local conn = notifications.ChildAdded:Connect(patchNotification)
-		gui.Destroying:Connect(function()
-			conn:Disconnect()
-		end)
+		local conn = trackConnection(notifications.ChildAdded:Connect(patchNotification))
+		trackConnection(gui.Destroying:Connect(function()
+			safeDisconnect(conn)
+		end))
 
 		for _, child in ipairs(notifications:GetChildren()) do
 			patchNotification(child)
@@ -241,13 +274,13 @@ task.spawn(function()
 	local PlayerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui", 10)
 
 	if CoreGui then
-		CoreGui.ChildAdded:Connect(patchRayfieldGui)
+		trackConnection(CoreGui.ChildAdded:Connect(patchRayfieldGui))
 		for _, child in ipairs(CoreGui:GetChildren()) do
 			task.spawn(patchRayfieldGui, child)
 		end
 	end
 	if PlayerGui then
-		PlayerGui.ChildAdded:Connect(patchRayfieldGui)
+		trackConnection(PlayerGui.ChildAdded:Connect(patchRayfieldGui))
 		for _, child in ipairs(PlayerGui:GetChildren()) do
 			task.spawn(patchRayfieldGui, child)
 		end
@@ -268,7 +301,7 @@ local ping = 0
 local lastTime = os.clock()
 local frameCount = 0
 
-local fpsConnection = RunService.RenderStepped:Connect(function()
+trackConnection(RunService.RenderStepped:Connect(function()
 	frameCount = frameCount + 1
 	local now = os.clock()
 	if now - lastTime >= 1 then
@@ -276,8 +309,7 @@ local fpsConnection = RunService.RenderStepped:Connect(function()
 		frameCount = 0
 		lastTime = now
 	end
-end)
-table.insert(Client.ActiveConnections, fpsConnection)
+end))
 
 task.spawn(function()
 	while task.wait(2) do
@@ -353,6 +385,87 @@ task.spawn(function()
 	end
 end)
 
+local moduleCache = {}
+
+function Client:Destroy(reason)
+	if self.Destroying or self.Destroyed then
+		return false
+	end
+
+	self.Destroying = true
+	self.Destroyed = true
+	self.DestroyReason = reason or "Unknown"
+
+	safeStep("disconnect master connections", function()
+		if self.ActiveConnections then
+			for _, conn in pairs(self.ActiveConnections) do
+				safeDisconnect(conn)
+			end
+			table.clear(self.ActiveConnections)
+		end
+	end)
+
+	safeStep("cleanup modules", function()
+		if self.Modules then
+			local modules = {}
+			for name, module in pairs(self.Modules) do
+				table.insert(modules, {
+					Name = name,
+					Module = module,
+				})
+			end
+
+			for _, entry in ipairs(modules) do
+				local name = entry.Name
+				local module = entry.Module
+				if typeof(module) == "table" then
+					module.Destroyed = true
+					if typeof(module.CleanUp) == "function" then
+						safeStep("module " .. tostring(name), function()
+							module:CleanUp()
+						end)
+					end
+				end
+			end
+		end
+	end)
+
+	safeStep("destroy Rayfield", function()
+		local rayfield = getgenv().Rayfield or Rayfield
+		if rayfield and typeof(rayfield.Destroy) == "function" then
+			rayfield:Destroy()
+		end
+	end)
+
+	safeStep("release tables", function()
+		if self.Modules then
+			table.clear(self.Modules)
+		end
+		if self.Tabs then
+			table.clear(self.Tabs)
+		end
+		if moduleCache then
+			table.clear(moduleCache)
+		end
+	end)
+
+	safeStep("release globals", function()
+		if getgenv().Client == self then
+			getgenv().Client = nil
+		end
+		getgenv().Rayfield = nil
+		getgenv().loadModule = nil
+		getgenv()._NULLSCAPE_Globals = nil
+	end)
+
+	safeStep("collect garbage", function()
+		if collectgarbage then
+			pcall(collectgarbage, "collect")
+		end
+	end)
+
+	return true
+end
 -- ==========================================
 -- TAB: SETTINGS
 -- ==========================================
@@ -364,61 +477,10 @@ Client.Tabs["Settings"] = SettingsTab
 SettingsTab:CreateButton({
 	Name = "Destroy UI",
 	Callback = function()
-		pcall(function()
-			-- Đánh dấu Client đã bị hủy để dừng các luồng/vòng lặp
-			Client.Destroyed = true
-
-			-- 1. Hủy các kết nối hệ thống chính trong master
-			if fpsConnection then
-				pcall(function()
-					fpsConnection:Disconnect()
-				end)
-			end
-			for _, conn in pairs(Client.ActiveConnections) do
-				if conn then
-					pcall(function()
-						conn:Disconnect()
-					end)
-				end
-			end
-
-			-- 2. Hủy các module con và giải phóng tài nguyên của chúng
-			for name, module in pairs(Client.Modules) do
-				if typeof(module) == "table" then
-					module.Destroyed = true
-					if typeof(module.CleanUp) == "function" then
-						pcall(function()
-							module:CleanUp()
-						end)
-					end
-					pcall(function()
-						table.clear(module)
-					end)
-				end
-			end
-
-			-- 3. Hủy UI Rayfield
-			Rayfield:Destroy()
-
-			-- 4. Giải phóng các biến môi trường toàn cục
-			getgenv().Rayfield = nil
-			getgenv().Client = nil
-			getgenv().loadModule = nil
-			getgenv()._NULLSCAPE_Globals = nil
-
-			-- 5. Xóa sạch dữ liệu trong bảng Client chính
-			table.clear(Client)
-
-			-- 6. Thu gom rác (Garbage Collector) để giải phóng RAM & Memory hoàn toàn
-			local cg = collectgarbage
-			if cg then
-				pcall(cg, "collect")
-			end
-		end)
+		Client:Destroy("User")
 	end,
 })
 
-local moduleCache = {}
 local function loadModule(path)
 	if moduleCache[path] ~= nil then
 		return moduleCache[path]

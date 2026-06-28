@@ -562,7 +562,7 @@ return function(Client, Controller)
 
 	Tab:CreateSlider({
 		Name = "Grapple Air Control",
-		Info = "0 returns control to the game. 1-9 adds stronger physical steering while preserving grapple momentum. 10 gives near-full directional authority.",
+		Info = "0 returns control to the game. 1-9 adds stronger physical steering while preserving grapple momentum. 10 is strong but smoothed to avoid snap turns.",
 		Range = { 0, 10 },
 		Increment = 1,
 		Suffix = "/10",

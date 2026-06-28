@@ -79,6 +79,7 @@ function EmergencyDecision.createSnapshot(deps, grapple, rescueResult)
     local targetName = getAssistResultTargetName(deps, rescueResult)
     local terrainReason = isAssistDecision(rescueResult) and rescueResult.Reason or nil
     local terrainScore = isAssistDecision(rescueResult) and rescueResult.Score or nil
+    local profile = deps.getPhysicsProfile and deps.getPhysicsProfile(grapple) or nil
 
     return {
         ClassId = classId,
@@ -104,6 +105,7 @@ function EmergencyDecision.createSnapshot(deps, grapple, rescueResult)
         TerrainReason = terrainReason,
         TerrainScore = terrainScore,
         IsReeling = movement.grappling == true,
+        Profile = profile,
     }
 end
 
@@ -121,6 +123,16 @@ function EmergencyDecision.createDecision(deps, grapple, rescueResult)
     end
 
     local threshold = snapshot.EmergencyMode == "Smart Auto" and cfg.EMERGENCY_SMART_AUTO_THRESHOLD or cfg.EMERGENCY_AUTO_THRESHOLD
+    local profile = snapshot.Profile
+    if profile then
+        threshold = threshold + ((profile.LowGravity and 8 or 0) * (profile.RescueCooldownScale or 1))
+        if profile.Concussion then
+            threshold = threshold - 10
+        end
+        if profile.Flesh then
+            threshold = threshold - 6
+        end
+    end
     if not snapshot.IsGrappler then
         return {
             Action = "DoNothing",
@@ -156,6 +168,20 @@ function EmergencyDecision.createDecision(deps, grapple, rescueResult)
     score = score + snapshot.UnsafeSamples * 18
     score = score + math.clamp((snapshot.HorizontalSpeed - cfg.AUTO_RESCUE_SPEED) / 120, 0, 1) * 24
     score = score + math.clamp((snapshot.FallSpeed - deps.getEmergencyFallThreshold(grapple)) / 120, 0, 1) * 34
+    if profile then
+        if profile.Concussion and snapshot.FallSpeed > 45 then
+            score = score + 12
+            reason = "ConcussionFallback"
+        end
+        if profile.WeakJumpPads and snapshot.RescueTargetName == "JumpPad" then
+            score = score - 12
+            reason = "WeakJumpPadFallback"
+        end
+        if profile.Medal and snapshot.RescueTargetName == "JumpPad" then
+            score = score - 10
+            reason = "MedalNoJumpPadBoost"
+        end
+    end
 
     if snapshot.InputDirection and snapshot.VelocityDirection and not snapshot.PanicPressure then
         local controlDot = snapshot.InputDirection:Dot(snapshot.VelocityDirection)
@@ -216,6 +242,7 @@ function EmergencyDecision.createDecision(deps, grapple, rescueResult)
         VoidDanger = snapshot.VoidDanger,
         Suppression = intentSuppression,
         SuppressionReason = intentReason,
+        Profile = profile,
     }
 end
 

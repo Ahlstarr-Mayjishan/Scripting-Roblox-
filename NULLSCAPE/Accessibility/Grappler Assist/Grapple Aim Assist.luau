@@ -16,6 +16,12 @@ local TerrainSense = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assi
 local IntentModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/IntentModel.luau")
 local MapSense = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/MapSense.luau")
 local HealthMonitor = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/HealthMonitor.luau")
+local AssistArbiter = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/AssistArbiter.luau")
+local VelocityAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/VelocityAssist.luau")
+local PhysicsProfile = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/PhysicsProfile.luau")
+local ThreatModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/ThreatModel.luau")
+local SafeLandingGuard = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SafeLandingGuard.luau")
+local TrajectoryAntiBonk = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TrajectoryAntiBonk.luau")
 
 local function packValues(...)
     local values = { ... }
@@ -92,6 +98,15 @@ local Logic = {
     LastJumpPadCommitPart = nil,
     LastGravityProfileAt = 0,
     LastGravityProfile = nil,
+    AssistArbiterState = AssistArbiter and AssistArbiter.new and AssistArbiter.new() or nil,
+    LastIntentSnapshot = nil,
+    LastIntentSnapshotAt = 0,
+    LastIntentSnapshotGrapple = nil,
+    LastIntentSnapshotRescueResult = nil,
+    LastPhysicsProfile = nil,
+    LastThreatSnapshot = nil,
+    LastLandingGuard = nil,
+    LastAntiBonkPrediction = nil,
     CurseHandler = nil,
     CurseHandlerLoaded = false,
 }
@@ -341,6 +356,16 @@ local CFG = {
     SMART_REEL_BAD_INPUT_PENALTY = 34,
     SMART_REEL_AUTO_MIN_DOT = -0.2,
     SMART_REEL_MANUAL_MIN_DOT = -0.55,
+    THREAT_SCAN_INTERVAL = 0.72,
+    THREAT_SCAN_MAX_DESCENDANTS = 700,
+    THREAT_SCAN_MAX_HAZARDS = 120,
+    MAP_ANCHOR_THREAT_MAX_DISTANCE = 38,
+    SAFE_LANDING_MAX_THREAT_SCORE = 52,
+    TRAJECTORY_ANTIBONK_INTERVAL = 0.055,
+    TRAJECTORY_ANTIBONK_LOOKAHEAD = 0.28,
+    TRAJECTORY_ANTIBONK_MIN_SPEED = 112,
+    RECAST_ALIGNMENT_MAX_STEP = 0.16,
+    RECAST_ALIGNMENT_MIN_DISTANCE = 12,
 }
 
 local SHARK_TAIL_STYLE_CONFIG = {
@@ -966,6 +991,59 @@ local function beginAdaptDrive(grapple)
     return false
 end
 
+local function applyGentleRecastAlignment(grapple, dt)
+    local function flatUnit(vector)
+        if typeof(vector) ~= "Vector3" then
+            return nil
+        end
+        local flat = Vector3.new(vector.X, 0, vector.Z)
+        if flat.Magnitude <= 0.05 then
+            return nil
+        end
+        return flat.Unit
+    end
+
+    local rootPart = grapple and grapple.RootPart
+    if not rootPart then
+        return false
+    end
+
+    local movement = grapple and grapple.Movement
+    local inputDirection = flatUnit(movement and movement.PlayerMoveDirection)
+    local velocityDirection = flatUnit(rootPart.Velocity)
+    if inputDirection and velocityDirection and inputDirection:Dot(velocityDirection) >= CFG.INTENT_CONTROL_SUPPRESS_DOT then
+        return false
+    end
+
+    local targetPosition = getActiveGrappleTargetPosition(grapple)
+    local targetDirection = flatUnit(targetPosition and (targetPosition - rootPart.Position))
+    if not targetDirection then
+        targetDirection = velocityDirection
+    end
+    if not targetDirection then
+        return false
+    end
+
+    if targetPosition and (targetPosition - rootPart.Position).Magnitude < CFG.RECAST_ALIGNMENT_MIN_DISTANCE then
+        return false
+    end
+
+    local currentLook = flatUnit(rootPart.CFrame.LookVector)
+    if not currentLook then
+        return false
+    end
+
+    local alpha = math.clamp((tonumber(dt) or 1 / 60) * 8, 0, CFG.RECAST_ALIGNMENT_MAX_STEP)
+    local blended = currentLook:Lerp(targetDirection, alpha)
+    if blended.Magnitude <= 0.05 then
+        return false
+    end
+
+    local position = rootPart.Position
+    rootPart.CFrame = CFrame.lookAt(position, position + blended.Unit, Vector3.yAxis)
+    return true
+end
+
 local function updateAdaptRecast(grapple)
     if not Logic.AdaptRecastPending then
         return
@@ -992,6 +1070,8 @@ local function updateAdaptRecast(grapple)
         Logic.markGrappleBonkGrace(grapple, 0.3)
         speed = getAdaptHorizontalSpeed(grapple)
     end
+
+    applyGentleRecastAlignment(grapple, 1 / 60)
 
     if not Logic.AdaptRecastReleaseIssued then
         Logic.AdaptRecastReleaseIssued = fireSpecialAction(grapple, Enum.UserInputState.End) == true
@@ -1666,6 +1746,91 @@ function Logic.getEffectiveEmergencyFallThreshold(grapple)
     return Logic.getEmergencyFallThreshold() * (profile.FallThresholdScale or 1)
 end
 
+local function getLevelValue()
+    local levelValue = ReplicatedStorage:FindFirstChild("Level")
+    return levelValue and tonumber(levelValue.Value) or 0
+end
+
+local function getPhysicsProfile(grapple, force)
+    if not (PhysicsProfile and PhysicsProfile.get) then
+        local fallback = Logic.getGravityAssistProfile(grapple)
+        Logic.LastPhysicsProfile = fallback
+        return fallback
+    end
+
+    local profile = PhysicsProfile.get({
+        now = time,
+        getLevel = getLevelValue,
+        isCurseEnabled = isCurseEnabled,
+    }, grapple, force)
+    Logic.LastPhysicsProfile = profile
+    return profile
+end
+
+local function getThreatModelDeps()
+    return {
+        Workspace = Workspace,
+        now = time,
+        ScanInterval = CFG.THREAT_SCAN_INTERVAL,
+        MaxDescendants = CFG.THREAT_SCAN_MAX_DESCENDANTS,
+        MaxHazards = CFG.THREAT_SCAN_MAX_HAZARDS,
+    }
+end
+
+local function getRouteThreat(startPosition, endPosition)
+    if not (ThreatModel and ThreatModel.getRouteThreat) then
+        return {
+            Score = 0,
+            Reason = "ThreatModelUnavailable",
+        }
+    end
+
+    local threat = ThreatModel.getRouteThreat(getThreatModelDeps(), startPosition, endPosition, {
+        MaxDistance = CFG.MAP_ANCHOR_THREAT_MAX_DISTANCE,
+    })
+    Logic.LastThreatSnapshot = threat
+    return threat
+end
+
+local function getLandingThreat(hit)
+    if not (ThreatModel and ThreatModel.getLandingThreat) then
+        return {
+            Score = 0,
+            Reason = "ThreatModelUnavailable",
+        }
+    end
+
+    local threat = ThreatModel.getLandingThreat(getThreatModelDeps(), hit)
+    Logic.LastThreatSnapshot = threat
+    return threat
+end
+
+local function getSafeLandingGuard(grapple)
+    if not (SafeLandingGuard and SafeLandingGuard.analyze) then
+        return nil
+    end
+
+    local params = getEmergencyFloorRaycastParams(grapple)
+    local landing = SafeLandingGuard.analyze({
+        now = time,
+        VelocityAssist = VelocityAssist,
+        getPhysicsProfile = getPhysicsProfile,
+        getVoidKillPlaneY = getVoidKillPlaneY,
+        getLandingThreat = getLandingThreat,
+        raycastFloor = function(position, depth)
+            return Workspace:Raycast(position, Vector3.new(0, -(depth or CFG.VOID_RESCUE_SAFE_LANDING_DEPTH), 0), params)
+        end,
+    }, grapple, {
+        Depth = CFG.VOID_RESCUE_SAFE_LANDING_DEPTH,
+        MaxTime = CFG.VOID_RESCUE_SAFE_LANDING_MAX_TIME,
+        MinNormalY = CFG.VOID_RESCUE_SAFE_LANDING_NORMAL_Y,
+        KillMargin = CFG.VOID_RESCUE_SAFE_LANDING_KILL_MARGIN,
+        MaxThreatScore = CFG.SAFE_LANDING_MAX_THREAT_SCORE,
+    })
+    Logic.LastLandingGuard = landing
+    return landing
+end
+
 function Logic.getHorizontalVelocity(rootPart)
     local velocity = rootPart and rootPart.Velocity
     if not velocity then
@@ -2119,6 +2284,7 @@ local function getMapSenseDeps()
         isLineClear = isLineClear,
         isUsableResult = Logic.isUsableResult,
         isPathSafeForHitbox = isPathSafeForHitbox,
+        getRouteThreat = getRouteThreat,
         now = time,
     }
 end
@@ -2549,13 +2715,73 @@ local function getIntentModelDeps()
     return {
         CFG = CFG,
         getAssistFlatUnit = getAssistFlatUnit,
+        getHorizontalVelocity = Logic.getHorizontalVelocity,
         isPanicPressureActive = isPanicPressureActive,
         isVoidRescueDanger = isVoidRescueDanger,
+        isJumpPadCommitGuardActive = Logic.isJumpPadCommitGuardActive,
+        getPhysicsProfile = getPhysicsProfile,
+        hasSafeLanding = function(grapple)
+            local landing = getSafeLandingGuard(grapple)
+            if landing then
+                return landing.Safe == true
+            end
+            return getSafeLandingFloorHit(grapple, getVoidKillPlaneY()) ~= nil
+        end,
     }
 end
 
+local function getIntentSnapshot(grapple, rescueResult)
+    local now = time()
+    if Logic.LastIntentSnapshot
+        and Logic.LastIntentSnapshotGrapple == grapple
+        and Logic.LastIntentSnapshotRescueResult == rescueResult
+        and now - (Logic.LastIntentSnapshotAt or 0) <= 0.035
+    then
+        return Logic.LastIntentSnapshot
+    end
+
+    if not (IntentModel and typeof(IntentModel.classify) == "function") then
+        local fallback = {
+            State = "Unavailable",
+            Reason = "IntentModelUnavailable",
+            Suppression = 0,
+            VoidDanger = false,
+            JumpPadCommit = false,
+            SafeLanding = false,
+        }
+        Logic.LastIntentSnapshot = fallback
+        Logic.LastIntentSnapshotAt = now
+        Logic.LastIntentSnapshotGrapple = grapple
+        Logic.LastIntentSnapshotRescueResult = rescueResult
+        return fallback
+    end
+
+    local snapshot = IntentModel.classify(getIntentModelDeps(), grapple, rescueResult)
+    Logic.LastIntentSnapshot = snapshot
+    Logic.LastIntentSnapshotAt = now
+    Logic.LastIntentSnapshotGrapple = grapple
+    Logic.LastIntentSnapshotRescueResult = rescueResult
+    return snapshot
+end
+
 local function getPlayerIntentSuppression(grapple, rescueResult)
-    return IntentModel.getSuppression(getIntentModelDeps(), grapple, rescueResult)
+    local snapshot = getIntentSnapshot(grapple, rescueResult)
+    return snapshot.Suppression or 0, snapshot.Reason or "NoIntent"
+end
+
+local function canRunAssist(assistName, grapple, options)
+    if not (AssistArbiter and AssistArbiter.canRun) then
+        return true
+    end
+
+    local intent = getIntentSnapshot(grapple, options and options.RescueResult)
+    return AssistArbiter.canRun(Logic.AssistArbiterState, assistName, intent, options)
+end
+
+local function claimAssist(assistName, reason, duration)
+    if AssistArbiter and AssistArbiter.claim then
+        AssistArbiter.claim(Logic.AssistArbiterState, assistName, reason, duration)
+    end
 end
 
 local function getGrapplerEmergencyDecisionDeps()
@@ -2572,6 +2798,7 @@ local function getGrapplerEmergencyDecisionDeps()
         getEmergencyFallThreshold = Logic.getEffectiveEmergencyFallThreshold,
         getPlayerIntentSuppression = getPlayerIntentSuppression,
         isRescueTargetName = isRescueTargetName,
+        getPhysicsProfile = getPhysicsProfile,
     }
 end
 
@@ -3097,6 +3324,10 @@ local function tryPanicRescue(grapple)
     if not (hasClassCapability(grapple, "EmergencyRescue") and Logic.isEmergencyProtectionEnabled()) then
         return false
     end
+    local allowed = canRunAssist("PanicRescue", grapple)
+    if not allowed then
+        return false
+    end
 
     local movement = grapple and grapple.Movement
     if not (grapple and movement and Logic.isInAir(grapple)) then
@@ -3148,6 +3379,7 @@ local function tryPanicRescue(grapple)
 
     Logic.LastPanicRescuePulseAt = time()
     if pulseSpecialAction(grapple) then
+        claimAssist(voidDanger and "VoidRescue" or "PanicRescue", voidDanger and "VoidDanger" or "PanicRescue", voidDanger and CFG.VOID_RESCUE_WINDOW or CFG.PANIC_RESCUE_WINDOW)
         markEmergencyRescuePulse()
         if voidDanger then
             Logic.LastVoidRescueAt = time()
@@ -3480,6 +3712,10 @@ local function tryUseSharkTail(grapple)
     if not canUseSharkTail(grapple) then
         return false
     end
+    local allowed = canRunAssist("SharkTail", grapple)
+    if not allowed then
+        return false
+    end
 
     local horizontal = Logic.getHorizontalVelocity(grapple.RootPart)
     if horizontal.Magnitude < 35 then
@@ -3492,6 +3728,7 @@ local function tryUseSharkTail(grapple)
         end)
         if success then
             Logic.LastSharkTailAssistAt = time()
+            claimAssist("SharkTail", "SharkTail", getSharkTailStyleConfig().Cooldown)
             Logic.SharkTailPlanToken = Logic.SharkTailPlanToken + 1
             Logic.SharkTailPlannedAt = 0
             Logic.SharkTailStabilizeUntil = time() + CFG.SHARK_TAIL_STABILIZE_WINDOW
@@ -3519,6 +3756,11 @@ local function tryVoidSharkTailSaver(grapple)
 end
 
 local function planSmartSharkTail(grapple)
+    local allowed = canRunAssist("SharkTail", grapple)
+    if not allowed then
+        return false
+    end
+
     if tryVoidSharkTailSaver(grapple) then
         return true
     end
@@ -3865,11 +4107,19 @@ local function canStartSmartReel(grapple, manual)
 end
 
 local function startSmartReel(grapple, manual)
+    if not manual then
+        local allowed = canRunAssist("SmartReel", grapple)
+        if not allowed then
+            return false
+        end
+    end
+
     if not canStartSmartReel(grapple, manual == true) then
         return false
     end
 
     grapple.jumpPadReel = true
+    claimAssist("SmartReel", Logic.LastSmartReelDecision and Logic.LastSmartReelDecision.Reason or "SmartReel", CFG.SMART_REEL_START_COOLDOWN)
     grapple.reelStart = time()
     grapple.grappleReel = true
     Logic.LastSmartReelStartAt = time()
@@ -3899,6 +4149,10 @@ local function applyMomentumGuard(grapple)
     if not (hasClassCapability(grapple, "MomentumGuard") and Logic.isMomentumGuardEnabled()) then
         return
     end
+    local allowed = canRunAssist("MomentumGuard", grapple)
+    if not allowed then
+        return
+    end
 
     local movement = grapple and grapple.Movement
     local rootPart = grapple and grapple.RootPart
@@ -3917,11 +4171,54 @@ local function applyMomentumGuard(grapple)
 
     local targetSpeed = math.max(CFG.MOMENTUM_GUARD_CLAMP, speed - (speed - CFG.MOMENTUM_GUARD_CLAMP) * 0.35)
     local clampedHorizontal = horizontal.Unit * targetSpeed
-    rootPart.Velocity = Vector3.new(clampedHorizontal.X, rootPart.Velocity.Y, clampedHorizontal.Z)
+    if VelocityAssist and VelocityAssist.blendHorizontal then
+        VelocityAssist.blendHorizontal(rootPart, clampedHorizontal, 1, 28, "MomentumGuard")
+    else
+        rootPart.Velocity = Vector3.new(clampedHorizontal.X, rootPart.Velocity.Y, clampedHorizontal.Z)
+    end
+    claimAssist("MomentumGuard", "MomentumGuard", 0.08)
+end
+
+local function applySafeLandingGuard(grapple)
+    if not (Logic.isSuiteEnabled() and hasClassCapability(grapple, "VoidRescue")) then
+        return false
+    end
+    local landing = getSafeLandingGuard(grapple)
+    if not (landing and landing.Safe) then
+        return false
+    end
+    local allowed = canRunAssist("MomentumGuard", grapple)
+    if not allowed then
+        return false
+    end
+
+    if SafeLandingGuard and SafeLandingGuard.applyDamping then
+        local applied = SafeLandingGuard.applyDamping({
+            now = time,
+            VelocityAssist = VelocityAssist,
+            getPhysicsProfile = getPhysicsProfile,
+            getVoidKillPlaneY = getVoidKillPlaneY,
+            getLandingThreat = getLandingThreat,
+            raycastFloor = function(position, depth)
+                local params = getEmergencyFloorRaycastParams(grapple)
+                return Workspace:Raycast(position, Vector3.new(0, -(depth or CFG.VOID_RESCUE_SAFE_LANDING_DEPTH), 0), params)
+            end,
+        }, grapple, landing)
+        if applied then
+            claimAssist("MomentumGuard", "SafeLanding", 0.08)
+        end
+        return applied == true
+    end
+
+    return false
 end
 
 local function applyPanicStabilize(grapple)
     if not Logic.isEmergencyProtectionEnabled() or time() > (Logic.PanicStabilizeUntil or 0) then
+        return
+    end
+    local allowed = canRunAssist("PanicStabilize", grapple)
+    if not allowed then
         return
     end
 
@@ -3938,11 +4235,20 @@ local function applyPanicStabilize(grapple)
 
     local targetSpeed = math.max(CFG.PANIC_STABILIZE_CLAMP, speed - (speed - CFG.PANIC_STABILIZE_CLAMP) * 0.45)
     local clampedHorizontal = horizontal.Unit * targetSpeed
-    rootPart.Velocity = Vector3.new(clampedHorizontal.X, rootPart.Velocity.Y, clampedHorizontal.Z)
+    if VelocityAssist and VelocityAssist.blendHorizontal then
+        VelocityAssist.blendHorizontal(rootPart, clampedHorizontal, 1, 36, "PanicStabilize")
+    else
+        rootPart.Velocity = Vector3.new(clampedHorizontal.X, rootPart.Velocity.Y, clampedHorizontal.Z)
+    end
+    claimAssist("PanicStabilize", "PanicStabilize", 0.16)
 end
 
 local function applySharkTailStabilize(grapple)
     if time() > (Logic.SharkTailStabilizeUntil or 0) then
+        return
+    end
+    local allowed = canRunAssist("SharkTail", grapple)
+    if not allowed then
         return
     end
 
@@ -3969,13 +4275,23 @@ local function applySharkTailStabilize(grapple)
     end
 
     if nextHorizontal ~= horizontal or nextY ~= velocity.Y then
-        rootPart.Velocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
+        if VelocityAssist and VelocityAssist.blendHorizontal then
+            VelocityAssist.blendHorizontal(rootPart, nextHorizontal, 1, 34, "SharkTailStabilize")
+            VelocityAssist.setVerticalSoft(rootPart, nextY, 1, 22, "SharkTailStabilizeY")
+        else
+            rootPart.Velocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
+        end
+        claimAssist("SharkTail", "SharkTailStabilize", 0.08)
     end
 end
 
 local function applyAirControlMultiplier(grapple, dt)
     local controlLevel = Logic.getAirControlMultiplier()
     if controlLevel <= 0 then
+        return
+    end
+    local allowed = canRunAssist("AirControl", grapple)
+    if not allowed then
         return
     end
 
@@ -3998,13 +4314,15 @@ local function applyAirControlMultiplier(grapple, dt)
     local levelAlpha = math.clamp(controlLevel / 10, 0, 1)
     local velocity = rootPart.Velocity
     local horizontalVelocity = Vector3.new(velocity.X, 0, velocity.Z)
+    local profile = getPhysicsProfile(grapple)
     local graceWingsMultiplier = hasUpgrade(movement, "GraceWings") and 1.5 or 1
+    local profileAirScale = tonumber(profile and profile.AirControlScale) or 1
     local movementSpeedMultiplier = tonumber(movement.movementSpeedMulti) or 1
 
     local inputUnit = playerMoveDirection.Unit
     local alongInputSpeed = horizontalVelocity:Dot(inputUnit)
     local lateralVelocity = horizontalVelocity - inputUnit * alongInputSpeed
-    local assistAcceleration = (42 + controlLevel * 30) * movementSpeedMultiplier * graceWingsMultiplier
+    local assistAcceleration = (28 + controlLevel * 22) * movementSpeedMultiplier * graceWingsMultiplier * profileAirScale
     local authority = levelAlpha ^ 1.35
     local maxControlSpeed = 62 + controlLevel * 13
     local desiredAlongSpeed = math.clamp(
@@ -4012,28 +4330,46 @@ local function applyAirControlMultiplier(grapple, dt)
         -maxControlSpeed * 0.35,
         maxControlSpeed
     )
-    local lateralDamping = math.clamp((0.08 + authority * 0.58) * dtClamped * 60, 0, controlLevel >= 10 and 0.82 or 0.62)
-    local nextHorizontal = inputUnit * desiredAlongSpeed + lateralVelocity * (1 - lateralDamping)
+    local alongDelta = math.clamp(desiredAlongSpeed - alongInputSpeed, -assistAcceleration * dtClamped, assistAcceleration * dtClamped)
+    local nextHorizontal = horizontalVelocity + inputUnit * alongDelta
+
+    local lateralBrakeAlpha = math.clamp((0.025 + authority * 0.14) * dtClamped * 60, 0, 0.28)
+    local lateralBrake = lateralVelocity * lateralBrakeAlpha
+    local maxBrakeDelta = (12 + controlLevel * 7) * dtClamped
+    if lateralBrake.Magnitude > maxBrakeDelta then
+        lateralBrake = lateralBrake.Unit * maxBrakeDelta
+    end
+    nextHorizontal -= lateralBrake
 
     local maxHorizontalSpeed = 128 + controlLevel * 15
     if nextHorizontal.Magnitude > maxHorizontalSpeed then
         nextHorizontal = nextHorizontal.Unit * maxHorizontalSpeed
     end
 
-    local gravityCancel = math.clamp((controlLevel - 3) / 7, 0, 1) ^ 1.25
+    local gravityCancel = (math.clamp((controlLevel - 3) / 7, 0, 1) ^ 1.35) * 0.82
+    if profile and profile.LowGravity then
+        gravityCancel *= 0.65
+    end
     local nextY = velocity.Y
     if gravityCancel > 0 then
         nextY += Workspace.Gravity * gravityCancel * dtClamped
-        if controlLevel >= 10 and nextY < -3 then
-            nextY = math.max(nextY, -3)
-        end
     end
 
-    rootPart.Velocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
+    local desiredVelocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
+    if VelocityAssist and VelocityAssist.applyDelta then
+        VelocityAssist.applyDelta(rootPart, desiredVelocity - rootPart.Velocity, 26 + controlLevel * 4, "AirControl")
+    else
+        rootPart.Velocity = desiredVelocity
+    end
+    claimAssist("AirControl", "AirControl", 0.04)
 end
 
 local function applySmartReelLandingAssist(grapple)
     if time() > (Logic.SmartReelLandingAssistUntil or 0) then
+        return false
+    end
+    local allowed = canRunAssist("ReelPull", grapple)
+    if not allowed then
         return false
     end
 
@@ -4084,7 +4420,13 @@ local function applySmartReelLandingAssist(grapple)
         nextY = CFG.SMART_REEL_LANDING_UP_SPEED_MAX
     end
 
-    rootPart.Velocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
+    local desiredVelocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
+    if VelocityAssist and VelocityAssist.applyDelta then
+        VelocityAssist.applyDelta(rootPart, desiredVelocity - rootPart.Velocity, 44, "LandingAssist")
+    else
+        rootPart.Velocity = desiredVelocity
+    end
+    claimAssist("ReelPull", "LandingAssist", 0.12)
     Logic.LastSmartReelDebug = Logic.LastSmartReelDebug or {}
     Logic.LastSmartReelDebug.LandingAssist = true
     Logic.LastSmartReelDebug.LandingHeight = heightToPlane
@@ -4097,6 +4439,10 @@ local function applyReelPullMultiplier(grapple)
     if not (grapple and rootPart and grapple.jumpPadReel) then
         return
     end
+    local allowed = canRunAssist("ReelPull", grapple)
+    if not allowed then
+        return
+    end
 
     if applySmartReelLandingAssist(grapple) then
         return
@@ -4106,14 +4452,28 @@ local function applyReelPullMultiplier(grapple)
     if multiplier <= 1 then
         return
     end
+    local profile = getPhysicsProfile(grapple)
+    multiplier = 1 + (multiplier - 1) * (tonumber(profile and profile.PullScale) or 1)
 
-    rootPart.Velocity = rootPart.Velocity * multiplier
+    local desiredVelocity = rootPart.Velocity * multiplier
+    if VelocityAssist and VelocityAssist.applyDelta then
+        VelocityAssist.applyDelta(rootPart, desiredVelocity - rootPart.Velocity, 38, "ReelPull")
+    else
+        rootPart.Velocity = desiredVelocity
+    end
+    claimAssist("ReelPull", "ReelPull", 0.12)
 end
 
 local function applySharkTailPullMultiplier(grapple, previousVelocity)
 
     local multiplier = Logic.getSharkTailPullMultiplier()
     if multiplier <= 1 then
+        return
+    end
+    local profile = getPhysicsProfile(grapple)
+    multiplier = 1 + (multiplier - 1) * (tonumber(profile and profile.PullScale) or 1)
+    local allowed = canRunAssist("SharkTail", grapple)
+    if not allowed then
         return
     end
 
@@ -4132,7 +4492,13 @@ local function applySharkTailPullMultiplier(grapple, previousVelocity)
         return
     end
 
-    rootPart.Velocity = beforeVelocity + deltaVelocity * multiplier
+    local desiredVelocity = beforeVelocity + deltaVelocity * multiplier
+    if VelocityAssist and VelocityAssist.applyDelta then
+        VelocityAssist.applyDelta(rootPart, desiredVelocity - rootPart.Velocity, 42, "SharkTailPull")
+    else
+        rootPart.Velocity = desiredVelocity
+    end
+    claimAssist("SharkTail", "SharkTailPull", 0.12)
 end
 
 local function shouldSuppressGrappleBonk(movement)
@@ -4214,6 +4580,36 @@ function Logic.markGrappleBonkGrace(grapple, duration)
 
     Logic.LastGrappleMovement = movement
     Logic.SuppressBonkUntil = math.max(Logic.SuppressBonkUntil, time() + duration)
+end
+
+local function applyTrajectoryAntiBonk(grapple)
+    if not (TrajectoryAntiBonk and TrajectoryAntiBonk.apply and Logic.isAntiBonkEnabled() and hasClassCapability(grapple, "MomentumGuard")) then
+        return false
+    end
+
+    local allowed = canRunAssist("AntiBonk", grapple)
+    if not allowed then
+        return false
+    end
+
+    local params = getEmergencyFloorRaycastParams(grapple)
+    local applied, prediction = TrajectoryAntiBonk.apply({
+        now = time,
+        VelocityAssist = VelocityAssist,
+        getPhysicsProfile = getPhysicsProfile,
+        Interval = CFG.TRAJECTORY_ANTIBONK_INTERVAL,
+        Lookahead = CFG.TRAJECTORY_ANTIBONK_LOOKAHEAD,
+        MinSpeed = CFG.TRAJECTORY_ANTIBONK_MIN_SPEED,
+        raycast = function(position, direction)
+            return Workspace:Raycast(position, direction, params)
+        end,
+    }, grapple)
+    Logic.LastAntiBonkPrediction = prediction
+    if applied then
+        Logic.markGrappleBonkGrace(grapple, 0.45)
+        claimAssist("AntiBonk", "TrajectoryAntiBonk", 0.16)
+    end
+    return applied == true
 end
 
 local function ensureDiveBonkHook(globals)
@@ -4373,6 +4769,8 @@ function Logic.enable()
             HealthMonitor.try("BellBypass", maintainBellBypass, self)
             if Logic.isSuiteEnabled() and hasAnyGrappleAssistCapability(self) then
                 HealthMonitor.try("TerrainSense", updateTerrainFallContext, self)
+                HealthMonitor.try("SafeLandingGuard", getSafeLandingGuard, self)
+                HealthMonitor.try("IntentClassifier", getIntentSnapshot, self)
             end
             if hasClassCapability(self, "MomentumGuard") and self.Movement and (self.Movement.grappling or self.jumpPadReel) then
                 Logic.markGrappleBonkGrace(self, 0.45)
@@ -4412,6 +4810,8 @@ function Logic.enable()
             end
             HealthMonitor.try("BellBypass", maintainBellBypass, self)
             HealthMonitor.try("RefillStamina", refillStamina, self)
+            HealthMonitor.try("SafeLandingDamping", applySafeLandingGuard, self)
+            HealthMonitor.try("TrajectoryAntiBonk", applyTrajectoryAntiBonk, self)
             HealthMonitor.try("ReelPull", applyReelPullMultiplier, self)
             HealthMonitor.try("AirControl", applyAirControlMultiplier, self, dt)
             HealthMonitor.try("MomentumGuard", applyMomentumGuard, self)
@@ -4521,6 +4921,27 @@ function Logic.disable()
     Logic.LastSmartReelEvalAt = 0
     Logic.LastSmartReelDebug = nil
     Logic.LastSmartReelDecision = nil
+    Logic.LastIntentSnapshot = nil
+    Logic.LastIntentSnapshotAt = 0
+    Logic.LastIntentSnapshotGrapple = nil
+    Logic.LastIntentSnapshotRescueResult = nil
+    Logic.LastPhysicsProfile = nil
+    Logic.LastThreatSnapshot = nil
+    Logic.LastLandingGuard = nil
+    Logic.LastAntiBonkPrediction = nil
+    Logic.AssistArbiterState = AssistArbiter and AssistArbiter.new and AssistArbiter.new() or nil
+    if PhysicsProfile and PhysicsProfile.clear then
+        PhysicsProfile.clear()
+    end
+    if ThreatModel and ThreatModel.clear then
+        ThreatModel.clear()
+    end
+    if SafeLandingGuard and SafeLandingGuard.clear then
+        SafeLandingGuard.clear()
+    end
+    if TrajectoryAntiBonk and TrajectoryAntiBonk.clear then
+        TrajectoryAntiBonk.clear()
+    end
     Logic.SmartReelLandingAssistUntil = 0
     Logic.SmartReelLandingTargetPosition = nil
     Logic.SmartReelLandingPlaneY = nil
@@ -4572,11 +4993,31 @@ function Logic.getLastAdaptInputPressed()
 end
 
 function Logic.getHealthStatus()
+    local baseStatus = "Core OK"
     if HealthMonitor and typeof(HealthMonitor.getStatus) == "function" then
-        return HealthMonitor.getStatus()
+        baseStatus = HealthMonitor.getStatus()
     end
 
-    return "Core OK"
+    local intent = Logic.LastIntentSnapshot
+    local intentText = intent and (tostring(intent.State) .. "/" .. tostring(intent.Reason)) or "Intent:pending"
+    local arbiterText = AssistArbiter and AssistArbiter.snapshot and AssistArbiter.snapshot(Logic.AssistArbiterState) or "Arbiter:pending"
+    local profileText = PhysicsProfile and PhysicsProfile.describe and PhysicsProfile.describe(Logic.LastPhysicsProfile) or "Profile:pending"
+    local threatText = ThreatModel and ThreatModel.snapshot and ThreatModel.snapshot() or "Threat:pending"
+    local landingText = SafeLandingGuard and SafeLandingGuard.snapshot and SafeLandingGuard.snapshot() or "Landing:pending"
+    local bonkText = TrajectoryAntiBonk and TrajectoryAntiBonk.snapshot and TrajectoryAntiBonk.snapshot() or "Bonk:pending"
+    return tostring(baseStatus)
+        .. " | "
+        .. intentText
+        .. " | "
+        .. tostring(arbiterText)
+        .. " | "
+        .. tostring(profileText)
+        .. " | "
+        .. tostring(threatText)
+        .. " | "
+        .. tostring(landingText)
+        .. " | "
+        .. tostring(bonkText)
 end
 
 return Logic

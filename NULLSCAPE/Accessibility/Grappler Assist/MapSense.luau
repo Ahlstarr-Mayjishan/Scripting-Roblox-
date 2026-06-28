@@ -244,7 +244,7 @@ local function getSwingRoomScore(deps, grapple, candidate, position, distance, r
         + getSwingClearanceScore(deps, grapple, candidate, position, anchorUnit)
 end
 
-local function getAnchorScore(deps, grapple, candidate, position, distance, screenScore, result)
+local function getAnchorScore(deps, grapple, candidate, position, distance, screenScore, result, routeThreat)
     local cfg = deps.CFG
     local rootPart = grapple and grapple.RootPart
     if not rootPart then
@@ -268,6 +268,14 @@ local function getAnchorScore(deps, grapple, candidate, position, distance, scre
         score = score - 22
     elseif candidate.Name == "GrapplePoint" and verticalOffset >= -16 then
         score = score - 14
+    end
+
+    if routeThreat or deps.getRouteThreat then
+        local threat = routeThreat or deps.getRouteThreat(rootPart.Position, position)
+        local threatScore = tonumber(threat and threat.Score) or 0
+        if threatScore > 0 then
+            score = score + threatScore
+        end
     end
 
     return score + getSwingRoomScore(deps, grapple, candidate, position, distance, result)
@@ -296,6 +304,7 @@ function MapSense.findBestVoidAnchor(deps, grapple, options)
     local bestDistance = nil
     local bestScreenScore = nil
     local bestScore = math.huge
+    local bestThreat = nil
 
     for _, candidate in ipairs(anchors) do
         local part = candidate.Part
@@ -309,7 +318,8 @@ function MapSense.findBestVoidAnchor(deps, grapple, options)
 
             local result, distance = deps.isLineClear(grapple, candidate.Instance, part, position, maxRange)
             if result and deps.isUsableResult(grapple, result) and deps.isPathSafeForHitbox(grapple, candidate.Instance, part, position, maxRange) then
-                local score = getAnchorScore(deps, grapple, candidate, position, distance, screenScore, result)
+                local threat = deps.getRouteThreat and deps.getRouteThreat(rootPart.Position, position) or nil
+                local score = getAnchorScore(deps, grapple, candidate, position, distance, screenScore, result, threat)
                 if score < bestScore then
                     bestResult = result
                     bestInstance = candidate.Instance
@@ -317,6 +327,7 @@ function MapSense.findBestVoidAnchor(deps, grapple, options)
                     bestDistance = distance
                     bestScreenScore = screenScore
                     bestScore = score
+                    bestThreat = threat
                 end
             end
         end
@@ -330,6 +341,7 @@ function MapSense.findBestVoidAnchor(deps, grapple, options)
             Distance = bestDistance,
             ScreenScore = bestScreenScore,
             Score = bestScore,
+            Threat = bestThreat,
             Reason = "MapVoidAnchor",
         } or nil
     end

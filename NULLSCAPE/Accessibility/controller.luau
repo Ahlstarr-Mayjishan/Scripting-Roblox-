@@ -191,8 +191,19 @@ function Controller:CleanUp()
 	local globals = getGlobals()
 	local finalCleanup = self.Destroyed or (globals.activeAccessibilityController ~= nil and globals.activeAccessibilityController ~= self)
 	if finalCleanup then
+		self.AntiBonkEnabled = false
+		self.GrapplerStaminaMode = "Off"
+		self.GrappleAssistSuiteEnabled = false
+		self.GrappleAimAssistEnabled = false
+		self.GrappleRescueAssistEnabled = false
+		self.GrappleEmergencyProtectionEnabled = false
+		self.GrappleSmartReelEnabled = false
+		self.GrappleSharkTailHelperEnabled = false
+		self.GrappleMomentumGuardEnabled = false
+		self.GrappleJumpPadUsesBypassEnabled = false
 		callExecutor("disableRailAssist")
 		callExecutor("disableGrappleAimAssist")
+		callExecutor("disableAntiBonk")
 	end
 	GC.cleanAll()
 	self.EnemiesFolder = nil
