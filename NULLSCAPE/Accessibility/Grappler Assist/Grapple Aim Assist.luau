@@ -219,6 +219,11 @@ local CFG = {
     TERRAIN_VOID_SCAN_INTERVAL = 0.1,
     TERRAIN_VOID_SAFE_SCAN_INTERVAL = 0.18,
     TERRAIN_VOID_FULL_SCAN_FALL_SPEED = 35,
+    RAIL_EXIT_LANDING_GRACE = 0.95,
+    RAIL_EXIT_MAX_HORIZONTAL_DRIFT = 90,
+    RAIL_EXIT_FLOOR_DEPTH = 72,
+    RAIL_EXIT_PROJECT_TIME = 0.42,
+    RAIL_EXIT_MIN_NORMAL_Y = 0.38,
     INTENT_CONTROL_SUPPRESS_DOT = 0.34,
     INTENT_REEL_SUPPRESS_PENALTY = 58,
     INTENT_JUMPPAD_SUPPRESS_PENALTY = 72,
@@ -1440,6 +1445,96 @@ local function getSafeLandingFloorHit(grapple, killY)
     return bestHit
 end
 
+local function isRailExitSafeFloorHit(result, killY)
+    if not result then
+        return false
+    end
+
+    local instance = result.Instance
+    if instance and instance.Name == "KillVoid" then
+        return false
+    end
+    if result.Normal and result.Normal.Y < CFG.RAIL_EXIT_MIN_NORMAL_Y then
+        return false
+    end
+    if killY and result.Position.Y <= killY + CFG.VOID_RESCUE_SAFE_LANDING_KILL_MARGIN then
+        return false
+    end
+
+    return true
+end
+
+local function isRailExitLandingGraceActive(grapple, killY)
+    local rootPart = grapple and grapple.RootPart
+    local movement = grapple and grapple.Movement
+    if not (rootPart and movement) then
+        return false
+    end
+
+    local exit = Logic.getGlobals().NullscapeRailLastExit
+    if typeof(exit) ~= "table" then
+        return false
+    end
+
+    local exitAt = tonumber(exit.At)
+    if not exitAt or time() - exitAt > CFG.RAIL_EXIT_LANDING_GRACE then
+        return false
+    end
+
+    if exit.Movement and exit.Movement ~= movement then
+        return false
+    end
+
+    local exitPosition = exit.Position
+    if typeof(exitPosition) == "Vector3" then
+        local drift = Vector3.new(rootPart.Position.X - exitPosition.X, 0, rootPart.Position.Z - exitPosition.Z).Magnitude
+        if drift > CFG.RAIL_EXIT_MAX_HORIZONTAL_DRIFT then
+            return false
+        end
+    end
+
+    local gravityProfile = Logic.getGravityAssistProfile(grapple)
+    local voidBufferBonus = gravityProfile.VoidBufferBonus or 0
+    if killY and rootPart.Position.Y <= killY + CFG.VOID_RESCUE_HARD_BUFFER + voidBufferBonus * 0.35 then
+        return false
+    end
+
+    local params = getEmergencyFloorRaycastParams(grapple)
+    local velocity = rootPart.Velocity
+    local horizontal = Logic.getHorizontalVelocity(rootPart)
+    local samples = {
+        rootPart.Position,
+        rootPart.Position + horizontal * CFG.RAIL_EXIT_PROJECT_TIME,
+    }
+
+    local exitVelocity = exit.Velocity
+    if typeof(exitVelocity) == "Vector3" then
+        local exitHorizontal = Vector3.new(exitVelocity.X, 0, exitVelocity.Z)
+        table.insert(samples, rootPart.Position + exitHorizontal * math.min(CFG.RAIL_EXIT_PROJECT_TIME, 0.28))
+    end
+
+    local height = CFG.PANIC_RESCUE_GROUND_CHECK_HEIGHT
+    for _, sample in ipairs(samples) do
+        local hit = Workspace:Raycast(
+            sample + Vector3.new(0, height, 0),
+            Vector3.new(0, -(CFG.RAIL_EXIT_FLOOR_DEPTH + height), 0),
+            params
+        )
+        if isRailExitSafeFloorHit(hit, killY) then
+            local distance = rootPart.Position.Y - hit.Position.Y
+            if distance >= -2 then
+                local fallSpeed = math.max(-velocity.Y, 12)
+                local timeToLanding = math.max(distance, 0) / fallSpeed
+                if timeToLanding <= CFG.RAIL_EXIT_LANDING_GRACE + 0.35 then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
 local function getWallHit(position, direction, params)
     if not (position and direction and direction.Magnitude > 0) then
         return nil
@@ -1542,6 +1637,10 @@ local function getVoidDangerState(grapple)
             return true, "BelowKillPlane"
         end
 
+        if isRailExitLandingGraceActive(grapple, killY) then
+            return false, "RailExitLandingGrace"
+        end
+
         if safeLandingHit then
             return false, landingGuard and landingGuard.Reason or "SafeLandingFloor"
         end
@@ -1562,6 +1661,10 @@ local function getVoidDangerState(grapple)
 
     if safeLandingHit then
         return false, landingGuard and landingGuard.Reason or "SafeLandingFloor"
+    end
+
+    if isRailExitLandingGraceActive(grapple, killY) then
+        return false, "RailExitLandingGrace"
     end
 
     local terrainState = getTerrainVoidFallState(grapple)
@@ -1599,6 +1702,10 @@ local function getProjectedUnsafeSampleCount(grapple)
     end
 
     local killY = getVoidKillPlaneY()
+    if isRailExitLandingGraceActive(grapple, killY) then
+        return 0, false
+    end
+
     local landing = getSafeLandingGuard and getSafeLandingGuard(grapple) or nil
     if (landing and landing.Safe) or getSafeLandingFloorHit(grapple, killY) then
         return 0, false
@@ -1667,6 +1774,10 @@ function Logic.isPanicRescueDanger(grapple)
 
     local landing = getSafeLandingGuard and getSafeLandingGuard(grapple) or nil
     if landing and landing.Safe then
+        return false
+    end
+
+    if isRailExitLandingGraceActive(grapple, getVoidKillPlaneY()) then
         return false
     end
 
@@ -3436,6 +3547,9 @@ local function tryPanicRescue(grapple)
     local voidDanger = isVoidRescueDanger(grapple)
     local landing = getSafeLandingGuard and getSafeLandingGuard(grapple) or nil
     if not voidDanger and landing and landing.Safe then
+        return false
+    end
+    if not voidDanger and isRailExitLandingGraceActive(grapple, getVoidKillPlaneY()) then
         return false
     end
     if isEmergencyRescueRecastBlocked(grapple, voidDanger) then

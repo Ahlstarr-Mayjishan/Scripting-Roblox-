@@ -17,6 +17,12 @@ local Logic = {
     LastTelefraggerScanAt = 0,
 }
 
+local function packValues(...)
+    local values = { ... }
+    values.n = select("#", ...)
+    return values
+end
+
 local RAIL_SCAN_INTERVAL = 0.08
 local RAIL_NEAR_CAPTURE_DISTANCE = 2.75
 local RAIL_FAST_APPROACH_SPEED = 28
@@ -143,6 +149,22 @@ end
 
 local function getLocalMovement()
     return getGlobals().NullscapeRailLocalMovement
+end
+
+local function rememberRailExit(movement, railPart)
+    local rootPart = movement and movement.RootPart
+    if not rootPart then
+        return
+    end
+
+    getGlobals().NullscapeRailLastExit = {
+        At = time(),
+        Movement = movement,
+        RailPart = railPart,
+        Position = rootPart.Position,
+        Velocity = rootPart.Velocity,
+        WasJump = movement.railJumped == true,
+    }
 end
 
 local function clampPointToPart(part, worldPosition)
@@ -455,6 +477,7 @@ function Logic.enable()
         movementCore.FollowRail = function(self, railPart, ...)
             if self and self.IsLocalPlayer then
                 globals.NullscapeRailLocalMovement = self
+                globals.NullscapeRailCurrentPart = railPart
                 if isSuiteEnabled() then
                     applyEntrySpeedBoost(self, railPart)
                 end
@@ -471,6 +494,14 @@ function Logic.enable()
         movementCore.Step = function(self, dt, ...)
             if self and self.IsLocalPlayer then
                 globals.NullscapeRailLocalMovement = self
+                local wasRail = self.rail == true
+                local railPart = globals.NullscapeRailCurrentPart
+                local results = packValues(originalStep(self, dt, ...))
+                if wasRail and self.rail ~= true then
+                    rememberRailExit(self, railPart)
+                    globals.NullscapeRailCurrentPart = nil
+                end
+                return table.unpack(results, 1, results.n)
             end
             return originalStep(self, dt, ...)
         end
@@ -499,6 +530,8 @@ function Logic.disable()
     globals.RailAssistOriginalStep = nil
     globals.RailAssistHooked = false
     globals.NullscapeRailLocalMovement = nil
+    globals.NullscapeRailCurrentPart = nil
+    globals.NullscapeRailLastExit = nil
 
     Logic.LastAutoRailAt = 0
     Logic.LastScanAt = 0
