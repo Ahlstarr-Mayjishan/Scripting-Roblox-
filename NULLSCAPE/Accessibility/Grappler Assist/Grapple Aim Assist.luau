@@ -109,12 +109,15 @@ local Logic = {
     LastLandingGuard = nil,
     LastAntiBonkPrediction = nil,
     LastPredictionHorizon = nil,
+    MapModel = nil,
     LastRuntimeCharacter = nil,
     LastRuntimeRootPart = nil,
     LastRuntimeMovement = nil,
     CurseHandler = nil,
     CurseHandlerLoaded = false,
 }
+
+Logic.MapModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/MapModel.luau")
 
 local VALID_TARGETS = {
     GrapplePoint = true,
@@ -388,6 +391,17 @@ local CFG = {
     THREAT_SCAN_INTERVAL = 0.72,
     THREAT_SCAN_MAX_DESCENDANTS = 700,
     THREAT_SCAN_MAX_HAZARDS = 120,
+    MAP_MODEL_CHUNK_SIZE = 64,
+    MAP_MODEL_ACTIVE_RADIUS = 2,
+    MAP_MODEL_KEEP_RADIUS = 4,
+    MAP_MODEL_STEP_INTERVAL = 0.28,
+    MAP_MODEL_RESCAN_INTERVAL = 2.5,
+    MAP_MODEL_SCAN_HEIGHT = 260,
+    MAP_MODEL_FLOOR_DEPTH = 280,
+    MAP_MODEL_FLOOR_NORMAL_Y = 0.42,
+    MAP_MODEL_KILL_MARGIN = 12,
+    MAP_MODEL_MAX_PARTS_PER_CHUNK = 90,
+    MAP_MODEL_MAX_ANCHORS_PER_CHUNK = 36,
     MAP_ANCHOR_THREAT_MAX_DISTANCE = 38,
     SAFE_LANDING_MAX_THREAT_SCORE = 52,
     CONTROLLED_LANDING_PROBE_TIME = 0.72,
@@ -1405,11 +1419,30 @@ local function getSafeLandingFloorHit(grapple, killY)
         return nil
     end
 
-    local params = getEmergencyFloorRaycastParams(grapple)
     local horizontal = Vector3.new(velocity.X, 0, velocity.Z)
     local horizon = getPredictionHorizon and getPredictionHorizon(grapple) or nil
     local tactical = tonumber(horizon and horizon.Tactical) or 0.72
     local route = tonumber(horizon and horizon.Route) or 1.3
+    local gravityProfile = Logic.getGravityAssistProfile(grapple)
+    local maxLandingTime = CFG.VOID_RESCUE_SAFE_LANDING_MAX_TIME + (gravityProfile.Active and 0.35 or 0)
+    if Logic.MapModel and Logic.getMapModelDeps then
+        local landing = Logic.MapModel.findLandingBelow(Logic.getMapModelDeps(), rootPart.Position, velocity, {
+            Character = grapple.Character,
+            Horizon = route,
+            Radius = CFG.CONTROLLED_LANDING_COARSE_PROBE_DISTANCE,
+            Depth = CFG.VOID_RESCUE_SAFE_LANDING_DEPTH,
+        })
+        local result = landing and landing.Result
+        if isSafeLandingFloorHit(result, killY) then
+            local distance = rootPart.Position.Y - result.Position.Y
+            local fallSpeed = math.max(-velocity.Y, 8)
+            if distance >= 0 and distance / fallSpeed <= maxLandingTime then
+                return result
+            end
+        end
+    end
+
+    local params = getEmergencyFloorRaycastParams(grapple)
     local samples = {
         rootPart.Position,
         rootPart.Position + horizontal * 0.22,
@@ -1439,8 +1472,6 @@ local function getSafeLandingFloorHit(grapple, killY)
 
     local fallSpeed = math.max(-velocity.Y, 8)
     local timeToLanding = bestDistance / fallSpeed
-    local gravityProfile = Logic.getGravityAssistProfile(grapple)
-    local maxLandingTime = CFG.VOID_RESCUE_SAFE_LANDING_MAX_TIME + (gravityProfile.Active and 0.35 or 0)
     if timeToLanding > maxLandingTime then
         return nil
     end
@@ -1615,6 +1646,29 @@ local function getVoidKillPlaneY()
     return nil
 end
 
+function Logic.getMapModelDeps()
+    return {
+        CFG = CFG,
+        getVoidKillPlaneY = getVoidKillPlaneY,
+        getAssistRange = getAssistRange,
+        isLineClear = isLineClear,
+        isUsableResult = Logic.isUsableResult,
+    }
+end
+
+function Logic.updateMapModel(grapple, force)
+    if not (Logic.MapModel and Logic.isSuiteEnabled() and hasClassCapability(grapple, "VoidRescue")) then
+        return false
+    end
+
+    local rootPart = grapple and grapple.RootPart
+    if not rootPart then
+        return false
+    end
+
+    return Logic.MapModel.step(Logic.getMapModelDeps(), rootPart.Position, grapple.Character, force == true)
+end
+
 local getSafeLandingGuard
 local isPanicPressureActive
 
@@ -1668,6 +1722,25 @@ local function getVoidDangerState(grapple)
 
     if isRailExitLandingGraceActive(grapple, killY) then
         return false, "RailExitLandingGrace"
+    end
+
+    if Logic.MapModel and Logic.getMapModelDeps then
+        local modelState = Logic.MapModel.getVoidRisk(Logic.getMapModelDeps(), rootPart.Position, velocity, {
+            Character = grapple.Character,
+            Depth = CFG.VOID_RESCUE_SAFE_LANDING_DEPTH,
+            HardBuffer = CFG.VOID_RESCUE_HARD_BUFFER + voidBufferBonus * 0.35,
+            Horizon = 0.72,
+            MinFallSpeed = CFG.TERRAIN_VOID_FALL_SPEED,
+            Radius = CFG.CONTROLLED_LANDING_COARSE_PROBE_DISTANCE,
+        })
+        if modelState and modelState.Danger then
+            if killY and y > killY + CFG.VOID_RESCUE_MOMENTUM_GRACE_HEIGHT + voidBufferBonus and not isPanicPressureActive() then
+                return false, "VoidMomentumGrace"
+            end
+            return true, modelState.Reason or "MapModelVoid"
+        elseif modelState and modelState.Landing then
+            return false, modelState.Reason or "MapModelLanding"
+        end
     end
 
     local terrainState = getTerrainVoidFallState(grapple)
@@ -2501,6 +2574,13 @@ local function getMapSenseDeps()
 end
 
 local function scanMapVoidAnchor(grapple, options)
+    if Logic.MapModel and Logic.getMapModelDeps then
+        local modelResult = Logic.MapModel.findBestAnchor(Logic.getMapModelDeps(), grapple, options)
+        if modelResult then
+            return modelResult
+        end
+    end
+
     return MapSense.findBestVoidAnchor(getMapSenseDeps(), grapple, options)
 end
 
@@ -4977,6 +5057,9 @@ end
 function Logic.enable()
     local globals = Logic.getGlobals()
     Logic.resetRuntimeState(nil, "Enable")
+    if Logic.MapModel and Logic.MapModel.start then
+        Logic.MapModel.start()
+    end
     if globals.GrappleAimAssistHooked then
         globals.activeGrappleAimAssist = Logic
         Logic.ensureDiveBonkHook(globals)
@@ -5108,6 +5191,7 @@ function Logic.enable()
             end
             HealthMonitor.try("BellBypass", maintainBellBypass, self)
             if Logic.isSuiteEnabled() and hasAnyGrappleAssistCapability(self) then
+                HealthMonitor.try("MapModel", Logic.updateMapModel, self, false)
                 HealthMonitor.try("TerrainSense", updateTerrainFallContext, self)
                 HealthMonitor.try("SafeLandingGuard", getSafeLandingGuard, self)
                 HealthMonitor.try("IntentClassifier", getIntentSnapshot, self)
@@ -5310,6 +5394,11 @@ function Logic.disable()
     clearInputConnections()
     clearConnections()
     MapSense.clear()
+    if Logic.MapModel and Logic.MapModel.stop then
+        Logic.MapModel.stop()
+    elseif Logic.MapModel and Logic.MapModel.clear then
+        Logic.MapModel.clear()
+    end
     table.clear(Logic.Candidates)
 end
 
@@ -5351,6 +5440,7 @@ function Logic.getHealthStatus()
     local landingText = SafeLandingGuard and SafeLandingGuard.snapshot and SafeLandingGuard.snapshot() or "Landing:pending"
     local bonkText = TrajectoryAntiBonk and TrajectoryAntiBonk.snapshot and TrajectoryAntiBonk.snapshot() or "Bonk:pending"
     local horizonText = PredictionHorizon and PredictionHorizon.snapshot and PredictionHorizon.snapshot(Logic.LastPredictionHorizon) or "Horizon:pending"
+    local mapText = Logic.MapModel and Logic.MapModel.snapshot and Logic.MapModel.snapshot() or "MapModel:pending"
     return tostring(baseStatus)
         .. " | "
         .. intentText
@@ -5366,6 +5456,20 @@ function Logic.getHealthStatus()
         .. tostring(bonkText)
         .. " | "
         .. tostring(horizonText)
+        .. " | "
+        .. tostring(mapText)
+end
+
+function Logic.clearMapModel()
+    if Logic.MapModel and Logic.MapModel.clear then
+        Logic.MapModel.clear()
+    end
+end
+
+function Logic.setMapModelDebugEnabled(value)
+    if Logic.MapModel and Logic.MapModel.setDebugEnabled then
+        Logic.MapModel.setDebugEnabled(value == true)
+    end
 end
 
 return Logic

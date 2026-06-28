@@ -158,6 +158,14 @@ function Executor.disableGrappleAimAssist()
     callModule("GrappleAimAssist", "disable")
 end
 
+function Executor.clearGrappleMapModel()
+    callModule("GrappleAimAssist", "clearMapModel")
+end
+
+function Executor.setGrappleMapModelDebug(value)
+    callModule("GrappleAimAssist", "setMapModelDebugEnabled", value == true)
+end
+
 function Executor.getGrappleAimAssistHealthStatus()
     local failure = getFailureText("GrappleAimAssist")
     if failure then

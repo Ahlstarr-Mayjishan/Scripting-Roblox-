@@ -33,6 +33,7 @@ local DEFAULTS = {
 	GrappleAimAssistTargetPriority = "GrapplePoint",
 	GrappleAimAssistRangePriority = "Nearest",
 	GrappleAdaptInputKey = "T",
+	GrappleMapModelDebugEnabled = false,
 }
 
 local function resolveController(Client, Controller)
@@ -275,6 +276,16 @@ return function(Client, Controller)
 			Tab:CreateLabel("Grapple Adapt Input: " .. tostring(Controller.GrappleAdaptInputKey or "T"))
 	end
 
+	Tab:CreateToggle({
+		Name = "Map Model Mini Map",
+		Info = "Shows the chunk cache used by Grappler Assist. Green = landing, yellow = anchor, red = no known landing.",
+		CurrentValue = Controller.GrappleMapModelDebugEnabled or false,
+		Flag = "GrappleMapModelDebugToggle",
+		Callback = function(Value)
+			Controller:SetGrappleMapModelDebug(Value)
+		end,
+	})
+
 	Tab:CreateButton({
 		Name = "Rebind Grapple Adapt Input",
 		Info = "Sets the Adapt Input key. Tap = one assisted recast. Hold = auto-drive while airborne. The key is saved to master_settings.json.",
@@ -291,7 +302,7 @@ return function(Client, Controller)
 				})
 			end
 
-			adaptInputCaptureConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+			adaptInputCaptureConnection = UserInputService.InputBegan:Connect(function(input, _gameProcessed)
 				if UserInputService:GetFocusedTextBox() then
 					return
 				end

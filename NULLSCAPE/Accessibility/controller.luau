@@ -114,6 +114,7 @@ local Controller = {
 	GrappleAimAssistTargetPriority = "GrapplePoint",
 	GrappleAimAssistRangePriority = "Nearest",
 	GrappleAimAssistStrength = "Balanced",
+	GrappleMapModelDebugEnabled = false,
 	AntiBonkEnabled = false,
 	GrappleSmartReelEnabled = false,
 	GrappleSmartReelMode = "Manual",
@@ -203,6 +204,7 @@ function Controller:CleanUp()
 		self.GrappleSharkTailHelperEnabled = false
 		self.GrappleMomentumGuardEnabled = false
 		self.GrappleJumpPadUsesBypassEnabled = false
+		self.GrappleMapModelDebugEnabled = false
 		callExecutor("disableRailAssist")
 		callExecutor("disableGrappleAimAssist")
 		callExecutor("disableAntiBonk")
@@ -410,6 +412,7 @@ function Controller:HasAnyGrappleAssistFeature()
 		or self.GrappleSharkTailHelperEnabled
 		or self.GrappleMomentumGuardEnabled
 		or self.GrappleJumpPadUsesBypassEnabled
+		or self.GrappleMapModelDebugEnabled
 end
 
 function Controller:RefreshGrappleAssistHook()
@@ -438,8 +441,28 @@ function Controller:GetGrappleAssistHealthStatus()
     return tostring(result)
 end
 
+function Controller:SetGrappleMapModelDebug(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
+	self.GrappleMapModelDebugEnabled = value == true
+	if self.GrappleMapModelDebugEnabled then
+		self.GrappleAssistSuiteEnabled = true
+	end
+
+	if not self:RefreshGrappleAssistHook() then
+		self.GrappleMapModelDebugEnabled = false
+		self.GrappleAssistSuiteEnabled = previousSuite
+		return
+	end
+
+	callExecutor("setGrappleMapModelDebug", self.GrappleMapModelDebugEnabled)
+end
+
 function Controller:SetGrappleAssistSuite(value)
     self.GrappleAssistSuiteEnabled = value == true
+	if not self.GrappleAssistSuiteEnabled then
+		self.GrappleMapModelDebugEnabled = false
+		callExecutor("setGrappleMapModelDebug", false)
+	end
 
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleAssistSuiteEnabled = false
@@ -852,6 +875,7 @@ local function setInLobby(val)
 	inLobby = val
 	if val then
 		disconnectFolderObservations()
+		callExecutor("clearGrappleMapModel")
 		Controller:CleanUp()
 	else
 		Controller:updateSpringerAutoJumpState()
