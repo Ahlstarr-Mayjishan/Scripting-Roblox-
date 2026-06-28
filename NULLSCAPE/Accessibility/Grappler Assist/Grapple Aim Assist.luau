@@ -109,6 +109,9 @@ local Logic = {
     LastLandingGuard = nil,
     LastAntiBonkPrediction = nil,
     LastPredictionHorizon = nil,
+    LastRuntimeCharacter = nil,
+    LastRuntimeRootPart = nil,
+    LastRuntimeMovement = nil,
     CurseHandler = nil,
     CurseHandlerLoaded = false,
 }
@@ -4867,12 +4870,109 @@ local function ensureDiveBonkHook(globals)
     end
 end
 
-function Logic.enable()
-    local globals = Logic.getGlobals()
+local function resetRuntimeState(grapple, reason)
+    Logic.CurrentGrappleStep = nil
+    Logic.LastKnownGrapple = grapple
+    Logic.LastGrappleMovement = grapple and grapple.Movement or nil
+    Logic.LastRuntimeCharacter = grapple and grapple.Character or nil
+    Logic.LastRuntimeRootPart = grapple and grapple.RootPart or nil
+    Logic.LastRuntimeMovement = grapple and grapple.Movement or nil
+    Logic.SuppressBonkUntil = 0
+    Logic.AdaptDriveActive = false
+    Logic.AdaptRecastToken = Logic.AdaptRecastToken + 1
+    Logic.AdaptRecastPending = false
+    Logic.AdaptRecastReleaseIssued = false
+    Logic.AdaptRecastRequestedAt = 0
+    Logic.AdaptRecastReleaseAt = 0
+    Logic.AdaptAwaitingAttachUntil = 0
+    Logic.AdaptRetryAt = 0
+    Logic.AutoRescueUntil = 0
+    Logic.LastAutoRescuePulseAt = 0
+    Logic.LastPanicRescuePulseAt = 0
+    Logic.LastPanicInputAt = 0
+    Logic.PanicInputCount = 0
+    Logic.PanicPressureUntil = 0
+    Logic.PanicStabilizeUntil = 0
+    Logic.LastPanicWatchdogAt = 0
+    Logic.LastPanicDangerEvalAt = 0
+    Logic.LastPanicDangerValue = false
+    Logic.EmergencyRescueLockUntil = 0
+    Logic.LastVoidRescueAt = 0
+    Logic.VoidRescueUntil = 0
+    Logic.TerrainFallState = nil
+    Logic.LastTerrainFallEvalAt = 0
+    Logic.EmergencyFloorRaycastParams = nil
+    Logic.EmergencyFloorRaycastCharacter = nil
+    Logic.LastSharkTailAssistAt = 0
+    Logic.LastSharkTailEvalAt = 0
+    Logic.NextSharkTailEvalDelay = 0.08
+    Logic.SharkTailPlanToken = Logic.SharkTailPlanToken + 1
+    Logic.SharkTailPlannedAt = 0
+    Logic.SharkTailStabilizeUntil = 0
+    Logic.LastSmartReelStartAt = 0
+    Logic.LastAssistTargetInstance = nil
+    Logic.LastAssistTargetAt = 0
+    Logic.LastAssistDebug = reason and ("RuntimeReset:" .. tostring(reason)) or nil
+    Logic.LastSmartReelEvalAt = 0
+    Logic.LastSmartReelDebug = nil
+    Logic.LastSmartReelDecision = nil
+    Logic.SmartReelLandingAssistUntil = 0
+    Logic.SmartReelLandingTargetPosition = nil
+    Logic.SmartReelLandingPlaneY = nil
+    Logic.MovementIntentState = MOVEMENT_INTENT.Freefall
+    Logic.MovementIntentUntil = 0
+    Logic.MovementIntentReason = nil
+    Logic.JumpPadCommitGuardUntil = 0
+    Logic.LastJumpPadCommitAt = 0
+    Logic.LastJumpPadCommitPart = nil
+    Logic.LastIntentSnapshot = nil
+    Logic.LastIntentSnapshotAt = 0
+    Logic.LastIntentSnapshotGrapple = nil
+    Logic.LastIntentSnapshotRescueResult = nil
+    Logic.LastPhysicsProfile = nil
+    Logic.LastThreatSnapshot = nil
+    Logic.LastLandingGuard = nil
+    Logic.LastAntiBonkPrediction = nil
+    Logic.LastPredictionHorizon = nil
+    Logic.AssistArbiterState = AssistArbiter and AssistArbiter.new and AssistArbiter.new() or nil
+
     if HealthMonitor and typeof(HealthMonitor.reset) == "function" then
         HealthMonitor.reset()
     end
+    if PhysicsProfile and PhysicsProfile.clear then
+        PhysicsProfile.clear()
+    end
+    if ThreatModel and ThreatModel.clear then
+        ThreatModel.clear()
+    end
+    if SafeLandingGuard and SafeLandingGuard.clear then
+        SafeLandingGuard.clear()
+    end
+    if TrajectoryAntiBonk and TrajectoryAntiBonk.clear then
+        TrajectoryAntiBonk.clear()
+    end
+
+    Logic.BellBypassToken = Logic.BellBypassToken + 1
+    releaseBellBypass()
+    restoreJumpPadBypassParts()
+    Logic.LastJumpPadUsesBypassEnabled = false
+    if Logic.FallbackHitbox then
+        pcall(function()
+            Logic.FallbackHitbox:Destroy()
+        end)
+        Logic.FallbackHitbox = nil
+    end
+    Logic.NoCollisionMoveCastParams = nil
+    MapSense.clear()
+    table.clear(Logic.Candidates)
+    Logic.CandidateCursor = 1
+end
+
+function Logic.enable()
+    local globals = Logic.getGlobals()
+    resetRuntimeState(nil, "Enable")
     if globals.GrappleAimAssistHooked then
+        globals.activeGrappleAimAssist = Logic
         ensureDiveBonkHook(globals)
         watchAdaptInput()
         watchCandidateFolder()
@@ -4989,6 +5089,12 @@ function Logic.enable()
             if globals.activeGrappleAimAssist ~= Logic then
                 return originalStep(self, dt, ...)
             end
+            if self
+                and (self.Character ~= Logic.LastRuntimeCharacter
+                    or self.RootPart ~= Logic.LastRuntimeRootPart
+                    or self.Movement ~= Logic.LastRuntimeMovement) then
+                resetRuntimeState(self, "RuntimeChanged")
+            end
             Logic.LastKnownGrapple = self
             HealthMonitor.try("RefillStamina", refillStamina, self)
             if hasClassCapability(self, "JumpPadBypass") then
@@ -5028,13 +5134,14 @@ function Logic.enable()
 
             Logic.CurrentGrappleStep = self
             local _, restoreCollisionCheck = HealthMonitor.try("CollisionBypass", beginGrappleCollisionBypass, self)
-            local success, stepResult = pcall(originalStep, self, dt, ...)
+            local stepResults = packValues(pcall(originalStep, self, dt, ...))
+            local success = stepResults[1]
             Logic.CurrentGrappleStep = nil
             if restoreCollisionCheck then
                 HealthMonitor.try("CollisionBypassRestore", restoreCollisionCheck)
             end
             if not success then
-                error(stepResult, 0)
+                error(stepResults[2], 0)
             end
             HealthMonitor.try("BellBypass", maintainBellBypass, self)
             HealthMonitor.try("RefillStamina", refillStamina, self)
@@ -5046,7 +5153,7 @@ function Logic.enable()
             HealthMonitor.try("PanicStabilize", applyPanicStabilize, self)
             HealthMonitor.try("SharkTailStabilize", applySharkTailStabilize, self)
             HealthMonitor.try("AdaptRecast", updateAdaptRecast, self)
-            return stepResult
+            return table.unpack(stepResults, 2, stepResults.n)
         end
     end
 
@@ -5121,6 +5228,9 @@ function Logic.disable()
     Logic.CurrentGrappleStep = nil
     Logic.LastKnownGrapple = nil
     Logic.LastGrappleMovement = nil
+    Logic.LastRuntimeCharacter = nil
+    Logic.LastRuntimeRootPart = nil
+    Logic.LastRuntimeMovement = nil
     Logic.SuppressBonkUntil = 0
     Logic.LastSharkTailAssistAt = 0
     Logic.LastSharkTailEvalAt = 0

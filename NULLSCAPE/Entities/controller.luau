@@ -1340,7 +1340,7 @@ local function initializeICBMHook()
 	}
 
 	local function handleRemoteCall(self, ...)
-		local args = { ... }
+		local firstArg = ...
 
 		-- Lấy activeController hiện tại từ globals
 		local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
@@ -1354,6 +1354,12 @@ local function initializeICBMHook()
 		end
 
 		-- Chạy logic chặn RemoteEvent thống nhất từ RemoteBlocking.luau
+		if self.Name == "Died" and firstArg == "VoidImplosion" and activeCtrl.VoidImplosionImmune == true then
+			return true
+		end
+
+		local args = { ... }
+
 		if activeCtrl.GuardianImmune == true and self.Name == "Died" and args[1] == "Guardian" then
 			return true
 		end

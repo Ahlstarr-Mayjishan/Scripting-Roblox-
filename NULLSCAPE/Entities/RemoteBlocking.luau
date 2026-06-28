@@ -156,6 +156,10 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
     end
 
     local remoteName = remote.Name
+    if remoteName == "Died" and args[1] == "VoidImplosion" and controller.VoidImplosionImmune == true then
+        return true
+    end
+
     if not Logic.TargetRemotes[remoteName] then
         return false
     end
