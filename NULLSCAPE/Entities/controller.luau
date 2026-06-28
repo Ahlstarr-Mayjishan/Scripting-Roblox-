@@ -6,6 +6,7 @@
 --  - Gửi kết nối đăng ký qua GC và phát lệnh dọn dẹp giải phóng tài nguyên.
 -- ]]
 
+local getgenv = getgenv
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local activeCallbacks = {}
 
@@ -13,24 +14,40 @@ local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.lua
 local SpecialImmunity = getgenv().loadModule("NULLSCAPE/Entities/SpecialImmunity.luau")
 local Executor = {
 	enableImmunity = function(gc, enemy)
-		if TouchInterest then TouchInterest.enableImmunity(gc, enemy) end
+		if TouchInterest then
+			TouchInterest.enableImmunity(gc, enemy)
+		end
 	end,
 	disableImmunityForType = function(gc, entityName)
-		if TouchInterest then TouchInterest.disableImmunityForType(gc, entityName) end
-		if SpecialImmunity then SpecialImmunity.disableForType(entityName) end
+		if TouchInterest then
+			TouchInterest.disableImmunityForType(gc, entityName)
+		end
+		if SpecialImmunity then
+			SpecialImmunity.disableForType(entityName)
+		end
 	end,
 	restoreAll = function(gc)
-		if TouchInterest then TouchInterest.restoreAll(gc) end
-		if SpecialImmunity then SpecialImmunity.disable() end
+		if TouchInterest then
+			TouchInterest.restoreAll(gc)
+		end
+		if SpecialImmunity then
+			SpecialImmunity.disable()
+		end
 	end,
 	enableSpecialImmunity = function()
-		if SpecialImmunity then return SpecialImmunity.enable() end
+		if SpecialImmunity then
+			return SpecialImmunity.enable()
+		end
 	end,
 	disableSpecialImmunityForType = function(entityName)
-		if SpecialImmunity then SpecialImmunity.disableForType(entityName) end
+		if SpecialImmunity then
+			SpecialImmunity.disableForType(entityName)
+		end
 	end,
 	disableSpecialImmunity = function()
-		if SpecialImmunity then SpecialImmunity.disable() end
+		if SpecialImmunity then
+			SpecialImmunity.disable()
+		end
 	end,
 }
 local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
@@ -91,6 +108,7 @@ end
 
 local function debugPrint(...)
 	-- Không in debug theo yêu cầu của người dùng
+	return select("#", ...)
 end
 
 local function createCadenceUI()
@@ -116,7 +134,7 @@ local function createCadenceUI()
 
 	local Frame = Instance.new("Frame")
 	Frame.Name = "MainFrame"
-	Frame.Size = UDim2.new(0, 220, 0, 80)
+	Frame.Size = UDim2.fromOffset(220, 80)
 	Frame.Position = UDim2.new(0.5, -110, 0.1, 0)
 	Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 	Frame.BackgroundTransparency = 0.2
@@ -136,8 +154,8 @@ local function createCadenceUI()
 
 	local TitleLabel = Instance.new("TextLabel")
 	TitleLabel.Name = "TitleLabel"
-	TitleLabel.Size = UDim2.new(1, 0, 0.4, 0)
-	TitleLabel.Position = UDim2.new(0, 0, 0.05, 0)
+	TitleLabel.Size = UDim2.fromScale(1, 0.4)
+	TitleLabel.Position = UDim2.fromScale(0, 0.05)
 	TitleLabel.BackgroundTransparency = 1
 	TitleLabel.Text = "🎵 CADENCE STATUS"
 	TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -147,8 +165,8 @@ local function createCadenceUI()
 
 	local StatusLabel = Instance.new("TextLabel")
 	StatusLabel.Name = "StatusLabel"
-	StatusLabel.Size = UDim2.new(1, 0, 0.5, 0)
-	StatusLabel.Position = UDim2.new(0, 0, 0.45, 0)
+	StatusLabel.Size = UDim2.fromScale(1, 0.5)
+	StatusLabel.Position = UDim2.fromScale(0, 0.45)
 	StatusLabel.BackgroundTransparency = 1
 	StatusLabel.Text = "Not Active"
 	StatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
@@ -192,7 +210,7 @@ local function disconnectFolderObservations()
 	end
 	table.clear(workspaceConnections)
 
-	for folder, conns in pairs(folderConnections) do
+	for _, conns in pairs(folderConnections) do
 		for _, conn in ipairs(conns) do
 			if conn then
 				pcall(function()
@@ -536,7 +554,7 @@ function Controller:SetImmunity(entityName, value)
 			HuskEvasion.disableHuskImmunity(GC)
 		end
 		if entityName == "Springer" then
-			for part, data in pairs(disabledShockwaves) do
+			for part in pairs(disabledShockwaves) do
 				restoreShockwave(part)
 			end
 		end
@@ -599,7 +617,7 @@ function Controller:SetSpringerImmunityMode(mode)
 			end
 		else
 			-- Legit: Khôi phục lại toàn bộ sóng để có lực đẩy
-			for part, data in pairs(disabledShockwaves) do
+			for part in pairs(disabledShockwaves) do
 				restoreShockwave(part)
 			end
 		end
@@ -700,10 +718,10 @@ local function processEntity(enemy)
 					-- Fix horizontal stretched border for Springer instantly to prevent visual glitches
 					if string.find(enemy.Name:lower(), "springer") then
 						pcall(function()
-							child.Size = UDim2.new(4, 0, 4, 0)
+							child.Size = UDim2.fromScale(4, 4)
 							local function formatSquare(obj)
 								if obj:IsA("GuiObject") then
-									obj.Size = UDim2.new(1, 0, 1, 0)
+									obj.Size = UDim2.fromScale(1, 1)
 									if obj:IsA("Frame") then
 										obj.Position = UDim2.new(0, 0, 0, 0)
 									end
@@ -721,7 +739,7 @@ local function processEntity(enemy)
 					task.spawn(function()
 						-- Wait for physical parts of the enemy model to replicate/load (up to 3 seconds)
 						local rootPart = nil
-						for i = 1, 60 do
+						for _ = 1, 60 do
 							if not enemy or not enemy.Parent then return end
 							rootPart = enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
 							if rootPart then break end
@@ -730,14 +748,18 @@ local function processEntity(enemy)
 
 						if rootPart then
 							if child.Adornee == enemy or child.Adornee == nil then
-								pcall(function() child.Adornee = rootPart end)
+								pcall(function()
+									child.Adornee = rootPart
+								end)
 							end
 
 							-- Defensively hide native ESP when enemy is spawning far below the map (Y < -50)
 							local function updateVisibility()
 								if not rootPart or not rootPart.Parent then return end
 								local isBelowMap = rootPart.Position.Y < -50
-								pcall(function() child.Enabled = not isBelowMap end)
+								pcall(function()
+									child.Enabled = not isBelowMap
+								end)
 							end
 
 							updateVisibility()
@@ -763,7 +785,7 @@ local function processEntity(enemy)
 		task.spawn(function()
 			-- Tìm kiếm đệ quy phần đầu hoặc phần thân khả dụng của quái vật 3D một cách không đồng bộ
 			local actualHead
-			for i = 1, 30 do -- Thử tối đa 30 lần (30 * 0.05s = 1.5s) để khớp với nhịp tải phần tử của game
+			for _ = 1, 30 do -- Thử tối đa 30 lần (30 * 0.05s = 1.5s) để khớp với nhịp tải phần tử của game
 				if not enemy or not enemy.Parent then
 					break
 				end
@@ -787,7 +809,9 @@ local function processEntity(enemy)
 					rootPart = enemy:FindFirstChildWhichIsA("BasePart", true)
 				end
 				if rootPart and rootPart:IsA("BasePart") then
-					pcall(function() enemy.PrimaryPart = rootPart end)
+					pcall(function()
+						enemy.PrimaryPart = rootPart
+					end)
 				end
 			end
 
@@ -800,7 +824,7 @@ local function processEntity(enemy)
 				if rootPart and rootPart:IsA("BasePart") then
 					local fakeHead = Instance.new("BillboardGui")
 					fakeHead.Name = "head"
-					fakeHead.Size = UDim2.new(4, 0, 4, 0)
+					fakeHead.Size = UDim2.fromScale(4, 4)
 					fakeHead.Adornee = rootPart
 					fakeHead.AlwaysOnTop = true
 					fakeHead.Parent = enemy
@@ -1487,7 +1511,9 @@ task.spawn(function()
 	if inRoundVal and inRoundVal:IsA("BoolValue") then
 		hasInRoundValue = true
 		if getgenv()._NULLSCAPE_Globals.activeEntitiesController ~= Controller then
-			pcall(function() Controller:CleanUp() end)
+			pcall(function()
+				Controller:CleanUp()
+			end)
 			return
 		end
 		setInLobby(not inRoundVal.Value)
@@ -1496,14 +1522,20 @@ task.spawn(function()
 		conn = inRoundVal.Changed:Connect(function(val)
 			if Controller.Destroyed or not Controller.CleanUp then
 				if conn then
-					pcall(function() conn:Disconnect() end)
+					pcall(function()
+						conn:Disconnect()
+					end)
 				end
 				return
 			end
 			if getgenv()._NULLSCAPE_Globals.activeEntitiesController ~= Controller then
-				pcall(function() Controller:CleanUp() end)
+				pcall(function()
+					Controller:CleanUp()
+				end)
 				if conn then
-					pcall(function() conn:Disconnect() end)
+					pcall(function()
+						conn:Disconnect()
+					end)
 				end
 				return
 			end
@@ -1521,7 +1553,9 @@ task.spawn(function()
 			break
 		end
 		if getgenv()._NULLSCAPE_Globals.activeEntitiesController ~= Controller then
-			pcall(function() Controller:CleanUp() end)
+			pcall(function()
+				Controller:CleanUp()
+			end)
 			break
 		end
 		setInLobby(not isInMatch())

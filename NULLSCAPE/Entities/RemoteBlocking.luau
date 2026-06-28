@@ -173,11 +173,15 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         local depth = 0
         while current and current ~= workspace and current ~= game and depth < 50 do
             depth = depth + 1
-            local nameSuccess, name = pcall(function() return current.Name end)
+            local nameSuccess, name = pcall(function()
+                return current.Name
+            end)
             if nameSuccess and name and string.find(string.lower(name), string.lower(targetSubName)) then
                 return current
             end
-            local parentSuccess, parent = pcall(function() return current.Parent end)
+            local parentSuccess, parent = pcall(function()
+                return current.Parent
+            end)
             if parentSuccess then
                 current = parent
             else
