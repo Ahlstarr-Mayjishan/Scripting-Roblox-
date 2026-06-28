@@ -1188,7 +1188,7 @@ local function watchAdaptInput()
     end
 
     table.insert(Logic.InputConnections, UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed or Logic.isTextBoxFocused() or input.KeyCode ~= Logic.getAdaptInputKeyCode() then
+        if Logic.isTextBoxFocused() or input.KeyCode ~= Logic.getAdaptInputKeyCode() then
             return
         end
 
@@ -3423,6 +3423,13 @@ local function getSoftOverrideResult(grapple, originalResult)
         return nil
     end
 
+    -- Nếu người chơi đang aim trực tiếp vào một mục tiêu hợp lệ (như JumpPad, GrapplePoint, Bell, TriaOrb),
+    -- tôn trọng ý định của họ và không tự động thay thế sang mục tiêu khác.
+    local originalTargetName = getResultTargetName(originalResult)
+    if originalTargetName then
+        return nil
+    end
+
     local decision = scanNamedTargets(grapple, {
         returnDecision = true,
         fullScan = true,
@@ -3434,7 +3441,7 @@ local function getSoftOverrideResult(grapple, originalResult)
         return nil
     end
 
-    local originalScore, originalScreenScore, wrongAnchorPenalty, originalTargetName =
+    local originalScore, originalScreenScore, wrongAnchorPenalty, originalTargetNameCheck =
         getDirectResultAssistScore(grapple, originalResult)
     local decisionScore = tonumber(decision.Score) or math.huge
     local decisionScreenScore = tonumber(decision.ScreenScore) or math.huge
@@ -3445,13 +3452,10 @@ local function getSoftOverrideResult(grapple, originalResult)
         return nil
     end
 
+    -- Bắt buộc mục tiêu thay thế phải nằm trong phạm vi giới hạn của con trỏ chuột (Cursor Limit)
+    -- để không tự động snap sang mục tiêu quá xa khi người chơi đang aim vào địa hình.
     local hasClearCursorIntent = decisionScreenScore <= CFG.SOFT_OVERRIDE_CURSOR_LIMIT * strengthScale
-    local originalLooksOffIntent = originalScreenScore == nil
-        or originalScreenScore >= CFG.SOFT_OVERRIDE_ORIGINAL_BAD_CURSOR / strengthScale
-        or wrongAnchorPenalty >= CFG.SOFT_OVERRIDE_WRONG_ANCHOR_MIN / strengthScale
-        or originalTargetName == nil
-
-    if not (hasClearCursorIntent or originalLooksOffIntent) then
+    if not hasClearCursorIntent then
         return nil
     end
 

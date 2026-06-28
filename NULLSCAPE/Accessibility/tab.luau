@@ -292,7 +292,7 @@ return function(Client, Controller)
 			end
 
 			adaptInputCaptureConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-				if gameProcessed then
+				if UserInputService:GetFocusedTextBox() then
 					return
 				end
 				if input.UserInputType ~= Enum.UserInputType.Keyboard or input.KeyCode == Enum.KeyCode.Unknown then
