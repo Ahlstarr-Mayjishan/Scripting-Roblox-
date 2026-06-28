@@ -3453,9 +3453,11 @@ local function getSoftOverrideResult(grapple, originalResult)
         return nil
     end
 
-    -- Bắt buộc mục tiêu thay thế phải nằm trong phạm vi giới hạn của con trỏ chuột (Cursor Limit)
-    -- để không tự động snap sang mục tiêu quá xa khi người chơi đang aim vào địa hình.
-    local hasClearCursorIntent = decisionScreenScore <= CFG.SOFT_OVERRIDE_CURSOR_LIMIT * strengthScale
+    -- Bắt buộc mục tiêu thay thế phải nằm trong phạm vi giới hạn của con trỏ chuột nới rộng (38% thay vì 18% của SOFT_OVERRIDE_CURSOR_LIMIT)
+    -- để người chơi vẫn có thể snap vào mục tiêu khi aim lệch sang địa hình (aim hụt),
+    -- nhưng không bị tự động snap sang mục tiêu quá xa ở rìa màn hình.
+    local maxCursorLimit = 0.38
+    local hasClearCursorIntent = decisionScreenScore <= maxCursorLimit * strengthScale
     if not hasClearCursorIntent then
         return nil
     end
