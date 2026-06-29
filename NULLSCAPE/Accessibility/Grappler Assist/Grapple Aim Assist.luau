@@ -162,7 +162,7 @@ local MOVEMENT_INTENT = {
 }
 
 local CFG = {
-	ADAPT_INPUT_PULSE_DURATION = 0.05,
+	ADAPT_INPUT_PULSE_DURATION = 0.08,
 	ADAPT_TAP_THRESHOLD = 0.16,
 	ADAPT_RECAST_RELEASE_DELAY = 0.045,
 	ADAPT_RECAST_COOLDOWN = 0.12,
@@ -891,6 +891,15 @@ function pulseSpecialAction(grapple)
 	if time() - Logic.LastAdaptPulseAt < CFG.ADAPT_RECAST_COOLDOWN then
 		return false
 	end
+
+	-- Tìm mục tiêu và ép xoay nhân vật ngay tại thời điểm bắt đầu nhấn phím (Begin)
+	if typeof(Logic.scanSecondaryCastTarget) == "function" then
+		local secondaryTarget = Logic.scanSecondaryCastTarget(grapple)
+		if secondaryTarget and Logic.isUsableResult(grapple, secondaryTarget) then
+			ensureFacingTarget(grapple, secondaryTarget.Position)
+		end
+	end
+
 	if not fireSpecialAction(grapple, Enum.UserInputState.Begin) then
 		return false
 	end
