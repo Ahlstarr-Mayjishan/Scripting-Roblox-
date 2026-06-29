@@ -1002,6 +1002,45 @@ local characterRefreshConnection = LocalPlayer.CharacterAdded:Connect(function()
 end)
 table.insert(Controller.PermanentConnections, characterRefreshConnection)
 
+-- Lắng nghe và xử lý phần đầu cho các thực thể 3D như Springer (thêm proxy "head" để nhận ESP)
+local function handleEnemyAdded(enemy)
+	if not enemy or not enemy:IsA("Model") then return end
+	if enemy.Name == "Springer" or enemy.Name == "BigSpringer" then
+		task.spawn(function()
+			if enemy:FindFirstChild("head") then return end
+			local Head = enemy:WaitForChild("Head", 5)
+			if Head and Head:IsA("BasePart") and not enemy:FindFirstChild("head") then
+				local proxyHead = Instance.new("Part")
+				proxyHead.Name = "head"
+				proxyHead.Size = Head.Size
+				proxyHead.Transparency = 1
+				proxyHead.CanCollide = false
+				proxyHead.Massless = true
+				
+				local weld = Instance.new("WeldConstraint")
+				weld.Part0 = Head
+				weld.Part1 = proxyHead
+				weld.Parent = proxyHead
+				
+				proxyHead.CFrame = Head.CFrame
+				proxyHead.Parent = enemy
+			end
+		end)
+	end
+end
+
+local enemiesFolder = workspace:WaitForChild("Enemies", 15)
+if enemiesFolder then
+	for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+		pcall(handleEnemyAdded, enemy)
+	end
+
+	local enemyAddedConn = enemiesFolder.ChildAdded:Connect(function(enemy)
+		pcall(handleEnemyAdded, enemy)
+	end)
+	table.insert(Controller.PermanentConnections, enemyAddedConn)
+end
+
 -- Lắng nghe sự kiện đổi trạng thái game thời gian thực
 task.spawn(function()
 	local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)

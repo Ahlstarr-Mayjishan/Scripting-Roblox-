@@ -233,49 +233,34 @@ local function restoreHooks()
 	end
 
 	-- Restore prototype hooks
+	-- WARNING: DO NOT call hookfunction on RemoteEvent/RemoteFunction prototypes as it crashes the client!
+	-- Instead, we just let them pass through since handleEntitiesRemoteCall is cleared during cleanup.
 	if globals.PrototypeHooked then
-		if typeof(hookfunction) == "function" then
-			local remoteProto = Instance.new("RemoteEvent")
-			if globals.OriginalFireServer then
-				pcall(hookfunction, remoteProto.FireServer, globals.OriginalFireServer)
-			end
-			local funcProto = Instance.new("RemoteFunction")
-			if globals.OriginalInvokeServer then
-				pcall(hookfunction, funcProto.InvokeServer, globals.OriginalInvokeServer)
-			end
-		end
 		globals.PrototypeHooked = nil
 		globals.OriginalFireServer = nil
 		globals.OriginalInvokeServer = nil
 	end
 
 	-- Restore StatusEffect connection hook
+	-- WARNING: DO NOT call hookfunction on OnClientEvent.Connect prototype.
 	if globals.StatusEffectHooked then
-		local StatusEffectChanged = ReplicatedStorage:FindFirstChild("Events")
-			and ReplicatedStorage.Events:FindFirstChild("StatusEffectChanged")
-		if StatusEffectChanged and StatusEffectChanged:IsA("RemoteEvent") then
-			if typeof(hookfunction) == "function" and globals.OriginalOnClientEventConnect then
-				pcall(hookfunction, StatusEffectChanged.OnClientEvent.Connect, globals.OriginalOnClientEventConnect)
-			end
-		end
-
-		local ReplicatedFirst = game:GetService("ReplicatedFirst")
-		local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
-		local handlerModule = clientModules and clientModules:FindFirstChild("StatusEffectHandler")
-		if handlerModule and handlerModule:IsA("ModuleScript") then
-			local StatusEffectHandler = require(handlerModule)
-			if typeof(StatusEffectHandler) == "table" and globals.OriginalHasStatus then
-				if typeof(hookfunction) == "function" then
-					pcall(hookfunction, StatusEffectHandler.HasStatus, globals.OriginalHasStatus)
-				else
-					StatusEffectHandler.HasStatus = globals.OriginalHasStatus
-				end
-			end
-		end
 		globals.StatusEffectHooked = nil
 		globals.StatusEffectLoopToken = nil
 		globals.OriginalOnClientEventConnect = nil
-		globals.OriginalHasStatus = nil
+
+		-- Restore StatusEffectHandler.HasStatus (safe Lua table assignment)
+		if globals.OriginalHasStatus then
+			local ReplicatedFirst = game:GetService("ReplicatedFirst")
+			local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+			local handlerModule = clientModules and clientModules:FindFirstChild("StatusEffectHandler")
+			if handlerModule and handlerModule:IsA("ModuleScript") then
+				local success, StatusEffectHandler = pcall(require, handlerModule)
+				if success and typeof(StatusEffectHandler) == "table" then
+					StatusEffectHandler.HasStatus = globals.OriginalHasStatus
+				end
+			end
+			globals.OriginalHasStatus = nil
+		end
 	end
 
 	-- Restore SettingsHandler hooks
