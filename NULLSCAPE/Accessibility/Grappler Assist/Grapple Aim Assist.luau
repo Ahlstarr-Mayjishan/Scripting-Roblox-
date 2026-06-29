@@ -1277,6 +1277,201 @@ local function watchAdaptInput()
 					Logic.LastAdaptInputPressed = time()
 					requestAdaptRecast(grapple)
 				end
+	if not rootPart then
+		return false
+	end
+
+	local movement = grapple and grapple.Movement
+	local inputDirection = flatUnit(movement and movement.PlayerMoveDirection)
+	local velocityDirection = flatUnit(rootPart.Velocity)
+	if
+		inputDirection
+		and velocityDirection
+		and inputDirection:Dot(velocityDirection) >= CFG.INTENT_CONTROL_SUPPRESS_DOT
+	then
+		return false
+	end
+
+	local targetPosition = getActiveGrappleTargetPosition(grapple)
+	local targetDirection = flatUnit(targetPosition and (targetPosition - rootPart.Position))
+	if not targetDirection then
+		targetDirection = velocityDirection
+	end
+	if not targetDirection then
+		return false
+	end
+
+	if targetPosition and (targetPosition - rootPart.Position).Magnitude < CFG.RECAST_ALIGNMENT_MIN_DISTANCE then
+		return false
+	end
+
+	local currentLook = flatUnit(rootPart.CFrame.LookVector)
+	if not currentLook then
+		return false
+	end
+
+	local alpha = math.clamp((tonumber(dt) or 1 / 60) * 8, 0, CFG.RECAST_ALIGNMENT_MAX_STEP)
+	local blended = currentLook:Lerp(targetDirection, alpha)
+	if blended.Magnitude <= 0.05 then
+		return false
+	end
+
+	local position = rootPart.Position
+	rootPart.CFrame = CFrame.lookAt(position, position + blended.Unit, Vector3.yAxis)
+	return true
+end
+
+local function updateAdaptRecast(grapple)
+	if not Logic.AdaptRecastPending then
+		return
+	end
+	if not (Logic.AdaptInputHeld and Logic.isSuiteEnabled()) then
+		Logic.AdaptRecastPending = false
+		Logic.AdaptRecastReleaseIssued = false
+		return
+	end
+
+	local movement = grapple and grapple.Movement
+	if not (grapple and movement) then
+		return
+	end
+
+	local now = time()
+	local releaseElapsed = now - Logic.AdaptRecastReleaseAt
+	local requestElapsed = now - Logic.AdaptRecastRequestedAt
+	local detached = movement.grappling ~= true and grapple.jumpPadReel ~= true
+	local speed = getAdaptHorizontalSpeed(grapple)
+
+	if speed > CFG.ADAPT_RECAST_SAFE_SPEED then
+		clampAdaptRecastVelocity(grapple)
+		Logic.markGrappleBonkGrace(grapple, 0.3)
+		speed = getAdaptHorizontalSpeed(grapple)
+	end
+
+	applyGentleRecastAlignment(grapple, 1 / 60)
+
+	if not Logic.AdaptRecastReleaseIssued then
+		Logic.AdaptRecastReleaseIssued = fireSpecialAction(grapple, Enum.UserInputState.End) == true
+		Logic.AdaptRecastReleaseAt = now
+		return
+	end
+
+	if not detached then
+		return
+	end
+	if releaseElapsed < CFG.ADAPT_RECAST_RELEASE_DELAY then
+		return
+	end
+	if speed > CFG.ADAPT_RECAST_SAFE_SPEED and requestElapsed < CFG.ADAPT_RECAST_MAX_WAIT then
+		return
+	end
+
+	Logic.AdaptRecastPending = false
+	Logic.AdaptRecastReleaseIssued = false
+	pulseSpecialAction(grapple)
+end
+
+local function maintainAdaptInputHold(grapple)
+	if
+		not (
+			hasClassCapability(grapple, "AimAssist")
+			and Logic.AdaptDriveActive
+			and Logic.AdaptInputHeld
+			and Logic.isSuiteEnabled()
+			and Logic.isInAir(grapple)
+		)
+	then
+		return
+	end
+	if Logic.AdaptRecastPending then
+		return
+	end
+
+	local movement = grapple and grapple.Movement
+	if not (grapple and movement) then
+		return
+	end
+	if isAwaitingAdaptAttach(grapple) then
+		return
+	end
+	if time() < (Logic.AdaptRetryAt or 0) then
+		return
+	end
+	if time() - Logic.LastAdaptPulseAt < CFG.ADAPT_RECAST_COOLDOWN then
+		return
+	end
+
+	if movement.grappling == true or grapple.jumpPadReel == true then
+		if not hasReachedGrappleDestination(grapple) then
+			return
+		end
+		requestAdaptRecast(grapple)
+		return
+	end
+
+	if not Logic.hasAdaptDriveTarget(grapple) then
+		Logic.AdaptRetryAt = time() + CFG.ADAPT_RETRY_DELAY
+		return
+	end
+
+	pulseSpecialAction(grapple)
+end
+
+local function updateAdaptInputMode(grapple)
+	if not (Logic.AdaptInputHeld and Logic.isSuiteEnabled()) then
+		return
+	end
+	if Logic.AdaptDriveActive then
+		return
+	end
+	if time() - (Logic.AdaptInputBeganAt or 0) < CFG.ADAPT_TAP_THRESHOLD then
+		return
+	end
+
+	beginAdaptDrive(grapple)
+end
+
+local function watchAdaptInput()
+	if #Logic.InputConnections > 0 then
+		return
+	end
+
+	table.insert(
+		Logic.InputConnections,
+		UserInputService.InputBegan:Connect(function(input, _gameProcessed)
+			if Logic.isTextBoxFocused() or input.KeyCode ~= Logic.getAdaptInputKeyCode() then
+				return
+			end
+
+			Logic.AdaptInputHeld = true
+			Logic.AdaptInputBeganAt = time()
+		end)
+	)
+
+	table.insert(
+		Logic.InputConnections,
+		UserInputService.InputEnded:Connect(function(input)
+			if input.KeyCode ~= Logic.getAdaptInputKeyCode() then
+				return
+			end
+
+			local heldDuration = time() - (Logic.AdaptInputBeganAt or 0)
+			local shouldTap = heldDuration <= CFG.ADAPT_TAP_THRESHOLD and Logic.AdaptDriveActive ~= true
+
+			Logic.AdaptInputHeld = false
+			Logic.AdaptInputBeganAt = 0
+			Logic.AdaptDriveActive = false
+			Logic.AdaptRecastPending = false
+			Logic.AdaptRecastReleaseIssued = false
+			Logic.AdaptAwaitingAttachUntil = 0
+			Logic.AdaptRetryAt = 0
+
+			if shouldTap and Logic.isSuiteEnabled() then
+				local grapple = getTrackedGrapple()
+				if grapple then
+					Logic.LastAdaptInputPressed = time()
+					requestAdaptRecast(grapple)
+				end
 			end
 		end)
 	)
@@ -1285,13 +1480,10 @@ end
 local function rebuildCandidateCache()
 	table.clear(Logic.Candidates)
 
-	local jumpPads = Workspace:FindFirstChild("JumpPads")
-	if not jumpPads then
-		return
-	end
-
-	for _, descendant in ipairs(jumpPads:GetDescendants()) do
-		registerCandidateBranch(descendant, jumpPads)
+	for _, descendant in ipairs(Workspace:GetDescendants()) do
+		if VALID_TARGETS[descendant.Name] then
+			registerCandidateBranch(descendant, Workspace)
+		end
 	end
 end
 
@@ -1299,24 +1491,22 @@ local function watchCandidateFolder()
 	clearConnections()
 	rebuildCandidateCache()
 
-	local jumpPads = Workspace:FindFirstChild("JumpPads")
-	if not jumpPads then
-		local connection = Workspace.ChildAdded:Connect(function(child)
-			if child.Name == "JumpPads" then
-				watchCandidateFolder()
-			end
-		end)
-		table.insert(Logic.Connections, connection)
-		return
-	end
-
 	table.insert(
 		Logic.Connections,
-		jumpPads.DescendantAdded:Connect(function(descendant)
-			registerCandidateBranch(descendant, jumpPads)
+		Workspace.DescendantAdded:Connect(function(descendant)
+			if VALID_TARGETS[descendant.Name] then
+				registerCandidateBranch(descendant, Workspace)
+			end
 		end)
 	)
-	table.insert(Logic.Connections, jumpPads.DescendantRemoving:Connect(unregisterCandidateTree))
+	table.insert(
+		Logic.Connections,
+		Workspace.DescendantRemoving:Connect(function(descendant)
+			if VALID_TARGETS[descendant.Name] then
+				unregisterCandidateTree(descendant)
+			end
+		end)
+	)
 end
 
 local function getGrappleModule()
@@ -2713,6 +2903,7 @@ local function getMapSenseDeps()
 		isPathSafeForHitbox = isPathSafeForHitbox,
 		getRouteThreat = getRouteThreat,
 		now = time,
+		getCandidateList = getCandidateList,
 	}
 end
 

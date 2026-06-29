@@ -149,54 +149,6 @@ local function addTaggedAnchors(deps, anchors, seen, maxAnchors)
     end
 end
 
-local function addRoot(roots, seenRoots, root)
-    if root and root.Parent and not seenRoots[root] then
-        seenRoots[root] = true
-        table.insert(roots, root)
-    end
-end
-
-local function buildAnchorRoots(workspace)
-    local roots = {}
-    local seenRoots = {}
-    addRoot(roots, seenRoots, workspace:FindFirstChild("JumpPads"))
-    addRoot(roots, seenRoots, workspace:FindFirstChild("Gifts"))
-    addRoot(roots, seenRoots, workspace:FindFirstChild("CurrentRooms"))
-    addRoot(roots, seenRoots, workspace:FindFirstChild("Interactables"))
-    addRoot(roots, seenRoots, workspace:FindFirstChild("Specials"))
-
-    for _, child in ipairs(workspace:GetChildren()) do
-        if child.Name == "Bell" or child.Name == "TriaOrb" or child.Name == "GrapplePoint" or child.Name == "JumpPad" then
-            addRoot(roots, seenRoots, child)
-        end
-    end
-
-    return roots
-end
-
-local function scanChildrenBudgeted(deps, anchors, seen, roots, maxDescendants, maxAnchors)
-    local stack = {}
-    for _, root in ipairs(roots) do
-        table.insert(stack, root)
-    end
-
-    local scanned = 0
-    while #stack > 0 and scanned < maxDescendants and #anchors < maxAnchors do
-        local current = table.remove(stack)
-        if current and current.Parent then
-            scanned = scanned + 1
-            addAnchor(deps, anchors, seen, current)
-            if #anchors >= maxAnchors then
-                break
-            end
-
-            local children = current:GetChildren()
-            for i = #children, 1, -1 do
-                table.insert(stack, children[i])
-            end
-        end
-    end
-end
 
 function MapSense.refresh(deps, force)
     local workspace = deps.Workspace
@@ -218,21 +170,22 @@ function MapSense.refresh(deps, force)
 
     local seen = {}
     local anchors = MapSense.Anchors
-    local maxDescendants = cfg.MAP_ANCHOR_SCAN_MAX_DESCENDANTS or 9000
     local maxAnchors = cfg.MAP_ANCHOR_MAX_CANDIDATES or 320
 
-    addTaggedAnchors(deps, anchors, seen, maxAnchors)
-
-    local roots = buildAnchorRoots(workspace)
-    for _, root in ipairs(roots) do
-        addAnchor(deps, anchors, seen, root)
-        if #anchors >= maxAnchors then
-            break
+    -- Đọc trực tiếp từ danh sách candidate đã được cache trong Aim Assist (Tốc độ O(N) cực nhanh)
+    local candidates = deps.getCandidateList and deps.getCandidateList()
+    if candidates then
+        for _, candidate in ipairs(candidates) do
+            addAnchor(deps, anchors, seen, candidate.Instance)
+            if #anchors >= maxAnchors then
+                break
+            end
         end
     end
 
+    -- Dự phòng: Nếu không lấy được candidate cache, sử dụng CollectionService làm phương án fallback
     if #anchors < maxAnchors then
-        scanChildrenBudgeted(deps, anchors, seen, roots, maxDescendants, maxAnchors)
+        addTaggedAnchors(deps, anchors, seen, maxAnchors)
     end
 
     return anchors

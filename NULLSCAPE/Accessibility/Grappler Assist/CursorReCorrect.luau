@@ -139,8 +139,13 @@ local function lineClear(deps, grapple, candidate, part, targetPosition, maxRang
 	end
 
 	local result = workspace:Raycast(origin, offset, grapple.grappleParams)
-	if isTargetHit(result, candidate.Instance, part) then
-		return result, distance
+	-- CẬP NHẬT NÂNG CẤP: Nếu đường truyền hoàn toàn trống (Raycast trả về nil), hoặc đập trúng mục tiêu
+	if not result or isTargetHit(result, candidate.Instance, part) then
+		return result or {
+			Position = targetPosition,
+			Instance = part,
+			Normal = Vector3.new(0, 1, 0),
+		}, distance
 	end
 
 	return nil, nil
@@ -389,26 +394,34 @@ function CursorReCorrect.scanSurfaceAroundCursor(deps, grapple, options)
 		end
 
 		local directHit = workspace:Raycast(originPosition, offsetToHit, grapple.grappleParams)
+		-- CẬP NHẬT NÂNG CẤP: Nếu tia quét từ nhân vật không bị cản trở (directHit = nil), hoặc đập trúng chính vật thể camera nhìn thấy
+		local hitResult = nil
+		if not directHit then
+			hitResult = cameraHit
+		elseif directHit.Instance == cameraHit.Instance or directHit.Instance:IsDescendantOf(cameraHit.Instance.Parent) then
+			hitResult = directHit
+		end
+
 		if
-			directHit
-			and (not directHit.Normal or directHit.Normal.Y <= maxSurfaceNormalY)
-			and (not deps.isUsableResult or deps.isUsableResult(grapple, directHit))
+			hitResult
+			and (not hitResult.Normal or hitResult.Normal.Y <= maxSurfaceNormalY)
+			and (not deps.isUsableResult or deps.isUsableResult(grapple, hitResult))
 			and (
 				not deps.isPathSafeForHitbox
-				or deps.isPathSafeForHitbox(grapple, directHit.Instance, directHit.Instance, directHit.Position, maxRange)
+				or deps.isPathSafeForHitbox(grapple, hitResult.Instance, hitResult.Instance, hitResult.Position, maxRange)
 			)
 		then
 			local realScreenScore = screenScore
 			if deps.getCameraScreenScore then
-				realScreenScore = deps.getCameraScreenScore(camera, directHit.Position, screenAnchor) or screenScore
+				realScreenScore = deps.getCameraScreenScore(camera, hitResult.Position, screenAnchor) or screenScore
 			end
 			if realScreenScore > cursorLimit then
 				continue
 			end
 
-			local score, reason = scoreSurface(deps, grapple, directHit, realScreenScore, driveMode, distance)
+			local score, reason = scoreSurface(deps, grapple, hitResult, realScreenScore, driveMode, distance)
 			if score < bestScore then
-				bestResult = directHit
+				bestResult = hitResult
 				bestScore = score
 				bestReason = reason or "CursorSurface"
 				bestScreenScore = realScreenScore
