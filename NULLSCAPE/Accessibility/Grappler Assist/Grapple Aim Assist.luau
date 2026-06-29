@@ -342,12 +342,15 @@ local CFG = {
 	CURSOR_INTENT_CONFIDENCE_LIMIT = 0.24,
 	CURSOR_SPECIAL_FOCUS_LIMIT = 0.055,
 	CURSOR_SPECIAL_FOCUS_BONUS = -18,
-	CURSOR_RECORRECT_CONFIDENCE_LIMIT = 0.2,
+	CURSOR_SPECIAL_TARGET_LIMIT = 0.42,
+	CURSOR_SPECIAL_TARGET_FORCE_LIMIT = 0.5,
+	CURSOR_SPECIAL_TARGET_BONUS = -65,
+	CURSOR_RECORRECT_CONFIDENCE_LIMIT = 0.28,
 	CURSOR_RECORRECT_SURFACE_NORMAL_Y_MAX = 0.55,
-	CURSOR_DIRECT_OVERRIDE_LIMIT = 0.08,
+	CURSOR_DIRECT_OVERRIDE_LIMIT = 0.12,
 	CURSOR_DIRECT_SURFACE_LIMIT = 0.035,
-	CURSOR_PREVIEW_RECORRECT_LIMIT = 0.28,
-	CURSOR_CAST_RECORRECT_LIMIT = 0.22,
+	CURSOR_PREVIEW_RECORRECT_LIMIT = 0.36,
+	CURSOR_CAST_RECORRECT_LIMIT = 0.34,
 	CURSOR_TARGET_SAMPLE_LIMIT = 18,
 	CURSOR_SURFACE_DETECTOR_LIMIT = 0.24,
 	CURSOR_OPTIMAL_DISTANCE_MIN = 26,
@@ -372,7 +375,7 @@ local CFG = {
 	ASSIST_SPECIAL_BELL_FALL_SPEED = -45,
 	ASSIST_SPECIAL_JUMPPAD_FALL_SPEED = -70,
 	SOFT_OVERRIDE_MIN_SCORE_GAP = 34,
-	SOFT_OVERRIDE_CURSOR_LIMIT = 0.18,
+	SOFT_OVERRIDE_CURSOR_LIMIT = 0.26,
 	SOFT_OVERRIDE_ORIGINAL_BAD_CURSOR = 0.28,
 	SOFT_OVERRIDE_WRONG_ANCHOR_MIN = 34,
 	SOFT_OVERRIDE_SURFACE_PENALTY = 46,
@@ -3333,16 +3336,20 @@ local function scanNamedTargets(grapple, options)
 				end
 				if screenScore then
 					local isLockedTarget = candidate.Instance == Logic.LastAssistTargetInstance
+					local cursorFilterLimit = forceCursor and (cursorLimit or CFG.CURSOR_RECORRECT_CONFIDENCE_LIMIT)
+						or CFG.ASSIST_CURSOR_PREFILTER_LIMIT
+					if VALID_TARGETS[candidate.Name] then
+						cursorFilterLimit = math.max(
+							cursorFilterLimit,
+							forceCursor and CFG.CURSOR_SPECIAL_TARGET_FORCE_LIMIT or CFG.CURSOR_SPECIAL_TARGET_LIMIT
+						)
+					end
 					if
 						rangeMode == "Closest To Cursor"
 						and not rescueMode
 						and not emergencyBrakeMode
 						and not isLockedTarget
-						and screenScore
-							> (
-								forceCursor and (cursorLimit or CFG.CURSOR_RECORRECT_CONFIDENCE_LIMIT)
-								or CFG.ASSIST_CURSOR_PREFILTER_LIMIT
-							)
+						and screenScore > cursorFilterLimit
 					then
 						continue
 					end
@@ -3393,6 +3400,9 @@ local function scanNamedTargets(grapple, options)
 									and screenScore <= CFG.CURSOR_SPECIAL_FOCUS_LIMIT
 								then
 									priorityScore = priorityScore + CFG.CURSOR_SPECIAL_FOCUS_BONUS
+								end
+								if VALID_TARGETS[candidate.Name] and screenScore <= CFG.CURSOR_SPECIAL_TARGET_LIMIT then
+									priorityScore = priorityScore + CFG.CURSOR_SPECIAL_TARGET_BONUS
 								end
 							end
 							local distanceScore = rangeMode == "Farthest" and -distance or distance
@@ -3485,7 +3495,11 @@ local function scanNamedTargets(grapple, options)
 		local viewportSize = camera.ViewportSize
 		local cursorDistance = (Vector2.new(viewportPoint.X, viewportPoint.Y) - screenAnchor).Magnitude
 			/ math.max(viewportSize.X, viewportSize.Y)
-		if cursorDistance > (cursorLimit or CFG.CURSOR_INTENT_CONFIDENCE_LIMIT) then
+		local finalCursorLimit = cursorLimit or CFG.CURSOR_INTENT_CONFIDENCE_LIMIT
+		if VALID_TARGETS[bestTargetName] then
+			finalCursorLimit = math.max(finalCursorLimit, CFG.CURSOR_SPECIAL_TARGET_LIMIT)
+		end
+		if cursorDistance > finalCursorLimit then
 			return nil
 		end
 	end
@@ -3765,7 +3779,11 @@ local function getSoftOverrideResult(grapple, originalResult)
 
 	-- Bắt buộc mục tiêu thay thế phải nằm trong phạm vi giới hạn của con trỏ chuột (Cursor Limit)
 	-- để không tự động snap sang mục tiêu quá xa khi người chơi đang aim vào địa hình.
-	local hasClearCursorIntent = decisionScreenScore <= CFG.SOFT_OVERRIDE_CURSOR_LIMIT * strengthScale
+	local softCursorLimit = CFG.SOFT_OVERRIDE_CURSOR_LIMIT * strengthScale
+	if decisionTargetName and VALID_TARGETS[decisionTargetName] then
+		softCursorLimit = math.max(softCursorLimit, CFG.CURSOR_SPECIAL_TARGET_LIMIT)
+	end
+	local hasClearCursorIntent = decisionScreenScore <= softCursorLimit
 	if not hasClearCursorIntent then
 		return nil
 	end
