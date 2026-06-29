@@ -54,14 +54,38 @@ local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
 local RemoteBlocking = getgenv().loadModule("NULLSCAPE/Entities/RemoteBlocking.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 
+local function getRootJoint(char)
+	local rootPart = char:FindFirstChild("HumanoidRootPart")
+	if not rootPart then
+		return nil
+	end
+	local r6Joint = rootPart:FindFirstChild("RootJoint")
+	if r6Joint and r6Joint:IsA("Motor6D") then
+		return r6Joint
+	end
+	local lowerTorso = char:FindFirstChild("LowerTorso")
+	if lowerTorso then
+		local r15Joint = lowerTorso:FindFirstChild("RootJoint")
+		if r15Joint and r15Joint:IsA("Motor6D") then
+			return r15Joint
+		end
+	end
+	return nil
+end
+
+local hookedTelefraggers = setmetatable({}, { __mode = "k" })
+
 local Controller = {
 	-- Trạng thái bật/tắt miễn nhiễm cho từng thực thể
 	BabyImmune = false,
 	BellImmune = false,
+	BellCurseImmune = false,
+	BellBlindnessImmune = false,
 	FleshImmune = false,
 	MartImmune = false,
 	TelefraggerImmune = false,
 	ICBMImmune = false,
+	ICBMBurnImmune = false,
 	GuardianImmune = false,
 	OperatorImmune = false,
 	SpringerImmune = false,
@@ -307,6 +331,18 @@ function Controller:SetTelefraggerBackTrick(value)
 	self:UpdateTelefraggerConnection()
 end
 
+function Controller:SetICBMBurnImmune(value)
+	self.ICBMBurnImmune = value
+end
+
+function Controller:SetBellCurseImmune(value)
+	self.BellCurseImmune = value
+end
+
+function Controller:SetBellBlindnessImmune(value)
+	self.BellBlindnessImmune = value
+end
+
 function Controller:UpdateTelefraggerConnection()
 	if self.TelefraggerConnection then
 		pcall(function()
@@ -332,7 +368,7 @@ function Controller:UpdateTelefraggerConnection()
 		end
 	end
 
-	if not (self.TelefraggerAutoDodge or self.TelefraggerBackTrick) then
+	if not self.TelefraggerAutoDodge then
 		return
 	end
 
@@ -362,25 +398,6 @@ function Controller:UpdateTelefraggerConnection()
 		return rayResult ~= nil
 	end
 
-	local function getRootJoint(char)
-		local rootPart = char:FindFirstChild("HumanoidRootPart")
-		if not rootPart then
-			return nil
-		end
-		local r6Joint = rootPart:FindFirstChild("RootJoint")
-		if r6Joint and r6Joint:IsA("Motor6D") then
-			return r6Joint
-		end
-		local lowerTorso = char:FindFirstChild("LowerTorso")
-		if lowerTorso then
-			local r15Joint = lowerTorso:FindFirstChild("RootJoint")
-			if r15Joint and r15Joint:IsA("Motor6D") then
-				return r15Joint
-			end
-		end
-		return nil
-	end
-
 	self.TelefraggerConnection = RunService.Heartbeat:Connect(function(dt)
 		local char = LocalPlayer.Character
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -396,7 +413,6 @@ function Controller:UpdateTelefraggerConnection()
 
 		local dangerSegment = nil
 		local minSegmentDist = math.huge
-		local isTargeted = false
 
 		-- Quét tất cả các chỉ thị (Indicator) hoạt động của Telefragger ở cự ly gần
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
@@ -417,123 +433,8 @@ function Controller:UpdateTelefraggerConnection()
 						if dist < 15 and dist < minSegmentDist then
 							minSegmentDist = dist
 							dangerSegment = { Start = startPos, End = endPos, Closest = closest }
-							isTargeted = true
 						end
 					end
-				end
-			end
-		end
-
-		if not self.TelefraggerTracker then
-			self.TelefraggerTracker = {}
-		end
-
-		-- Clean up inactive telefragger tracks
-		local activeTelefraggers = {}
-		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-			if string.find(string.lower(enemy.Name), "telefragger") then
-				activeTelefraggers[enemy] = true
-			end
-		end
-		for enemy in pairs(self.TelefraggerTracker) do
-			if not activeTelefraggers[enemy] or not enemy.Parent then
-				self.TelefraggerTracker[enemy] = nil
-			end
-		end
-
-		-- Track telefraggers to predict teleportation times (specifically for extreme mode and below where there is no dash indicator)
-		for enemy in pairs(activeTelefraggers) do
-			local track = self.TelefraggerTracker[enemy]
-			local enemyRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChild("Torso") or enemy:FindFirstChild("IndicatorPart")
-			local currentPos = enemyRoot and enemyRoot.Position
-			if currentPos then
-				if not track then
-					track = {
-						lastPosition = currentPos,
-						spawnTime = tick(),
-						lastTeleportTime = tick(),
-						hasTeleportedInitial = false,
-						cooldown = 5.0,
-					}
-					self.TelefraggerTracker[enemy] = track
-				else
-					-- Check for sudden teleportation (position jump > 10 studs)
-					local distMoved = (currentPos - track.lastPosition).Magnitude
-					if distMoved > 10 then
-						local now = tick()
-						local diff = now - track.lastTeleportTime
-						if diff > 1.5 and diff < 15 then
-							track.cooldown = diff
-						end
-						track.lastTeleportTime = now
-						track.hasTeleportedInitial = true
-					end
-					track.lastPosition = currentPos
-				end
-
-				-- Determine if we should trigger BackTrick based on this telefragger
-				local now = tick()
-				local timeSinceLast = now - track.lastTeleportTime
-				local timeSinceSpawn = now - track.spawnTime
-				
-				-- 1. Initial teleport prediction window (first 1.5 seconds of spawn)
-				if not track.hasTeleportedInitial and timeSinceSpawn < 1.5 then
-					isTargeted = true
-				end
-
-				-- 2. Periodic teleport prediction window (just before estimated cooldown)
-				local estCooldown = track.cooldown or 5.0
-				if timeSinceLast > estCooldown - 0.7 and timeSinceLast < estCooldown + 0.3 then
-					isTargeted = true
-				end
-			end
-		end
-
-		-- 1. Xử lý cơ chế BackTrick (Xoay hướng vật lý 180 độ, bù trừ khớp nối visual để server tính toán lệch ra sau lưng)
-		if self.TelefraggerBackTrick then
-			if isTargeted then
-				local rootJoint = getRootJoint(char)
-				if rootJoint then
-					if not self.WasRedirectingTelefragger then
-						self.WasRedirectingTelefragger = true
-						self.RedirectRootJoint = rootJoint
-						self.RedirectOriginalC0 = rootJoint.C0
-						self.OriginalAutoRotate = humanoid.AutoRotate
-						humanoid.AutoRotate = false
-					end
-
-					local moveDir = humanoid.MoveDirection
-					local targetLook = Vector3.zero
-					if moveDir.Magnitude > 0.1 then
-						targetLook = -moveDir.Unit
-					else
-						local camera = workspace.CurrentCamera
-						if camera then
-							local camLook = camera.CFrame.LookVector
-							targetLook = -Vector3.new(camLook.X, 0, camLook.Z).Unit
-						end
-					end
-
-					if targetLook.Magnitude > 0.1 then
-						rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + targetLook, Vector3.yAxis)
-					end
-
-					local isR6 = (rootJoint.Parent == rootPart)
-					if isR6 then
-						rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, 0, math.pi)
-					else
-						rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, math.pi, 0)
-					end
-				end
-			else
-				if self.WasRedirectingTelefragger then
-					self.WasRedirectingTelefragger = false
-					if self.RedirectRootJoint and self.RedirectRootJoint.Parent then
-						pcall(function()
-							self.RedirectRootJoint.C0 = self.RedirectOriginalC0
-						end)
-					end
-					humanoid.AutoRotate = self.OriginalAutoRotate
 				end
 			end
 		end
@@ -578,6 +479,76 @@ function Controller:UpdateTelefraggerConnection()
 					end
 				end
 			end
+		end
+	end)
+end
+
+function Controller:TriggerSilentBackTrick()
+	if not self.TelefraggerBackTrick then
+		return
+	end
+
+	local char = game.Players.LocalPlayer.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+	if not (humanoid and rootPart and humanoid.Health > 0) then
+		return
+	end
+
+	local rootJoint = getRootJoint(char)
+	if not rootJoint then
+		return
+	end
+
+	-- Tránh kích hoạt đè lên nhau nếu đang chạy
+	if self.WasRedirectingTelefragger then
+		return
+	end
+
+	self.WasRedirectingTelefragger = true
+	self.RedirectRootJoint = rootJoint
+	self.RedirectOriginalC0 = rootJoint.C0
+	self.OriginalAutoRotate = humanoid.AutoRotate
+	humanoid.AutoRotate = false
+
+	-- Xác định hướng đối lập của di chuyển hoặc camera để quay ngược 180 độ
+	local moveDir = humanoid.MoveDirection
+	local targetLook = Vector3.zero
+	if moveDir.Magnitude > 0.1 then
+		targetLook = -moveDir.Unit
+	else
+		local camera = workspace.CurrentCamera
+		if camera then
+			local camLook = camera.CFrame.LookVector
+			targetLook = -Vector3.new(camLook.X, 0, camLook.Z).Unit
+		end
+	end
+
+	if targetLook.Magnitude > 0.1 then
+		rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + targetLook, Vector3.yAxis)
+	end
+
+	-- Bù trừ góc xoay 180 độ ở client bằng RootJoint để visual trông bình thường
+	local isR6 = (rootJoint.Parent == rootPart)
+	if isR6 then
+		rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, 0, math.pi)
+	else
+		rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, math.pi, 0)
+	end
+
+	-- Hoàn trả trạng thái ban đầu sau đúng 80 miligiây (siêu nhanh)
+	task.delay(0.08, function()
+		if not self.WasRedirectingTelefragger then
+			return
+		end
+		self.WasRedirectingTelefragger = false
+		pcall(function()
+			humanoid.AutoRotate = self.OriginalAutoRotate
+		end)
+		if rootJoint and rootJoint.Parent then
+			pcall(function()
+				rootJoint.C0 = self.RedirectOriginalC0
+			end)
 		end
 	end)
 end
@@ -1342,6 +1313,22 @@ local function processEntity(enemy)
 				GC.registerEntityConnection(enemy, cadenceConn)
 			end
 		end
+
+		-- ── Telefragger ClientEvent Hook ─────────────────────────────
+		if string.find(string.lower(name), "telefragger") and not hookedTelefraggers[enemy] then
+			hookedTelefraggers[enemy] = true
+			task.spawn(function()
+				local clientEvent = enemy:WaitForChild("ClientEvent", 5)
+				if clientEvent and clientEvent:IsA("RemoteEvent") then
+					local telefraggerConn = clientEvent.OnClientEvent:Connect(function(actionName, p2)
+						if actionName == "SetTeleport" or actionName == "Indicator" then
+							Controller:TriggerSilentBackTrick()
+						end
+					end)
+					GC.registerEntityConnection(enemy, telefraggerConn)
+				end
+			end)
+		end
 	end
 
 	-- Đăng ký sự kiện lắng nghe đổi tên của thực thể (Phòng hờ game đổi tên trễ sau khi spawn)
@@ -1636,6 +1623,72 @@ local function initializeStatusEffectHook()
 	end)
 end
 
+-- Hook hiệu ứng mù khi ai đó gõ Chuông (Bell Blindness / Screen flash black/white)
+local function initializeBellBlindnessHook()
+	local globals = getgenv()._NULLSCAPE_Globals
+	globals.BellHookedFunctions = globals.BellHookedFunctions or {}
+
+	-- Hook _G.RingBell để tránh nhấp nháy/mù cục bộ khi ta tự gõ hoặc chạm chuông
+	task.spawn(function()
+		while not _G.RingBell do
+			task.wait(0.5)
+		end
+		local originalRingBell = _G.RingBell
+		_G.RingBell = function(p1)
+			local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+			if activeCtrl and activeCtrl.BellBlindnessImmune then
+				return
+			end
+			return originalRingBell(p1)
+		end
+	end)
+
+	-- Hook OnClientEvent của Bell để tránh mù khi người chơi khác gõ chuông trong phòng
+	task.spawn(function()
+		local events = ReplicatedStorage:WaitForChild("Events", 15)
+		local bellEvent = events and events:WaitForChild("Bell", 15)
+		if bellEvent and bellEvent:IsA("RemoteEvent") then
+			if typeof(getconnections) == "function" and typeof(hookfunction) == "function" then
+				local function hookBellConnections()
+					for _, connection in ipairs(getconnections(bellEvent.OnClientEvent)) do
+						local originalFunction = connection.Function
+						if typeof(originalFunction) == "function" and not globals.BellHookedFunctions[originalFunction] then
+							local oldFunc
+							oldFunc = hookfunction(originalFunction, function(...)
+								local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+								if activeCtrl and activeCtrl.BellBlindnessImmune then
+									return
+								end
+								return oldFunc(...)
+							end)
+							globals.BellHookedFunctions[originalFunction] = true
+						end
+					end
+				end
+
+				-- Hook các kết nối cũ đang hoạt động
+				hookBellConnections()
+
+				-- Hook hàm Connect để tự động bọc các kết nối mới trong tương lai
+				local oldConnect
+				oldConnect = hookfunction(bellEvent.OnClientEvent.Connect, function(self, callback)
+					if typeof(callback) == "function" then
+						local newCallback = function(...)
+							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+							if activeCtrl and activeCtrl.BellBlindnessImmune then
+								return
+							end
+							return callback(...)
+						end
+						return oldConnect(self, newCallback)
+					end
+					return oldConnect(self, callback)
+				end)
+			end
+		end
+	end)
+end
+
 -- Hook để chặn RemoteEvent báo tử của thực thể Client-side (như ICBM và Springer) một cách an toàn
 local function initializeICBMHook()
 	-- Xây dựng bảng tra cứu nhanh O(1) tên các RemoteEvent cần chặn
@@ -1664,12 +1717,18 @@ local function initializeICBMHook()
 		end
  
 		-- Trì hoãn cuộc gọi CreateHook để đồng bộ hóa trạng thái vật lý lên server (tránh bị từ chối do độ trễ ping)
-		if self.Name == "GrappleReplicator" and firstArg == "CreateHook" then
-			local args = { ... }
+		local namecallArgs = { ... }
+		if self.Name == "GrappleReplicator" and firstArg == "CreateHook" and namecallArgs[3] ~= "DelayedBypass" then
 			task.delay(0.06, function()
-				local originalNamecall = getgenv()._NULLSCAPE_Globals.OriginalNamecall
-				if originalNamecall then
-					originalNamecall(self, table.unpack(args))
+				local originalFireServer = getgenv()._NULLSCAPE_Globals.OriginalFireServer
+				if originalFireServer then
+					pcall(originalFireServer, self, table.unpack(namecallArgs))
+				else
+					-- Dự phòng nếu không có hookfunction: tự gọi lại và gắn thêm tag nhận biết để tránh lặp đệ quy
+					namecallArgs[3] = "DelayedBypass"
+					pcall(function()
+						self:FireServer(table.unpack(namecallArgs))
+					end)
 				end
 			end)
 			return true
@@ -1862,5 +1921,6 @@ end)
 
 task.spawn(initializeICBMHook)
 task.spawn(initializeStatusEffectHook)
+task.spawn(initializeBellBlindnessHook)
 
 return Controller

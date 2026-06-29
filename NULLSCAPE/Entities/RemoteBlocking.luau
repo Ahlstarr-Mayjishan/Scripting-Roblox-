@@ -14,8 +14,8 @@ Logic.Config = {
     ["ICBM"] = {
         ControllerFlag = "ICBMImmune",
         Remotes = { "ClientEvent" },
-        Keywords = { "kill", "combust", "damage", "debuff", "burn", "fire", "hit" },
-        LegitKeywords = { "kill", "combust" }
+        Keywords = { "kill", "damage", "hit" },
+        LegitKeywords = { "kill" }
     },
     ["Guardian"] = {
         ControllerFlag = "GuardianImmune",
@@ -36,7 +36,7 @@ Logic.Config = {
         LegitKeywords = { "Kill", "DemonKill" }
     },
     ["Bell"] = {
-        ControllerFlag = "BellImmune",
+        ControllerFlag = "BellCurseImmune",
         Remotes = { "ClientEvent" },
         Keywords = { "debuff" },
         LegitKeywords = { "debuff" }
@@ -134,6 +134,17 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 
     if typeof(remote) ~= "Instance" then
         return false
+    end
+
+    -- Chặn riêng biệt hiệu ứng cháy (Burn curse) của ICBM nếu tùy chọn được bật
+    if controller.ICBMBurnImmune == true
+        and remote.ClassName == "RemoteEvent"
+        and remote.Name == "ClientEvent"
+        and args[1] == "Combust" then
+        local parent = remote.Parent
+        if parent and parent.Name == "ICBM" then
+            return true
+        end
     end
 
     -- Operator is entirely client-driven and reports its kill through the BroSecureMethod RemoteEvent or DiedFunc.

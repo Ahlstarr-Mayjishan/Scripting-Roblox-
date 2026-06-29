@@ -61,12 +61,50 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
-		Name = "Bell",
-		CurrentValue = getFlag(Controller, "BellImmune"),
-		Flag = "ImmunityBellToggle",
-		Callback = function(Value)
-			setImmunity(Controller, "Bell", Value)
+	local currentBellOptions = {}
+	if getFlag(Controller, "BellImmune") then
+		table.insert(currentBellOptions, "Immunity")
+	end
+	if getFlag(Controller, "BellCurseImmune") then
+		table.insert(currentBellOptions, "Knockback (Curse)")
+	end
+	if getFlag(Controller, "BellBlindnessImmune") then
+		table.insert(currentBellOptions, "Ring screen blindness")
+	end
+
+	Tab:CreateDropdown({
+		Name = "Bell Hack Mode",
+		Options = { "Immunity", "Knockback (Curse)", "Ring screen blindness" },
+		CurrentOption = currentBellOptions,
+		MultipleOptions = true,
+		Flag = "BellHackDropdown",
+		Callback = function(Options)
+			local hasImmunity = false
+			local hasCurseImmune = false
+			local hasBlindnessImmune = false
+			for _, opt in ipairs(Options) do
+				if opt == "Immunity" then
+					hasImmunity = true
+				elseif opt == "Knockback (Curse)" then
+					hasCurseImmune = true
+				elseif opt == "Ring screen blindness" then
+					hasBlindnessImmune = true
+				end
+			end
+			local activeController = resolveController(nil, Controller)
+			if activeController then
+				if typeof(activeController.SetImmunity) == "function" then
+					activeController:SetImmunity("Bell", hasImmunity)
+				end
+				if typeof(activeController.SetBellCurseImmune) == "function" then
+					activeController:SetBellCurseImmune(hasCurseImmune)
+				end
+				if typeof(activeController.SetBellBlindnessImmune) == "function" then
+					activeController:SetBellBlindnessImmune(hasBlindnessImmune)
+				end
+			else
+				warn("[NULLSCAPE] Entities controller is not ready; ignored Bell Hack Mode change")
+			end
 		end,
 	})
 
@@ -137,12 +175,41 @@ return function(Client, Controller)
 
 	Tab:CreateSection("Entities - Client Side")
 
-	Tab:CreateToggle({
-		Name = "ICBM",
-		CurrentValue = getFlag(Controller, "ICBMImmune"),
-		Flag = "ImmunityICBMToggle",
-		Callback = function(Value)
-			setImmunity(Controller, "ICBM", Value)
+	local currentICBMOptions = {}
+	if getFlag(Controller, "ICBMImmune") then
+		table.insert(currentICBMOptions, "Immunity")
+	end
+	if getFlag(Controller, "ICBMBurnImmune") then
+		table.insert(currentICBMOptions, "Burn effect (Curse)")
+	end
+
+	Tab:CreateDropdown({
+		Name = "ICBM Hack Mode",
+		Options = { "Immunity", "Burn effect (Curse)" },
+		CurrentOption = currentICBMOptions,
+		MultipleOptions = true,
+		Flag = "ICBMHackDropdown",
+		Callback = function(Options)
+			local hasImmunity = false
+			local hasBurnImmunity = false
+			for _, opt in ipairs(Options) do
+				if opt == "Immunity" then
+					hasImmunity = true
+				elseif opt == "Burn effect (Curse)" then
+					hasBurnImmunity = true
+				end
+			end
+			local activeController = resolveController(nil, Controller)
+			if activeController then
+				if typeof(activeController.SetImmunity) == "function" then
+					activeController:SetImmunity("ICBM", hasImmunity)
+				end
+				if typeof(activeController.SetICBMBurnImmune) == "function" then
+					activeController:SetICBMBurnImmune(hasBurnImmunity)
+				end
+			else
+				warn("[NULLSCAPE] Entities controller is not ready; ignored ICBM Hack Mode change")
+			end
 		end,
 	})
 
