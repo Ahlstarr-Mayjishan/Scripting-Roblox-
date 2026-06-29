@@ -15,7 +15,6 @@ local MapModel = {
     LastCenterKey = nil,
     LastInRound = nil,
     Debug3DEnabled = false,
-    Debug3DFolder = nil,
     Debug3DGui = nil,
     Debug3DViewport = nil,
     Debug3DWorld = nil,
@@ -165,18 +164,6 @@ local function makeDebugPart(parent, name, cframe, size, color, transparency)
     return part
 end
 
-local function ensureDebug3DFolder()
-    if MapModel.Debug3DFolder and MapModel.Debug3DFolder.Parent then
-        return MapModel.Debug3DFolder
-    end
-
-    local folder = Instance.new("Folder")
-    folder.Name = "NULLSCAPE_MapModel3D"
-    folder.Parent = Workspace
-    MapModel.Debug3DFolder = folder
-    return folder
-end
-
 local function ensureDebug3DViewport(deps)
     if MapModel.Debug3DGui and MapModel.Debug3DGui.Parent and MapModel.Debug3DWorld and MapModel.Debug3DCamera then
         return MapModel.Debug3DWorld, MapModel.Debug3DCamera
@@ -272,9 +259,7 @@ local function render3DModel(deps, position)
     end
     MapModel.LastDebug3DRenderAt = currentTime
 
-    local folder = ensureDebug3DFolder()
     local world, camera = ensureDebug3DViewport(deps)
-    clearChildren(folder)
     clearChildren(world)
 
     local chunkSize = getCfg(deps, "CHUNK_SIZE")
@@ -299,15 +284,6 @@ local function render3DModel(deps, position)
             color = Color3.fromRGB(255, 210, 75)
             transparency = 0.78
         end
-
-        makeDebugPart(
-            folder,
-            "Chunk_" .. tostring(chunk.Key),
-            CFrame.new(chunk.Center.X, chunkY + 0.4, chunk.Center.Z),
-            Vector3.new(chunkSize, chunkHeight, chunkSize),
-            color,
-            transparency
-        )
         if world then
             makeDebugPart(
                 world,
@@ -324,14 +300,6 @@ local function render3DModel(deps, position)
                 break
             end
             markers = markers + 1
-            makeDebugPart(
-                folder,
-                "Landing",
-                CFrame.new(landing.Position + Vector3.new(0, 1.2, 0)),
-                Vector3.new(4.5, 0.35, 4.5),
-                Color3.fromRGB(85, 255, 145),
-                0.16
-            )
             if world then
                 makeDebugPart(
                     world,
@@ -349,14 +317,6 @@ local function render3DModel(deps, position)
                 break
             end
             markers = markers + 1
-            makeDebugPart(
-                folder,
-                "Anchor_" .. tostring(anchor.Name),
-                CFrame.new(anchor.Position),
-                Vector3.new(3.2, 3.2, 3.2),
-                Color3.fromRGB(255, 220, 85),
-                0.08
-            )
             if world then
                 makeDebugPart(
                     world,
@@ -369,15 +329,6 @@ local function render3DModel(deps, position)
             end
         end
     end
-
-    makeDebugPart(
-        folder,
-        "PlayerProjection",
-        CFrame.new(position.X, position.Y - 2.8, position.Z),
-        Vector3.new(5.5, 0.35, 5.5),
-        Color3.fromRGB(245, 245, 245),
-        0.08
-    )
     if world then
         makeDebugPart(
             world,
@@ -602,9 +553,6 @@ function MapModel.clear()
     MapModel.LastStepAt = 0
     MapModel.LastCenterKey = nil
     MapModel.LastInRound = nil
-    if MapModel.Debug3DFolder then
-        clearChildren(MapModel.Debug3DFolder)
-    end
     if MapModel.Debug3DWorld then
         clearChildren(MapModel.Debug3DWorld)
     end
@@ -839,10 +787,6 @@ function MapModel.setDebug3DEnabled(value)
     MapModel.Debug3DEnabled = value == true
     MapModel.LastDebug3DRenderAt = 0
     if not MapModel.Debug3DEnabled then
-        if MapModel.Debug3DFolder then
-            MapModel.Debug3DFolder:Destroy()
-        end
-        MapModel.Debug3DFolder = nil
         destroyDebug3DViewport()
     end
 end
