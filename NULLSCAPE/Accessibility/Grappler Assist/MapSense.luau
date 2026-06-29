@@ -512,17 +512,47 @@ function MapSense.findBestVoidAnchor(deps, grapple, options)
     local bestBreakdown = nil
     local evaluated = 0
 
+    local validCandidates = {}
     for _, candidate in ipairs(anchors) do
         local part = candidate.Part
         if part and part.Parent then
-            evaluated = evaluated + 1
             local position = part.Position
             local roughDistance = (position - rootPart.Position).Magnitude
-            if roughDistance > detectorRadius then
-                continue
+            if roughDistance <= detectorRadius then
+                table.insert(validCandidates, {
+                    candidate = candidate,
+                    part = part,
+                    position = position,
+                    roughDistance = roughDistance
+                })
             end
+        end
+    end
 
-            local result, distance, hitPosition = findAnchorLineClear(deps, grapple, candidate, position, maxRange)
+    -- Sắp xếp các điểm neo từ gần tới xa để tối ưu hóa hiệu năng
+    table.sort(validCandidates, function(a, b)
+        return a.roughDistance < b.roughDistance
+    end)
+
+    local maxExpensiveChecks = 8
+    local maxTotalChecks = 24
+    local checkedCount = 0
+    local totalChecks = 0
+
+    for _, item in ipairs(validCandidates) do
+        if checkedCount >= maxExpensiveChecks or totalChecks >= maxTotalChecks then
+            break
+        end
+        totalChecks = totalChecks + 1
+
+        local part = item.part
+        local position = item.position
+        local candidate = item.candidate
+
+        evaluated = evaluated + 1
+        local result, distance, hitPosition = findAnchorLineClear(deps, grapple, candidate, position, maxRange)
+        if result then
+            checkedCount = checkedCount + 1
             local scorePosition = hitPosition or position
             local viewportPoint, onScreen = camera:WorldToViewportPoint(scorePosition)
             local screenScore = 0.75

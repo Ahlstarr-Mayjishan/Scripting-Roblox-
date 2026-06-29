@@ -195,6 +195,7 @@ local CFG = {
 	VOID_RESCUE_KILL_PLANE_BUFFER = 34,
 	VOID_RESCUE_HARD_BUFFER = 10,
 	VOID_RESCUE_PREDICT_TIME = 0.42,
+	VOID_RESCUE_PREDICT_FAST_FALL_BONUS = 0.26,
 	VOID_RESCUE_TARGET_UPWARD_BONUS = -58,
 	VOID_RESCUE_LOW_TARGET_PENALTY = 95,
 	VOID_RESCUE_SAFE_LANDING_DEPTH = 190,
@@ -205,7 +206,12 @@ local CFG = {
 	VOID_RESCUE_FAST_FALL_TRIGGER = 95,
 	VOID_RESCUE_FAST_FALL_DROP_TRIGGER = 38,
 	VOID_RESCUE_PASSIVE_INPUT_MAX = 0.08,
-	VOID_RESCUE_COMMIT_LOCK = 1,
+	VOID_RESCUE_COMMIT_LOCK_MIN = 0.35,
+	VOID_RESCUE_COMMIT_LOCK_MAX = 0.75,
+	VOID_RESCUE_COMMIT_LOCK_SPEED_MIN = 90,
+	VOID_RESCUE_COMMIT_LOCK_SPEED_MAX = 240,
+	VOID_RESCUE_COMMIT_LOCK_FALL_MIN = 45,
+	VOID_RESCUE_COMMIT_LOCK_FALL_MAX = 180,
 	SHARK_TAIL_VOID_SAVER_ENABLED = false,
 	SHARK_TAIL_VOID_SAVER_TRIGGER_BUFFER = 46,
 	SHARK_TAIL_VOID_SAVER_USE_BUFFER = 28,
@@ -342,7 +348,7 @@ local CFG = {
 	SHARK_TAIL_TURN_BONUS = 28,
 	SHARK_TAIL_CRUISE_PENALTY = 24,
 	CURSOR_INTENT_SCREEN_WEIGHT = 1000,
-	CURSOR_INTENT_DISTANCE_WEIGHT = 0.015,
+	CURSOR_INTENT_DISTANCE_WEIGHT = 1.2,
 	CURSOR_INTENT_PREFERRED_BONUS = -4,
 	CURSOR_INTENT_CONFIDENCE_LIMIT = 0.24,
 	CURSOR_SPECIAL_FOCUS_LIMIT = 0.055,
@@ -1512,7 +1518,17 @@ function getVoidDangerState(grapple)
 		end
 
 		if velocity.Y < (gravityProfile.Active and -2 or -8) then
-			local projectedY = y + velocity.Y * (CFG.VOID_RESCUE_PREDICT_TIME + (gravityProfile.VoidPredictBonus or 0))
+			local fallSpeed = math.max(-velocity.Y, 0)
+			local fastFallRatio = math.clamp(
+				(fallSpeed - CFG.VOID_RESCUE_COMMIT_LOCK_FALL_MIN)
+					/ math.max(CFG.VOID_RESCUE_COMMIT_LOCK_FALL_MAX - CFG.VOID_RESCUE_COMMIT_LOCK_FALL_MIN, 1),
+				0,
+				1
+			)
+			local predictTime = CFG.VOID_RESCUE_PREDICT_TIME
+				+ (gravityProfile.VoidPredictBonus or 0)
+				+ CFG.VOID_RESCUE_PREDICT_FAST_FALL_BONUS * fastFallRatio
+			local projectedY = y + velocity.Y * predictTime - 0.5 * Workspace.Gravity * predictTime * predictTime
 			if projectedY <= killY + CFG.VOID_RESCUE_HARD_BUFFER + voidBufferBonus * 0.5 then
 				return true, gravityProfile.Active and "LowGravityProjectedKillPlane" or "ProjectedKillPlane"
 			end
@@ -1568,10 +1584,22 @@ function markVoidRescueWindow()
 	end
 end
 
-function markVoidRescueCommitLock()
+function markVoidRescueCommitLock(grapple)
+	local rootPart = grapple and grapple.RootPart
+	local velocity = rootPart and rootPart.Velocity or Vector3.zero
+	local horizontalSpeed = rootPart and Logic.getHorizontalVelocity(rootPart).Magnitude or 0
+	local fallSpeed = math.max(-velocity.Y, 0)
+	local horizontalRange = math.max(CFG.VOID_RESCUE_COMMIT_LOCK_SPEED_MAX - CFG.VOID_RESCUE_COMMIT_LOCK_SPEED_MIN, 1)
+	local fallRange = math.max(CFG.VOID_RESCUE_COMMIT_LOCK_FALL_MAX - CFG.VOID_RESCUE_COMMIT_LOCK_FALL_MIN, 1)
+	local horizontalRatio = math.clamp((horizontalSpeed - CFG.VOID_RESCUE_COMMIT_LOCK_SPEED_MIN) / horizontalRange, 0, 1)
+	local fallRatio = math.clamp((fallSpeed - CFG.VOID_RESCUE_COMMIT_LOCK_FALL_MIN) / fallRange, 0, 1)
+	local momentumRatio = math.max(horizontalRatio, fallRatio)
+	local duration = CFG.VOID_RESCUE_COMMIT_LOCK_MIN
+		+ (CFG.VOID_RESCUE_COMMIT_LOCK_MAX - CFG.VOID_RESCUE_COMMIT_LOCK_MIN) * momentumRatio
+
 	Logic.VoidRescueCommitLockUntil = math.max(
 		Logic.VoidRescueCommitLockUntil or 0,
-		time() + CFG.VOID_RESCUE_COMMIT_LOCK
+		time() + math.clamp(duration, CFG.VOID_RESCUE_COMMIT_LOCK_MIN, CFG.VOID_RESCUE_COMMIT_LOCK_MAX)
 	)
 end
 
@@ -2417,12 +2445,7 @@ function maintainBellBypass(grapple)
 	local part = grapple and grapple.grapplePart
 	local rootPart = grapple and grapple.RootPart
 	if movement and movement.grappling and isBellInstance(part) and rootPart then
-		local distance = (rootPart.Position - part.Position).Magnitude
-		if distance > 12 then
-			holdBellBypass(part)
-		else
-			releaseBellBypass()
-		end
+		holdBellBypass(part)
 	else
 		scheduleBellBypassRelease(0.5)
 	end
@@ -3106,198 +3129,242 @@ function scanNamedTargets(grapple, options)
 	local bestDistance = nil
 	local bestScreenScore = nil
 	local bestReason = nil
-	local checks = (forceCursor or fullScan or driveMode or emergencyBrakeMode or rangeMode == "Closest To Cursor") and candidateCount
-		or math.min(candidateCount, CFG.MAX_CANDIDATES_PER_CAST)
-
-	for _ = 1, checks do
-		if Logic.CandidateCursor > candidateCount then
-			Logic.CandidateCursor = 1
-		end
-
-		local candidate = candidateList[Logic.CandidateCursor]
-		Logic.CandidateCursor = Logic.CandidateCursor + 1
-
+	local validCandidates = {}
+	for i = 1, candidateCount do
+		local candidate = candidateList[i]
 		local part = candidate and candidate.Part
 		if part and part.Parent then
 			if candidate.Name ~= "Bell" or part.CanTouch or hasSavedBellImmunity(part) then
-				local screenScore, focusPosition
-				if CastIntent and CastIntent.getPartScreenFocus then
-					screenScore, focusPosition = CastIntent.getPartScreenFocus(
-						camera,
-						part,
-						screenAnchor,
-						rangeMode == "Closest To Cursor"
-					)
-				end
-				local position = focusPosition or part.Position
-				if not screenScore then
-					screenScore = getCameraScreenScore(camera, position, screenAnchor)
-				end
-				if not screenScore and (Logic.AdaptDriveActive or (options and options.allowOffScreen)) then
-					screenScore = 1.0
-				end
-				if screenScore then
-					local isLockedTarget = candidate.Instance == Logic.LastAssistTargetInstance
-					local cursorFilterLimit = forceCursor and (cursorLimit or CFG.CURSOR_RECORRECT_CONFIDENCE_LIMIT)
-						or CFG.ASSIST_CURSOR_PREFILTER_LIMIT
-					if VALID_TARGETS[candidate.Name] then
-						cursorFilterLimit = math.max(
-							cursorFilterLimit,
-							forceCursor and CFG.CURSOR_SPECIAL_TARGET_FORCE_LIMIT or CFG.CURSOR_SPECIAL_TARGET_LIMIT
-						)
-					end
-					if
-						rangeMode == "Closest To Cursor"
-						and not rescueMode
-						and not emergencyBrakeMode
-						and not isLockedTarget
-						and screenScore > cursorFilterLimit
-					then
-						continue
-					end
-
-					local result, distance, hitPosition
-					if CursorReCorrect and CursorReCorrect.findCandidateLineClear then
-						result, distance, hitPosition = CursorReCorrect.findCandidateLineClear(
-							getCursorReCorrectDeps(),
-							grapple,
-							candidate,
+				local roughDistance = (part.Position - rootPart.Position).Magnitude
+				if roughDistance <= maxRange then
+					local screenScore, focusPosition
+					if CastIntent and CastIntent.getPartScreenFocus then
+						screenScore, focusPosition = CastIntent.getPartScreenFocus(
+							camera,
 							part,
-							position,
-							maxRange,
-							rangeMode == "Closest To Cursor" or forceCursor or rescueMode or emergencyBrakeMode or driveMode
+							screenAnchor,
+							rangeMode == "Closest To Cursor"
 						)
-					else
-						result, distance = isLineClear(grapple, candidate.Instance, part, position, maxRange)
-						hitPosition = position
 					end
-					local pathPosition = hitPosition or position
-					if result and Logic.isUsableResult(grapple, result) then
-						local pathSafe = isPathSafeForHitbox(grapple, candidate.Instance, part, pathPosition, maxRange)
-					if pathSafe then
-						local item = {
-							Name = candidate.Name,
-							Result = result,
-							Instance = candidate.Instance,
-							Distance = distance,
-							ScreenScore = screenScore,
-						}
-
-						if rangeMode == "Random" then
-							table.insert(validResults, item)
-						else
-							local priorityScore = candidate.Name == preferredName and 0 or 1000
-							local score
-							if panicMode or emergencyBrakeMode then
-								priorityScore = 0
-							elseif rescueMode then
-								priorityScore = rescuePriority[candidate.Name] or 1000
-							elseif rangeMode == "Closest To Cursor" then
-								priorityScore = (forceCursor and 0) or (candidate.Name == preferredName and CFG.CURSOR_INTENT_PREFERRED_BONUS)
-									or 0
-								if
-									candidate.Name ~= "GrapplePoint"
-									and screenScore <= CFG.CURSOR_SPECIAL_FOCUS_LIMIT
-								then
-									priorityScore = priorityScore + CFG.CURSOR_SPECIAL_FOCUS_BONUS
-								end
-								if VALID_TARGETS[candidate.Name] and screenScore <= CFG.CURSOR_SPECIAL_TARGET_LIMIT then
-									priorityScore = priorityScore + CFG.CURSOR_SPECIAL_TARGET_BONUS
-								end
-							end
-							local distanceScore = rangeMode == "Farthest" and -distance or distance
-							if rangeMode == "Closest To Cursor" then
-								distanceScore = distance * CFG.CURSOR_INTENT_DISTANCE_WEIGHT
-							end
-							local staminaPenalty = driveMode and 0
-								or (Logic.isInfiniteStamina() and 0 or distance * (1 - staminaRatio) * 0.12)
-							local intentPenalty =
-								getAssistIntentPenalty(rootPart, position, inputDirection, velocityDirection)
-							local routeBonus = getRouteAssistBonus(rootPart, position)
-							local specialBonus = getSpecialAnchorBonus(grapple, candidate.Name, position)
-							local wrongAnchorPenalty = getWrongAnchorPenalty(
-								rootPart,
-								position,
-								inputDirection,
-								velocityDirection,
-								rangeMode == "Closest To Cursor" and screenScore <= CFG.CURSOR_SPECIAL_FOCUS_LIMIT
+					local position = focusPosition or part.Position
+					if not screenScore then
+						screenScore = getCameraScreenScore(camera, position, screenAnchor)
+					end
+					if not screenScore and (Logic.AdaptDriveActive or (options and options.allowOffScreen)) then
+						screenScore = 1.0
+					end
+					if screenScore then
+						local isLockedTarget = candidate.Instance == Logic.LastAssistTargetInstance
+						local cursorFilterLimit = forceCursor and (cursorLimit or CFG.CURSOR_RECORRECT_CONFIDENCE_LIMIT)
+							or CFG.ASSIST_CURSOR_PREFILTER_LIMIT
+						if VALID_TARGETS[candidate.Name] then
+							cursorFilterLimit = math.max(
+								cursorFilterLimit,
+								forceCursor and CFG.CURSOR_SPECIAL_TARGET_FORCE_LIMIT or CFG.CURSOR_SPECIAL_TARGET_LIMIT
 							)
-							local roleScore = Logic.TargetRoles
-									and Logic.TargetRoles.score
-									and select(1, Logic.TargetRoles.score(Logic, grapple, candidate.Name, position, {
-										RescueMode = rescueMode,
-										PanicMode = panicMode or emergencyBrakeMode,
-										DriveMode = driveMode,
-									}))
-								or 0
-							local memoryScore = Logic.AnchorMemory
-									and Logic.AnchorMemory.score
-									and select(1, Logic.AnchorMemory.score(Logic.AnchorMemoryState, candidate.Instance))
-								or 0
-							local lockBonus = getAssistLockBonus(candidate.Instance)
-							if driveMode and not forceCursor and not emergencyBrakeMode then
-								score = getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
-									+ specialBonus
-									+ roleScore
-									+ memoryScore
-									+ wrongAnchorPenalty * 0.35
-									+ lockBonus
-							elseif panicMode or emergencyBrakeMode then
-								score = getPanicRescueScore(grapple, candidate, position, distance, screenScore)
-									+ roleScore
-									+ memoryScore
-									+ lockBonus
-							elseif rangeMode == "Closest To Cursor" and not rescueMode and not emergencyBrakeMode then
-								score = priorityScore
-									+ screenScore * CFG.CURSOR_INTENT_SCREEN_WEIGHT
-									+ distanceScore
-									+ staminaPenalty
-									+ intentPenalty * 0.35
-									+ routeBonus * 0.35
-									+ specialBonus
-									+ roleScore
-									+ memoryScore
-									+ wrongAnchorPenalty * 0.4
-									+ lockBonus
-							else
-								score = priorityScore
-									+ screenScore * 100
-									+ distanceScore * 0.01
-									+ staminaPenalty
-									+ intentPenalty
-									+ routeBonus
-									+ specialBonus
-									+ roleScore
-									+ memoryScore
-									+ wrongAnchorPenalty
-									+ lockBonus
-							end
-
-							if score < bestScore then
-								bestScore = score
-								bestResult = result
-								bestTargetInstance = candidate.Instance
-								bestTargetName = candidate.Name
-								bestDistance = distance
-								bestScreenScore = screenScore
-								bestReason = rangeMode
-							end
 						end
-					elseif Logic.AnchorMemory and Logic.AnchorMemory.recordFailure then
-						Logic.AnchorMemory.recordFailure(Logic.AnchorMemoryState, candidate.Instance, "PathUnsafe", 105)
-					end
-					elseif Logic.AnchorMemory and Logic.AnchorMemory.recordFailure then
-						Logic.AnchorMemory.recordFailure(
-							Logic.AnchorMemoryState,
-							candidate.Instance,
-							result and "UnusableResult" or "LineBlocked",
-							result and 80 or 90
-						)
+						if
+							rangeMode == "Closest To Cursor"
+							and not rescueMode
+							and not emergencyBrakeMode
+							and not isLockedTarget
+							and screenScore > cursorFilterLimit
+						then
+							-- Bỏ qua nếu lệch hồng tâm quá lớn
+						else
+							table.insert(validCandidates, {
+								candidate = candidate,
+								part = part,
+								roughDistance = roughDistance,
+								screenScore = screenScore,
+								position = position,
+							})
+						end
 					end
 				end
+			else
+				unregisterCandidate(candidate and candidate.Instance)
 			end
 		else
 			unregisterCandidate(candidate and candidate.Instance)
+		end
+	end
+
+	-- Sắp xếp các điểm neo để tối ưu hóa hiệu năng quét
+	if rangeMode == "Closest To Cursor" then
+		table.sort(validCandidates, function(a, b)
+			return a.screenScore < b.screenScore
+		end)
+	elseif rangeMode == "Farthest" then
+		table.sort(validCandidates, function(a, b)
+			return a.roughDistance > b.roughDistance
+		end)
+	elseif rangeMode == "Random" then
+		-- Không cần sắp xếp
+	else -- "Nearest"
+		table.sort(validCandidates, function(a, b)
+			return a.roughDistance < b.roughDistance
+		end)
+	end
+
+	local maxExpensiveChecks = 8
+	local maxTotalChecks = 24
+	local checkedCount = 0
+	local totalChecks = 0
+
+	for _, item in ipairs(validCandidates) do
+		if checkedCount >= maxExpensiveChecks or totalChecks >= maxTotalChecks then
+			break
+		end
+		totalChecks = totalChecks + 1
+
+		local candidate = item.candidate
+		local part = item.part
+		local position = item.position
+		local screenScore = item.screenScore
+
+		evaluated = evaluated + 1
+		local result, distance, hitPosition
+		if CursorReCorrect and CursorReCorrect.findCandidateLineClear then
+			result, distance, hitPosition = CursorReCorrect.findCandidateLineClear(
+				getCursorReCorrectDeps(),
+				grapple,
+				candidate,
+				part,
+				position,
+				maxRange,
+				rangeMode == "Closest To Cursor" or forceCursor or rescueMode or emergencyBrakeMode or driveMode
+			)
+		else
+			result, distance = isLineClear(grapple, candidate.Instance, part, position, maxRange)
+			hitPosition = position
+		end
+
+		if result then
+			checkedCount = checkedCount + 1
+			local pathPosition = hitPosition or position
+			if Logic.isUsableResult(grapple, result) then
+				local pathSafe = isPathSafeForHitbox(grapple, candidate.Instance, part, pathPosition, maxRange)
+				if pathSafe then
+					local resItem = {
+						Name = candidate.Name,
+						Result = result,
+						Instance = candidate.Instance,
+						Distance = distance,
+						ScreenScore = screenScore,
+					}
+
+					if rangeMode == "Random" then
+						table.insert(validResults, resItem)
+					else
+						local priorityScore = candidate.Name == preferredName and 0 or 1000
+						local score
+						if panicMode or emergencyBrakeMode then
+							priorityScore = 0
+						elseif rescueMode then
+							priorityScore = rescuePriority[candidate.Name] or 1000
+						elseif rangeMode == "Closest To Cursor" then
+							priorityScore = (forceCursor and 0) or (candidate.Name == preferredName and CFG.CURSOR_INTENT_PREFERRED_BONUS)
+								or 0
+							if
+								candidate.Name ~= "GrapplePoint"
+								and screenScore <= CFG.CURSOR_SPECIAL_FOCUS_LIMIT
+							then
+								priorityScore = priorityScore + CFG.CURSOR_SPECIAL_FOCUS_BONUS
+							end
+							if VALID_TARGETS[candidate.Name] and screenScore <= CFG.CURSOR_SPECIAL_TARGET_LIMIT then
+								priorityScore = priorityScore + CFG.CURSOR_SPECIAL_TARGET_BONUS
+							end
+						end
+						local distanceScore = rangeMode == "Farthest" and -distance or distance
+						if rangeMode == "Closest To Cursor" then
+							distanceScore = distance * CFG.CURSOR_INTENT_DISTANCE_WEIGHT
+						end
+						local staminaPenalty = driveMode and 0
+							or (Logic.isInfiniteStamina() and 0 or distance * (1 - staminaRatio) * 0.12)
+						local intentPenalty =
+							getAssistIntentPenalty(rootPart, position, inputDirection, velocityDirection)
+						local routeBonus = getRouteAssistBonus(rootPart, position)
+						local specialBonus = getSpecialAnchorBonus(grapple, candidate.Name, position)
+						local wrongAnchorPenalty = getWrongAnchorPenalty(
+							rootPart,
+							position,
+							inputDirection,
+							velocityDirection,
+							rangeMode == "Closest To Cursor" and screenScore <= CFG.CURSOR_SPECIAL_FOCUS_LIMIT
+						)
+						local roleScore = Logic.TargetRoles
+								and Logic.TargetRoles.score
+								and select(1, Logic.TargetRoles.score(Logic, grapple, candidate.Name, position, {
+									RescueMode = rescueMode,
+									PanicMode = panicMode or emergencyBrakeMode,
+									DriveMode = driveMode,
+								}))
+							or 0
+						local memoryScore = Logic.AnchorMemory
+								and Logic.AnchorMemory.score
+								and select(1, Logic.AnchorMemory.score(Logic.AnchorMemoryState, candidate.Instance))
+							or 0
+						local lockBonus = getAssistLockBonus(candidate.Instance)
+						if driveMode and not forceCursor and not emergencyBrakeMode then
+							score = getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
+								+ specialBonus
+								+ roleScore
+								+ memoryScore
+								+ wrongAnchorPenalty * 0.35
+								+ lockBonus
+						elseif panicMode or emergencyBrakeMode then
+							score = getPanicRescueScore(grapple, candidate, position, distance, screenScore)
+								+ roleScore
+								+ memoryScore
+								+ lockBonus
+						elseif rangeMode == "Closest To Cursor" and not rescueMode and not emergencyBrakeMode then
+							score = priorityScore
+								+ screenScore * CFG.CURSOR_INTENT_SCREEN_WEIGHT
+								+ distanceScore
+								+ staminaPenalty
+								+ intentPenalty * 0.35
+								+ routeBonus * 0.35
+								+ specialBonus
+								+ roleScore
+								+ memoryScore
+								+ wrongAnchorPenalty * 0.4
+								+ lockBonus
+						else
+							score = priorityScore
+								+ screenScore * 100
+								+ distanceScore * 0.01
+								+ staminaPenalty
+								+ intentPenalty
+								+ routeBonus
+								+ specialBonus
+								+ roleScore
+								+ memoryScore
+								+ wrongAnchorPenalty
+								+ lockBonus
+						end
+
+						if score < bestScore then
+							bestScore = score
+							bestResult = result
+							bestTargetInstance = candidate.Instance
+							bestTargetName = candidate.Name
+							bestDistance = distance
+							bestScreenScore = screenScore
+							bestReason = rangeMode
+						end
+					end
+				elseif Logic.AnchorMemory and Logic.AnchorMemory.recordFailure then
+					Logic.AnchorMemory.recordFailure(Logic.AnchorMemoryState, candidate.Instance, "PathUnsafe", 105)
+				end
+			elseif Logic.AnchorMemory and Logic.AnchorMemory.recordFailure then
+				Logic.AnchorMemory.recordFailure(
+					Logic.AnchorMemoryState,
+					candidate.Instance,
+					result and "UnusableResult" or "LineBlocked",
+					result and 80 or 90
+				)
+			end
 		end
 	end
 
@@ -3630,6 +3697,13 @@ function getSoftOverrideResult(grapple, originalResult)
 	if decisionTargetName and VALID_TARGETS[decisionTargetName] then
 		softCursorLimit = math.max(softCursorLimit, CFG.CURSOR_SPECIAL_TARGET_LIMIT)
 	end
+
+	-- Nếu con trỏ đang chỉ trực tiếp vào địa hình bình thường (không phải trời không và không phải điểm đặc biệt),
+	-- ta giới hạn chặt chẽ phạm vi hút của Soft Override để tôn trọng ý định bắn địa hình của người chơi.
+	if originalResult and not originalTargetName then
+		softCursorLimit = math.min(softCursorLimit, CFG.CURSOR_DIRECT_OVERRIDE_LIMIT)
+	end
+
 	local hasClearCursorIntent = decisionScreenScore <= softCursorLimit
 	if not hasClearCursorIntent then
 		return nil
@@ -3837,7 +3911,7 @@ function tryPanicRescue(grapple)
 		if voidDanger then
 			Logic.LastVoidRescueAt = time()
 			markVoidRescueWindow()
-			markVoidRescueCommitLock()
+			markVoidRescueCommitLock(grapple)
 		end
 		Logic.PanicStabilizeUntil = time() + CFG.PANIC_STABILIZE_WINDOW
 		Logic.markGrappleBonkGrace(grapple, CFG.PANIC_STABILIZE_WINDOW)
@@ -3913,7 +3987,8 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 		local secondaryTarget = Logic.scanSecondaryCastTarget(grapple, result)
 		if Logic.isUsableResult(grapple, secondaryTarget) then
 			if
-				hasClassCapability(grapple, "BellBypass")
+				not forceRefresh
+				and hasClassCapability(grapple, "BellBypass")
 				and secondaryTarget.Instance
 				and secondaryTarget.Instance.Name == "Bell"
 			then
@@ -3937,7 +4012,8 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 		local reCorrectDecision = getCursorReCorrectDecision(grapple, "SkyReCorrect", limit)
 		if reCorrectDecision and Logic.isUsableResult(grapple, reCorrectDecision.Result) then
 			if
-				hasClassCapability(grapple, "BellBypass")
+				not forceRefresh
+				and hasClassCapability(grapple, "BellBypass")
 				and reCorrectDecision.Instance
 				and reCorrectDecision.Instance.Name == "Bell"
 			then
@@ -3988,7 +4064,8 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 		local overrideResult = getSoftOverrideResult(grapple, result)
 		if Logic.isUsableResult(grapple, overrideResult) then
 			if
-				hasClassCapability(grapple, "BellBypass")
+				not forceRefresh
+				and hasClassCapability(grapple, "BellBypass")
 				and overrideResult.Instance
 				and overrideResult.Instance.Name == "Bell"
 			then
@@ -4053,7 +4130,8 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 	end
 	if Logic.isUsableResult(grapple, assistedResult) then
 		if
-			hasClassCapability(grapple, "BellBypass")
+			not forceRefresh
+			and hasClassCapability(grapple, "BellBypass")
 			and assistedResult.Instance
 			and assistedResult.Instance.Name == "Bell"
 		then
@@ -5491,14 +5569,19 @@ function Logic.enable()
 				return originalEnd(self, p2, ...)
 			end
 			Logic.LastKnownGrapple = self
-			if p2 == true and Logic.isAntiDetachEnabled() then
+
+			local part = self.grapplePart
+			local partName = part and part.Name
+			local isSpecial = partName and VALID_TARGETS[partName]
+
+			if p2 == true and Logic.isAntiDetachEnabled() and not isSpecial then
 				Logic.LastAssistDebug = {
 					Reason = "AntiDetachBlocked",
 					Target = "Grapple",
 				}
 				return nil
 			end
-			if isVoidRescueCommitLocked(self) then
+			if isVoidRescueCommitLocked(self) and p2 ~= true then
 				Logic.LastAssistDebug = {
 					Reason = "VoidCommitEndLock",
 					Target = "Grapple",
