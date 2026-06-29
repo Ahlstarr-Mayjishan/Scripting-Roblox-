@@ -753,6 +753,9 @@ local function registerCandidate(instance)
 	if not part or not targetName then
 		return
 	end
+	if targetName == "JumpPad" and part.CanQuery == false and not Logic.isJumpPadUsesBypassEnabled() then
+		return
+	end
 
 	Logic.Candidates[instance] = {
 		Instance = instance,
@@ -2115,6 +2118,7 @@ end
 local function getThreatModelDeps()
 	return {
 		Workspace = Workspace,
+		CollectionService = game:GetService("CollectionService"),
 		now = time,
 		ScanInterval = CFG.THREAT_SCAN_INTERVAL,
 		MaxDescendants = CFG.THREAT_SCAN_MAX_DESCENDANTS,
@@ -2694,8 +2698,15 @@ local function getMapSenseDeps()
 	return {
 		CFG = CFG,
 		Workspace = Workspace,
+		CollectionService = game:GetService("CollectionService"),
 		VALID_TARGETS = VALID_TARGETS,
 		getTargetPart = getTargetPart,
+		isTargetPartUsable = function(name, part)
+			if name == "JumpPad" and part and part.CanQuery == false and not Logic.isJumpPadUsesBypassEnabled() then
+				return false
+			end
+			return true
+		end,
 		getAssistRange = getAssistRange,
 		isLineClear = isLineClear,
 		isUsableResult = Logic.isUsableResult,
@@ -4109,6 +4120,9 @@ function Logic.isUsableResult(grapple, result)
 		return false
 	end
 	if instance.Parent == nil or typeof(result.Position) ~= "Vector3" then
+		return false
+	end
+	if instance.Name == "JumpPad" and instance.CanQuery == false and not Logic.isJumpPadUsesBypassEnabled() then
 		return false
 	end
 

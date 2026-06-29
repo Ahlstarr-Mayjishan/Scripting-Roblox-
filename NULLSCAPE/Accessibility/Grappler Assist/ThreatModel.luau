@@ -84,6 +84,66 @@ local function addHazard(hazards, seen, instance)
     })
 end
 
+local function addTaggedHazards(deps, hazards, seen, maxHazards)
+    local collectionService = deps and deps.CollectionService
+    if not (collectionService and collectionService.GetTagged) then
+        return
+    end
+
+    local tags = deps.ThreatTags or {
+        "Springer",
+        "Skinwalker",
+        "Husk",
+        "Slicer",
+        "Telefragger",
+        "SpringerShockwave",
+        "DemonShockwave",
+        "CloudWave",
+        "Tripmine",
+        "GoldTripmine",
+        "CorrodedMetal",
+    }
+
+    for _, tag in ipairs(tags) do
+        local success, tagged = pcall(function()
+            return collectionService:GetTagged(tag)
+        end)
+        if success and tagged then
+            for _, instance in ipairs(tagged) do
+                addHazard(hazards, seen, instance)
+                if #hazards >= maxHazards then
+                    return
+                end
+            end
+        end
+    end
+end
+
+local function addRoot(roots, seenRoots, root)
+    if root and root.Parent and not seenRoots[root] then
+        seenRoots[root] = true
+        table.insert(roots, root)
+    end
+end
+
+local function buildThreatRoots(workspace)
+    local roots = {}
+    local seenRoots = {}
+    addRoot(roots, seenRoots, workspace:FindFirstChild("Enemies"))
+    addRoot(roots, seenRoots, workspace:FindFirstChild("Gifts"))
+    addRoot(roots, seenRoots, workspace:FindFirstChild("Tripmines"))
+    addRoot(roots, seenRoots, workspace:FindFirstChild("CurrentRooms"))
+    addRoot(roots, seenRoots, workspace:FindFirstChild("Hazards"))
+
+    for _, child in ipairs(workspace:GetChildren()) do
+        if isHazardInstance(child) then
+            addRoot(roots, seenRoots, child)
+        end
+    end
+
+    return roots
+end
+
 function ThreatModel.refresh(deps, force)
     deps = deps or {}
     local workspace = deps.Workspace
@@ -103,19 +163,11 @@ function ThreatModel.refresh(deps, force)
     table.clear(state.Hazards)
 
     local seen = {}
-    local roots = {}
-    local enemies = workspace:FindFirstChild("Enemies")
-    if enemies then
-        table.insert(roots, enemies)
-    end
-    local gifts = workspace:FindFirstChild("Gifts")
-    if gifts then
-        table.insert(roots, gifts)
-    end
-    table.insert(roots, workspace)
-
     local maxDescendants = tonumber(deps.MaxDescendants) or 650
     local maxHazards = tonumber(deps.MaxHazards) or 120
+    addTaggedHazards(deps, state.Hazards, seen, maxHazards)
+
+    local roots = buildThreatRoots(workspace)
     local scanned = 0
     local stack = {}
     for _, root in ipairs(roots) do

@@ -116,6 +116,9 @@ local function addAnchor(deps, anchors, seen, instance)
     if not (part and name) then
         return
     end
+    if deps.isTargetPartUsable and not deps.isTargetPartUsable(name, part) then
+        return
+    end
 
     seen[instance] = true
     table.insert(anchors, {
@@ -123,6 +126,52 @@ local function addAnchor(deps, anchors, seen, instance)
         Part = part,
         Name = name,
     })
+end
+
+local function addTaggedAnchors(deps, anchors, seen, maxAnchors)
+    local collectionService = deps.CollectionService
+    if not (collectionService and collectionService.GetTagged) then
+        return
+    end
+
+    for targetName in pairs(deps.VALID_TARGETS) do
+        local success, tagged = pcall(function()
+            return collectionService:GetTagged(targetName)
+        end)
+        if success and tagged then
+            for _, instance in ipairs(tagged) do
+                addAnchor(deps, anchors, seen, instance)
+                if #anchors >= maxAnchors then
+                    return
+                end
+            end
+        end
+    end
+end
+
+local function addRoot(roots, seenRoots, root)
+    if root and root.Parent and not seenRoots[root] then
+        seenRoots[root] = true
+        table.insert(roots, root)
+    end
+end
+
+local function buildAnchorRoots(workspace)
+    local roots = {}
+    local seenRoots = {}
+    addRoot(roots, seenRoots, workspace:FindFirstChild("JumpPads"))
+    addRoot(roots, seenRoots, workspace:FindFirstChild("Gifts"))
+    addRoot(roots, seenRoots, workspace:FindFirstChild("CurrentRooms"))
+    addRoot(roots, seenRoots, workspace:FindFirstChild("Interactables"))
+    addRoot(roots, seenRoots, workspace:FindFirstChild("Specials"))
+
+    for _, child in ipairs(workspace:GetChildren()) do
+        if child.Name == "Bell" or child.Name == "TriaOrb" or child.Name == "GrapplePoint" or child.Name == "JumpPad" then
+            addRoot(roots, seenRoots, child)
+        end
+    end
+
+    return roots
 end
 
 local function scanChildrenBudgeted(deps, anchors, seen, roots, maxDescendants, maxAnchors)
@@ -172,16 +221,18 @@ function MapSense.refresh(deps, force)
     local maxDescendants = cfg.MAP_ANCHOR_SCAN_MAX_DESCENDANTS or 9000
     local maxAnchors = cfg.MAP_ANCHOR_MAX_CANDIDATES or 320
 
-    local workspaceChildren = workspace:GetChildren()
-    for _, child in ipairs(workspaceChildren) do
-        addAnchor(deps, anchors, seen, child)
+    addTaggedAnchors(deps, anchors, seen, maxAnchors)
+
+    local roots = buildAnchorRoots(workspace)
+    for _, root in ipairs(roots) do
+        addAnchor(deps, anchors, seen, root)
         if #anchors >= maxAnchors then
             break
         end
     end
 
     if #anchors < maxAnchors then
-        scanChildrenBudgeted(deps, anchors, seen, workspaceChildren, maxDescendants, maxAnchors)
+        scanChildrenBudgeted(deps, anchors, seen, roots, maxDescendants, maxAnchors)
     end
 
     return anchors
