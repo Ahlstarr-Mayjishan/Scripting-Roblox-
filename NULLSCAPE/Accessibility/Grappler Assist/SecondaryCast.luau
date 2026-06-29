@@ -11,7 +11,7 @@ local CFG
 
 function SecondaryCast.link(logicInstance)
 	Logic = logicInstance
-	CFG = Logic.getConfig()
+	CFG = Logic.CFG
 	
 	-- Khởi tạo các biến trên Logic nếu chưa tồn tại
 	Logic.AdaptDriveActive = Logic.AdaptDriveActive or false
