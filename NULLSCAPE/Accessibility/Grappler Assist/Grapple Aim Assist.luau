@@ -2133,12 +2133,12 @@ function isLineClear(grapple, targetInstance, targetPart, targetPosition, maxRan
 	end
 
 	local result = Workspace:Raycast(rootPart.Position, offset, grapple.grappleParams)
-	if not result then
-		return nil
-	end
-
-	if result.Instance == targetPart or result.Instance:IsDescendantOf(targetInstance) then
-		return result, distance
+	if not result or result.Instance == targetPart or result.Instance:IsDescendantOf(targetInstance) then
+		return result or {
+			Instance = targetPart,
+			Position = targetPosition,
+			Normal = Vector3.new(0, 1, 0),
+		}, distance
 	end
 
 	if
@@ -2161,50 +2161,6 @@ function isTargetHit(result, targetInstance, targetPart)
 end
 
 function isPathSafeForHitbox(grapple, targetInstance, targetPart, targetPosition, maxRange)
-	local movement = grapple and grapple.Movement
-	local rootPart = grapple and grapple.RootPart
-	if not rootPart then
-		return nil
-	end
-
-	local offset = targetPosition - rootPart.Position
-	local distance = offset.Magnitude
-	if distance <= 0 or distance > maxRange then
-		return nil
-	end
-
-	local hitbox = movement and movement.Hitbox
-	if not (hitbox and hitbox.Parent and hitbox:IsA("BasePart")) then
-		hitbox = getFallbackHitbox(rootPart)
-	end
-
-	local size = hitbox.Size or CFG.FALLBACK_HITBOX_SIZE
-	local buffer = math.max(size.X, size.Y, size.Z) * 0.5
-	local castDistance = math.max(distance - buffer, 0)
-	if castDistance <= 0 then
-		return true
-	end
-
-	local direction = offset.Unit * castDistance
-	local success, result = pcall(function()
-		return Workspace:Shapecast(hitbox, direction, movement and movement.moveCastParams or grapple.grappleParams)
-	end)
-	if not success then
-		return true
-	end
-
-	if not result then
-		return true
-	end
-
-	if isTargetHit(result, targetInstance, targetPart) then
-		return true
-	end
-
-	if result.Normal and result.Normal.Y < 0.7 then
-		return false
-	end
-
 	return true
 end
 
@@ -3958,11 +3914,6 @@ function Logic.isUsableResult(grapple, result)
 		return false
 	end
 
-	local humanoid = grapple and grapple.Humanoid
-	if humanoid and humanoid:GetState() == Enum.HumanoidStateType.Running and instance.Name ~= "JumpPad" then
-		return false
-	end
-
 	return true
 end
 
@@ -5336,6 +5287,11 @@ function Logic.enable()
 				return originalStart(self, result, ...)
 			end
 			Logic.LastKnownGrapple = self
+
+			-- Bỏ qua chặn trên đất của game: Ép trạng thái nhân vật về Freefall nếu đang chạy mà bám điểm thường
+			if self.Humanoid and self.Humanoid:GetState() == Enum.HumanoidStateType.Running and result and result.Instance and result.Instance.Name ~= "JumpPad" then
+				self.Humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+			end
 			refillStamina(self)
 			if hasClassCapability(self, "JumpPadBypass") then
 				maintainJumpPadUsesBypass()
