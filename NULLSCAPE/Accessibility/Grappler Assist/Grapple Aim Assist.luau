@@ -3126,6 +3126,9 @@ function scanNamedTargets(grapple, options)
 				if not screenScore then
 					screenScore = getCameraScreenScore(camera, position, screenAnchor)
 				end
+				if not screenScore and (Logic.AdaptDriveActive or (options and options.allowOffScreen)) then
+					screenScore = 1.0
+				end
 				if screenScore then
 					local isLockedTarget = candidate.Instance == Logic.LastAssistTargetInstance
 					local cursorFilterLimit = forceCursor and (cursorLimit or CFG.CURSOR_RECORRECT_CONFIDENCE_LIMIT)
@@ -3880,6 +3883,16 @@ function Logic.isUsableResult(grapple, result)
 	return true
 end
 
+local function ensureFacingTarget(grapple, targetPosition)
+	if not grapple or not grapple.RootPart or not targetPosition then
+		return
+	end
+	local flatLook = (targetPosition - grapple.RootPart.Position) * Vector3.new(1, 0, 1)
+	if flatLook.Magnitude > 0.1 then
+		grapple.RootPart.CFrame = CFrame.lookAlong(grapple.RootPart.Position, flatLook.Unit)
+	end
+end
+
 function assistedCast(grapple, forceRefresh, originalCast, ...)
 	notePanicInput(grapple)
 	local result, direction = originalCast(grapple, forceRefresh, ...)
@@ -3904,6 +3917,9 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 				Score = 0,
 				Target = secondaryTarget.Instance.Name,
 			}
+			if not forceRefresh then
+				ensureFacingTarget(grapple, secondaryTarget.Position)
+			end
 			return secondaryTarget, direction
 		end
 	end
@@ -3925,6 +3941,9 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 				Score = reCorrectDecision.Score,
 				Target = reCorrectDecision.Instance.Name,
 			}
+			if not forceRefresh then
+				ensureFacingTarget(grapple, reCorrectDecision.Result.Position)
+			end
 			return reCorrectDecision.Result, direction
 		end
 	end
@@ -3967,6 +3986,14 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 				and overrideResult.Instance.Name == "Bell"
 			then
 				holdBellBypass(overrideResult.Instance)
+			end
+			Logic.LastAssistDebug = {
+				Reason = "SoftOverride",
+				Score = 0,
+				Target = overrideResult.Instance.Name,
+			}
+			if not forceRefresh then
+				ensureFacingTarget(grapple, overrideResult.Position)
 			end
 			return overrideResult
 		end
