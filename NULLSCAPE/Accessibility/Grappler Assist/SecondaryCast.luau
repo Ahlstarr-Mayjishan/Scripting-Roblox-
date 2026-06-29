@@ -52,9 +52,6 @@ function SecondaryCast.requestAdaptRecast(grapple)
 
 	local movement = grapple and grapple.Movement
 	if movement and (movement.grappling == true or grapple.jumpPadReel == true) then
-		if not Logic.hasReachedGrappleDestination(grapple) then
-			return false
-		end
 		Logic.AdaptRecastPending = true
 		Logic.AdaptRecastReleaseIssued = Logic.fireSpecialAction(grapple, Enum.UserInputState.End) == true
 		Logic.AdaptRecastRequestedAt = now
@@ -67,10 +64,6 @@ function SecondaryCast.requestAdaptRecast(grapple)
 end
 
 function SecondaryCast.beginAdaptDrive(grapple)
-	if Logic.AdaptDriveActive then
-		return false
-	end
-
 	Logic.AdaptDriveActive = true
 	Logic.LastAdaptInputPressed = time()
 
@@ -131,7 +124,7 @@ function SecondaryCast.updateAdaptRecast(grapple)
 	if not Logic.AdaptRecastPending then
 		return
 	end
-	if not (Logic.AdaptInputHeld and Logic.isSuiteEnabled()) then
+	if not Logic.isSuiteEnabled() then
 		Logic.AdaptRecastPending = false
 		Logic.AdaptRecastReleaseIssued = false
 		return
@@ -178,52 +171,13 @@ function SecondaryCast.updateAdaptRecast(grapple)
 end
 
 function SecondaryCast.maintainAdaptInputHold(grapple)
-	local movement = grapple and grapple.Movement
-	local rootPart = grapple and grapple.RootPart
-	if
-		movement
-		and rootPart
-		and Logic.AdaptDriveActive
-		and Logic.AdaptInputHeld
-		and not (movement.grappling == true or grapple.jumpPadReel == true)
-	then
-		if Logic.AdaptRecastPending then
-			return
-		end
-		if SecondaryCast.isAwaitingAdaptAttach(grapple) then
-			return
-		end
-		if time() < (Logic.AdaptRetryAt or 0) then
-			return
-		end
-		if time() - Logic.LastAdaptPulseAt < CFG.ADAPT_RECAST_COOLDOWN then
-			return
-		end
-
-		local allowed = Logic.canRunAssist("AimAssist", grapple)
-		if allowed then
-			local now = time()
-			Logic.LastAdaptPulseAt = now
-			SecondaryCast.requestAdaptRecast(grapple)
-		end
-		if not Logic.hasAdaptDriveTarget(grapple) then
-			Logic.AdaptRetryAt = time() + CFG.ADAPT_RETRY_DELAY
-		end
-	end
+	-- Vô hiệu hóa việc tự động giữ/lặp recast để tôn trọng quy tắc "1 bấm 1 lần phóng neo"
+	return
 end
 
 function SecondaryCast.updateAdaptInputMode(grapple)
-	if not (Logic.AdaptInputHeld and Logic.isSuiteEnabled()) then
-		return
-	end
-	if Logic.AdaptDriveActive then
-		return
-	end
-	if time() - (Logic.AdaptInputBeganAt or 0) < CFG.ADAPT_TAP_THRESHOLD then
-		return
-	end
-
-	SecondaryCast.beginAdaptDrive(grapple)
+	-- Vô hiệu hóa việc tự động phân biệt tap/hold
+	return
 end
 
 function SecondaryCast.watchAdaptInput()
@@ -259,11 +213,6 @@ function SecondaryCast.watchAdaptInput()
 
 			Logic.AdaptInputHeld = false
 			Logic.AdaptInputBeganAt = 0
-			Logic.AdaptDriveActive = false
-			Logic.AdaptRecastPending = false
-			Logic.AdaptRecastReleaseIssued = false
-			Logic.AdaptAwaitingAttachUntil = 0
-			Logic.AdaptRetryAt = 0
 		end)
 	)
 end

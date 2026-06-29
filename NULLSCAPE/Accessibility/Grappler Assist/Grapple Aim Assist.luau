@@ -55,6 +55,8 @@ local Logic = {
 	AdaptDriveActive = false,
 	AdaptRecastToken = 0,
 	LastKnownGrapple = nil,
+	LastGrappledPart = nil,
+	LastGrappledTime = 0,
 	AdaptRecastPending = false,
 	AdaptRecastReleaseIssued = false,
 	AdaptRecastRequestedAt = 0,
@@ -920,6 +922,7 @@ function pulseSpecialAction(grapple)
 		end
 
 		fireSpecialAction(activeGrapple, Enum.UserInputState.End)
+		Logic.AdaptDriveActive = false
 	end)
 
 	return true
@@ -3154,6 +3157,11 @@ function scanNamedTargets(grapple, options)
 						screenScore = 1.0
 					end
 					if screenScore then
+						if (part == Logic.LastGrappledPart or candidate.Instance == Logic.LastGrappledPart) and time() - (Logic.LastGrappledTime or 0) < 0.8 then
+							if driveMode or (screenScore > 0.15) then
+								continue
+							end
+						end
 						local isLockedTarget = candidate.Instance == Logic.LastAssistTargetInstance
 						local cursorFilterLimit = forceCursor and (cursorLimit or CFG.CURSOR_RECORRECT_CONFIDENCE_LIMIT)
 							or CFG.ASSIST_CURSOR_PREFILTER_LIMIT
@@ -5199,6 +5207,8 @@ function Logic.resetRuntimeState(grapple, reason)
 	Logic.LastRuntimeCharacter = grapple and grapple.Character or nil
 	Logic.LastRuntimeRootPart = grapple and grapple.RootPart or nil
 	Logic.LastRuntimeMovement = grapple and grapple.Movement or nil
+	Logic.LastGrappledPart = nil
+	Logic.LastGrappledTime = 0
 	Logic.SuppressBonkUntil = 0
 	Logic.AdaptDriveActive = false
 	Logic.AdaptRecastToken = Logic.AdaptRecastToken + 1
@@ -5571,6 +5581,10 @@ function Logic.enable()
 			Logic.LastKnownGrapple = self
 
 			local part = self.grapplePart
+			if part then
+				Logic.LastGrappledPart = part
+				Logic.LastGrappledTime = time()
+			end
 			local partName = part and part.Name
 			local isSpecial = partName and VALID_TARGETS[partName]
 
