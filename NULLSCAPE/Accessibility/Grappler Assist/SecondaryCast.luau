@@ -286,10 +286,14 @@ function SecondaryCast.scanSecondaryCastTarget(grapple, originalResult)
 	end
 
 	-- 3. Dự phòng 2: Nếu chỉ chuột vào khoảng không và không có điểm đặc biệt, tự quét bề mặt địa hình thường trên màn hình
-	return Logic.scanScreenSurface(grapple, {
-		driveMode = true,
-		returnDecision = true
-	})
+	if typeof(Logic.scanScreenSurface) == "function" then
+		return Logic.scanScreenSurface(grapple, {
+			driveMode = true,
+			returnDecision = true
+		})
+	end
+
+	return nil
 end
 
 function SecondaryCast.isAdaptInputHeld()
