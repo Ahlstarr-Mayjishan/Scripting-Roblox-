@@ -1236,47 +1236,8 @@ local function updateAdaptInputMode(grapple)
 	beginAdaptDrive(grapple)
 end
 
-local function watchAdaptInput()
-	if #Logic.InputConnections > 0 then
-		return
-	end
-
-	table.insert(
-		Logic.InputConnections,
-		UserInputService.InputBegan:Connect(function(input, _gameProcessed)
-			if Logic.isTextBoxFocused() or input.KeyCode ~= Logic.getAdaptInputKeyCode() then
-				return
-			end
-
-			Logic.AdaptInputHeld = true
-			Logic.AdaptInputBeganAt = time()
-		end)
-	)
-
-	table.insert(
-		Logic.InputConnections,
-		UserInputService.InputEnded:Connect(function(input)
-			if input.KeyCode ~= Logic.getAdaptInputKeyCode() then
-				return
-			end
-
-			local heldDuration = time() - (Logic.AdaptInputBeganAt or 0)
-			local shouldTap = heldDuration <= CFG.ADAPT_TAP_THRESHOLD and Logic.AdaptDriveActive ~= true
-
-			Logic.AdaptInputHeld = false
-			Logic.AdaptInputBeganAt = 0
-			Logic.AdaptDriveActive = false
-			Logic.AdaptRecastPending = false
-			Logic.AdaptRecastReleaseIssued = false
-			Logic.AdaptAwaitingAttachUntil = 0
-			Logic.AdaptRetryAt = 0
-
-			if shouldTap and Logic.isSuiteEnabled() then
-				local grapple = getTrackedGrapple()
-				if grapple then
-					Logic.LastAdaptInputPressed = time()
-					requestAdaptRecast(grapple)
-				end
+local function applyGentleRecastAlignment(grapple, dt)
+	local rootPart = grapple and grapple.RootPart
 	if not rootPart then
 		return false
 	end

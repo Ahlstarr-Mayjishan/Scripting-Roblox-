@@ -171,6 +171,24 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateToggle({
+		Name = "nilEnemy",
+		CurrentValue = getFlag(Controller, "nilEnemyImmune"),
+		Flag = "ImmunitynilEnemyToggle",
+		Callback = function(Value)
+			setImmunity(Controller, "nilEnemy", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "nilMirage",
+		CurrentValue = getFlag(Controller, "nilMirageImmune"),
+		Flag = "ImmunitynilMirageToggle",
+		Callback = function(Value)
+			setImmunity(Controller, "nilMirage", Value)
+		end,
+	})
+
 	Tab:CreateSection("Entities - Special Immunity")
 
 	Tab:CreateToggle({

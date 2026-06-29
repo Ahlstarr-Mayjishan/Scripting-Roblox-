@@ -19,8 +19,8 @@ Logic.Config = {
     ["Sigil"] = "SigilImmune",
     ["Cadence"] = "CadenceImmune",
     ["Catalyst"] = "CatalystImmune",
-    -- Thêm thực thể TouchInterest mới tại đây, ví dụ:
-    -- ["Demon"] = "DemonImmune",
+    ["nilEnemy"] = "nilEnemyImmune",
+    ["nilMirage"] = "nilMirageImmune",
 }
 
 local processedEntities = setmetatable({}, { __mode = "k" })
@@ -40,7 +40,7 @@ end
 function Logic.isTargetEntity(name)
     if not name then return false end
     local lowerName = string.lower(name)
-    if string.find(lowerName, "cadenceorb") then
+    if string.find(lowerName, "orb") or string.find(lowerName, "instrument") then
         return false
     end
     for configName, _ in pairs(Logic.Config) do
@@ -54,7 +54,7 @@ end
 function Logic.getImmunityCheck(name, controller)
     if not name or not controller then return nil end
     local lowerName = string.lower(name)
-    if string.find(lowerName, "cadenceorb") then
+    if string.find(lowerName, "orb") or string.find(lowerName, "instrument") then
         return nil
     end
     for configName, immuneKey in pairs(Logic.Config) do
