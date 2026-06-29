@@ -11,6 +11,7 @@ local DEFAULTS = {
 	RailAutoCaptureRange = 4,
 	GrappleAssistSuiteEnabled = false,
 	GrapplerStaminaMode = "Off",
+	StaminaMode = "Off",
 	GrappleAimAssistEnabled = false,
 	GrappleAimAssistStrength = "Balanced",
 	GrappleRescueAssistEnabled = false,
@@ -346,10 +347,10 @@ return function(Client, Controller)
 	end
 
 	Tab:CreateDropdown({
-		Name = "Grappler Stamina",
-		Info = "Infinite Stamina refills the Grappler timer locally so long pulls do not drain the native grapple bar.",
+		Name = "Class Stamina",
+		Info = "Infinite Stamina refills native class stamina/timer resources for classes that expose a compatible stamina bar.",
 		Options = { "Off", "Infinite Stamina" },
-		CurrentOption = Controller.GrapplerStaminaMode or "Off",
+		CurrentOption = Controller.StaminaMode or Controller.GrapplerStaminaMode or "Off",
 		MultipleOptions = false,
 		Flag = "GrapplerStaminaModeDropdown",
 		Callback = function(Option)
@@ -357,7 +358,7 @@ return function(Client, Controller)
 			if typeof(Option) == "table" then
 				selected = Option[1]
 			end
-			Controller:SetGrapplerStaminaMode(selected)
+			Controller:SetStaminaMode(selected)
 		end,
 	})
 

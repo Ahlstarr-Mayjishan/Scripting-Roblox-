@@ -23,6 +23,7 @@ local ThreatModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assis
 local SafeLandingGuard = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SafeLandingGuard.luau")
 local TrajectoryAntiBonk = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TrajectoryAntiBonk.luau")
 local PredictionHorizon = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/PredictionHorizon.luau")
+local StaminaAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Stamina Assist.luau")
 
 local function packValues(...)
 	local values = { ... }
@@ -657,8 +658,12 @@ function Logic.getSharkTailPullMultiplier()
 end
 
 function Logic.isInfiniteStamina()
+	if StaminaAssist and typeof(StaminaAssist.isEnabled) == "function" then
+		return StaminaAssist.isEnabled() == true
+	end
+
 	local controller = Logic.getController()
-	return controller and controller.GrapplerStaminaMode == "Infinite Stamina"
+	return controller and (controller.StaminaMode or controller.GrapplerStaminaMode) == "Infinite Stamina"
 end
 
 function Logic.normalizeTargetPriority(value)
@@ -2145,6 +2150,10 @@ local function getFallbackHitbox(rootPart)
 end
 
 local function getStaminaRatio(grapple)
+	if StaminaAssist and typeof(StaminaAssist.getRatio) == "function" then
+		return StaminaAssist.getRatio(grapple)
+	end
+
 	if Logic.isInfiniteStamina() then
 		return 1
 	end
@@ -2159,26 +2168,8 @@ local function getStaminaRatio(grapple)
 end
 
 local function refillStamina(grapple)
-	if not Logic.isInfiniteStamina() or typeof(grapple) ~= "table" then
-		return
-	end
-
-	local maxTime = tonumber(grapple.usedGrappleTime) or tonumber(grapple.TimeClamp) or tonumber(grapple.Time)
-	if not maxTime or maxTime <= 0 then
-		return
-	end
-
-	grapple.Time = maxTime
-	grapple.TimeClamp = maxTime
-	grapple.TimeDrained = false
-
-	local ui = grapple.UI
-	local frame = ui and ui:FindFirstChild("Frame")
-	local bar = frame and frame:FindFirstChild("Bar")
-	if bar then
-		pcall(function()
-			bar.Size = UDim2.fromScale(1, 1)
-		end)
+	if StaminaAssist and typeof(StaminaAssist.refill) == "function" then
+		StaminaAssist.refill(grapple)
 	end
 end
 

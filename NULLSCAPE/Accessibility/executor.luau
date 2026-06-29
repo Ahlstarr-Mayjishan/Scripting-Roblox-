@@ -8,7 +8,7 @@ local MODULE_PATHS = {
     SpringerLogic = "NULLSCAPE/Accessibility/Auto jump - Springer.luau",
     InfiniteAirJump = "NULLSCAPE/Accessibility/Infinite Air Jump.luau",
     AntiBonk = "NULLSCAPE/Accessibility/Anti Bonk.luau",
-    GrapplerInfiniteStamina = "NULLSCAPE/Accessibility/Grappler Assist/Grappler Infinite Stamina.luau",
+    StaminaAssist = "NULLSCAPE/Accessibility/Stamina Assist.luau",
     GrappleAimAssist = "NULLSCAPE/Accessibility/Grappler Assist/Grapple Aim Assist.luau",
     RailAssist = "NULLSCAPE/Accessibility/Rail Assist.luau",
 }
@@ -146,8 +146,16 @@ function Executor.disableAntiBonk()
     callModule("AntiBonk", "disable")
 end
 
+function Executor.initializeStaminaAssist()
+    return callModule("StaminaAssist", "initialize")
+end
+
+function Executor.disableStaminaAssist()
+    callModule("StaminaAssist", "disable")
+end
+
 function Executor.initializeGrapplerInfiniteStamina()
-    return callModule("GrapplerInfiniteStamina", "initialize")
+    return Executor.initializeStaminaAssist()
 end
 
 function Executor.enableGrappleAimAssist()

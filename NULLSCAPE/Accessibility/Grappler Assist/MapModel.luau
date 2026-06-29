@@ -6,6 +6,7 @@
 
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 
 local MapModel = {
     Running = false,
@@ -95,6 +96,48 @@ local function clearChildren(parent)
     end
     for _, child in ipairs(parent:GetChildren()) do
         child:Destroy()
+    end
+end
+
+local function isLegacy2DDebugGui(gui)
+    if not (gui and gui:IsA("ScreenGui")) then
+        return false
+    end
+
+    local name = string.lower(tostring(gui.Name or ""))
+    if name == "grapplemapmodeldebug" or name == "nullscape_grapplemapmodeldebug" then
+        return true
+    end
+    if name == "nullscape_mapmodeldebug" or name == "nullscape_mapmodelminimap" then
+        return true
+    end
+
+    return string.find(name, "mapmodel", 1, true) ~= nil
+        and (string.find(name, "mini", 1, true) ~= nil or string.find(name, "debug", 1, true) ~= nil)
+        and (string.find(name, "nullscape", 1, true) ~= nil or string.find(name, "grapple", 1, true) ~= nil)
+end
+
+local function cleanupLegacy2DDebugGui()
+    local containers = {}
+    local localPlayer = Players.LocalPlayer
+    local playerGui = localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")
+    if playerGui then
+        table.insert(containers, playerGui)
+    end
+
+    local success, coreGui = pcall(function()
+        return game:GetService("CoreGui")
+    end)
+    if success and coreGui then
+        table.insert(containers, coreGui)
+    end
+
+    for _, container in ipairs(containers) do
+        for _, child in ipairs(container:GetChildren()) do
+            if isLegacy2DDebugGui(child) then
+                child:Destroy()
+            end
+        end
     end
 end
 
@@ -420,6 +463,7 @@ local function ensureChunk(deps, cx, cz, centerY, character, force)
 end
 
 function MapModel.start()
+    cleanupLegacy2DDebugGui()
     MapModel.Running = true
 end
 
@@ -430,6 +474,7 @@ function MapModel.stop()
 end
 
 function MapModel.clear()
+    cleanupLegacy2DDebugGui()
     table.clear(MapModel.Chunks)
     MapModel.LastStepAt = 0
     MapModel.LastCenterKey = nil
@@ -664,6 +709,7 @@ function MapModel.snapshot()
 end
 
 function MapModel.setDebug3DEnabled(value)
+    cleanupLegacy2DDebugGui()
     MapModel.Debug3DEnabled = value == true
     MapModel.LastDebug3DRenderAt = 0
     if not MapModel.Debug3DEnabled then

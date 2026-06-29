@@ -102,6 +102,7 @@ local Controller = {
 	RailAutoDelay = 1.5,
 	RailAutoCaptureRange = 4,
 	GrapplerStaminaMode = "Off",
+	StaminaMode = "Off",
 	GrappleAssistSuiteEnabled = false,
 	GrappleAimAssistEnabled = false,
 	GrappleRescueAssistEnabled = false,
@@ -196,6 +197,8 @@ function Controller:CleanUp()
 	if finalCleanup then
 		self.AntiBonkEnabled = false
 		self.GrapplerStaminaMode = "Off"
+		self.StaminaMode = "Off"
+		callExecutor("disableStaminaAssist")
 		self.GrappleAssistSuiteEnabled = false
 		self.GrappleAimAssistEnabled = false
 		self.GrappleRescueAssistEnabled = false
@@ -367,7 +370,7 @@ function Controller:SetRailAutoCaptureRange(value)
 	self.RailAutoCaptureRange = math.clamp(tonumber(value) or 4, 1, 64)
 end
 
-function Controller:SetGrapplerStaminaMode(mode)
+function Controller:SetStaminaMode(mode)
 	local selectedMode = mode
 	if typeof(selectedMode) == "table" then
 		selectedMode = selectedMode[1]
@@ -379,10 +382,30 @@ function Controller:SetGrapplerStaminaMode(mode)
 	end
 
 	local previousMode = self.GrapplerStaminaMode
+	local previousStaminaMode = self.StaminaMode
 	self.GrapplerStaminaMode = selectedMode
+	self.StaminaMode = selectedMode
+
+	if selectedMode == "Infinite Stamina" then
+		if not callExecutor("initializeStaminaAssist") then
+			self.GrapplerStaminaMode = previousMode or "Off"
+			self.StaminaMode = previousStaminaMode or "Off"
+			if getgenv().Rayfield then
+				getgenv().Rayfield:Notify({
+					Title = "Accessibility Config",
+					Content = "Stamina module is not available yet",
+					Duration = 3,
+				})
+			end
+			return
+		end
+	else
+		callExecutor("disableStaminaAssist")
+	end
 
 	if not self:RefreshGrappleAssistHook() then
 		self.GrapplerStaminaMode = previousMode or "Off"
+		self.StaminaMode = previousStaminaMode or "Off"
 		if getgenv().Rayfield then
 			getgenv().Rayfield:Notify({
 				Title = "Accessibility Config",
@@ -396,10 +419,14 @@ function Controller:SetGrapplerStaminaMode(mode)
 	if getgenv().Rayfield then
 		getgenv().Rayfield:Notify({
 			Title = "Accessibility Config",
-			Content = "Grappler stamina mode: " .. selectedMode,
+			Content = "Class stamina mode: " .. selectedMode,
 			Duration = 2,
 		})
 	end
+end
+
+function Controller:SetGrapplerStaminaMode(mode)
+	return self:SetStaminaMode(mode)
 end
 
 function Controller:HasAnyGrappleAssistFeature()
@@ -416,7 +443,7 @@ function Controller:HasAnyGrappleAssistFeature()
 end
 
 function Controller:RefreshGrappleAssistHook()
-    if (self.GrappleAssistSuiteEnabled and self:HasAnyGrappleAssistFeature()) or self.GrapplerStaminaMode == "Infinite Stamina" then
+    if self.GrappleAssistSuiteEnabled and self:HasAnyGrappleAssistFeature() then
         if not callExecutor("enableGrappleAimAssist") then
             return false
 		end
