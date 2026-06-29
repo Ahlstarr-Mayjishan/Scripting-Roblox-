@@ -13,11 +13,15 @@ local HookedSharkTail = nil
 local AirControl = nil
 local ReelPull = nil
 local SharkTailPull = nil
+local GrappleRecovery = nil
+local GrappleRange = nil
 
 local MODULE_PATHS = {
 	AirControl = "NULLSCAPE/Class Adjustment/Grappler/Grapple Air Control.luau",
 	ReelPull = "NULLSCAPE/Class Adjustment/Grappler/Grapple Reel Pull.luau",
 	SharkTailPull = "NULLSCAPE/Class Adjustment/Grappler/SharkTail Pull.luau",
+	GrappleRecovery = "NULLSCAPE/Class Adjustment/Grappler/Grapple Recovery.luau",
+	GrappleRange = "NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau",
 }
 
 local function getGlobals()
@@ -48,6 +52,8 @@ local function loadAdjustmentModules()
 	AirControl = AirControl or getgenv().loadModule(MODULE_PATHS.AirControl)
 	ReelPull = ReelPull or getgenv().loadModule(MODULE_PATHS.ReelPull)
 	SharkTailPull = SharkTailPull or getgenv().loadModule(MODULE_PATHS.SharkTailPull)
+	GrappleRecovery = GrappleRecovery or getgenv().loadModule(MODULE_PATHS.GrappleRecovery)
+	GrappleRange = GrappleRange or getgenv().loadModule(MODULE_PATHS.GrappleRange)
 end
 
 local function applyStepAdjustments(self, dt)
@@ -88,12 +94,18 @@ function Executor.enable()
 		local originalStep = grappleModule.Step
 		local wrappedStep
 		wrappedStep = function(self, dt, ...)
+			local beforeTime = self and self.Time
 			local stepResults = packValues(pcall(originalStep, self, dt, ...))
 			if not stepResults[1] then
 				error(stepResults[2], 0)
 			end
 
 			applyStepAdjustments(self, dt)
+
+			if GrappleRecovery and typeof(GrappleRecovery.apply) == "function" then
+				pcall(GrappleRecovery.apply, self, dt, beforeTime)
+			end
+
 			return table.unpack(stepResults, 2, stepResults.n)
 		end
 
@@ -117,6 +129,29 @@ function Executor.enable()
 		grappleModule.SharkTail = wrappedSharkTail
 	end
 
+	if typeof(grappleModule.Cast) == "function" and not globals.ClassAdjustmentOriginalCast then
+		local originalCast = grappleModule.Cast
+		local wrappedCast
+		wrappedCast = function(self, forceRefresh, ...)
+			if not HooksActive then
+				return originalCast(self, forceRefresh, ...)
+			end
+
+			if GrappleRange and typeof(GrappleRange.cast) == "function" then
+				local success, result = pcall(GrappleRange.cast, self, forceRefresh, originalCast, ...)
+				if success then
+					return result
+				end
+			end
+
+			return originalCast(self, forceRefresh, ...)
+		end
+
+		globals.ClassAdjustmentOriginalCast = originalCast
+		globals.ClassAdjustmentHookedCast = wrappedCast
+		grappleModule.Cast = wrappedCast
+	end
+
 	HooksActive = true
 	return true
 end
@@ -138,6 +173,11 @@ function Executor.restore()
 		grappleModule.SharkTail = globals.ClassAdjustmentOriginalSharkTail
 		globals.ClassAdjustmentOriginalSharkTail = nil
 		HookedSharkTail = nil
+	end
+	if grappleModule and globals.ClassAdjustmentHookedCast and grappleModule.Cast == globals.ClassAdjustmentHookedCast then
+		grappleModule.Cast = globals.ClassAdjustmentOriginalCast
+		globals.ClassAdjustmentOriginalCast = nil
+		globals.ClassAdjustmentHookedCast = nil
 	end
 end
 

@@ -37,6 +37,7 @@ local createControllerProxy = function(Client, Controller)
 		GrappleAirControlMultiplier = 0,
 		GrappleReelPullMultiplier = 1,
 		GrappleSharkTailPullMultiplier = 1,
+		GrappleMaxRange = 90,
 	}
 
 	return setmetatable({ __ClassAdjustmentProxy = true }, {
@@ -105,6 +106,19 @@ return function(Client, Controller)
 		Flag = "GrappleSharkTailPullMultiplierSlider",
 		Callback = function(Value)
 			Controller:SetGrappleSharkTailPullMultiplier(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Grapple Max Range",
+		Info = "Adjusts the maximum grapple cast lock-on range limit client-side.",
+		Range = { 90, 120 },
+		Increment = 1,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleMaxRange or 90,
+		Flag = "GrappleMaxRangeSlider",
+		Callback = function(Value)
+			Controller:SetGrappleMaxRange(Value)
 		end,
 	})
 end

@@ -13,6 +13,7 @@ local Control = {
 	GrappleAirControlMultiplier = 0,
 	GrappleReelPullMultiplier = 1.1,
 	GrappleSharkTailPullMultiplier = 1.1,
+	GrappleMaxRange = 90,
 	Destroyed = false,
 	PermanentConnections = {},
 }
@@ -43,6 +44,7 @@ local function readSettings()
 		Control.GrappleAirControlMultiplier = tonumber(decoded.GrappleAirControlMultiplierSlider) or Control.GrappleAirControlMultiplier
 		Control.GrappleReelPullMultiplier = tonumber(decoded.GrappleReelPullMultiplierSlider) or Control.GrappleReelPullMultiplier
 		Control.GrappleSharkTailPullMultiplier = tonumber(decoded.GrappleSharkTailPullMultiplierSlider) or Control.GrappleSharkTailPullMultiplier
+		Control.GrappleMaxRange = tonumber(decoded.GrappleMaxRangeSlider) or Control.GrappleMaxRange
 	end
 end
 
@@ -64,6 +66,7 @@ local function saveSettings()
 	data.GrappleAirControlMultiplierSlider = Control.GrappleAirControlMultiplier
 	data.GrappleReelPullMultiplierSlider = Control.GrappleReelPullMultiplier
 	data.GrappleSharkTailPullMultiplierSlider = Control.GrappleSharkTailPullMultiplier
+	data.GrappleMaxRangeSlider = Control.GrappleMaxRange
 
 	pcall(function()
 		makefolder(SETTINGS_FOLDER)
@@ -139,6 +142,11 @@ end
 
 function Control:SetGrappleSharkTailPullMultiplier(value)
 	self.GrappleSharkTailPullMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
+	saveSettings()
+end
+
+function Control:SetGrappleMaxRange(value)
+	self.GrappleMaxRange = math.clamp(tonumber(value) or 90, 90, 120)
 	saveSettings()
 end
 
