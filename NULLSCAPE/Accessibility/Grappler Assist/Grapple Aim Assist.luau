@@ -25,6 +25,7 @@ local SafeLandingGuard = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler 
 local TrajectoryAntiBonk = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TrajectoryAntiBonk.luau")
 local PredictionHorizon = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/PredictionHorizon.luau")
 local CastIntent = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/CastIntent.luau")
+local CursorReCorrect = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/CursorReCorrect.luau")
 local StaminaAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Stamina Assist.luau")
 
 local function packValues(...)
@@ -347,6 +348,8 @@ local CFG = {
 	CURSOR_DIRECT_SURFACE_LIMIT = 0.035,
 	CURSOR_PREVIEW_RECORRECT_LIMIT = 0.28,
 	CURSOR_CAST_RECORRECT_LIMIT = 0.22,
+	CURSOR_TARGET_SAMPLE_LIMIT = 9,
+	CURSOR_SURFACE_DETECTOR_LIMIT = 0.24,
 	ASSIST_INPUT_INTENT_WEIGHT = 32,
 	ASSIST_VELOCITY_INTENT_WEIGHT = 14,
 	ASSIST_TARGET_LOCK_DURATION = 0.22,
@@ -3105,6 +3108,20 @@ local function getTerrainSurfaceScore(grapple, result, screenScore, driveMode)
 	return TerrainSense.scoreSurface(getTerrainSenseDeps(), grapple, result, screenScore, driveMode)
 end
 
+local function getCursorReCorrectDeps()
+	return {
+		CFG = CFG,
+		Workspace = Workspace,
+		getAssistRange = getAssistRange,
+		getScreenAnchor = getScreenAnchor,
+		getCameraScreenScore = getCameraScreenScore,
+		getTerrainSurfaceScore = getTerrainSurfaceScore,
+		isLineClear = isLineClear,
+		isUsableResult = Logic.isUsableResult,
+		isPathSafeForHitbox = isPathSafeForHitbox,
+	}
+end
+
 local function getIntentModelDeps()
 	return {
 		CFG = CFG,
@@ -3218,66 +3235,6 @@ local function getEffectivePreferredTarget(grapple, preferredName)
 	return preferredName
 end
 
-local function getTargetSamplePositions(part, preferredPosition)
-	local positions = {}
-	local function add(position)
-		if typeof(position) ~= "Vector3" then
-			return
-		end
-		for _, existing in ipairs(positions) do
-			if (existing - position).Magnitude <= 0.1 then
-				return
-			end
-		end
-		table.insert(positions, position)
-	end
-
-	add(preferredPosition)
-	if not (part and part:IsA("BasePart")) then
-		return positions
-	end
-
-	local half = part.Size * 0.5
-	local cframe = part.CFrame
-	add(part.Position)
-	local samples = {
-		Vector3.new(half.X, 0, 0),
-		Vector3.new(-half.X, 0, 0),
-		Vector3.new(0, half.Y, 0),
-		Vector3.new(0, -half.Y, 0),
-		Vector3.new(0, 0, half.Z),
-		Vector3.new(0, 0, -half.Z),
-		Vector3.new(half.X, half.Y, half.Z),
-		Vector3.new(half.X, half.Y, -half.Z),
-		Vector3.new(-half.X, half.Y, half.Z),
-		Vector3.new(-half.X, half.Y, -half.Z),
-	}
-
-	for _, localPoint in ipairs(samples) do
-		if #positions >= CFG.CURSOR_TARGET_SAMPLE_LIMIT then
-			break
-		end
-		add(cframe:PointToWorldSpace(localPoint))
-	end
-
-	return positions
-end
-
-local function findCandidateLineClear(grapple, candidate, part, preferredPosition, maxRange, trySamples)
-	if not trySamples then
-		local result, distance = isLineClear(grapple, candidate.Instance, part, preferredPosition, maxRange)
-		return result, distance, preferredPosition
-	end
-
-	for _, position in ipairs(getTargetSamplePositions(part, preferredPosition)) do
-		local result, distance = isLineClear(grapple, candidate.Instance, part, position, maxRange)
-		if result and Logic.isUsableResult(grapple, result) then
-			return result, distance, position
-		end
-	end
-
-	return nil, nil, preferredPosition
-end
 local function scanNamedTargets(grapple, options)
 	local camera = Workspace.CurrentCamera
 	if not camera then
@@ -3372,14 +3329,21 @@ local function scanNamedTargets(grapple, options)
 						continue
 					end
 
-					local result, distance, hitPosition = findCandidateLineClear(
-						grapple,
-						candidate,
-						part,
-						position,
-						maxRange,
-						rangeMode == "Closest To Cursor" or forceCursor or rescueMode or emergencyBrakeMode or driveMode
-					)
+					local result, distance, hitPosition
+					if CursorReCorrect and CursorReCorrect.findCandidateLineClear then
+						result, distance, hitPosition = CursorReCorrect.findCandidateLineClear(
+							getCursorReCorrectDeps(),
+							grapple,
+							candidate,
+							part,
+							position,
+							maxRange,
+							rangeMode == "Closest To Cursor" or forceCursor or rescueMode or emergencyBrakeMode or driveMode
+						)
+					else
+						result, distance = isLineClear(grapple, candidate.Instance, part, position, maxRange)
+						hitPosition = position
+					end
 					local pathPosition = hitPosition or position
 					if
 						result
@@ -3756,10 +3720,18 @@ local function getSoftOverrideResult(grapple, originalResult)
 		fullScan = true,
 		forceCursor = true,
 	})
+	if not (decision and decision.Result) and CursorReCorrect and CursorReCorrect.scanSurfaceAroundCursor then
+		decision = CursorReCorrect.scanSurfaceAroundCursor(getCursorReCorrectDeps(), grapple, {
+			returnDecision = true,
+			forceCursor = true,
+			cursorLimit = CFG.SOFT_OVERRIDE_CURSOR_LIMIT,
+		})
+	end
 	if not (decision and decision.Result) then
 		return nil
 	end
-	if isSameAssistTarget(originalResult, decision) then
+	local decisionTargetName = decision.Name or getResultTargetName(decision.Result)
+	if isSameAssistTarget(originalResult, decision) and (originalTargetName or decisionTargetName) then
 		return nil
 	end
 
@@ -3785,7 +3757,7 @@ local function getSoftOverrideResult(grapple, originalResult)
 		Score = decisionScore,
 		OriginalScore = originalScore,
 		Gap = scoreGap,
-		Target = decision.Name,
+		Target = decision.Name or (decision.Instance and decision.Instance.Name) or "Surface",
 	}
 
 	return decision.Result
@@ -3798,15 +3770,22 @@ local function getCursorReCorrectDecision(grapple, reason, cursorLimit)
 		forceCursor = true,
 		cursorLimit = cursorLimit,
 	})
+	if not (decision and decision.Result) and CursorReCorrect and CursorReCorrect.scanSurfaceAroundCursor then
+		decision = CursorReCorrect.scanSurfaceAroundCursor(getCursorReCorrectDeps(), grapple, {
+			returnDecision = true,
+			forceCursor = true,
+			cursorLimit = cursorLimit or CFG.CURSOR_SURFACE_DETECTOR_LIMIT,
+		})
+	end
 	if not (decision and decision.Result) then
 		return nil
 	end
 
 	Logic.LastAssistDebug = {
-		Reason = reason or "CursorReCorrect",
+		Reason = decision.Reason or reason or "CursorReCorrect",
 		Score = decision.Score,
 		ScreenScore = decision.ScreenScore,
-		Target = decision.Name or (decision.Instance and decision.Instance.Name) or "Target",
+		Target = decision.Name or (decision.Instance and decision.Instance.Name) or "Surface",
 	}
 
 	return decision

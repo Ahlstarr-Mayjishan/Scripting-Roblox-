@@ -267,22 +267,17 @@ return function(Client, Controller)
 
 	Tab:CreateSection("Settings")
 
+	local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+
 	Tab:CreateDropdown({
 		Name = "Immunity Effect",
-		Options = { "Legit", "Blatant" },
-		CurrentOption = (
-			resolveController(Client, Controller) and resolveController(Client, Controller).SpringerImmunityMode
-		) or "Legit",
-		MultipleOptions = false,
-		Flag = "SpringerImmunityModeDropdown",
-		Callback = function(Option)
-			local selected = Option
-			if typeof(Option) == "table" then
-				selected = Option[1]
-			end
-			local activeController = resolveController(Client, Controller)
-			if activeController and typeof(activeController.SetSpringerImmunityMode) == "function" then
-				activeController:SetSpringerImmunityMode(selected)
+		Options = { "Flesh", "Concussion", "Fire", "Panic", "Insanity", "Overtuned", "Springer Knockback", "Bell Knockback" },
+		CurrentOption = (StatusImmunity and StatusImmunity.GetActiveImmunities()) or {},
+		MultipleOptions = true,
+		Flag = "StatusImmunityDropdown",
+		Callback = function(Options)
+			if StatusImmunity and typeof(StatusImmunity.SetActiveImmunities) == "function" then
+				StatusImmunity.SetActiveImmunities(Options)
 			end
 		end,
 	})

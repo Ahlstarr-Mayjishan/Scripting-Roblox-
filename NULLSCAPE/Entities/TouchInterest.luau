@@ -54,7 +54,14 @@ function Logic.getImmunityCheck(name, controller)
     for configName, immuneKey in pairs(Logic.Config) do
         if string.find(lowerName, string.lower(configName)) then
             return function()
-                return controller[immuneKey] == true
+                local isImmune = controller[immuneKey] == true
+                if not isImmune and string.lower(configName) == "bell" then
+                    local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+                    if StatusImmunity and StatusImmunity.isImmune("Bell Knockback") then
+                        return true
+                    end
+                end
+                return isImmune
             end
         end
     end

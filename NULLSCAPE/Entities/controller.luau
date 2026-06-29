@@ -79,7 +79,7 @@ local Controller = {
 	CelestialImmune = false,
 	ScrapmawImmune = false,
 	CatalystImmune = false,
-	SpringerImmunityMode = "Legit",
+	SpringerImmunityMode = "Blatant",
 	Destroyed = false,
 
 	EnemiesFolder = nil,
@@ -565,23 +565,10 @@ function Controller:SetSpringerImmunityMode(mode)
 	end
 
 	if mode == "Blatant" then
-		-- Tự động dọn dẹp toàn bộ debuff đang có trên người chơi
-		pcall(function()
-			local ReplicatedFirst = game:GetService("ReplicatedFirst")
-			local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
-			local handlerModule = clientModules and clientModules:FindFirstChild("StatusEffectHandler")
-			if handlerModule and handlerModule:IsA("ModuleScript") then
-				local StatusEffectHandler = require(handlerModule)
-				if typeof(StatusEffectHandler) == "table" and typeof(StatusEffectHandler.RemoveAllStatuses) == "function" then
-					StatusEffectHandler.RemoveAllStatuses()
-				end
-			end
-			for _, debuffName in ipairs({ "Flesh", "Panic", "Concussion", "Fire", "Insanity" }) do
-				for _, callback in ipairs(activeCallbacks) do
-					pcall(callback, debuffName, false)
-				end
-			end
-		end)
+		local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+		if StatusImmunity then
+			StatusImmunity.removeAllStatuses()
+		end
 	end
 
 	if self.SpringerImmune then
@@ -604,6 +591,54 @@ function Controller:SetSpringerImmunityMode(mode)
 				restoreShockwave(part)
 			end
 		end
+	end
+end
+
+function Controller:SetSpringerKnockbackImmune(enabled)
+	if enabled then
+		if self.EnemiesFolder then
+			for _, enemy in ipairs(self.EnemiesFolder:GetChildren()) do
+				if string.find(enemy.Name, "Springer") then
+					for _, child in ipairs(enemy:GetChildren()) do
+						if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
+							disableShockwave(enemy, child)
+						end
+					end
+				end
+			end
+		end
+	else
+		if not (self.SpringerImmune and self.SpringerImmunityMode == "Blatant") then
+			for part in pairs(disabledShockwaves) do
+				restoreShockwave(part)
+			end
+		end
+	end
+end
+
+function Controller:SetBellKnockbackImmune(enabled)
+	if enabled then
+		if self.EnemiesFolder then
+			for _, enemy in ipairs(self.EnemiesFolder:GetChildren()) do
+				if string.find(enemy.Name, "Bell") then
+					TouchInterest.enableImmunity(GC, enemy)
+				end
+			end
+		end
+	else
+		if not self.BellImmune then
+			TouchInterest.disableImmunityForType(GC, "Bell")
+		end
+	end
+end
+
+function Controller:DisableShockwave(enemy, part)
+	disableShockwave(enemy, part)
+end
+
+function Controller:RestoreSpringerShockwaves()
+	for part in pairs(disabledShockwaves) do
+		restoreShockwave(part)
 	end
 end
 
@@ -981,23 +1016,29 @@ local function processEntity(enemy)
 	-- Xử lý vô hiệu hóa shockwave cho Springer (Springer không có TouchInterest, chỉ có ClientEvent và ShockwaveEvent)
 	if string.find(enemy.Name, "Springer") then
 		local childAddedConn = enemy.ChildAdded:Connect(function(child)
-			if
-				(child.Name == "SpringerShockwave" or child.Name == "DemonShockwave")
-				and Controller.SpringerImmune
-				and Controller.SpringerImmunityMode == "Blatant"
-			then
-				disableShockwave(enemy, child)
+			if (child.Name == "SpringerShockwave" or child.Name == "DemonShockwave") then
+				local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+				local hasKnockbackImmune = StatusImmunity and StatusImmunity.isImmune("Springer Knockback")
+				local hasSpringerImmune = Controller.SpringerImmune
+				local isBlatant = Controller.SpringerImmunityMode == "Blatant"
+				
+				if hasKnockbackImmune or (hasSpringerImmune and isBlatant) then
+					disableShockwave(enemy, child)
+				end
 			end
 		end)
 		GC.registerEntityConnection(enemy, childAddedConn)
 
 		for _, child in ipairs(enemy:GetChildren()) do
-			if
-				(child.Name == "SpringerShockwave" or child.Name == "DemonShockwave")
-				and Controller.SpringerImmune
-				and Controller.SpringerImmunityMode == "Blatant"
-			then
-				disableShockwave(enemy, child)
+			if (child.Name == "SpringerShockwave" or child.Name == "DemonShockwave") then
+				local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+				local hasKnockbackImmune = StatusImmunity and StatusImmunity.isImmune("Springer Knockback")
+				local hasSpringerImmune = Controller.SpringerImmune
+				local isBlatant = Controller.SpringerImmunityMode == "Blatant"
+				
+				if hasKnockbackImmune or (hasSpringerImmune and isBlatant) then
+					disableShockwave(enemy, child)
+				end
 			end
 		end
 	end
@@ -1144,116 +1185,11 @@ end
 
 -- Hook hệ thống trạng thái (Status Effects) để miễn nhiễm debuff ở chế độ Blatant
 local function initializeStatusEffectHook()
-	local globals = getgenv()._NULLSCAPE_Globals
-	if globals.StatusEffectHooked then
-		return
+	local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+	if StatusImmunity then
+		StatusImmunity.initialize()
 	end
-
-	local StatusEffectChanged = ReplicatedStorage:FindFirstChild("Events")
-		and ReplicatedStorage.Events:FindFirstChild("StatusEffectChanged")
-	if StatusEffectChanged and StatusEffectChanged:IsA("RemoteEvent") then
-		pcall(function()
-			if typeof(hookfunction) == "function" then
-				local oldConnect
-				oldConnect = hookfunction(StatusEffectChanged.OnClientEvent.Connect, function(self, callback)
-					local isTarget = false
-					pcall(function()
-						isTarget = (self == StatusEffectChanged.OnClientEvent)
-					end)
-					
-					if isTarget then
-						if not table.find(activeCallbacks, callback) then
-							table.insert(activeCallbacks, callback)
-						end
-						local newCallback = function(statusName, isActive, ...)
-							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-							if
-								activeCtrl
-								and activeCtrl.SpringerImmunityMode == "Blatant"
-								and statusName ~= "Medal"
-								and statusName ~= "Overtuned"
-							then
-								return
-							end
-							return callback(statusName, isActive, ...)
-						end
-						return oldConnect(self, newCallback)
-					end
-					return oldConnect(self, callback)
-				end)
-				globals.OriginalOnClientEventConnect = oldConnect
-			end
-		end)
-
-		-- Hook các connection hiện có của StatusEffectChanged.OnClientEvent
-		pcall(function()
-			if typeof(getconnections) == "function" and typeof(hookfunction) == "function" then
-				for _, connection in ipairs(getconnections(StatusEffectChanged.OnClientEvent)) do
-					local originalFunction = connection.Function
-					if typeof(originalFunction) == "function" then
-						if not table.find(activeCallbacks, originalFunction) then
-							table.insert(activeCallbacks, originalFunction)
-						end
-						local oldFunc
-						oldFunc = hookfunction(originalFunction, function(statusName, isActive, ...)
-							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-							if
-								activeCtrl
-								and activeCtrl.SpringerImmunityMode == "Blatant"
-								and statusName ~= "Medal"
-								and statusName ~= "Overtuned"
-							then
-								return
-							end
-							return oldFunc(statusName, isActive, ...)
-						end)
-					end
-				end
-			end
-		end)
-	end
-
-	pcall(function()
-		local ReplicatedFirst = game:GetService("ReplicatedFirst")
-		local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
-		local handlerModule = clientModules and clientModules:FindFirstChild("StatusEffectHandler")
-		if handlerModule and handlerModule:IsA("ModuleScript") then
-			local StatusEffectHandler = require(handlerModule)
-			if typeof(StatusEffectHandler) == "table" and typeof(StatusEffectHandler.HasStatus) == "function" then
-				if typeof(hookfunction) == "function" then
-					local oldHasStatus
-					oldHasStatus = hookfunction(StatusEffectHandler.HasStatus, function(statusName, ...)
-						local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-						if
-							activeCtrl
-							and activeCtrl.SpringerImmunityMode == "Blatant"
-							and statusName ~= "Medal"
-							and statusName ~= "Overtuned"
-						then
-							return false
-						end
-						return oldHasStatus(statusName, ...)
-					end)
-					globals.OriginalHasStatus = oldHasStatus
-				else
-					local oldHasStatus = StatusEffectHandler.HasStatus
-					globals.OriginalHasStatus = oldHasStatus
-					StatusEffectHandler.HasStatus = function(statusName, ...)
-						local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-						if
-							activeCtrl
-							and activeCtrl.SpringerImmunityMode == "Blatant"
-							and statusName ~= "Medal"
-							and statusName ~= "Overtuned"
-						then
-							return false
-						end
-						return oldHasStatus(statusName, ...)
-					end
-				end
-			end
-		end
-	end)
+end
 
 	-- Hook SettingsHandler to bypass camera shakes, blurs, and flash effects natively
 	pcall(function()
