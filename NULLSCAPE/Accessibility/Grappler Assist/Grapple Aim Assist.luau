@@ -512,38 +512,7 @@ function Logic.getGlobals()
 end
 
 function Logic.getController()
-	
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.getGlobals().activeAccessibilityController
+	return Logic.getGlobals().activeAccessibilityController
 end
 
 function Logic.isEnabled()
@@ -638,73 +607,11 @@ function Logic.getMovementIntentState()
 		return MOVEMENT_INTENT.Freefall
 	end
 
-	
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.MovementIntentState or MOVEMENT_INTENT.Freefall
+	return Logic.MovementIntentState or MOVEMENT_INTENT.Freefall
 end
 
 function Logic.isMovementIntent(state)
-	
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.getMovementIntentState() == state
+	return Logic.getMovementIntentState() == state
 end
 
 function Logic.isAutomationSuppressedByIntent()
@@ -1013,6 +920,16 @@ function isAutoRescueWindowActive()
 	return time() <= (Logic.AutoRescueUntil or 0)
 end
 
+function isAwaitingAdaptAttach(grapple)
+	local movement = grapple and grapple.Movement
+	if movement and (movement.grappling == true or grapple.jumpPadReel == true) then
+		Logic.AdaptAwaitingAttachUntil = 0
+		Logic.AdaptRetryAt = 0
+		return false
+	end
+
+	return time() <= (Logic.AdaptAwaitingAttachUntil or 0)
+end
 
 function isEmergencyRescueRecastBlocked(grapple, ignoreTimeLock)
 	if not ignoreTimeLock and time() <= (Logic.EmergencyRescueLockUntil or 0) then
@@ -1024,7 +941,7 @@ function isEmergencyRescueRecastBlocked(grapple, ignoreTimeLock)
 	end
 
 	local movement = grapple and grapple.Movement
-	if movement and (movement.grappling == true or grapple.jumpPadReel == true or Logic.isAwaitingAdaptAttach(grapple)) then
+	if movement and (movement.grappling == true or grapple.jumpPadReel == true or isAwaitingAdaptAttach(grapple)) then
 		return true
 	end
 
@@ -1111,16 +1028,415 @@ function clampAdaptRecastVelocity(grapple)
 	rootPart.Velocity = Vector3.new(clampedHorizontal.X, rootPart.Velocity.Y, clampedHorizontal.Z)
 end
 
+function requestAdaptRecast(grapple)
+	if not hasClassCapability(grapple, "AimAssist") then
+		return false
+	end
 
+	local now = time()
+	if now - Logic.LastAdaptPulseAt < CFG.ADAPT_RECAST_COOLDOWN then
+		return false
+	end
 
+	local movement = grapple and grapple.Movement
+	if movement and (movement.grappling == true or grapple.jumpPadReel == true) then
+		if not hasReachedGrappleDestination(grapple) then
+			return false
+		end
+		Logic.AdaptRecastPending = true
+		Logic.AdaptRecastReleaseIssued = fireSpecialAction(grapple, Enum.UserInputState.End) == true
+		Logic.AdaptRecastRequestedAt = now
+		Logic.AdaptRecastReleaseAt = now
+		Logic.markGrappleBonkGrace(grapple, 0.5)
+		return Logic.AdaptRecastReleaseIssued
+	end
 
+	return pulseSpecialAction(grapple)
+end
 
+function beginAdaptDrive(grapple)
+	if Logic.AdaptDriveActive then
+		return false
+	end
 
+	Logic.AdaptDriveActive = true
+	Logic.LastAdaptInputPressed = time()
 
+	if grapple then
+		return requestAdaptRecast(grapple)
+	end
 
+	return false
+end
 
+function applyGentleRecastAlignment(grapple, dt)
+	local function flatUnit(vector)
+		if typeof(vector) ~= "Vector3" then
+			return nil
+		end
+		local flat = Vector3.new(vector.X, 0, vector.Z)
+		if flat.Magnitude <= 0.05 then
+			return nil
+		end
+		return flat.Unit
+	end
 
+	local rootPart = grapple and grapple.RootPart
+	if not rootPart then
+		return false
+	end
 
+	local movement = grapple and grapple.Movement
+	local inputDirection = flatUnit(movement and movement.PlayerMoveDirection)
+	local velocityDirection = flatUnit(rootPart.Velocity)
+	if
+		inputDirection
+		and velocityDirection
+		and inputDirection:Dot(velocityDirection) >= CFG.INTENT_CONTROL_SUPPRESS_DOT
+	then
+		return false
+	end
+
+	local targetPosition = getActiveGrappleTargetPosition(grapple)
+	local targetDirection = flatUnit(targetPosition and (targetPosition - rootPart.Position))
+	if not targetDirection then
+		targetDirection = velocityDirection
+	end
+	if not targetDirection then
+		return false
+	end
+
+	if targetPosition and (targetPosition - rootPart.Position).Magnitude < CFG.RECAST_ALIGNMENT_MIN_DISTANCE then
+		return false
+	end
+
+	local currentLook = flatUnit(rootPart.CFrame.LookVector)
+	if not currentLook then
+		return false
+	end
+
+	local alpha = math.clamp((tonumber(dt) or 1 / 60) * 8, 0, CFG.RECAST_ALIGNMENT_MAX_STEP)
+	local blended = currentLook:Lerp(targetDirection, alpha)
+	if blended.Magnitude <= 0.05 then
+		return false
+	end
+
+	local position = rootPart.Position
+	rootPart.CFrame = CFrame.lookAt(position, position + blended.Unit, Vector3.yAxis)
+	return true
+end
+
+function updateAdaptRecast(grapple)
+	if not Logic.AdaptRecastPending then
+		return
+	end
+	if not (Logic.AdaptInputHeld and Logic.isSuiteEnabled()) then
+		Logic.AdaptRecastPending = false
+		Logic.AdaptRecastReleaseIssued = false
+		return
+	end
+
+	local movement = grapple and grapple.Movement
+	if not (grapple and movement) then
+		return
+	end
+
+	local now = time()
+	local releaseElapsed = now - Logic.AdaptRecastReleaseAt
+	local requestElapsed = now - Logic.AdaptRecastRequestedAt
+	local detached = movement.grappling ~= true and grapple.jumpPadReel ~= true
+	local speed = getAdaptHorizontalSpeed(grapple)
+
+	if speed > CFG.ADAPT_RECAST_SAFE_SPEED then
+		clampAdaptRecastVelocity(grapple)
+		Logic.markGrappleBonkGrace(grapple, 0.3)
+		speed = getAdaptHorizontalSpeed(grapple)
+	end
+
+	applyGentleRecastAlignment(grapple, 1 / 60)
+
+	if not Logic.AdaptRecastReleaseIssued then
+		Logic.AdaptRecastReleaseIssued = fireSpecialAction(grapple, Enum.UserInputState.End) == true
+		Logic.AdaptRecastReleaseAt = now
+		return
+	end
+
+	if not detached then
+		return
+	end
+	if releaseElapsed < CFG.ADAPT_RECAST_RELEASE_DELAY then
+		return
+	end
+	if speed > CFG.ADAPT_RECAST_SAFE_SPEED and requestElapsed < CFG.ADAPT_RECAST_MAX_WAIT then
+		return
+	end
+
+	Logic.AdaptRecastPending = false
+	Logic.AdaptRecastReleaseIssued = false
+	pulseSpecialAction(grapple)
+end
+
+function maintainAdaptInputHold(grapple)
+	if
+		not (
+			hasClassCapability(grapple, "AimAssist")
+			and Logic.AdaptDriveActive
+			and Logic.AdaptInputHeld
+			and Logic.isSuiteEnabled()
+			and Logic.isInAir(grapple)
+		)
+	then
+		return
+	end
+	if Logic.AdaptRecastPending then
+		return
+	end
+
+	local movement = grapple and grapple.Movement
+	if not (grapple and movement) then
+		return
+	end
+	if isAwaitingAdaptAttach(grapple) then
+		return
+	end
+	if time() < (Logic.AdaptRetryAt or 0) then
+		return
+	end
+	if time() - Logic.LastAdaptPulseAt < CFG.ADAPT_RECAST_COOLDOWN then
+		return
+	end
+
+	if movement.grappling == true or grapple.jumpPadReel == true then
+		if not hasReachedGrappleDestination(grapple) then
+			return
+		end
+		requestAdaptRecast(grapple)
+		return
+	end
+
+	if not Logic.hasAdaptDriveTarget(grapple) then
+		Logic.AdaptRetryAt = time() + CFG.ADAPT_RETRY_DELAY
+		return
+	end
+
+	pulseSpecialAction(grapple)
+end
+
+function updateAdaptInputMode(grapple)
+	if not (Logic.AdaptInputHeld and Logic.isSuiteEnabled()) then
+		return
+	end
+	if Logic.AdaptDriveActive then
+		return
+	end
+	if time() - (Logic.AdaptInputBeganAt or 0) < CFG.ADAPT_TAP_THRESHOLD then
+		return
+	end
+
+	beginAdaptDrive(grapple)
+end
+
+function applyGentleRecastAlignment(grapple, dt)
+	local rootPart = grapple and grapple.RootPart
+	if not rootPart then
+		return false
+	end
+
+	local movement = grapple and grapple.Movement
+	local inputDirection = flatUnit(movement and movement.PlayerMoveDirection)
+	local velocityDirection = flatUnit(rootPart.Velocity)
+	if
+		inputDirection
+		and velocityDirection
+		and inputDirection:Dot(velocityDirection) >= CFG.INTENT_CONTROL_SUPPRESS_DOT
+	then
+		return false
+	end
+
+	local targetPosition = getActiveGrappleTargetPosition(grapple)
+	local targetDirection = flatUnit(targetPosition and (targetPosition - rootPart.Position))
+	if not targetDirection then
+		targetDirection = velocityDirection
+	end
+	if not targetDirection then
+		return false
+	end
+
+	if targetPosition and (targetPosition - rootPart.Position).Magnitude < CFG.RECAST_ALIGNMENT_MIN_DISTANCE then
+		return false
+	end
+
+	local currentLook = flatUnit(rootPart.CFrame.LookVector)
+	if not currentLook then
+		return false
+	end
+
+	local alpha = math.clamp((tonumber(dt) or 1 / 60) * 8, 0, CFG.RECAST_ALIGNMENT_MAX_STEP)
+	local blended = currentLook:Lerp(targetDirection, alpha)
+	if blended.Magnitude <= 0.05 then
+		return false
+	end
+
+	local position = rootPart.Position
+	rootPart.CFrame = CFrame.lookAt(position, position + blended.Unit, Vector3.yAxis)
+	return true
+end
+
+function updateAdaptRecast(grapple)
+	if not Logic.AdaptRecastPending then
+		return
+	end
+	if not (Logic.AdaptInputHeld and Logic.isSuiteEnabled()) then
+		Logic.AdaptRecastPending = false
+		Logic.AdaptRecastReleaseIssued = false
+		return
+	end
+
+	local movement = grapple and grapple.Movement
+	if not (grapple and movement) then
+		return
+	end
+
+	local now = time()
+	local releaseElapsed = now - Logic.AdaptRecastReleaseAt
+	local requestElapsed = now - Logic.AdaptRecastRequestedAt
+	local detached = movement.grappling ~= true and grapple.jumpPadReel ~= true
+	local speed = getAdaptHorizontalSpeed(grapple)
+
+	if speed > CFG.ADAPT_RECAST_SAFE_SPEED then
+		clampAdaptRecastVelocity(grapple)
+		Logic.markGrappleBonkGrace(grapple, 0.3)
+		speed = getAdaptHorizontalSpeed(grapple)
+	end
+
+	applyGentleRecastAlignment(grapple, 1 / 60)
+
+	if not Logic.AdaptRecastReleaseIssued then
+		Logic.AdaptRecastReleaseIssued = fireSpecialAction(grapple, Enum.UserInputState.End) == true
+		Logic.AdaptRecastReleaseAt = now
+		return
+	end
+
+	if not detached then
+		return
+	end
+	if releaseElapsed < CFG.ADAPT_RECAST_RELEASE_DELAY then
+		return
+	end
+	if speed > CFG.ADAPT_RECAST_SAFE_SPEED and requestElapsed < CFG.ADAPT_RECAST_MAX_WAIT then
+		return
+	end
+
+	Logic.AdaptRecastPending = false
+	Logic.AdaptRecastReleaseIssued = false
+	pulseSpecialAction(grapple)
+end
+
+function maintainAdaptInputHold(grapple)
+	if
+		not (
+			hasClassCapability(grapple, "AimAssist")
+			and Logic.AdaptDriveActive
+			and Logic.AdaptInputHeld
+			and Logic.isSuiteEnabled()
+			and Logic.isInAir(grapple)
+		)
+	then
+		return
+	end
+	if Logic.AdaptRecastPending then
+		return
+	end
+
+	local movement = grapple and grapple.Movement
+	if not (grapple and movement) then
+		return
+	end
+	if isAwaitingAdaptAttach(grapple) then
+		return
+	end
+	if time() < (Logic.AdaptRetryAt or 0) then
+		return
+	end
+	if time() - Logic.LastAdaptPulseAt < CFG.ADAPT_RECAST_COOLDOWN then
+		return
+	end
+
+	if movement.grappling == true or grapple.jumpPadReel == true then
+		if not hasReachedGrappleDestination(grapple) then
+			return
+		end
+		requestAdaptRecast(grapple)
+		return
+	end
+
+	if not Logic.hasAdaptDriveTarget(grapple) then
+		Logic.AdaptRetryAt = time() + CFG.ADAPT_RETRY_DELAY
+		return
+	end
+
+	pulseSpecialAction(grapple)
+end
+
+function updateAdaptInputMode(grapple)
+	if not (Logic.AdaptInputHeld and Logic.isSuiteEnabled()) then
+		return
+	end
+	if Logic.AdaptDriveActive then
+		return
+	end
+	if time() - (Logic.AdaptInputBeganAt or 0) < CFG.ADAPT_TAP_THRESHOLD then
+		return
+	end
+
+	beginAdaptDrive(grapple)
+end
+
+function watchAdaptInput()
+	if #Logic.InputConnections > 0 then
+		return
+	end
+
+	table.insert(
+		Logic.InputConnections,
+		UserInputService.InputBegan:Connect(function(input, _gameProcessed)
+			if Logic.isTextBoxFocused() or input.KeyCode ~= Logic.getAdaptInputKeyCode() then
+				return
+			end
+
+			Logic.AdaptInputHeld = true
+			Logic.AdaptInputBeganAt = time()
+		end)
+	)
+
+	table.insert(
+		Logic.InputConnections,
+		UserInputService.InputEnded:Connect(function(input)
+			if input.KeyCode ~= Logic.getAdaptInputKeyCode() then
+				return
+			end
+
+			local heldDuration = time() - (Logic.AdaptInputBeganAt or 0)
+			local shouldTap = heldDuration <= CFG.ADAPT_TAP_THRESHOLD and Logic.AdaptDriveActive ~= true
+
+			Logic.AdaptInputHeld = false
+			Logic.AdaptInputBeganAt = 0
+			Logic.AdaptDriveActive = false
+			Logic.AdaptRecastPending = false
+			Logic.AdaptRecastReleaseIssued = false
+			Logic.AdaptAwaitingAttachUntil = 0
+			Logic.AdaptRetryAt = 0
+
+			if shouldTap and Logic.isSuiteEnabled() then
+				local grapple = getTrackedGrapple()
+				if grapple then
+					Logic.LastAdaptInputPressed = time()
+					requestAdaptRecast(grapple)
+				end
+			end
+		end)
+	)
+end
 
 function rebuildCandidateCache()
 	table.clear(Logic.Candidates)
@@ -1234,111 +1550,18 @@ function isHighMomentumDanger(grapple)
 		return false
 	end
 
-	
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.getHorizontalVelocity(grapple.RootPart).Magnitude >= CFG.AUTO_RESCUE_SPEED
+	return Logic.getHorizontalVelocity(grapple.RootPart).Magnitude >= CFG.AUTO_RESCUE_SPEED
 end
 
 function isEmergencyAssistDanger(grapple)
-	
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.isEmergencyProtectionEnabled()
+	return Logic.isEmergencyProtectionEnabled()
 		and (isHighMomentumDanger(grapple) or Logic.getCachedPanicRescueDanger(grapple))
 end
 
 function getEmergencyFloorRaycastParams(grapple)
 	local character = grapple and grapple.Character
 	if Logic.EmergencyFloorRaycastParams and Logic.EmergencyFloorRaycastCharacter == character then
-		
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.EmergencyFloorRaycastParams
+		return Logic.EmergencyFloorRaycastParams
 	end
 
 	local params = RaycastParams.new()
@@ -1890,74 +2113,12 @@ end
 function Logic.getCachedPanicRescueDanger(grapple)
 	local now = time()
 	if now - Logic.LastPanicDangerEvalAt < CFG.PANIC_DANGER_EVAL_INTERVAL then
-		
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.LastPanicDangerValue == true
+		return Logic.LastPanicDangerValue == true
 	end
 
 	Logic.LastPanicDangerEvalAt = now
 	Logic.LastPanicDangerValue = Logic.isPanicRescueDanger(grapple) == true
-	
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.LastPanicDangerValue
+	return Logic.LastPanicDangerValue
 end
 
 function getModeValue(key)
@@ -1987,38 +2148,7 @@ end
 
 function getCurseHandler()
 	if Logic.CurseHandlerLoaded then
-		
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.CurseHandler
+		return Logic.CurseHandler
 	end
 
 	Logic.CurseHandlerLoaded = true
@@ -2033,38 +2163,7 @@ return Logic
 		Logic.CurseHandler = result
 	end
 
-	
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.CurseHandler
+	return Logic.CurseHandler
 end
 
 function isCurseEnabled(curseName)
@@ -2082,38 +2181,7 @@ end
 function Logic.getGravityAssistProfile(grapple)
 	local now = time()
 	if Logic.LastGravityProfile and now - (Logic.LastGravityProfileAt or 0) < CFG.LOW_GRAVITY_PROFILE_TTL then
-		
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.LastGravityProfile
+		return Logic.LastGravityProfile
 	end
 
 	local movement = grapple and grapple.Movement
@@ -2145,38 +2213,7 @@ end
 
 function Logic.getEffectiveEmergencyFallThreshold(grapple)
 	local profile = Logic.getGravityAssistProfile(grapple)
-	
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.getEmergencyFallThreshold() * (profile.FallThresholdScale or 1)
+	return Logic.getEmergencyFallThreshold() * (profile.FallThresholdScale or 1)
 end
 
 function getLevelValue()
@@ -2338,38 +2375,7 @@ end
 function getFallbackHitbox(rootPart)
 	if Logic.FallbackHitbox and Logic.FallbackHitbox.Parent then
 		Logic.FallbackHitbox.CFrame = rootPart.CFrame
-		
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.FallbackHitbox
+		return Logic.FallbackHitbox
 	end
 
 	local part = Instance.new("Part")
@@ -2904,38 +2910,7 @@ function canUseKillVoidSharkTailSaver(grapple, requireUseWindow)
 		return false
 	end
 
-	
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.getHorizontalVelocity(rootPart).Magnitude >= CFG.SHARK_TAIL_VOID_SAVER_MIN_SPEED
+	return Logic.getHorizontalVelocity(rootPart).Magnitude >= CFG.SHARK_TAIL_VOID_SAVER_MIN_SPEED
 end
 
 function getKillVoidSaverDirections(grapple)
@@ -3356,38 +3331,7 @@ function getCursorReCorrectDeps()
 		getSpecialAnchorBonus = getSpecialAnchorBonus,
 		getHorizontalVelocity = Logic.getHorizontalVelocity,
 		getAnchorMemoryScore = function(instance)
-			
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.AnchorMemory and Logic.AnchorMemory.score and Logic.AnchorMemory.score(Logic.AnchorMemoryState, instance)
+			return Logic.AnchorMemory and Logic.AnchorMemory.score and Logic.AnchorMemory.score(Logic.AnchorMemoryState, instance)
 				or 0
 		end,
 		isVoidRescueActive = function(grapple)
@@ -3423,38 +3367,7 @@ function getIntentSnapshot(grapple, rescueResult)
 		and Logic.LastIntentSnapshotRescueResult == rescueResult
 		and now - (Logic.LastIntentSnapshotAt or 0) <= 0.035
 	then
-		
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.LastIntentSnapshot
+		return Logic.LastIntentSnapshot
 	end
 
 	if not (IntentModel and typeof(IntentModel.classify) == "function") then
@@ -4384,7 +4297,6 @@ function Logic.isUsableResult(grapple, result)
 	return true
 end
 
-
 function assistedCast(grapple, forceRefresh, originalCast, ...)
 	notePanicInput(grapple)
 	local result, direction = originalCast(grapple, forceRefresh, ...)
@@ -4394,22 +4306,22 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 		return result, direction
 	end
 
-	if Logic.AdaptDriveActive and hasClassCapability(grapple, "AimAssist") and Logic.isEnabled() then
-		local secondaryTarget = Logic.scanSecondaryCastTarget(grapple, result)
-		if Logic.isUsableResult(grapple, secondaryTarget) then
+	if hasClassCapability(grapple, "AimAssist") and Logic.isEnabled() then
+		local autoAimResult = scanNamedTargets(grapple, { driveMode = true, fullScan = true, forceCursor = false })
+		if Logic.isUsableResult(grapple, autoAimResult) then
 			if
 				hasClassCapability(grapple, "BellBypass")
-				and secondaryTarget.Instance
-				and secondaryTarget.Instance.Name == "Bell"
+				and autoAimResult.Instance
+				and autoAimResult.Instance.Name == "Bell"
 			then
-				holdBellBypass(secondaryTarget.Instance)
+				holdBellBypass(autoAimResult.Instance)
 			end
 			Logic.LastAssistDebug = {
-				Reason = "SecondaryAutoAim",
+				Reason = "AutoAimCast",
 				Score = 0,
-				Target = secondaryTarget.Instance.Name,
+				Target = autoAimResult.Instance.Name,
 			}
-			return secondaryTarget, direction
+			return autoAimResult, direction
 		end
 	end
 
@@ -4655,7 +4567,7 @@ function getSharkTailScore(grapple)
 		return 0, false
 	end
 
-	if Logic.AdaptRecastPending or Logic.isAwaitingAdaptAttach(grapple) then
+	if Logic.AdaptRecastPending or isAwaitingAdaptAttach(grapple) then
 		return 0, false
 	end
 
@@ -5453,38 +5365,7 @@ end
 
 function Logic.getNoCollisionMoveCastParams()
 	if Logic.NoCollisionMoveCastParams then
-		
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
-return Logic
-.NoCollisionMoveCastParams
+		return Logic.NoCollisionMoveCastParams
 	end
 
 	local params = RaycastParams.new()
@@ -5704,7 +5585,7 @@ function Logic.enable()
 	if globals.GrappleAimAssistHooked and globals.activeGrappleAimAssist == Logic then
 		globals.activeGrappleAimAssist = Logic
 		Logic.ensureDiveBonkHook(globals)
-		Logic.watchAdaptInput()
+		watchAdaptInput()
 		watchCandidateFolder()
 		return true
 	end
@@ -5906,7 +5787,7 @@ function Logic.enable()
 			local emergencyAirborne = isEmergencyAirborne(self)
 			if Logic.isSuiteEnabled() and hasAnyGrappleAssistCapability(self) and emergencyAirborne then
 				if airborne and hasClassCapability(self, "AimAssist") then
-					HealthMonitor.try("AdaptInputMode", Logic.updateAdaptInputMode, self)
+					HealthMonitor.try("AdaptInputMode", updateAdaptInputMode, self)
 				end
 
 				local sharkTailPlanned = false
@@ -5930,7 +5811,7 @@ function Logic.enable()
 				end
 				HealthMonitor.try("AutoMomentumRescue", tryAutoMomentumRescue, self)
 				if airborne then
-					HealthMonitor.try("AdaptInputHold", Logic.maintainAdaptInputHold, self)
+					HealthMonitor.try("AdaptInputHold", maintainAdaptInputHold, self)
 				end
 			end
 
@@ -5954,7 +5835,7 @@ function Logic.enable()
 			HealthMonitor.try("MomentumGuard", applyMomentumGuard, self)
 			HealthMonitor.try("PanicStabilize", Logic.applyPanicStabilize, self)
 			HealthMonitor.try("SharkTailStabilize", Logic.applySharkTailStabilize, self)
-			HealthMonitor.try("AdaptRecast", Logic.updateAdaptRecast, self)
+			HealthMonitor.try("AdaptRecast", updateAdaptRecast, self)
 			return table.unpack(stepResults, 2, stepResults.n)
 		end
 	end
@@ -5988,7 +5869,7 @@ function Logic.enable()
 
 	globals.GrappleAimAssistHooked = true
 	globals.activeGrappleAimAssist = Logic
-	Logic.watchAdaptInput()
+	watchAdaptInput()
 	watchCandidateFolder()
 	table.insert(Logic.Connections, RunService.Heartbeat:Connect(panicRescueWatchdog))
 	return true
@@ -6143,7 +6024,13 @@ function Logic.getRangeOptions()
 	return options
 end
 
+function Logic.isAdaptInputHeld()
+	return Logic.AdaptInputHeld == true
+end
 
+function Logic.getLastAdaptInputPressed()
+	return Logic.LastAdaptInputPressed
+end
 
 function Logic.getHealthStatus()
 	local baseStatus = "Core OK"
@@ -6183,35 +6070,4 @@ function Logic.getHealthStatus()
 		.. tostring(horizonText)
 end
 
-
-local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SecondaryCast.luau")
-Logic.hasClassCapability = hasClassCapability
-Logic.getTrackedGrapple = getTrackedGrapple
-Logic.fireSpecialAction = fireSpecialAction
-Logic.pulseSpecialAction = pulseSpecialAction
-Logic.hasReachedGrappleDestination = hasReachedGrappleDestination
-Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
-Logic.getPhysicsProfile = getPhysicsProfile
-Logic.VelocityAssist = VelocityAssist
-Logic.scanNamedTargets = scanNamedTargets
-Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
-Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
-Logic.getAssistFlatUnit = getAssistFlatUnit
-Logic.canRunAssist = canRunAssist
-
-SecondaryCast.link(Logic)
-
-Logic.scanSecondaryCastTarget = SecondaryCast.scanSecondaryCastTarget
-Logic.beginAdaptDrive = SecondaryCast.beginAdaptDrive
-Logic.watchAdaptInput = SecondaryCast.watchAdaptInput
-Logic.updateAdaptInputMode = SecondaryCast.updateAdaptInputMode
-Logic.maintainAdaptInputHold = SecondaryCast.maintainAdaptInputHold
-Logic.updateAdaptRecast = SecondaryCast.updateAdaptRecast
-Logic.isAwaitingAdaptAttach = SecondaryCast.isAwaitingAdaptAttach
-Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
-Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
-Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
-Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
-
 return Logic
-
