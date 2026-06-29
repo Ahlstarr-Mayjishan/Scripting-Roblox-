@@ -5805,6 +5805,7 @@ Logic.getActiveGrappleTargetPosition = getActiveGrappleTargetPosition
 Logic.getPhysicsProfile = getPhysicsProfile
 Logic.VelocityAssist = VelocityAssist
 Logic.scanNamedTargets = scanNamedTargets
+Logic.scanScreenSurface = scanScreenSurface
 Logic.getAdaptHorizontalSpeed = getAdaptHorizontalSpeed
 Logic.clampAdaptRecastVelocity = clampAdaptRecastVelocity
 Logic.getAssistFlatUnit = getAssistFlatUnit
