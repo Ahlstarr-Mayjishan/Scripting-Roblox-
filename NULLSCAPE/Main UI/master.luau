@@ -521,7 +521,12 @@ local function loadModule(path)
 
 	local sourceSuccess, sourceResult = pcall(function()
 		if isLocal then
-			return readfile(path)
+			local content = readfile(path)
+			if content and #content:gsub("%s+", "") > 0 then
+				return content
+			else
+				warn("[NULLSCAPE] Local file " .. tostring(path) .. " is empty or invalid, falling back to GitHub!")
+			end
 		end
 
 		local githubRawUrl = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
