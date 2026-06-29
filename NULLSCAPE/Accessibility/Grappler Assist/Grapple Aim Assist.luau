@@ -3469,8 +3469,15 @@ function scanNamedTargets(grapple, options)
 	local emergencyBrakeMode = isEmergencyAssistDanger(grapple) and isAutoRescueWindowActive()
 	local panicMode = emergencyBrakeMode and Logic.getCachedPanicRescueDanger(grapple)
 	preferredName = getEffectivePreferredTarget(grapple, preferredName)
+	local inputDirection, velocityDirection = getAssistIntentDirections(grapple)
 	local rangeMode = normalizeRangePriority(controller and controller.GrappleAimAssistRangePriority)
-	if forceCursor and not rescueMode and not emergencyBrakeMode then
+	if driveMode then
+		if inputDirection then
+			rangeMode = "Farthest"
+		else
+			rangeMode = "Nearest"
+		end
+	elseif forceCursor and not rescueMode and not emergencyBrakeMode then
 		rangeMode = "Closest To Cursor"
 	end
 	if emergencyBrakeMode or (not forceCursor and not driveMode and shouldForceNearest(grapple)) then
@@ -3480,7 +3487,6 @@ function scanNamedTargets(grapple, options)
 	local maxRange = getAssistRange(grapple, driveMode)
 	local staminaRatio = getStaminaRatio(grapple)
 	local screenAnchor = getScreenAnchor(camera, rangeMode)
-	local inputDirection, velocityDirection = getAssistIntentDirections(grapple)
 	local candidateList = getCandidateList()
 	local candidateCount = #candidateList
 	if candidateCount == 0 then
@@ -3583,7 +3589,7 @@ function scanNamedTargets(grapple, options)
 						else
 							local priorityScore = candidate.Name == preferredName and 0 or 1000
 							local score
-							if (driveMode and not forceCursor and not emergencyBrakeMode) or panicMode or emergencyBrakeMode then
+							if panicMode or emergencyBrakeMode then
 								priorityScore = 0
 							elseif rescueMode then
 								priorityScore = rescuePriority[candidate.Name] or 1000
@@ -4368,7 +4374,7 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 
 	local assistedResult
 	if Logic.AdaptDriveActive then
-		assistedResult = scanNamedTargets(grapple, { driveMode = true, fullScan = true, forceCursor = true })
+		assistedResult = scanNamedTargets(grapple, { driveMode = true, fullScan = true, forceCursor = false })
 	else
 		local mapResult
 		if isVoidRescueWindowActive() or isVoidRescueDanger(grapple) then
