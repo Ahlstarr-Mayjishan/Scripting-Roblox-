@@ -240,6 +240,13 @@ function SecondaryCast.watchAdaptInput()
 
 			Logic.AdaptInputHeld = true
 			Logic.AdaptInputBeganAt = time()
+
+			if Logic.isSuiteEnabled() then
+				local grapple = Logic.getTrackedGrapple()
+				if grapple then
+					SecondaryCast.beginAdaptDrive(grapple)
+				end
+			end
 		end)
 	)
 
@@ -250,9 +257,6 @@ function SecondaryCast.watchAdaptInput()
 				return
 			end
 
-			local heldDuration = time() - (Logic.AdaptInputBeganAt or 0)
-			local shouldTap = heldDuration <= CFG.ADAPT_TAP_THRESHOLD and Logic.AdaptDriveActive ~= true
-
 			Logic.AdaptInputHeld = false
 			Logic.AdaptInputBeganAt = 0
 			Logic.AdaptDriveActive = false
@@ -260,24 +264,16 @@ function SecondaryCast.watchAdaptInput()
 			Logic.AdaptRecastReleaseIssued = false
 			Logic.AdaptAwaitingAttachUntil = 0
 			Logic.AdaptRetryAt = 0
-
-			if shouldTap and Logic.isSuiteEnabled() then
-				local grapple = Logic.getTrackedGrapple()
-				if grapple then
-					Logic.LastAdaptInputPressed = time()
-					SecondaryCast.requestAdaptRecast(grapple)
-				end
-			end
 		end)
 	)
 end
 
 function SecondaryCast.scanSecondaryCastTarget(grapple, originalResult)
-	-- 1. Ưu tiên các điểm đặc biệt nằm gần con trỏ chuột trước (tôn trọng close to mouse)
+	-- 1. Ưu tiên quét toàn bộ phạm vi Camera nhìn thấy (cursorLimit = 2.0)
 	local mouseTarget = Logic.scanNamedTargets(grapple, {
 		fullScan = true,
 		forceCursor = true,
-		cursorLimit = 0.45,
+		cursorLimit = 2.0,
 		rangeMode = "Closest To Cursor"
 	})
 	if mouseTarget then
@@ -285,12 +281,12 @@ function SecondaryCast.scanSecondaryCastTarget(grapple, originalResult)
 	end
 
 	-- 2. Nếu người dùng đang nhắm vào một vị trí cụ thể trên bản đồ (như tường, sàn, trần nhà - originalResult hợp lệ)
-	-- thì tôn trọng hướng nhắm cụ thể của họ và không tự ý auto-drive đi chỗ khác
+	-- thì tôn trọng hướng nhắm cụ thể của họ
 	if Logic.isUsableResult(grapple, originalResult) then
 		return originalResult
 	end
 
-	-- 3. Chỉ khi chuột trỏ vào không khí (không có gì) thì mới tự động chọn hướng/điểm bám tối ưu theo hệ thống
+	-- 3. Chỉ khi chuột trỏ vào không khí thì mới tự động quét điểm bám tối ưu theo hệ thống
 	return Logic.scanNamedTargets(grapple, {
 		driveMode = true,
 		fullScan = true,

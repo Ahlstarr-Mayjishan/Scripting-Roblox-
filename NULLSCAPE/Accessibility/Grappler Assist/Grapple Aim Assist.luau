@@ -2722,14 +2722,14 @@ function getAimAssistStrengthScale()
 	local controller = Logic.getController()
 	local value = tostring(controller and controller.GrappleAimAssistStrength or "Balanced")
 	if value == "Light" then
-		return 0.75
+		return 1.2
 	elseif value == "Strong" then
-		return 1.25
+		return 3.0
 	elseif value == "Motor Accessibility" then
-		return 1.6
+		return 6.0
 	end
 
-	return 1
+	return 1.8
 end
 
 function getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
@@ -3908,6 +3908,27 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 		end
 	end
 
+	if not Logic.isUsableResult(grapple, result) and hasClassCapability(grapple, "AimAssist") and Logic.isEnabled() then
+		local strengthScale = getAimAssistStrengthScale()
+		local limit = CFG.SOFT_OVERRIDE_CURSOR_LIMIT * strengthScale
+		local reCorrectDecision = getCursorReCorrectDecision(grapple, "SkyReCorrect", limit)
+		if reCorrectDecision and Logic.isUsableResult(grapple, reCorrectDecision.Result) then
+			if
+				hasClassCapability(grapple, "BellBypass")
+				and reCorrectDecision.Instance
+				and reCorrectDecision.Instance.Name == "Bell"
+			then
+				holdBellBypass(reCorrectDecision.Instance)
+			end
+			Logic.LastAssistDebug = {
+				Reason = "SkyReCorrect",
+				Score = reCorrectDecision.Score,
+				Target = reCorrectDecision.Instance.Name,
+			}
+			return reCorrectDecision.Result, direction
+		end
+	end
+
 	if
 		CastIntent
 		and CastIntent.getCursorPreviewResult
@@ -3919,8 +3940,10 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 		local previewTargetName = getResultTargetName(previewResult)
 		local reCorrectDecision
 		if not previewTargetName then
+			local strengthScale = getAimAssistStrengthScale()
+			local limit = math.max(CFG.CURSOR_PREVIEW_RECORRECT_LIMIT, CFG.SOFT_OVERRIDE_CURSOR_LIMIT * strengthScale)
 			reCorrectDecision =
-				getCursorReCorrectDecision(grapple, "CursorPreviewReCorrect", CFG.CURSOR_PREVIEW_RECORRECT_LIMIT)
+				getCursorReCorrectDecision(grapple, "CursorPreviewReCorrect", limit)
 		end
 		if reCorrectDecision and Logic.isUsableResult(grapple, reCorrectDecision.Result) then
 			return reCorrectDecision.Result, previewDirection
