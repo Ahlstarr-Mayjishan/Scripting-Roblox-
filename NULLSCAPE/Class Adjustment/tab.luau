@@ -38,6 +38,8 @@ local createControllerProxy = function(Client, Controller)
 		GrappleReelPullMultiplier = 1,
 		GrappleSharkTailPullMultiplier = 1,
 		GrappleMaxRange = 90,
+		GrappleDisableGroundRelease = false,
+		GrappleNoReelCooldown = false,
 	}
 
 	return setmetatable({ __ClassAdjustmentProxy = true }, {
@@ -119,6 +121,26 @@ return function(Client, Controller)
 		Flag = "GrappleMaxRangeSlider",
 		Callback = function(Value)
 			Controller:SetGrappleMaxRange(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Disable Ground Auto-Release",
+		Info = "Prevents the grapple hook from automatically releasing when you are close to or running on the ground.",
+		CurrentValue = Controller.GrappleDisableGroundRelease or false,
+		Flag = "GrappleDisableGroundReleaseToggle",
+		Callback = function(Value)
+			Controller:SetGrappleDisableGroundRelease(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "No Reel Cooldown",
+		Info = "Removes the 3-second cooldown between grapple hooks, allowing you to fire hooks instantly.",
+		CurrentValue = Controller.GrappleNoReelCooldown or false,
+		Flag = "GrappleNoReelCooldownToggle",
+		Callback = function(Value)
+			Controller:SetGrappleNoReelCooldown(Value)
 		end,
 	})
 end

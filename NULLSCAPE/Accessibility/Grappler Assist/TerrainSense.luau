@@ -179,6 +179,7 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
     local graceFallSpeed = cfg.TERRAIN_VOID_GRACE_MIN_FALL_SPEED or cfg.TERRAIN_VOID_FULL_SCAN_FALL_SPEED
     local droppedBeyondGrace = state.LastSafePosition
         and rootPart.Position.Y <= state.LastSafePosition.Y - graceDropDistance
+    local dropDepth = state.LastSafePosition and (state.LastSafePosition.Y - rootPart.Position.Y) or 0
     local graceAllowsRescue = fallSpeed >= graceFallSpeed or droppedBeyondGrace == true
     local horizontalVelocity = Vector3.new(velocity.X, 0, velocity.Z)
     local horizontalSpeed = horizontalVelocity.Magnitude
@@ -244,7 +245,15 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
     elseif terrainLost and falling and droppedFromLastSafe then
         danger = true
         reason = "TerrainVoidDrop"
-    elseif terrainLost and falling and sinceSafeFloor <= cfg.TERRAIN_VOID_CONTEXT_TTL then
+    elseif
+        terrainLost
+        and falling
+        and (
+            sinceSafeFloor <= cfg.TERRAIN_VOID_CONTEXT_TTL
+            or sinceSafeFloor == math.huge
+            or fallSpeed >= cfg.TERRAIN_VOID_FULL_SCAN_FALL_SPEED
+        )
+    then
         danger = true
         reason = "TerrainNoFloor"
     end
@@ -254,6 +263,7 @@ function TerrainSense.analyzeVoidFall(deps, grapple, previousState)
     state.UnsafeSamples = unsafeSamples
     state.NoFloorBelow = noFloorBelow
     state.SinceSafeFloor = sinceSafeFloor
+    state.DropDepth = dropDepth
     state.FallSpeed = fallSpeed
     state.HorizontalSpeed = horizontalSpeed
     state.WallSlamRisk = wallSlamRisk

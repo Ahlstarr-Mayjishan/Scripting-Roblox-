@@ -14,6 +14,8 @@ local Control = {
 	GrappleReelPullMultiplier = 1.1,
 	GrappleSharkTailPullMultiplier = 1.1,
 	GrappleMaxRange = 90,
+	GrappleDisableGroundRelease = false,
+	GrappleNoReelCooldown = false,
 	Destroyed = false,
 	PermanentConnections = {},
 }
@@ -45,6 +47,13 @@ local function readSettings()
 		Control.GrappleReelPullMultiplier = tonumber(decoded.GrappleReelPullMultiplierSlider) or Control.GrappleReelPullMultiplier
 		Control.GrappleSharkTailPullMultiplier = tonumber(decoded.GrappleSharkTailPullMultiplierSlider) or Control.GrappleSharkTailPullMultiplier
 		Control.GrappleMaxRange = tonumber(decoded.GrappleMaxRangeSlider) or Control.GrappleMaxRange
+		
+		if decoded.GrappleDisableGroundRelease ~= nil then
+			Control.GrappleDisableGroundRelease = not not decoded.GrappleDisableGroundRelease
+		end
+		if decoded.GrappleNoReelCooldown ~= nil then
+			Control.GrappleNoReelCooldown = not not decoded.GrappleNoReelCooldown
+		end
 	end
 end
 
@@ -67,6 +76,8 @@ local function saveSettings()
 	data.GrappleReelPullMultiplierSlider = Control.GrappleReelPullMultiplier
 	data.GrappleSharkTailPullMultiplierSlider = Control.GrappleSharkTailPullMultiplier
 	data.GrappleMaxRangeSlider = Control.GrappleMaxRange
+	data.GrappleDisableGroundRelease = Control.GrappleDisableGroundRelease
+	data.GrappleNoReelCooldown = Control.GrappleNoReelCooldown
 
 	pcall(function()
 		makefolder(SETTINGS_FOLDER)
@@ -147,6 +158,16 @@ end
 
 function Control:SetGrappleMaxRange(value)
 	self.GrappleMaxRange = math.clamp(tonumber(value) or 90, 90, 120)
+	saveSettings()
+end
+
+function Control:SetGrappleDisableGroundRelease(value)
+	self.GrappleDisableGroundRelease = not not value
+	saveSettings()
+end
+
+function Control:SetGrappleNoReelCooldown(value)
+	self.GrappleNoReelCooldown = not not value
 	saveSettings()
 end
 

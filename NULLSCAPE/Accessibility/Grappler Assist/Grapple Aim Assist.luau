@@ -74,6 +74,7 @@ local Logic = {
 	EmergencyRescueLockUntil = 0,
 	LastVoidRescueAt = 0,
 	VoidRescueUntil = 0,
+	VoidRescueCommitLockUntil = 0,
 	TerrainFallState = nil,
 	LastTerrainFallEvalAt = 0,
 	EmergencyFloorRaycastParams = nil,
@@ -113,6 +114,7 @@ local Logic = {
 	LastAntiBonkPrediction = nil,
 	LastPredictionHorizon = nil,
 	CastIntentState = CastIntent and CastIntent.newState and CastIntent.newState() or nil,
+	ClassAdjustmentControl = nil,
 	LastRuntimeCharacter = nil,
 	LastRuntimeRootPart = nil,
 	LastRuntimeMovement = nil,
@@ -193,6 +195,11 @@ local CFG = {
 	VOID_RESCUE_SAFE_LANDING_MAX_TIME = 1.55,
 	VOID_RESCUE_SAFE_LANDING_NORMAL_Y = 0.45,
 	VOID_RESCUE_SAFE_LANDING_KILL_MARGIN = 12,
+	VOID_RESCUE_TERRAIN_DROP_TRIGGER = 76,
+	VOID_RESCUE_FAST_FALL_TRIGGER = 95,
+	VOID_RESCUE_FAST_FALL_DROP_TRIGGER = 38,
+	VOID_RESCUE_PASSIVE_INPUT_MAX = 0.08,
+	VOID_RESCUE_COMMIT_LOCK = 1,
 	SHARK_TAIL_VOID_SAVER_ENABLED = false,
 	SHARK_TAIL_VOID_SAVER_TRIGGER_BUFFER = 46,
 	SHARK_TAIL_VOID_SAVER_USE_BUFFER = 28,
@@ -335,6 +342,8 @@ local CFG = {
 	CURSOR_RECORRECT_SURFACE_NORMAL_Y_MAX = 0.55,
 	CURSOR_DIRECT_OVERRIDE_LIMIT = 0.08,
 	CURSOR_DIRECT_SURFACE_LIMIT = 0.035,
+	CURSOR_PREVIEW_RECORRECT_LIMIT = 0.28,
+	CURSOR_CAST_RECORRECT_LIMIT = 0.22,
 	ASSIST_INPUT_INTENT_WEIGHT = 32,
 	ASSIST_VELOCITY_INTENT_WEIGHT = 14,
 	ASSIST_TARGET_LOCK_DURATION = 0.22,
@@ -1649,6 +1658,51 @@ local function getVoidKillPlaneY()
 	return nil
 end
 
+local function isEmergencyAirborne(grapple)
+	if Logic.isInAir(grapple) then
+		return true
+	end
+
+	local rootPart = grapple and grapple.RootPart
+	local velocity = rootPart and rootPart.Velocity
+	if not (rootPart and velocity) then
+		return false
+	end
+
+	local killY = getVoidKillPlaneY()
+	if killY and rootPart.Position.Y <= killY + CFG.VOID_RESCUE_KILL_PLANE_BUFFER then
+		return true
+	end
+
+	if velocity.Y <= -CFG.TERRAIN_VOID_FALL_SPEED then
+		return true
+	end
+
+	local terrainState = getTerrainVoidFallState(grapple)
+	if terrainState and (terrainState.Danger or terrainState.NoFloorBelow) then
+		return true
+	end
+
+	return false
+end
+
+local function isPassiveVoidRescueState(grapple)
+	local movement = grapple and grapple.Movement
+	if not movement then
+		return false
+	end
+	if movement.grappling == true or grapple.jumpPadReel == true or grapple.specialHeld == true then
+		return false
+	end
+
+	local input = movement.PlayerMoveDirection
+	if typeof(input) == "Vector3" and input.Magnitude > CFG.VOID_RESCUE_PASSIVE_INPUT_MAX then
+		return false
+	end
+
+	return true
+end
+
 local getSafeLandingGuard
 local isPanicPressureActive
 
@@ -1707,10 +1761,24 @@ local function getVoidDangerState(grapple)
 
 	local terrainState = getTerrainVoidFallState(grapple)
 	if terrainState and terrainState.Danger then
+		local dropDepth = tonumber(terrainState.DropDepth) or 0
+		local fallSpeed = tonumber(terrainState.FallSpeed) or 0
+		local fastFall = fallSpeed >= CFG.VOID_RESCUE_FAST_FALL_TRIGGER
+		local requiredDrop = fastFall and CFG.VOID_RESCUE_FAST_FALL_DROP_TRIGGER
+			or CFG.VOID_RESCUE_TERRAIN_DROP_TRIGGER
+		if dropDepth < requiredDrop and not isPanicPressureActive() then
+			return false, "TerrainDropDepthGrace"
+		end
+		if not fastFall and not isPassiveVoidRescueState(grapple) and not isPanicPressureActive() then
+			return false, "PlayerActiveVoidIntent"
+		end
 		if
 			killY
 			and y > killY + CFG.VOID_RESCUE_MOMENTUM_GRACE_HEIGHT + voidBufferBonus
 			and not isPanicPressureActive()
+			and terrainState.IntentGrace
+			and not terrainState.IntentGraceAllowsRescue
+			and (terrainState.FallSpeed or 0) < CFG.TERRAIN_VOID_GRACE_MIN_FALL_SPEED
 		then
 			return false, "VoidMomentumGrace"
 		end
@@ -1730,6 +1798,20 @@ local function markVoidRescueWindow()
 	if not Logic.isMovementIntent(MOVEMENT_INTENT.JumpPadCommit) then
 		Logic.setMovementIntent(MOVEMENT_INTENT.VoidRescue, CFG.VOID_RESCUE_WINDOW, "VoidDanger")
 	end
+end
+
+local function markVoidRescueCommitLock()
+	Logic.VoidRescueCommitLockUntil = math.max(
+		Logic.VoidRescueCommitLockUntil or 0,
+		time() + CFG.VOID_RESCUE_COMMIT_LOCK
+	)
+end
+
+local function isVoidRescueCommitLocked(grapple)
+	local movement = grapple and grapple.Movement
+	return time() <= (Logic.VoidRescueCommitLockUntil or 0)
+		and movement
+		and movement.grappling == true
 end
 
 local function isVoidRescueWindowActive()
@@ -1809,7 +1891,7 @@ isPanicPressureActive = function()
 end
 
 function Logic.isPanicRescueDanger(grapple)
-	if not (grapple and Logic.isInAir(grapple)) then
+	if not (grapple and isEmergencyAirborne(grapple)) then
 		return false
 	end
 
@@ -2156,19 +2238,41 @@ local function refillStamina(grapple)
 	end
 end
 
+function Logic.getConfiguredGrappleMaxRange()
+	if Logic.ClassAdjustmentControl == nil then
+		local env = getgenv()
+		local loader = env and env.loadModule
+		if typeof(loader) == "function" then
+			local ok, control = pcall(loader, "NULLSCAPE/Class Adjustment/Control.luau")
+			if ok and typeof(control) == "table" then
+				Logic.ClassAdjustmentControl = control
+			else
+				Logic.ClassAdjustmentControl = false
+			end
+		else
+			Logic.ClassAdjustmentControl = false
+		end
+	end
+
+	local control = Logic.ClassAdjustmentControl
+	local maxRange = typeof(control) == "table" and tonumber(control.GrappleMaxRange) or nil
+	return math.clamp(maxRange or CFG.DEFAULT_MAX_RANGE, CFG.DEFAULT_MAX_RANGE, 120)
+end
+
 local function getAssistRange(grapple, ignoreStamina)
+	local maxRange = Logic.getConfiguredGrappleMaxRange()
 	if ignoreStamina then
-		return CFG.DEFAULT_MAX_RANGE
+		return maxRange
 	end
 
 	local staminaRatio = getStaminaRatio(grapple)
 	if staminaRatio < 0.3 then
-		return 45
+		return math.max(45, maxRange * 0.5)
 	elseif staminaRatio < 0.6 then
-		return 70
+		return math.max(70, maxRange * 0.78)
 	end
 
-	return CFG.DEFAULT_MAX_RANGE
+	return maxRange
 end
 
 local function shouldForceNearest(grapple)
@@ -3124,6 +3228,7 @@ local function scanNamedTargets(grapple, options)
 	local returnDecision = typeof(options) == "table" and options.returnDecision == true
 	local fullScan = typeof(options) == "table" and options.fullScan == true
 	local forceCursor = typeof(options) == "table" and options.forceCursor == true
+	local cursorLimit = typeof(options) == "table" and tonumber(options.cursorLimit) or nil
 
 	local controller = Logic.getController()
 	local preferredName = Logic.normalizeTargetPriority(controller and controller.GrappleAimAssistTargetPriority)
@@ -3197,7 +3302,11 @@ local function scanNamedTargets(grapple, options)
 						and not rescueMode
 						and not emergencyBrakeMode
 						and not isLockedTarget
-						and screenScore > (forceCursor and CFG.CURSOR_RECORRECT_CONFIDENCE_LIMIT or CFG.ASSIST_CURSOR_PREFILTER_LIMIT)
+						and screenScore
+							> (
+								forceCursor and (cursorLimit or CFG.CURSOR_RECORRECT_CONFIDENCE_LIMIT)
+								or CFG.ASSIST_CURSOR_PREFILTER_LIMIT
+							)
 					then
 						continue
 					end
@@ -3325,7 +3434,7 @@ local function scanNamedTargets(grapple, options)
 		local viewportSize = camera.ViewportSize
 		local cursorDistance = (Vector2.new(viewportPoint.X, viewportPoint.Y) - screenAnchor).Magnitude
 			/ math.max(viewportSize.X, viewportSize.Y)
-		if cursorDistance > CFG.CURSOR_INTENT_CONFIDENCE_LIMIT then
+		if cursorDistance > (cursorLimit or CFG.CURSOR_INTENT_CONFIDENCE_LIMIT) then
 			return nil
 		end
 	end
@@ -3613,6 +3722,27 @@ local function getSoftOverrideResult(grapple, originalResult)
 	return decision.Result
 end
 
+local function getCursorReCorrectDecision(grapple, reason, cursorLimit)
+	local decision = scanNamedTargets(grapple, {
+		returnDecision = true,
+		fullScan = true,
+		forceCursor = true,
+		cursorLimit = cursorLimit,
+	})
+	if not (decision and decision.Result) then
+		return nil
+	end
+
+	Logic.LastAssistDebug = {
+		Reason = reason or "CursorReCorrect",
+		Score = decision.Score,
+		ScreenScore = decision.ScreenScore,
+		Target = decision.Name or (decision.Instance and decision.Instance.Name) or "Target",
+	}
+
+	return decision
+end
+
 function Logic.hasAdaptDriveTarget(grapple)
 	local driveOptions = { driveMode = true }
 	return scanNamedTargets(grapple, driveOptions) ~= nil
@@ -3695,7 +3825,7 @@ local function tryPanicRescue(grapple)
 	end
 
 	local movement = grapple and grapple.Movement
-	if not (grapple and movement and Logic.isInAir(grapple)) then
+	if not (grapple and movement and isEmergencyAirborne(grapple)) then
 		return false
 	end
 	if Logic.isJumpPadCommitGuardActive() then
@@ -3772,6 +3902,7 @@ local function tryPanicRescue(grapple)
 		if voidDanger then
 			Logic.LastVoidRescueAt = time()
 			markVoidRescueWindow()
+			markVoidRescueCommitLock()
 		end
 		Logic.PanicStabilizeUntil = time() + CFG.PANIC_STABILIZE_WINDOW
 		Logic.markGrappleBonkGrace(grapple, CFG.PANIC_STABILIZE_WINDOW)
@@ -3827,6 +3958,39 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 		return result, direction
 	end
 
+	if
+		CastIntent
+		and CastIntent.getCursorPreviewResult
+		and hasClassCapability(grapple, "AimAssist")
+		and Logic.isEnabled()
+	then
+		local previewResult, previewDirection, previewScreenScore =
+			CastIntent.getCursorPreviewResult(getCastIntentDeps(), grapple, forceRefresh)
+		local previewTargetName = getResultTargetName(previewResult)
+		local reCorrectDecision
+		if not previewTargetName then
+			reCorrectDecision =
+				getCursorReCorrectDecision(grapple, "CursorPreviewReCorrect", CFG.CURSOR_PREVIEW_RECORRECT_LIMIT)
+		end
+		if reCorrectDecision and reCorrectDecision.Result then
+			return reCorrectDecision.Result, previewDirection
+		end
+		if previewResult then
+			Logic.LastAssistDebug = {
+				Reason = "CursorPreview",
+				Score = previewScreenScore,
+				Target = previewTargetName or previewResult.Instance.Name,
+			}
+			return previewResult, previewDirection
+		elseif previewDirection then
+			Logic.LastAssistDebug = {
+				Reason = "CursorPreviewMiss",
+				Target = "MouseRay",
+			}
+			return nil, previewDirection
+		end
+	end
+
 	if Logic.isUsableResult(grapple, result) then
 		local overrideResult = getSoftOverrideResult(grapple, result)
 		if overrideResult then
@@ -3865,6 +4029,11 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 			}
 			return cursorResult, cursorDirection
 		end
+	end
+
+	local cursorDecision = getCursorReCorrectDecision(grapple, "CursorCastReCorrect", CFG.CURSOR_CAST_RECORRECT_LIMIT)
+	if cursorDecision and cursorDecision.Result then
+		return cursorDecision.Result, cursorDirection
 	end
 
 	local assistedResult
@@ -4303,7 +4472,8 @@ local function getSmartReelBaseState(grapple)
 
 	local offset = targetPosition - rootPart.Position
 	local distance = offset.Magnitude
-	if distance <= CFG.SMART_REEL_NEAR_CUTOFF or distance > CFG.DEFAULT_MAX_RANGE then
+	local maxRange = getAssistRange(grapple, true)
+	if distance <= CFG.SMART_REEL_NEAR_CUTOFF or distance > maxRange then
 		return nil
 	end
 
@@ -4314,6 +4484,7 @@ local function getSmartReelBaseState(grapple)
 		TargetPosition = targetPosition,
 		Offset = offset,
 		Distance = distance,
+		MaxRange = maxRange,
 	}
 end
 
@@ -4322,7 +4493,7 @@ local function isSmartReelPathSafe(grapple, state)
 		return true
 	end
 
-	return isPathSafeForHitbox(grapple, state.TargetPart, state.TargetPart, state.TargetPosition, CFG.DEFAULT_MAX_RANGE)
+	return isPathSafeForHitbox(grapple, state.TargetPart, state.TargetPart, state.TargetPosition, state.MaxRange or getAssistRange(grapple, true))
 		== true
 end
 
@@ -4741,7 +4912,7 @@ end
 
 
 
-local function applySmartReelLandingAssist(grapple)
+function Logic.applySmartReelLandingAssist(grapple)
 	if time() > (Logic.SmartReelLandingAssistUntil or 0) then
 		return false
 	end
@@ -4806,7 +4977,7 @@ end
 
 
 
-local function shouldSuppressGrappleBonk(movement)
+function Logic.shouldSuppressGrappleBonk(movement)
 	if not Logic.isAntiBonkEnabled() then
 		return false
 	end
@@ -4828,7 +4999,7 @@ local function shouldSuppressGrappleBonk(movement)
 	return false
 end
 
-local function getNoCollisionMoveCastParams()
+function Logic.getNoCollisionMoveCastParams()
 	if Logic.NoCollisionMoveCastParams then
 		return Logic.NoCollisionMoveCastParams
 	end
@@ -4842,7 +5013,7 @@ local function getNoCollisionMoveCastParams()
 	return params
 end
 
-local function shouldSuppressGrappleCollisionCheck(grapple)
+function Logic.shouldSuppressGrappleCollisionCheck(grapple)
 	if not (hasClassCapability(grapple, "MomentumGuard") and Logic.isAntiBonkEnabled()) then
 		return false
 	end
@@ -4861,14 +5032,14 @@ local function shouldSuppressGrappleCollisionCheck(grapple)
 	return lastRelease ~= nil and time() - lastRelease < 1.5 and rootPart.Velocity.Magnitude > 70
 end
 
-local function beginGrappleCollisionBypass(grapple)
-	if not shouldSuppressGrappleCollisionCheck(grapple) then
+function Logic.beginGrappleCollisionBypass(grapple)
+	if not Logic.shouldSuppressGrappleCollisionCheck(grapple) then
 		return nil
 	end
 
 	local movement = grapple.Movement
 	local previousMoveCastParams = movement.moveCastParams
-	movement.moveCastParams = getNoCollisionMoveCastParams()
+	movement.moveCastParams = Logic.getNoCollisionMoveCastParams()
 
 	return function()
 		if movement then
@@ -4941,7 +5112,7 @@ function Logic.ensureDiveBonkHook(globals)
 		if globals.activeGrappleAimAssist ~= Logic then
 			return originalDiveBonk(self, ...)
 		end
-		if shouldSuppressGrappleBonk(self) then
+		if Logic.shouldSuppressGrappleBonk(self) then
 			self.diveBonked = false
 			self.bonkedOffPlayer = false
 			return nil
@@ -4980,6 +5151,7 @@ function Logic.resetRuntimeState(grapple, reason)
 	Logic.EmergencyRescueLockUntil = 0
 	Logic.LastVoidRescueAt = 0
 	Logic.VoidRescueUntil = 0
+	Logic.VoidRescueCommitLockUntil = 0
 	Logic.TerrainFallState = nil
 	Logic.LastTerrainFallEvalAt = 0
 	Logic.EmergencyFloorRaycastParams = nil
@@ -5153,6 +5325,17 @@ function Logic.enable()
 			end
 
 			if
+				(state == Enum.UserInputState.Begin or state == Enum.UserInputState.End)
+				and isVoidRescueCommitLocked(self)
+			then
+				Logic.LastAssistDebug = {
+					Reason = "VoidCommitInputLock",
+					Target = "Grapple",
+				}
+				return nil
+			end
+
+			if
 				state == Enum.UserInputState.End
 				and CastIntent
 				and CastIntent.markFreshCursorCast
@@ -5242,19 +5425,22 @@ function Logic.enable()
 				Logic.markGrappleBonkGrace(self, 0.45)
 			end
 
-			if Logic.isSuiteEnabled() and hasAnyGrappleAssistCapability(self) and Logic.isInAir(self) then
-				if hasClassCapability(self, "AimAssist") then
+			local airborne = Logic.isInAir(self)
+			local emergencyAirborne = isEmergencyAirborne(self)
+			if Logic.isSuiteEnabled() and hasAnyGrappleAssistCapability(self) and emergencyAirborne then
+				if airborne and hasClassCapability(self, "AimAssist") then
 					HealthMonitor.try("AdaptInputMode", updateAdaptInputMode, self)
 				end
 
 				local sharkTailPlanned = false
-				if Logic.isSharkTailHelperEnabled() and getModeValue("GrappleSharkTailMode") == "Automatic" then
+				if airborne and Logic.isSharkTailHelperEnabled() and getModeValue("GrappleSharkTailMode") == "Automatic" then
 					local ok, planned = HealthMonitor.try("AutoSharkTail", planSmartSharkTail, self)
 					sharkTailPlanned = ok and planned == true
 				end
 
 				if
-					not sharkTailPlanned
+					airborne
+					and not sharkTailPlanned
 					and not Logic.isJumpPadCommitGuardActive()
 					and Logic.isSmartReelEnabled()
 					and getModeValue("GrappleSmartReelMode") == "Automatic"
@@ -5266,11 +5452,13 @@ function Logic.enable()
 					HealthMonitor.try("PanicRescue", tryPanicRescue, self)
 				end
 				HealthMonitor.try("AutoMomentumRescue", tryAutoMomentumRescue, self)
-				HealthMonitor.try("AdaptInputHold", maintainAdaptInputHold, self)
+				if airborne then
+					HealthMonitor.try("AdaptInputHold", maintainAdaptInputHold, self)
+				end
 			end
 
 			Logic.CurrentGrappleStep = self
-			local _, restoreCollisionCheck = HealthMonitor.try("CollisionBypass", beginGrappleCollisionBypass, self)
+			local _, restoreCollisionCheck = HealthMonitor.try("CollisionBypass", Logic.beginGrappleCollisionBypass, self)
 			local stepResults = packValues(pcall(originalStep, self, dt, ...))
 			local success = stepResults[1]
 			Logic.CurrentGrappleStep = nil
@@ -5284,7 +5472,7 @@ function Logic.enable()
 			HealthMonitor.try("RefillStamina", refillStamina, self)
 			HealthMonitor.try("SafeLandingDamping", applySafeLandingGuard, self)
 			HealthMonitor.try("TrajectoryAntiBonk", Logic.applyTrajectoryAntiBonk, self)
-			HealthMonitor.try("LandingAssist", applySmartReelLandingAssist, self)
+			HealthMonitor.try("LandingAssist", Logic.applySmartReelLandingAssist, self)
 
 			HealthMonitor.try("MomentumGuard", applyMomentumGuard, self)
 			HealthMonitor.try("PanicStabilize", applyPanicStabilize, self)
@@ -5305,6 +5493,13 @@ function Logic.enable()
 				return originalEnd(self, ...)
 			end
 			Logic.LastKnownGrapple = self
+			if isVoidRescueCommitLocked(self) then
+				Logic.LastAssistDebug = {
+					Reason = "VoidCommitEndLock",
+					Target = "Grapple",
+				}
+				return nil
+			end
 			if hasClassCapability(self, "MomentumGuard") then
 				Logic.markGrappleBonkGrace(self, 0.45)
 			end
@@ -5390,6 +5585,7 @@ function Logic.disable()
 	Logic.EmergencyRescueLockUntil = 0
 	Logic.LastVoidRescueAt = 0
 	Logic.VoidRescueUntil = 0
+	Logic.VoidRescueCommitLockUntil = 0
 	Logic.TerrainFallState = nil
 	Logic.LastTerrainFallEvalAt = 0
 	Logic.EmergencyFloorRaycastParams = nil

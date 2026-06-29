@@ -94,8 +94,23 @@ function Executor.enable()
 		local originalStep = grappleModule.Step
 		local wrappedStep
 		wrappedStep = function(self, dt, ...)
+			local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+			local originalFilter
+			local altered = false
+
+			if Control and Control.GrappleDisableGroundRelease and self and self.Movement and self.Movement.grappling and self.grappleParams then
+				originalFilter = self.grappleParams.FilterDescendantsInstances
+				self.grappleParams.FilterDescendantsInstances = { workspace }
+				altered = true
+			end
+
 			local beforeTime = self and self.Time
 			local stepResults = packValues(pcall(originalStep, self, dt, ...))
+
+			if altered and self and self.grappleParams then
+				self.grappleParams.FilterDescendantsInstances = originalFilter
+			end
+
 			if not stepResults[1] then
 				error(stepResults[2], 0)
 			end
@@ -104,6 +119,10 @@ function Executor.enable()
 
 			if GrappleRecovery and typeof(GrappleRecovery.apply) == "function" then
 				pcall(GrappleRecovery.apply, self, dt, beforeTime)
+			end
+
+			if Control and Control.GrappleNoReelCooldown and self then
+				self.reelCooldown = false
 			end
 
 			return table.unpack(stepResults, 2, stepResults.n)

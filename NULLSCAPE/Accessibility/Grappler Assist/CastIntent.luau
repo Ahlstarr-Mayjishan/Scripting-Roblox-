@@ -155,4 +155,21 @@ function CastIntent.getNativeCursorResult(deps, grapple)
 	return result, unitRay.Direction.Unit, screenScore
 end
 
+function CastIntent.shouldUseCursorPreview(grapple, forceRefresh)
+	local movement = grapple and grapple.Movement
+	return forceRefresh == true
+		and grapple
+		and movement
+		and grapple.specialHeld == true
+		and movement.grappling ~= true
+end
+
+function CastIntent.getCursorPreviewResult(deps, grapple, forceRefresh)
+	if not CastIntent.shouldUseCursorPreview(grapple, forceRefresh) then
+		return nil
+	end
+
+	return CastIntent.getNativeCursorResult(deps, grapple)
+end
+
 return CastIntent

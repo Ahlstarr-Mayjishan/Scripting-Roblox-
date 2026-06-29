@@ -67,9 +67,9 @@ return function(Client, Controller)
 	})
 
 	if Tab.CreateLabel then
-		Tab:CreateLabel(
-			"Note: 0 range represents Infinite (Map-wide) pick up. \n - Gifts have a server-side limit of 30 studs. \n - Instrument has no limit (0 = infinite range)."
-		)
+		Tab:CreateLabel("Note: 0 range represents Infinite (Map-wide) pick up.")
+		Tab:CreateLabel(" - Gifts have a server-side limit of 30 studs.")
+		Tab:CreateLabel(" - Instrument has no limit (0 = infinite range).")
 	end
 
 	Tab:CreateSlider({

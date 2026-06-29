@@ -1024,6 +1024,28 @@ local function handleEnemyAdded(enemy)
 				
 				proxyHead.CFrame = Head.CFrame
 				proxyHead.Parent = enemy
+
+				-- Sửa lỗi hiển thị ESP cho thực thể 3D: hướng Adornee trực tiếp vào Head và đặt AlwaysOnTop = true
+				local espConn
+				espConn = enemy.ChildAdded:Connect(function(child)
+					if child.Name == "ESP" or child.Name == "ESPCrayon" then
+						pcall(function()
+							child.Adornee = Head
+							child.AlwaysOnTop = true
+						end)
+					end
+				end)
+				table.insert(Controller.PermanentConnections, espConn)
+
+				-- Sửa ngay nếu ESP đã được sinh ra trước khi kết nối sự kiện
+				for _, child in ipairs(enemy:GetChildren()) do
+					if child.Name == "ESP" or child.Name == "ESPCrayon" then
+						pcall(function()
+							child.Adornee = Head
+							child.AlwaysOnTop = true
+						end)
+					end
+				end
 			end
 		end)
 	end

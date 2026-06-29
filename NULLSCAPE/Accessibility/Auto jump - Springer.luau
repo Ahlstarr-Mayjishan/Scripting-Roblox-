@@ -67,7 +67,15 @@ function Logic.setupAutoJump(enemy, shockwave, controller, gc)
     local duration = isSpringloaded and 2.5 or 1.5
     
     local function runJumpCheck()
+        if not shockwave.CanTouch then
+            hasTriggered = false
+            return
+        end
         if hasTriggered then return end
+        
+        -- Chờ 1 frame để đảm bảo Position của shockwave đã được Script AI cập nhật chính xác (tránh race condition)
+        task.wait()
+        
         if not controller.SpringerAutoJumpEnabled then return end
         if not shockwave.CanTouch then return end
         

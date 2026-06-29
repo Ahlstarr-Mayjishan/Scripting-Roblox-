@@ -494,9 +494,9 @@ return function(Client, Controller)
 	})
 
 	if Tab.CreateLabel then
-		Tab:CreateLabel(
-			"Smart Reel: requires real NinjaBelt. \n - Manual: uses p2 sub-ability to start reel while already grappled; \n - Automatic: starts reel when airborne, attached, path-safe, and off cooldown."
-		)
+		Tab:CreateLabel("Smart Reel: requires real NinjaBelt.")
+		Tab:CreateLabel(" - Manual: uses p2 sub-ability to start reel while already grappled;")
+		Tab:CreateLabel(" - Automatic: starts reel when airborne, attached, path-safe, and off cooldown.")
 	end
 
 	Tab:CreateDropdown({
@@ -526,9 +526,10 @@ return function(Client, Controller)
 	})
 
 	if Tab.CreateLabel then
-		Tab:CreateLabel(
-			"SharkTail Helper: requires NinjaBelt + SharkTail. \n - Manual: uses p2 when the SharkTail window is safe; \n - outside that window it can fallback to Smart Reel. \n - Automatic: uses score/timing instead of firing every frame."
-		)
+		Tab:CreateLabel("SharkTail Helper: requires NinjaBelt + SharkTail.")
+		Tab:CreateLabel(" - Manual: uses p2 when the SharkTail window is safe;")
+		Tab:CreateLabel(" - outside that window it can fallback to Smart Reel.")
+		Tab:CreateLabel(" - Automatic: uses score/timing instead of firing every frame.")
 	end
 
 	Tab:CreateDropdown({
