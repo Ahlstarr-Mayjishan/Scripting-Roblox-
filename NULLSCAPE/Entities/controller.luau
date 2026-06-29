@@ -81,6 +81,11 @@ local Controller = {
 	CatalystImmune = false,
 	nilEnemyImmune = false,
 	nilMirageImmune = false,
+	TelefraggerRedirect = false,
+	TelefraggerRedirectConnection = nil,
+	WasRedirectingTelefragger = false,
+	RedirectRootJoint = nil,
+	RedirectOriginalC0 = nil,
 	SpringerImmunityMode = "Blatant",
 	Destroyed = false,
 
@@ -125,7 +130,7 @@ local function createCadenceUI()
 
 	local CoreGui = game:GetService("CoreGui")
 	local PlayerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
-	
+
 	local parent = CoreGui
 	local success, _ = pcall(function()
 		ScreenGui.Parent = parent
@@ -159,7 +164,7 @@ local function createCadenceUI()
 	TitleLabel.Size = UDim2.fromScale(1, 0.4)
 	TitleLabel.Position = UDim2.fromScale(0, 0.05)
 	TitleLabel.BackgroundTransparency = 1
-	TitleLabel.Text = "🎵 CADENCE STATUS"
+	TitleLabel.Text = "CADENCE STATUS"
 	TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 	TitleLabel.TextSize = 13
 	TitleLabel.Font = Enum.Font.GothamBold
@@ -223,7 +228,9 @@ end
 
 local function restoreHooks()
 	local globals = getgenv()._NULLSCAPE_Globals
-	if not globals then return end
+	if not globals then
+		return
+	end
 
 	-- Restore namecall
 	if globals.NamecallHooked and globals.OriginalNamecall then
@@ -289,12 +296,181 @@ local function restoreHooks()
 	end
 end
 
+function Controller:SetTelefraggerRedirect(value)
+	self.TelefraggerRedirect = value
+	if self.TelefraggerRedirectConnection then
+		pcall(function()
+			self.TelefraggerRedirectConnection:Disconnect()
+		end)
+		self.TelefraggerRedirectConnection = nil
+	end
+
+	if self.WasRedirectingTelefragger then
+		self.WasRedirectingTelefragger = false
+		local char = game.Players.LocalPlayer.Character
+		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			pcall(function()
+				humanoid.AutoRotate = self.OriginalAutoRotate
+			end)
+		end
+		if self.RedirectRootJoint and self.RedirectRootJoint.Parent then
+			pcall(function()
+				self.RedirectRootJoint.C0 = self.RedirectOriginalC0
+			end)
+		end
+	end
+
+	if not value then
+		return
+	end
+
+	local RunService = game:GetService("RunService")
+	local LocalPlayer = game.Players.LocalPlayer
+
+	local function hasActiveIndicator(enemy)
+		if not (enemy and enemy.Parent) then
+			return false
+		end
+		for _, name in ipairs({ "Mirror", "Surface", "HighlightGlass" }) do
+			local part = enemy:FindFirstChild(name, true)
+			if part and part:IsA("BasePart") and part.Transparency < 0.95 then
+				return true
+			end
+		end
+		local indicatorPart = enemy:FindFirstChild("IndicatorPart", true)
+		if indicatorPart then
+			for _, desc in ipairs(indicatorPart:GetDescendants()) do
+				if (desc:IsA("Beam") or desc:IsA("ParticleEmitter")) and desc.Enabled ~= false then
+					return true
+				end
+			end
+		end
+		return false
+	end
+
+	local function getRootJoint(char)
+		local rootPart = char:FindFirstChild("HumanoidRootPart")
+		if not rootPart then
+			return nil
+		end
+		local r6Joint = rootPart:FindFirstChild("RootJoint")
+		if r6Joint and r6Joint:IsA("Motor6D") then
+			return r6Joint
+		end
+		local lowerTorso = char:FindFirstChild("LowerTorso")
+		if lowerTorso then
+			local r15Joint = lowerTorso:FindFirstChild("RootJoint")
+			if r15Joint and r15Joint:IsA("Motor6D") then
+				return r15Joint
+			end
+		end
+		return nil
+	end
+
+	self.TelefraggerRedirectConnection = RunService.Heartbeat:Connect(function()
+		local char = LocalPlayer.Character
+		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+		local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+		if not (humanoid and rootPart and humanoid.Health > 0) then
+			return
+		end
+
+		local enemiesFolder = workspace:FindFirstChild("Enemies")
+		if not enemiesFolder then
+			return
+		end
+
+		local isTargeted = false
+		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+			if string.find(string.lower(enemy.Name), "telefragger") then
+				if hasActiveIndicator(enemy) then
+					local dist = (rootPart.Position - enemy.Position).Magnitude
+					if dist < 120 then
+						isTargeted = true
+						break
+					end
+				end
+			end
+		end
+
+		if isTargeted then
+			local rootJoint = getRootJoint(char)
+			if rootJoint then
+				if not self.WasRedirectingTelefragger then
+					self.WasRedirectingTelefragger = true
+					self.RedirectRootJoint = rootJoint
+					self.RedirectOriginalC0 = rootJoint.C0
+					self.OriginalAutoRotate = humanoid.AutoRotate
+					humanoid.AutoRotate = false
+				end
+
+				local moveDir = humanoid.MoveDirection
+				local targetLook = Vector3.zero
+				if moveDir.Magnitude > 0.1 then
+					targetLook = -moveDir.Unit
+				else
+					local camera = workspace.CurrentCamera
+					if camera then
+						local camLook = camera.CFrame.LookVector
+						targetLook = -Vector3.new(camLook.X, 0, camLook.Z).Unit
+					end
+				end
+
+				if targetLook.Magnitude > 0.1 then
+					rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + targetLook, Vector3.yAxis)
+				end
+
+				local isR6 = (rootJoint.Parent == rootPart)
+				if isR6 then
+					rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, 0, math.pi)
+				else
+					rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, math.pi, 0)
+				end
+			end
+		else
+			if self.WasRedirectingTelefragger then
+				self.WasRedirectingTelefragger = false
+				if self.RedirectRootJoint and self.RedirectRootJoint.Parent then
+					pcall(function()
+						self.RedirectRootJoint.C0 = self.RedirectOriginalC0
+					end)
+				end
+				humanoid.AutoRotate = self.OriginalAutoRotate
+			end
+		end
+	end)
+end
+
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
 function Controller:CleanUp()
 	disconnectFolderObservations()
 	pcall(function()
 		Executor.disableSpecialImmunity()
 	end)
+
+	if self.TelefraggerRedirectConnection then
+		pcall(function()
+			self.TelefraggerRedirectConnection:Disconnect()
+		end)
+		self.TelefraggerRedirectConnection = nil
+	end
+	if self.WasRedirectingTelefragger then
+		self.WasRedirectingTelefragger = false
+		local char = game.Players.LocalPlayer.Character
+		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			pcall(function()
+				humanoid.AutoRotate = self.OriginalAutoRotate
+			end)
+		end
+		if self.RedirectRootJoint and self.RedirectRootJoint.Parent then
+			pcall(function()
+				self.RedirectRootJoint.C0 = self.RedirectOriginalC0
+			end)
+		end
+	end
+
 	GC.cleanAll()
 	self.EnemiesFolder = nil
 
@@ -650,8 +826,7 @@ function Controller:RestoreSpringerShockwaves()
 	end
 end
 
-function Controller:StartSkinwalkerEvasion()
-end
+function Controller:StartSkinwalkerEvasion() end
 
 -- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
 local function findNativeEnemyESPTemplate()
@@ -659,7 +834,11 @@ local function findNativeEnemyESPTemplate()
 	if globals and globals.EntitiesNativeEnemyESPTemplate and globals.EntitiesNativeEnemyESPTemplate.Parent then
 		return globals.EntitiesNativeEnemyESPTemplate
 	end
-	if globals and globals.EntitiesNativeEnemyESPTemplateMissAt and time() - globals.EntitiesNativeEnemyESPTemplateMissAt < 2 then
+	if
+		globals
+		and globals.EntitiesNativeEnemyESPTemplateMissAt
+		and time() - globals.EntitiesNativeEnemyESPTemplateMissAt < 2
+	then
 		return nil
 	end
 
@@ -697,7 +876,8 @@ local function findNativeEnemyESPTemplate()
 	end
 	if not template then
 		local starterPlayer = game:GetService("StarterPlayer")
-		template = searchDescendantsBudgeted(starterPlayer and starterPlayer:FindFirstChild("StarterPlayerScripts"), 2500)
+		template =
+			searchDescendantsBudgeted(starterPlayer and starterPlayer:FindFirstChild("StarterPlayerScripts"), 2500)
 	end
 	if template then
 		if globals then
@@ -766,9 +946,13 @@ local function processEntity(enemy)
 						-- Wait for physical parts of the enemy model to replicate/load (up to 3 seconds)
 						local rootPart = nil
 						for _ = 1, 60 do
-							if not enemy or not enemy.Parent then return end
+							if not enemy or not enemy.Parent then
+								return
+							end
 							rootPart = enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
-							if rootPart then break end
+							if rootPart then
+								break
+							end
 							task.wait(0.05)
 						end
 
@@ -781,7 +965,9 @@ local function processEntity(enemy)
 
 							-- Defensively hide native ESP when enemy is spawning far below the map (Y < -50)
 							local function updateVisibility()
-								if not rootPart or not rootPart.Parent then return end
+								if not rootPart or not rootPart.Parent then
+									return
+								end
 								local isBelowMap = rootPart.Position.Y < -50
 								pcall(function()
 									child.Enabled = not isBelowMap
@@ -816,14 +1002,20 @@ local function processEntity(enemy)
 					break
 				end
 				local horse = string.find(enemy.Name, "Springer") and enemy:FindFirstChild("horse")
-				actualHead = (horse and horse:FindFirstChild("Head")) or enemy:FindFirstChild("Head", true) or enemy:FindFirstChild("head", true) or enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+				actualHead = (horse and horse:FindFirstChild("Head"))
+					or enemy:FindFirstChild("Head", true)
+					or enemy:FindFirstChild("head", true)
+					or enemy.PrimaryPart
+					or enemy:FindFirstChildWhichIsA("BasePart", true)
 				if actualHead then
 					break
 				end
 				task.wait(0.05) -- Chờ một nhịp cực ngắn trước khi kiểm tra lại
 			end
 
-			if not enemy or not enemy.Parent then return end
+			if not enemy or not enemy.Parent then
+				return
+			end
 
 			-- Gán PrimaryPart nếu model thiếu (Cực kỳ quan trọng để BillboardGui ESP của game gốc hiển thị)
 			if not enemy.PrimaryPart then
@@ -875,13 +1067,15 @@ local function processEntity(enemy)
 						cloned.StudsOffset = Vector3.new(0, 6.5, 0)
 						cloned.StudsOffsetWorldSpace = Vector3.new(0, 1.5, 0)
 					else
-						cloned.Size = headPart and headPart:IsA("BillboardGui") and headPart.Size or UDim2.fromScale(4, 4)
+						cloned.Size = headPart and headPart:IsA("BillboardGui") and headPart.Size
+							or UDim2.fromScale(4, 4)
 					end
-					
+
 					local label = cloned:FindFirstChild("Label", true)
 					if label and label:IsA("TextLabel") then
 						if cloned.Name == "ESPCrayon" then
-							local StupidNames = { "bingle", "dangle", "glorp", "zorp", "splurg", "boing", "sproing", "floop" }
+							local StupidNames =
+								{ "bingle", "dangle", "glorp", "zorp", "splurg", "boing", "sproing", "floop" }
 							label.Text = StupidNames[math.random(1, #StupidNames)]
 						else
 							label.Text = getEnemyDisplayName(enemy)
@@ -950,15 +1144,19 @@ local function processEntity(enemy)
 								pcall(function()
 									local ts = game:GetService("TweenService")
 									Controller.CadenceStatusLabel.TextSize = 20
-									ts:Create(Controller.CadenceStatusLabel, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-										TextSize = 16
-									}):Play()
+									ts:Create(
+										Controller.CadenceStatusLabel,
+										TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+										{
+											TextSize = 16,
+										}
+									):Play()
 									if Controller.CadenceUIFrame then
 										local stroke = Controller.CadenceUIFrame:FindFirstChildOfClass("UIStroke")
 										if stroke then
 											stroke.Color = Color3.fromRGB(255, 170, 0)
 											ts:Create(stroke, TweenInfo.new(1, Enum.EasingStyle.Linear), {
-												Color = Color3.fromRGB(80, 80, 80)
+												Color = Color3.fromRGB(80, 80, 80),
 											}):Play()
 										end
 									end
@@ -982,7 +1180,7 @@ local function processEntity(enemy)
 									if stroke then
 										stroke.Color = Color3.fromRGB(255, 50, 50)
 										ts:Create(stroke, TweenInfo.new(1, Enum.EasingStyle.Linear), {
-											Color = Color3.fromRGB(80, 80, 80)
+											Color = Color3.fromRGB(80, 80, 80),
 										}):Play()
 									end
 								end
@@ -1024,12 +1222,12 @@ local function processEntity(enemy)
 	-- Xử lý vô hiệu hóa shockwave cho Springer (Springer không có TouchInterest, chỉ có ClientEvent và ShockwaveEvent)
 	if string.find(enemy.Name, "Springer") then
 		local childAddedConn = enemy.ChildAdded:Connect(function(child)
-			if (child.Name == "SpringerShockwave" or child.Name == "DemonShockwave") then
+			if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
 				local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
 				local hasKnockbackImmune = StatusImmunity and StatusImmunity.isImmune("Springer Knockback")
 				local hasSpringerImmune = Controller.SpringerImmune
 				local isBlatant = Controller.SpringerImmunityMode == "Blatant"
-				
+
 				if hasKnockbackImmune or (hasSpringerImmune and isBlatant) then
 					disableShockwave(enemy, child)
 				end
@@ -1038,12 +1236,12 @@ local function processEntity(enemy)
 		GC.registerEntityConnection(enemy, childAddedConn)
 
 		for _, child in ipairs(enemy:GetChildren()) do
-			if (child.Name == "SpringerShockwave" or child.Name == "DemonShockwave") then
+			if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
 				local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
 				local hasKnockbackImmune = StatusImmunity and StatusImmunity.isImmune("Springer Knockback")
 				local hasSpringerImmune = Controller.SpringerImmune
 				local isBlatant = Controller.SpringerImmunityMode == "Blatant"
-				
+
 				if hasKnockbackImmune or (hasSpringerImmune and isBlatant) then
 					disableShockwave(enemy, child)
 				end
@@ -1216,14 +1414,21 @@ local function initializeStatusEffectHook()
 						local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
 						if activeCtrl and activeCtrl.SpringerImmunityMode == "Blatant" then
 							if typeof(keys) == "table" then
-								if keys[1] == "Graphics" and (keys[2] == "NoBlur" or keys[2] == "Photosensitivity" or keys[2] == "NoVFXWobble") then
+								if
+									keys[1] == "Graphics"
+									and (
+										keys[2] == "NoBlur"
+										or keys[2] == "Photosensitivity"
+										or keys[2] == "NoVFXWobble"
+									)
+								then
 									return true
 								end
 							end
 						end
 						return oldGet(keys, ...)
 					end
-					
+
 					if typeof(SettingsHandler.GetSettings) == "function" then
 						local oldGetSettings = SettingsHandler.GetSettings
 						globals.OriginalGetSettings = oldGetSettings
@@ -1241,7 +1446,7 @@ local function initializeStatusEffectHook()
 							return settingsTable
 						end
 					end
-					
+
 					globals.SettingsHooked = true
 				end
 			end
@@ -1268,8 +1473,8 @@ local function initializeStatusEffectHook()
 					if blur and blur:IsA("BlurEffect") and blur.Size > 0 then
 						blur.Size = 0
 					end
-					
-					for _, name in ipairs({"Flesh", "Fire", "Oblivion", "IceExampleEffect"}) do
+
+					for _, name in ipairs({ "Flesh", "Fire", "Oblivion", "IceExampleEffect" }) do
 						local cc = lighting:FindFirstChild(name)
 						if cc and cc:IsA("ColorCorrectionEffect") then
 							cc.Brightness = 0

@@ -88,12 +88,41 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
-		Name = "Telefragger",
-		CurrentValue = getFlag(Controller, "TelefraggerImmune"),
-		Flag = "ImmunityTelefraggerToggle",
-		Callback = function(Value)
-			setImmunity(Controller, "Telefragger", Value)
+	local currentTelefraggerOptions = {}
+	if getFlag(Controller, "TelefraggerImmune") then
+		table.insert(currentTelefraggerOptions, "Immunity")
+	end
+	if getFlag(Controller, "TelefraggerRedirect") then
+		table.insert(currentTelefraggerOptions, "BackTrick")
+	end
+
+	Tab:CreateDropdown({
+		Name = "Telefragger Hack Mode",
+		Options = { "Immunity", "BackTrick" },
+		CurrentOption = currentTelefraggerOptions,
+		MultipleOptions = true,
+		Flag = "TelefraggerHackDropdown",
+		Callback = function(Options)
+			local hasImmunity = false
+			local hasBackTrick = false
+			for _, opt in ipairs(Options) do
+				if opt == "Immunity" then
+					hasImmunity = true
+				elseif opt == "BackTrick" then
+					hasBackTrick = true
+				end
+			end
+			local activeController = resolveController(nil, Controller)
+			if activeController then
+				if typeof(activeController.SetImmunity) == "function" then
+					activeController:SetImmunity("Telefragger", hasImmunity)
+				end
+				if typeof(activeController.SetTelefraggerRedirect) == "function" then
+					activeController:SetTelefraggerRedirect(hasBackTrick)
+				end
+			else
+				warn("[NULLSCAPE] Entities controller is not ready; ignored Telefragger Hack Mode change")
+			end
 		end,
 	})
 
