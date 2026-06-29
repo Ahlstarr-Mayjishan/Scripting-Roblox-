@@ -198,17 +198,6 @@ function SecondaryCast.watchAdaptInput()
 			if Logic.isSuiteEnabled() then
 				local grapple = Logic.getTrackedGrapple()
 				if grapple then
-					-- Tìm mục tiêu và xoay hướng nhân vật lập tức để đồng bộ vật lý lên server trước
-					local target = SecondaryCast.scanSecondaryCastTarget(grapple)
-					if target and typeof(target) == "table" and target.Position then
-						local rootPart = grapple.RootPart
-						if rootPart then
-							local flatLook = (target.Position - rootPart.Position) * Vector3.new(1, 0, 1)
-							if flatLook.Magnitude > 0.1 then
-								rootPart.CFrame = CFrame.lookAlong(rootPart.Position, flatLook.Unit)
-							end
-						end
-					end
 					SecondaryCast.beginAdaptDrive(grapple)
 				end
 			end
