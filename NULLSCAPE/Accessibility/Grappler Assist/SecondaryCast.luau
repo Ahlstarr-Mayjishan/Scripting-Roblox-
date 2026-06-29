@@ -269,28 +269,26 @@ function SecondaryCast.watchAdaptInput()
 end
 
 function SecondaryCast.scanSecondaryCastTarget(grapple, originalResult)
-	-- 1. Ưu tiên quét toàn bộ phạm vi Camera nhìn thấy (cursorLimit = 2.0)
-	local mouseTarget = Logic.scanNamedTargets(grapple, {
+	-- 1. Siêu blatant: Ưu tiên tối đa tự động tìm và snap 100% vào điểm neo đặc biệt (Bells, JumpPads...) trong 360 độ (kể cả sau lưng/ngoài màn hình)
+	local blatantTarget = Logic.scanNamedTargets(grapple, {
+		driveMode = true,
 		fullScan = true,
-		forceCursor = true,
-		cursorLimit = 2.0,
-		rangeMode = "Closest To Cursor"
+		forceCursor = false,
+		allowOffScreen = true
 	})
-	if mouseTarget then
-		return mouseTarget
+	if blatantTarget then
+		return blatantTarget
 	end
 
-	-- 2. Nếu người dùng đang nhắm vào một vị trí cụ thể trên bản đồ (như tường, sàn, trần nhà - originalResult hợp lệ)
-	-- thì tôn trọng hướng nhắm cụ thể của họ
+	-- 2. Dự phòng 1: Nếu không có điểm đặc biệt nào xung quanh, tôn trọng hướng nhắm cụ thể của người chơi (vào tường, sàn, trần...)
 	if Logic.isUsableResult(grapple, originalResult) then
 		return originalResult
 	end
 
-	-- 3. Chỉ khi chuột trỏ vào không khí thì mới tự động quét điểm bám tối ưu theo hệ thống
-	return Logic.scanNamedTargets(grapple, {
+	-- 3. Dự phòng 2: Nếu chỉ chuột vào khoảng không và không có điểm đặc biệt, tự quét bề mặt địa hình thường trên màn hình
+	return Logic.scanScreenSurface(grapple, {
 		driveMode = true,
-		fullScan = true,
-		forceCursor = false
+		returnDecision = true
 	})
 end
 
