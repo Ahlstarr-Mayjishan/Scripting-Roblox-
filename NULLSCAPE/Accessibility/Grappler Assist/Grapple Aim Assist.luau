@@ -3960,7 +3960,7 @@ function getSoftOverrideResult(grapple, originalResult)
 	end
 
 	local movement = grapple and grapple.Movement
-	if not (grapple and movement and grapple.specialHeld and not movement.grappling and Logic.isInAir(grapple)) then
+	if not (grapple and movement and not movement.grappling) then
 		return nil
 	end
 
@@ -4343,7 +4343,7 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 	end
 
 	local movement = grapple and grapple.Movement
-	if not (grapple and movement and grapple.specialHeld and not movement.grappling and Logic.isInAir(grapple)) then
+	if not (grapple and movement and not movement.grappling) then
 		return result, direction
 	end
 	if Logic.isJumpPadCommitGuardActive() then
