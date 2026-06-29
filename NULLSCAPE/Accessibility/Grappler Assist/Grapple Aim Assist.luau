@@ -115,6 +115,9 @@ local Logic = {
 	LastAntiBonkPrediction = nil,
 	LastPredictionHorizon = nil,
 	CastIntentState = CastIntent and CastIntent.newState and CastIntent.newState() or nil,
+	TargetRoles = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TargetRoles.luau"),
+	AnchorMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/AnchorMemory.luau"),
+	AnchorMemoryState = nil,
 	ClassAdjustmentControl = nil,
 	LastRuntimeCharacter = nil,
 	LastRuntimeRootPart = nil,
@@ -122,6 +125,8 @@ local Logic = {
 	CurseHandler = nil,
 	CurseHandlerLoaded = false,
 }
+
+Logic.AnchorMemoryState = Logic.AnchorMemory and Logic.AnchorMemory.new and Logic.AnchorMemory.new() or nil
 
 local VALID_TARGETS = {
 	GrapplePoint = true,
@@ -347,11 +352,17 @@ local CFG = {
 	CURSOR_SPECIAL_TARGET_BONUS = -65,
 	CURSOR_RECORRECT_CONFIDENCE_LIMIT = 0.28,
 	CURSOR_RECORRECT_SURFACE_NORMAL_Y_MAX = 0.55,
+	CURSOR_RECORRECT_SCAN_INTERVAL = 0.05,
+	CURSOR_RECORRECT_CACHE_MOVE_EPSILON = 3,
+	CURSOR_RECORRECT_CACHE_SCREEN_EPSILON = 8,
+	CURSOR_RECORRECT_EARLY_SCORE = 12,
 	CURSOR_DIRECT_OVERRIDE_LIMIT = 0.12,
 	CURSOR_DIRECT_SURFACE_LIMIT = 0.035,
 	CURSOR_PREVIEW_RECORRECT_LIMIT = 0.36,
 	CURSOR_CAST_RECORRECT_LIMIT = 0.34,
+	GRAPPLE_LINE_CLEAR_TARGET_TOLERANCE = 3,
 	CURSOR_TARGET_SAMPLE_LIMIT = 18,
+	CURSOR_TARGET_SAFE_MARGIN = 0.35,
 	CURSOR_SURFACE_DETECTOR_LIMIT = 0.24,
 	CURSOR_OPTIMAL_DISTANCE_MIN = 26,
 	CURSOR_OPTIMAL_DISTANCE_IDEAL = 72,
@@ -439,6 +450,8 @@ local CFG = {
 	RECAST_ALIGNMENT_MAX_STEP = 0.16,
 	RECAST_ALIGNMENT_MIN_DISTANCE = 12,
 }
+
+Logic.CFG = CFG
 
 local SHARK_TAIL_STYLE_CONFIG = {
 	Conservative = {
@@ -2363,6 +2376,14 @@ local function isLineClear(grapple, targetInstance, targetPart, targetPosition, 
 		return result, distance
 	end
 
+	if
+		result.Normal
+		and result.Normal.Y >= 0.7
+		and (result.Position - targetPosition).Magnitude <= CFG.GRAPPLE_LINE_CLEAR_TARGET_TOLERANCE
+	then
+		return result, distance
+	end
+
 	return nil
 end
 
@@ -2419,7 +2440,7 @@ local function isPathSafeForHitbox(grapple, targetInstance, targetPart, targetPo
 		return false
 	end
 
-	return false
+	return true
 end
 
 local function isBellInstance(instance)
@@ -3128,6 +3149,14 @@ local function getCursorReCorrectDeps()
 		getScreenAnchor = getScreenAnchor,
 		getCameraScreenScore = getCameraScreenScore,
 		getTerrainSurfaceScore = getTerrainSurfaceScore,
+		getCastOrigin = function(grapple)
+			local character = grapple and grapple.Character
+			local head = character and character:FindFirstChild("Head")
+			if head and head:IsA("BasePart") then
+				return head.Position
+			end
+			return grapple and grapple.RootPart and grapple.RootPart.Position or nil
+		end,
 		isLineClear = isLineClear,
 		isUsableResult = Logic.isUsableResult,
 		isPathSafeForHitbox = isPathSafeForHitbox,
@@ -3137,6 +3166,10 @@ local function getCursorReCorrectDeps()
 		getWrongAnchorPenalty = getWrongAnchorPenalty,
 		getSpecialAnchorBonus = getSpecialAnchorBonus,
 		getHorizontalVelocity = Logic.getHorizontalVelocity,
+		getAnchorMemoryScore = function(instance)
+			return Logic.AnchorMemory and Logic.AnchorMemory.score and Logic.AnchorMemory.score(Logic.AnchorMemoryState, instance)
+				or 0
+		end,
 		isVoidRescueActive = function(grapple)
 			return isVoidRescueWindowActive() or isVoidRescueDanger(grapple)
 		end,
@@ -3246,6 +3279,9 @@ local function rememberAssistTarget(candidateInstance, reason, score)
 		Reason = reason,
 		Score = score,
 	}
+	if Logic.AnchorMemory and Logic.AnchorMemory.recordSuccess then
+		Logic.AnchorMemory.recordSuccess(Logic.AnchorMemoryState, candidateInstance, reason, score)
+	end
 end
 
 local function getEffectivePreferredTarget(grapple, preferredName)
@@ -3291,6 +3327,9 @@ local function scanNamedTargets(grapple, options)
 	local candidateCount = #candidateList
 	if candidateCount == 0 then
 		return nil
+	end
+	if Logic.AnchorMemory and Logic.AnchorMemory.prune then
+		Logic.AnchorMemory.prune(Logic.AnchorMemoryState)
 	end
 
 	local validResults = {}
@@ -3370,11 +3409,9 @@ local function scanNamedTargets(grapple, options)
 						hitPosition = position
 					end
 					local pathPosition = hitPosition or position
-					if
-						result
-						and Logic.isUsableResult(grapple, result)
-						and isPathSafeForHitbox(grapple, candidate.Instance, part, pathPosition, maxRange)
-					then
+					if result and Logic.isUsableResult(grapple, result) then
+						local pathSafe = isPathSafeForHitbox(grapple, candidate.Instance, part, pathPosition, maxRange)
+					if pathSafe then
 						local item = {
 							Name = candidate.Name,
 							Result = result,
@@ -3422,14 +3459,30 @@ local function scanNamedTargets(grapple, options)
 								velocityDirection,
 								rangeMode == "Closest To Cursor" and screenScore <= CFG.CURSOR_SPECIAL_FOCUS_LIMIT
 							)
+							local roleScore = Logic.TargetRoles
+									and Logic.TargetRoles.score
+									and select(1, Logic.TargetRoles.score(Logic, grapple, candidate.Name, position, {
+										RescueMode = rescueMode,
+										PanicMode = panicMode or emergencyBrakeMode,
+										DriveMode = driveMode,
+									}))
+								or 0
+							local memoryScore = Logic.AnchorMemory
+									and Logic.AnchorMemory.score
+									and select(1, Logic.AnchorMemory.score(Logic.AnchorMemoryState, candidate.Instance))
+								or 0
 							local lockBonus = getAssistLockBonus(candidate.Instance)
 							if driveMode and not forceCursor and not emergencyBrakeMode then
 								score = getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
 									+ specialBonus
+									+ roleScore
+									+ memoryScore
 									+ wrongAnchorPenalty * 0.35
 									+ lockBonus
 							elseif panicMode or emergencyBrakeMode then
 								score = getPanicRescueScore(grapple, candidate, position, distance, screenScore)
+									+ roleScore
+									+ memoryScore
 									+ lockBonus
 							elseif rangeMode == "Closest To Cursor" and not rescueMode and not emergencyBrakeMode then
 								score = priorityScore
@@ -3439,6 +3492,8 @@ local function scanNamedTargets(grapple, options)
 									+ intentPenalty * 0.35
 									+ routeBonus * 0.35
 									+ specialBonus
+									+ roleScore
+									+ memoryScore
 									+ wrongAnchorPenalty * 0.4
 									+ lockBonus
 							else
@@ -3449,6 +3504,8 @@ local function scanNamedTargets(grapple, options)
 									+ intentPenalty
 									+ routeBonus
 									+ specialBonus
+									+ roleScore
+									+ memoryScore
 									+ wrongAnchorPenalty
 									+ lockBonus
 							end
@@ -3463,6 +3520,16 @@ local function scanNamedTargets(grapple, options)
 								bestReason = rangeMode
 							end
 						end
+					elseif Logic.AnchorMemory and Logic.AnchorMemory.recordFailure then
+						Logic.AnchorMemory.recordFailure(Logic.AnchorMemoryState, candidate.Instance, "PathUnsafe", 105)
+					end
+					elseif Logic.AnchorMemory and Logic.AnchorMemory.recordFailure then
+						Logic.AnchorMemory.recordFailure(
+							Logic.AnchorMemoryState,
+							candidate.Instance,
+							result and "UnusableResult" or "LineBlocked",
+							result and 80 or 90
+						)
 					end
 				end
 			end
@@ -3681,6 +3748,19 @@ local function getDirectResultAssistScore(grapple, result, forceCursor)
 	local wrongAnchorPenalty =
 		getWrongAnchorPenalty(rootPart, result.Position, inputDirection, velocityDirection, false)
 	local surfacePenalty = targetName and 0 or CFG.SOFT_OVERRIDE_SURFACE_PENALTY
+	local roleScore = targetName
+			and Logic.TargetRoles
+			and Logic.TargetRoles.score
+			and select(1, Logic.TargetRoles.score(Logic, grapple, targetName, result.Position, {
+				RescueMode = isFallingFast(grapple),
+				PanicMode = Logic.getCachedPanicRescueDanger(grapple),
+				DriveMode = false,
+			}))
+		or 0
+	local memoryScore = Logic.AnchorMemory
+			and Logic.AnchorMemory.score
+			and select(1, Logic.AnchorMemory.score(Logic.AnchorMemoryState, result.Instance))
+		or 0
 
 	local score
 	if rangeMode == "Closest To Cursor" then
@@ -3690,6 +3770,8 @@ local function getDirectResultAssistScore(grapple, result, forceCursor)
 			+ intentPenalty * 0.35
 			+ routeBonus * 0.35
 			+ specialBonus
+			+ roleScore
+			+ memoryScore
 			+ wrongAnchorPenalty * 0.4
 			+ surfacePenalty
 	else
@@ -3699,6 +3781,8 @@ local function getDirectResultAssistScore(grapple, result, forceCursor)
 			+ intentPenalty
 			+ routeBonus
 			+ specialBonus
+			+ roleScore
+			+ memoryScore
 			+ wrongAnchorPenalty
 			+ surfacePenalty
 	end
@@ -5278,6 +5362,9 @@ function Logic.resetRuntimeState(grapple, reason)
 	if CastIntent and CastIntent.clear then
 		CastIntent.clear(Logic.CastIntentState)
 	end
+	if Logic.AnchorMemory and Logic.AnchorMemory.clear then
+		Logic.AnchorMemory.clear(Logic.AnchorMemoryState)
+	end
 	Logic.AssistArbiterState = AssistArbiter and AssistArbiter.new and AssistArbiter.new() or nil
 
 	if HealthMonitor and typeof(HealthMonitor.reset) == "function" then
@@ -5369,6 +5456,9 @@ function Logic.enable()
 				maintainJumpPadUsesBypass()
 			end
 			local jumpPadTarget = result and result.Instance
+			if Logic.AnchorMemory and Logic.AnchorMemory.recordSuccess and result and result.Instance then
+				Logic.AnchorMemory.recordSuccess(Logic.AnchorMemoryState, result.Instance, "NativeStart", 0)
+			end
 			if Logic.isJumpPadInstance(jumpPadTarget) then
 				Logic.markJumpPadCommit(self, jumpPadTarget)
 			end
@@ -5695,6 +5785,9 @@ function Logic.disable()
 	Logic.LastPredictionHorizon = nil
 	if CastIntent and CastIntent.clear then
 		CastIntent.clear(Logic.CastIntentState)
+	end
+	if Logic.AnchorMemory and Logic.AnchorMemory.clear then
+		Logic.AnchorMemory.clear(Logic.AnchorMemoryState)
 	end
 	Logic.AssistArbiterState = AssistArbiter and AssistArbiter.new and AssistArbiter.new() or nil
 	if PhysicsProfile and PhysicsProfile.clear then

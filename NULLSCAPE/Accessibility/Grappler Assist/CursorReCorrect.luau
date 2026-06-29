@@ -9,10 +9,6 @@ local CursorReCorrect = {}
 
 local DEFAULT_OFFSETS = {
 	{ 0, 0 },
-	{ 0.018, 0 },
-	{ -0.018, 0 },
-	{ 0, 0.018 },
-	{ 0, -0.018 },
 	{ 0.04, 0 },
 	{ -0.04, 0 },
 	{ 0, 0.04 },
@@ -25,14 +21,18 @@ local DEFAULT_OFFSETS = {
 	{ -0.075, 0 },
 	{ 0, 0.075 },
 	{ 0, -0.075 },
-	{ 0.075, 0.075 },
-	{ 0.075, -0.075 },
-	{ -0.075, 0.075 },
-	{ -0.075, -0.075 },
-	{ 0.12, 0 },
-	{ -0.12, 0 },
-	{ 0, 0.12 },
-	{ 0, -0.12 },
+}
+
+local SurfaceScanCache = {
+	At = 0,
+	RootPosition = nil,
+	ScreenAnchorX = nil,
+	ScreenAnchorY = nil,
+	CursorLimit = nil,
+	DriveMode = nil,
+	HasValue = false,
+	Result = nil,
+	Decision = nil,
 }
 
 local function addUniquePosition(positions, position)
@@ -47,6 +47,31 @@ local function addUniquePosition(positions, position)
 	table.insert(positions, position)
 end
 
+local function getCastOrigin(deps, grapple)
+	if deps and deps.getCastOrigin then
+		local origin = deps.getCastOrigin(grapple)
+		if typeof(origin) == "Vector3" then
+			return origin
+		end
+	end
+
+	local character = grapple and grapple.Character
+	local head = character and character:FindFirstChild("Head")
+	if head and head:IsA("BasePart") then
+		return head.Position
+	end
+
+	local rootPart = grapple and grapple.RootPart
+	return rootPart and rootPart.Position or nil
+end
+
+local function getInsetAxis(value, margin)
+	if value <= margin then
+		return value
+	end
+	return value - margin
+end
+
 function CursorReCorrect.getTargetSamplePositions(cfg, part, preferredPosition)
 	local positions = {}
 	addUniquePosition(positions, preferredPosition)
@@ -56,23 +81,27 @@ function CursorReCorrect.getTargetSamplePositions(cfg, part, preferredPosition)
 
 	local half = part.Size * 0.5
 	local cframe = part.CFrame
+	local safeMargin = cfg and cfg.CURSOR_TARGET_SAFE_MARGIN or 0.35
+	local insetX = getInsetAxis(half.X, safeMargin)
+	local insetY = getInsetAxis(half.Y, safeMargin)
+	local insetZ = getInsetAxis(half.Z, safeMargin)
 	addUniquePosition(positions, part.Position)
 
 	local samples = {
-		Vector3.new(half.X, 0, 0),
-		Vector3.new(-half.X, 0, 0),
-		Vector3.new(0, half.Y, 0),
-		Vector3.new(0, -half.Y, 0),
-		Vector3.new(0, 0, half.Z),
-		Vector3.new(0, 0, -half.Z),
-		Vector3.new(half.X, half.Y, half.Z),
-		Vector3.new(half.X, half.Y, -half.Z),
-		Vector3.new(half.X, -half.Y, half.Z),
-		Vector3.new(half.X, -half.Y, -half.Z),
-		Vector3.new(-half.X, half.Y, half.Z),
-		Vector3.new(-half.X, half.Y, -half.Z),
-		Vector3.new(-half.X, -half.Y, half.Z),
-		Vector3.new(-half.X, -half.Y, -half.Z),
+		Vector3.new(insetX, 0, 0),
+		Vector3.new(-insetX, 0, 0),
+		Vector3.new(0, insetY, 0),
+		Vector3.new(0, -insetY, 0),
+		Vector3.new(0, 0, insetZ),
+		Vector3.new(0, 0, -insetZ),
+		Vector3.new(insetX, insetY, insetZ),
+		Vector3.new(insetX, insetY, -insetZ),
+		Vector3.new(insetX, -insetY, insetZ),
+		Vector3.new(insetX, -insetY, -insetZ),
+		Vector3.new(-insetX, insetY, insetZ),
+		Vector3.new(-insetX, insetY, -insetZ),
+		Vector3.new(-insetX, -insetY, insetZ),
+		Vector3.new(-insetX, -insetY, -insetZ),
 	}
 
 	local limit = cfg and cfg.CURSOR_TARGET_SAMPLE_LIMIT or 18
@@ -84,6 +113,37 @@ function CursorReCorrect.getTargetSamplePositions(cfg, part, preferredPosition)
 	end
 
 	return positions
+end
+
+local function isTargetHit(result, targetInstance, targetPart)
+	if not (result and result.Instance) then
+		return false
+	end
+	return result.Instance == targetPart or result.Instance:IsDescendantOf(targetInstance)
+end
+
+local function lineClear(deps, grapple, candidate, part, targetPosition, maxRange)
+	local workspace = deps and deps.Workspace
+	local origin = getCastOrigin(deps, grapple)
+	if not (workspace and origin and grapple and grapple.grappleParams) then
+		if deps and deps.isLineClear then
+			return deps.isLineClear(grapple, candidate.Instance, part, targetPosition, maxRange)
+		end
+		return nil, nil
+	end
+
+	local offset = targetPosition - origin
+	local distance = offset.Magnitude
+	if distance <= 0 or distance > maxRange then
+		return nil, nil
+	end
+
+	local result = workspace:Raycast(origin, offset, grapple.grappleParams)
+	if isTargetHit(result, candidate.Instance, part) then
+		return result, distance
+	end
+
+	return nil, nil
 end
 
 local function getCursorAnchor(deps, camera)
@@ -163,13 +223,16 @@ local function getAnchorQualityScore(deps, grapple, result, distance)
 	return score, "OptimalAnchor"
 end
 
-local function scoreCandidateSample(deps, grapple, result, distance, samplePosition, preferredPosition)
+local function scoreCandidateSample(deps, grapple, result, distance, samplePosition, preferredPosition, candidate)
 	local cfg = deps.CFG
 	local score = distance * (cfg and cfg.CURSOR_INTENT_DISTANCE_WEIGHT or 0.015)
 	if typeof(samplePosition) == "Vector3" and typeof(preferredPosition) == "Vector3" then
 		score += (samplePosition - preferredPosition).Magnitude * 0.18
 	end
 	local anchorScore = getAnchorQualityScore(deps, grapple, result, distance)
+	if deps.getAnchorMemoryScore and candidate then
+		score += deps.getAnchorMemoryScore(candidate.Instance) or 0
+	end
 	return score + anchorScore
 end
 
@@ -189,13 +252,13 @@ function CursorReCorrect.findCandidateLineClear(deps, grapple, candidate, part, 
 	local bestPosition = preferredPosition
 	local bestScore = math.huge
 	for _, position in ipairs(CursorReCorrect.getTargetSamplePositions(cfg, part, preferredPosition)) do
-		local result, distance = deps.isLineClear(grapple, candidate.Instance, part, position, maxRange)
+		local result, distance = lineClear(deps, grapple, candidate, part, position, maxRange)
 		if result and (not deps.isUsableResult or deps.isUsableResult(grapple, result)) then
 			if
 				not deps.isPathSafeForHitbox
 				or deps.isPathSafeForHitbox(grapple, candidate.Instance, part, result.Position, maxRange)
 			then
-				local score = scoreCandidateSample(deps, grapple, result, distance, position, preferredPosition)
+				local score = scoreCandidateSample(deps, grapple, result, distance, position, preferredPosition, candidate)
 				if score < bestScore then
 					bestResult = result
 					bestDistance = distance
@@ -223,11 +286,58 @@ local function scoreSurface(deps, grapple, result, screenScore, driveMode, dista
 	return screenScore * screenWeight + distance * distanceWeight + terrainScore + anchorScore, reason .. "/" .. anchorReason
 end
 
+local function getCachedSurfaceScan(cfg, rootPart, screenAnchor, cursorLimit, driveMode, returnDecision)
+	local now = time()
+	local interval = cfg and cfg.CURSOR_RECORRECT_SCAN_INTERVAL or 0.05
+	if not SurfaceScanCache.HasValue or now - (SurfaceScanCache.At or 0) > interval then
+		return false, nil
+	end
+
+	local result = SurfaceScanCache.Result
+	if result and not (result.Instance and result.Instance.Parent) then
+		return false, nil
+	end
+
+	local rootPosition = SurfaceScanCache.RootPosition
+	local moveEpsilon = cfg and cfg.CURSOR_RECORRECT_CACHE_MOVE_EPSILON or 3
+	if not rootPosition or (rootPart.Position - rootPosition).Magnitude > moveEpsilon then
+		return false, nil
+	end
+
+	local screenEpsilon = cfg and cfg.CURSOR_RECORRECT_CACHE_SCREEN_EPSILON or 8
+	if
+		math.abs((SurfaceScanCache.ScreenAnchorX or 0) - screenAnchor.X) > screenEpsilon
+		or math.abs((SurfaceScanCache.ScreenAnchorY or 0) - screenAnchor.Y) > screenEpsilon
+		or math.abs((SurfaceScanCache.CursorLimit or 0) - cursorLimit) > 0.001
+		or SurfaceScanCache.DriveMode ~= driveMode
+	then
+		return false, nil
+	end
+
+	if returnDecision then
+		return true, SurfaceScanCache.Decision
+	end
+	return true, result
+end
+
+local function setCachedSurfaceScan(rootPart, screenAnchor, cursorLimit, driveMode, decision)
+	SurfaceScanCache.At = time()
+	SurfaceScanCache.RootPosition = rootPart.Position
+	SurfaceScanCache.ScreenAnchorX = screenAnchor.X
+	SurfaceScanCache.ScreenAnchorY = screenAnchor.Y
+	SurfaceScanCache.CursorLimit = cursorLimit
+	SurfaceScanCache.DriveMode = driveMode
+	SurfaceScanCache.HasValue = true
+	SurfaceScanCache.Result = decision and decision.Result or nil
+	SurfaceScanCache.Decision = decision
+end
+
 function CursorReCorrect.scanSurfaceAroundCursor(deps, grapple, options)
 	local workspace = deps and deps.Workspace
 	local camera = workspace and workspace.CurrentCamera
 	local rootPart = grapple and grapple.RootPart
-	if not (workspace and camera and rootPart and grapple and grapple.grappleParams) then
+	local originPosition = getCastOrigin(deps, grapple)
+	if not (workspace and camera and rootPart and originPosition and grapple and grapple.grappleParams) then
 		return nil
 	end
 
@@ -241,6 +351,10 @@ function CursorReCorrect.scanSurfaceAroundCursor(deps, grapple, options)
 	local cursorLimit = typeof(options) == "table" and tonumber(options.cursorLimit) or nil
 	cursorLimit = cursorLimit or (cfg and cfg.CURSOR_SURFACE_DETECTOR_LIMIT) or 0.24
 	local maxSurfaceNormalY = cfg and cfg.CURSOR_RECORRECT_SURFACE_NORMAL_Y_MAX or 0.55
+	local cacheHit, cached = getCachedSurfaceScan(cfg, rootPart, screenAnchor, cursorLimit, driveMode, returnDecision)
+	if cacheHit then
+		return cached
+	end
 
 	local bestResult = nil
 	local bestScore = math.huge
@@ -256,24 +370,25 @@ function CursorReCorrect.scanSurfaceAroundCursor(deps, grapple, options)
 			continue
 		end
 
-		local screenPoint = screenAnchor + Vector2.new(offsetX * viewportSize.X, offsetY * viewportSize.Y)
-		if screenPoint.X < 0 or screenPoint.Y < 0 or screenPoint.X > viewportSize.X or screenPoint.Y > viewportSize.Y then
+		local screenPointX = screenAnchor.X + offsetX * viewportSize.X
+		local screenPointY = screenAnchor.Y + offsetY * viewportSize.Y
+		if screenPointX < 0 or screenPointY < 0 or screenPointX > viewportSize.X or screenPointY > viewportSize.Y then
 			continue
 		end
 
-		local ray = camera:ViewportPointToRay(screenPoint.X, screenPoint.Y)
+		local ray = camera:ViewportPointToRay(screenPointX, screenPointY)
 		local cameraHit = workspace:Raycast(ray.Origin, ray.Direction.Unit * 2048, grapple.grappleParams)
 		if not cameraHit then
 			continue
 		end
 
-		local offsetToHit = cameraHit.Position - rootPart.Position
+		local offsetToHit = cameraHit.Position - originPosition
 		local distance = offsetToHit.Magnitude
 		if distance <= 0 or distance > maxRange then
 			continue
 		end
 
-		local directHit = workspace:Raycast(rootPart.Position, offsetToHit, grapple.grappleParams)
+		local directHit = workspace:Raycast(originPosition, offsetToHit, grapple.grappleParams)
 		if
 			directHit
 			and (not directHit.Normal or directHit.Normal.Y <= maxSurfaceNormalY)
@@ -298,21 +413,27 @@ function CursorReCorrect.scanSurfaceAroundCursor(deps, grapple, options)
 				bestReason = reason or "CursorSurface"
 				bestScreenScore = realScreenScore
 				bestDistance = distance
+				if screenScore <= 0.04 and score <= (cfg and cfg.CURSOR_RECORRECT_EARLY_SCORE or 12) then
+					break
+				end
 			end
 		end
 	end
 
+	local decision = bestResult and {
+		Result = bestResult,
+		Instance = bestResult.Instance,
+		Name = nil,
+		Position = bestResult.Position,
+		Distance = bestDistance,
+		ScreenScore = bestScreenScore,
+		Score = bestScore,
+		Reason = bestReason or "CursorSurfaceDetector",
+	} or nil
+	setCachedSurfaceScan(rootPart, screenAnchor, cursorLimit, driveMode, decision)
+
 	if returnDecision then
-		return bestResult and {
-			Result = bestResult,
-			Instance = bestResult.Instance,
-			Name = nil,
-			Position = bestResult.Position,
-			Distance = bestDistance,
-			ScreenScore = bestScreenScore,
-			Score = bestScore,
-			Reason = bestReason or "CursorSurfaceDetector",
-		} or nil
+		return decision
 	end
 
 	return bestResult
