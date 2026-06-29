@@ -28,10 +28,8 @@ local DEFAULTS = {
 	GrappleSharkTailStyle = "Balanced",
 	GrappleMomentumGuardEnabled = false,
 	GrappleJumpPadUsesBypassEnabled = false,
-	GrappleAirControlMultiplier = 0,
-	GrappleReelPullMultiplier = 1.1,
-	GrappleSharkTailPullMultiplier = 1.1,
 	GrappleAimAssistTargetPriority = "GrapplePoint",
+	GrapplerStaminaRecoverySpeed = 1,
 	GrappleAimAssistRangePriority = "Nearest",
 	GrappleAdaptInputKey = "T",
 	GrappleMapModel3DDebugEnabled = false,
@@ -176,6 +174,35 @@ return function(Client, Controller)
 		Flag = "AntiBonkToggle",
 		Callback = function(Value)
 			Controller:SetAntiBonk(Value)
+		end,
+	})
+
+	Tab:CreateDropdown({
+		Name = " Stamina Mode",
+		Info = "Infinite Stamina refills native class stamina/timer resources for classes that expose a compatible stamina bar.",
+		Options = { "Manual", "Infinite Stamina" },
+		CurrentOption = Controller.StaminaMode or Controller.GrapplerStaminaMode or "Off",
+		MultipleOptions = false,
+		Flag = "GrapplerStaminaModeDropdown",
+		Callback = function(Option)
+			local selected = Option
+			if typeof(Option) == "table" then
+				selected = Option[1]
+			end
+			Controller:SetStaminaMode(selected)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Grapple Recovery Speed",
+		Info = "Multiplies the natural stamina/time recovery speed of the Grappler when not active.",
+		Range = { 1, 10 },
+		Increment = 0.5,
+		Suffix = "x",
+		CurrentValue = Controller.GrapplerStaminaRecoverySpeed or 1,
+		Flag = "GrapplerStaminaRecoverySpeedSlider",
+		Callback = function(Value)
+			Controller:SetGrapplerStaminaRecoverySpeed(Value)
 		end,
 	})
 
@@ -345,22 +372,6 @@ return function(Client, Controller)
 			Disconnect = disconnectAdaptCapture,
 		})
 	end
-
-	Tab:CreateDropdown({
-		Name = "Class Stamina",
-		Info = "Infinite Stamina refills native class stamina/timer resources for classes that expose a compatible stamina bar.",
-		Options = { "Off", "Infinite Stamina" },
-		CurrentOption = Controller.StaminaMode or Controller.GrapplerStaminaMode or "Off",
-		MultipleOptions = false,
-		Flag = "GrapplerStaminaModeDropdown",
-		Callback = function(Option)
-			local selected = Option
-			if typeof(Option) == "table" then
-				selected = Option[1]
-			end
-			Controller:SetStaminaMode(selected)
-		end,
-	})
 
 	Tab:CreateToggle({
 		Name = "Grapple Aim Assist",
@@ -569,45 +580,6 @@ return function(Client, Controller)
 		Flag = "GrappleJumpPadUsesBypassToggle",
 		Callback = function(Value)
 			Controller:SetGrappleJumpPadUsesBypass(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Grapple Air Control",
-		Info = "0 returns control to the game. 1-9 adds stronger physical steering while preserving grapple momentum. 10 is strong but smoothed to avoid snap turns.",
-		Range = { 0, 10 },
-		Increment = 1,
-		Suffix = "/10",
-		CurrentValue = Controller.GrappleAirControlMultiplier or 0,
-		Flag = "GrappleAirControlMultiplierSlider",
-		Callback = function(Value)
-			Controller:SetGrappleAirControlMultiplier(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Grapple Reel Pull",
-		Info = "Multiplies velocity gained from reel-style pulls. Affects special pull targets and NinjaBelt reel behavior.",
-		Range = { 1.1, 5 },
-		Increment = 0.1,
-		Suffix = "x",
-		CurrentValue = Controller.GrappleReelPullMultiplier or 1.1,
-		Flag = "GrappleReelPullMultiplierSlider",
-		Callback = function(Value)
-			Controller:SetGrappleReelPullMultiplier(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "SharkTail Pull",
-		Info = "Multiplies the velocity delta created by SharkTail. Only applies when SharkTail actually fires and NinjaBelt + SharkTail are both owned.",
-		Range = { 1.1, 5 },
-		Increment = 0.1,
-		Suffix = "x",
-		CurrentValue = Controller.GrappleSharkTailPullMultiplier or 1.1,
-		Flag = "GrappleSharkTailPullMultiplierSlider",
-		Callback = function(Value)
-			Controller:SetGrappleSharkTailPullMultiplier(Value)
 		end,
 	})
 

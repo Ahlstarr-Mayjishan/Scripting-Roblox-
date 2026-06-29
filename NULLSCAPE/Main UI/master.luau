@@ -507,6 +507,9 @@ local function loadModule(path)
 		if path == "NULLSCAPE/Simulated Upgrades/controller.luau" then
 			return globals and globals.activeUpgradeController or nil
 		end
+		if path == "NULLSCAPE/Class Adjustment/Control.luau" then
+			return globals and globals.activeClassAdjustmentController or nil
+		end
 		warn("[NULLSCAPE] Skipping re-entrant module load: " .. tostring(path))
 		return nil
 	end
@@ -592,6 +595,19 @@ end)
 
 if not success3 then
 	warn("[NULLSCAPE] Lỗi khi nạp module Accessibility: " .. tostring(err3))
+end
+
+local success4, err4 = pcall(function()
+	local ClassAdjustmentController = loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+	Client.Modules["ClassAdjustmentController"] = ClassAdjustmentController
+	ClassAdjustmentController:initialize()
+	local ClassAdjustmentTab = loadModule("NULLSCAPE/Class Adjustment/tab.luau")
+
+	ClassAdjustmentTab(Client, ClassAdjustmentController)
+end)
+
+if not success4 then
+	warn("[NULLSCAPE] Lỗi khi nạp module Class Adjustment: " .. tostring(err4))
 end
 
 -- Tải cấu hình lưu trữ của Rayfield

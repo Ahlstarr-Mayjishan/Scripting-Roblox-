@@ -123,10 +123,8 @@ local Controller = {
 	GrappleSharkTailMode = "Manual",
 	GrappleSharkTailStyle = "Balanced",
 	GrappleMomentumGuardEnabled = false,
-	GrappleAirControlMultiplier = 0,
-	GrappleReelPullMultiplier = 1.1,
-	GrappleSharkTailPullMultiplier = 1.1,
 	GrappleJumpPadUsesBypassEnabled = false,
+	GrapplerStaminaRecoverySpeed = 1,
 	GrappleAdaptInputKey = readSavedAdaptInputKey(),
 	Destroyed = false,
 
@@ -429,6 +427,10 @@ function Controller:SetGrapplerStaminaMode(mode)
 	return self:SetStaminaMode(mode)
 end
 
+function Controller:SetGrapplerStaminaRecoverySpeed(value)
+	self.GrapplerStaminaRecoverySpeed = math.clamp(tonumber(value) or 1, 1, 10)
+end
+
 function Controller:HasAnyGrappleAssistFeature()
 	return self.GrappleAimAssistEnabled
 		or self.GrappleRescueAssistEnabled
@@ -693,17 +695,6 @@ function Controller:SetGrappleJumpPadUsesBypass(value)
 	end
 end
 
-function Controller:SetGrappleAirControlMultiplier(value)
-	self.GrappleAirControlMultiplier = math.clamp(tonumber(value) or 0, 0, 10)
-end
-
-function Controller:SetGrappleReelPullMultiplier(value)
-	self.GrappleReelPullMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
-end
-
-function Controller:SetGrappleSharkTailPullMultiplier(value)
-	self.GrappleSharkTailPullMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
-end
 
 function Controller:SetGrappleAdaptInputKey(key)
 	local keyName = normalizeKeyName(key)

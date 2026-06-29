@@ -16,6 +16,10 @@ local MapModel = {
     LastInRound = nil,
     Debug3DEnabled = false,
     Debug3DFolder = nil,
+    Debug3DGui = nil,
+    Debug3DViewport = nil,
+    Debug3DWorld = nil,
+    Debug3DCamera = nil,
     LastDebug3DRenderAt = 0,
 }
 
@@ -35,6 +39,9 @@ local DEFAULTS = {
     DEBUG_3D_RENDER_INTERVAL = 0.24,
     DEBUG_3D_MAX_MARKERS = 160,
     DEBUG_3D_CHUNK_HEIGHT = 4,
+    DEBUG_3D_MINIMAP_SIZE = 220,
+    DEBUG_3D_MINIMAP_SCALE = 0.055,
+    DEBUG_3D_MINIMAP_CAMERA_HEIGHT = 18,
 }
 
 local ANCHOR_NAMES = {
@@ -170,6 +177,75 @@ local function ensureDebug3DFolder()
     return folder
 end
 
+local function ensureDebug3DViewport(deps)
+    if MapModel.Debug3DGui and MapModel.Debug3DGui.Parent and MapModel.Debug3DWorld and MapModel.Debug3DCamera then
+        return MapModel.Debug3DWorld, MapModel.Debug3DCamera
+    end
+
+    local localPlayer = Players.LocalPlayer
+    local playerGui = localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")
+    if not playerGui then
+        return nil, nil
+    end
+
+    local size = getCfg(deps, "DEBUG_3D_MINIMAP_SIZE")
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "NULLSCAPE_MapModel3DViewport"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local viewport = Instance.new("ViewportFrame")
+    viewport.Name = "Viewport"
+    viewport.AnchorPoint = Vector2.new(1, 0)
+    viewport.Position = UDim2.new(1, -18, 0, 84)
+    viewport.Size = UDim2.fromOffset(size, size)
+    viewport.BackgroundColor3 = Color3.fromRGB(4, 8, 10)
+    viewport.BackgroundTransparency = 0.18
+    viewport.BorderSizePixel = 1
+    viewport.BorderColor3 = Color3.fromRGB(80, 245, 190)
+    viewport.Ambient = Color3.fromRGB(180, 210, 210)
+    viewport.LightColor = Color3.fromRGB(255, 255, 255)
+    viewport.LightDirection = Vector3.new(-0.4, -1, -0.25)
+    viewport.Parent = gui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = viewport
+
+    local world = Instance.new("WorldModel")
+    world.Name = "World"
+    world.Parent = viewport
+
+    local camera = Instance.new("Camera")
+    camera.Name = "Camera"
+    camera.FieldOfView = 42
+    camera.Parent = viewport
+    viewport.CurrentCamera = camera
+
+    gui.Parent = playerGui
+    MapModel.Debug3DGui = gui
+    MapModel.Debug3DViewport = viewport
+    MapModel.Debug3DWorld = world
+    MapModel.Debug3DCamera = camera
+    return world, camera
+end
+
+local function destroyDebug3DViewport()
+    if MapModel.Debug3DGui then
+        MapModel.Debug3DGui:Destroy()
+    end
+    MapModel.Debug3DGui = nil
+    MapModel.Debug3DViewport = nil
+    MapModel.Debug3DWorld = nil
+    MapModel.Debug3DCamera = nil
+end
+
+local function mapToViewport(position, origin, scale)
+    local offset = position - origin
+    return Vector3.new(offset.X * scale, offset.Y * scale, offset.Z * scale)
+end
+
 local function getChunkDisplayY(chunk, fallbackY)
     local total = 0
     local count = 0
@@ -197,11 +273,14 @@ local function render3DModel(deps, position)
     MapModel.LastDebug3DRenderAt = currentTime
 
     local folder = ensureDebug3DFolder()
+    local world, camera = ensureDebug3DViewport(deps)
     clearChildren(folder)
+    clearChildren(world)
 
     local chunkSize = getCfg(deps, "CHUNK_SIZE")
     local chunkHeight = getCfg(deps, "DEBUG_3D_CHUNK_HEIGHT")
     local maxMarkers = getCfg(deps, "DEBUG_3D_MAX_MARKERS")
+    local minimapScale = getCfg(deps, "DEBUG_3D_MINIMAP_SCALE")
     local markers = 0
 
     for _, chunk in pairs(MapModel.Chunks) do
@@ -229,6 +308,16 @@ local function render3DModel(deps, position)
             color,
             transparency
         )
+        if world then
+            makeDebugPart(
+                world,
+                "Chunk_" .. tostring(chunk.Key),
+                CFrame.new(mapToViewport(Vector3.new(chunk.Center.X, chunkY + 0.4, chunk.Center.Z), position, minimapScale)),
+                Vector3.new(chunkSize * minimapScale, math.max(chunkHeight * minimapScale, 0.12), chunkSize * minimapScale),
+                color,
+                transparency * 0.65
+            )
+        end
 
         for _, landing in ipairs(chunk.Landings or {}) do
             if markers >= maxMarkers then
@@ -243,6 +332,16 @@ local function render3DModel(deps, position)
                 Color3.fromRGB(85, 255, 145),
                 0.16
             )
+            if world then
+                makeDebugPart(
+                    world,
+                    "Landing",
+                    CFrame.new(mapToViewport(landing.Position + Vector3.new(0, 1.2, 0), position, minimapScale)),
+                    Vector3.new(0.34, 0.08, 0.34),
+                    Color3.fromRGB(85, 255, 145),
+                    0.04
+                )
+            end
         end
 
         for _, anchor in ipairs(chunk.Anchors or {}) do
@@ -258,6 +357,16 @@ local function render3DModel(deps, position)
                 Color3.fromRGB(255, 220, 85),
                 0.08
             )
+            if world then
+                makeDebugPart(
+                    world,
+                    "Anchor_" .. tostring(anchor.Name),
+                    CFrame.new(mapToViewport(anchor.Position, position, minimapScale)),
+                    Vector3.new(0.28, 0.28, 0.28),
+                    Color3.fromRGB(255, 220, 85),
+                    0.02
+                )
+            end
         end
     end
 
@@ -269,6 +378,20 @@ local function render3DModel(deps, position)
         Color3.fromRGB(245, 245, 245),
         0.08
     )
+    if world then
+        makeDebugPart(
+            world,
+            "PlayerProjection",
+            CFrame.new(0, -0.12, 0),
+            Vector3.new(0.5, 0.18, 0.5),
+            Color3.fromRGB(245, 245, 245),
+            0
+        )
+    end
+    if camera then
+        local height = getCfg(deps, "DEBUG_3D_MINIMAP_CAMERA_HEIGHT")
+        camera.CFrame = CFrame.lookAt(Vector3.new(0, height, height * 0.82), Vector3.new(0, 0, 0))
+    end
 end
 
 local function getTerrainRoots()
@@ -481,6 +604,9 @@ function MapModel.clear()
     MapModel.LastInRound = nil
     if MapModel.Debug3DFolder then
         clearChildren(MapModel.Debug3DFolder)
+    end
+    if MapModel.Debug3DWorld then
+        clearChildren(MapModel.Debug3DWorld)
     end
 end
 
@@ -717,6 +843,7 @@ function MapModel.setDebug3DEnabled(value)
             MapModel.Debug3DFolder:Destroy()
         end
         MapModel.Debug3DFolder = nil
+        destroyDebug3DViewport()
     end
 end
 

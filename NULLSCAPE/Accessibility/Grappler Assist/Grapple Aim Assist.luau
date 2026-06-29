@@ -630,32 +630,7 @@ function Logic.isTextBoxFocused()
 	return success and focused ~= nil
 end
 
-function Logic.getAirControlMultiplier()
-	local controller = Logic.getController()
-	if not (controller and controller.GrappleAssistSuiteEnabled == true) then
-		return 0
-	end
 
-	return math.clamp(tonumber(controller.GrappleAirControlMultiplier) or 0, 0, 10)
-end
-
-function Logic.getReelPullMultiplier()
-	local controller = Logic.getController()
-	if not (controller and controller.GrappleAssistSuiteEnabled == true) then
-		return 1
-	end
-
-	return math.clamp(tonumber(controller.GrappleReelPullMultiplier) or 1, 1, 5)
-end
-
-function Logic.getSharkTailPullMultiplier()
-	local controller = Logic.getController()
-	if not (controller and controller.GrappleAssistSuiteEnabled == true) then
-		return 1
-	end
-
-	return math.clamp(tonumber(controller.GrappleSharkTailPullMultiplier) or 1, 1, 5)
-end
 
 function Logic.isInfiniteStamina()
 	if StaminaAssist and typeof(StaminaAssist.isEnabled) == "function" then
@@ -4680,85 +4655,7 @@ local function applySharkTailStabilize(grapple)
 	end
 end
 
-local function applyAirControlMultiplier(grapple, dt)
-	local controlLevel = Logic.getAirControlMultiplier()
-	if controlLevel <= 0 then
-		return
-	end
-	local allowed = canRunAssist("AirControl", grapple)
-	if not allowed then
-		return
-	end
 
-	local movement = grapple and grapple.Movement
-	local rootPart = grapple and grapple.RootPart
-	if not (movement and rootPart and movement.grappling and not grapple.jumpPadReel) then
-		return
-	end
-
-	local playerMoveDirection = movement.PlayerMoveDirection
-	if typeof(playerMoveDirection) ~= "Vector3" or playerMoveDirection.Magnitude <= 0.01 then
-		return
-	end
-
-	local dtClamped = math.clamp(tonumber(dt) or 0, 0, 1 / 20)
-	if dtClamped <= 0 then
-		return
-	end
-
-	local levelAlpha = math.clamp(controlLevel / 10, 0, 1)
-	local velocity = rootPart.Velocity
-	local horizontalVelocity = Vector3.new(velocity.X, 0, velocity.Z)
-	local profile = getPhysicsProfile(grapple)
-	local graceWingsMultiplier = hasUpgrade(movement, "GraceWings") and 1.5 or 1
-	local profileAirScale = tonumber(profile and profile.AirControlScale) or 1
-	local movementSpeedMultiplier = tonumber(movement.movementSpeedMulti) or 1
-
-	local inputUnit = playerMoveDirection.Unit
-	local alongInputSpeed = horizontalVelocity:Dot(inputUnit)
-	local lateralVelocity = horizontalVelocity - inputUnit * alongInputSpeed
-	local assistAcceleration = (28 + controlLevel * 22)
-		* movementSpeedMultiplier
-		* graceWingsMultiplier
-		* profileAirScale
-	local authority = levelAlpha ^ 1.35
-	local maxControlSpeed = 62 + controlLevel * 13
-	local desiredAlongSpeed =
-		math.clamp(alongInputSpeed + assistAcceleration * dtClamped, -maxControlSpeed * 0.35, maxControlSpeed)
-	local alongDelta =
-		math.clamp(desiredAlongSpeed - alongInputSpeed, -assistAcceleration * dtClamped, assistAcceleration * dtClamped)
-	local nextHorizontal = horizontalVelocity + inputUnit * alongDelta
-
-	local lateralBrakeAlpha = math.clamp((0.025 + authority * 0.14) * dtClamped * 60, 0, 0.28)
-	local lateralBrake = lateralVelocity * lateralBrakeAlpha
-	local maxBrakeDelta = (12 + controlLevel * 7) * dtClamped
-	if lateralBrake.Magnitude > maxBrakeDelta then
-		lateralBrake = lateralBrake.Unit * maxBrakeDelta
-	end
-	nextHorizontal -= lateralBrake
-
-	local maxHorizontalSpeed = 128 + controlLevel * 15
-	if nextHorizontal.Magnitude > maxHorizontalSpeed then
-		nextHorizontal = nextHorizontal.Unit * maxHorizontalSpeed
-	end
-
-	local gravityCancel = (math.clamp((controlLevel - 3) / 7, 0, 1) ^ 1.35) * 0.82
-	if profile and profile.LowGravity then
-		gravityCancel *= 0.65
-	end
-	local nextY = velocity.Y
-	if gravityCancel > 0 then
-		nextY += Workspace.Gravity * gravityCancel * dtClamped
-	end
-
-	local desiredVelocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
-	if VelocityAssist and VelocityAssist.applyDelta then
-		VelocityAssist.applyDelta(rootPart, desiredVelocity - rootPart.Velocity, 26 + controlLevel * 4, "AirControl")
-	else
-		rootPart.Velocity = desiredVelocity
-	end
-	claimAssist("AirControl", "AirControl", 0.04)
-end
 
 local function applySmartReelLandingAssist(grapple)
 	if time() > (Logic.SmartReelLandingAssistUntil or 0) then
@@ -4823,71 +4720,7 @@ local function applySmartReelLandingAssist(grapple)
 	return true
 end
 
-local function applyReelPullMultiplier(grapple)
-	local rootPart = grapple and grapple.RootPart
-	if not (grapple and rootPart and grapple.jumpPadReel) then
-		return
-	end
-	local allowed = canRunAssist("ReelPull", grapple)
-	if not allowed then
-		return
-	end
 
-	if applySmartReelLandingAssist(grapple) then
-		return
-	end
-
-	local multiplier = Logic.getReelPullMultiplier()
-	if multiplier <= 1 then
-		return
-	end
-	local profile = getPhysicsProfile(grapple)
-	multiplier = 1 + (multiplier - 1) * (tonumber(profile and profile.PullScale) or 1)
-
-	local desiredVelocity = rootPart.Velocity * multiplier
-	if VelocityAssist and VelocityAssist.applyDelta then
-		VelocityAssist.applyDelta(rootPart, desiredVelocity - rootPart.Velocity, 38, "ReelPull")
-	else
-		rootPart.Velocity = desiredVelocity
-	end
-	claimAssist("ReelPull", "ReelPull", 0.12)
-end
-
-local function applySharkTailPullMultiplier(grapple, previousVelocity)
-	local multiplier = Logic.getSharkTailPullMultiplier()
-	if multiplier <= 1 then
-		return
-	end
-	local profile = getPhysicsProfile(grapple)
-	multiplier = 1 + (multiplier - 1) * (tonumber(profile and profile.PullScale) or 1)
-	local allowed = canRunAssist("SharkTail", grapple)
-	if not allowed then
-		return
-	end
-
-	local rootPart = grapple and grapple.RootPart
-	if not (grapple and rootPart) then
-		return
-	end
-
-	local beforeVelocity = previousVelocity
-	if typeof(beforeVelocity) ~= "Vector3" then
-		beforeVelocity = Vector3.new(0, 0, 0)
-	end
-
-	local deltaVelocity = rootPart.Velocity - beforeVelocity
-	if deltaVelocity.Magnitude <= 0.01 then
-		return
-	end
-
-	local desiredVelocity = beforeVelocity + deltaVelocity * multiplier
-	if VelocityAssist and VelocityAssist.applyDelta then
-		VelocityAssist.applyDelta(rootPart, desiredVelocity - rootPart.Velocity, 42, "SharkTailPull")
-	else
-		rootPart.Velocity = desiredVelocity
-	end
-	claimAssist("SharkTail", "SharkTailPull", 0.12)
-end
 
 local function shouldSuppressGrappleBonk(movement)
 	if not Logic.isAntiBonkEnabled() then
@@ -4970,7 +4803,7 @@ function Logic.markGrappleBonkGrace(grapple, duration)
 	Logic.SuppressBonkUntil = math.max(Logic.SuppressBonkUntil, time() + duration)
 end
 
-local function applyTrajectoryAntiBonk(grapple)
+function Logic.applyTrajectoryAntiBonk(grapple)
 	if
 		not (
 			TrajectoryAntiBonk
@@ -5248,20 +5081,7 @@ function Logic.enable()
 		end
 	end
 
-	if typeof(grappleModule.SharkTail) == "function" then
-		local originalSharkTail = grappleModule.SharkTail
-		globals.GrappleAimAssistOriginalSharkTail = originalSharkTail
 
-		grappleModule.SharkTail = function(self, ...)
-			if globals.activeGrappleAimAssist ~= Logic then
-				return originalSharkTail(self, ...)
-			end
-			local previousVelocity = self and self.RootPart and self.RootPart.Velocity
-			local result = originalSharkTail(self, ...)
-			HealthMonitor.try("SharkTailPull", applySharkTailPullMultiplier, self, previousVelocity)
-			return result
-		end
-	end
 
 	if typeof(grappleModule.Step) == "function" then
 		local originalStep = grappleModule.Step
@@ -5341,9 +5161,9 @@ function Logic.enable()
 			HealthMonitor.try("BellBypass", maintainBellBypass, self)
 			HealthMonitor.try("RefillStamina", refillStamina, self)
 			HealthMonitor.try("SafeLandingDamping", applySafeLandingGuard, self)
-			HealthMonitor.try("TrajectoryAntiBonk", applyTrajectoryAntiBonk, self)
-			HealthMonitor.try("ReelPull", applyReelPullMultiplier, self)
-			HealthMonitor.try("AirControl", applyAirControlMultiplier, self, dt)
+			HealthMonitor.try("TrajectoryAntiBonk", Logic.applyTrajectoryAntiBonk, self)
+			HealthMonitor.try("LandingAssist", applySmartReelLandingAssist, self)
+
 			HealthMonitor.try("MomentumGuard", applyMomentumGuard, self)
 			HealthMonitor.try("PanicStabilize", applyPanicStabilize, self)
 			HealthMonitor.try("SharkTailStabilize", applySharkTailStabilize, self)
