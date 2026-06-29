@@ -424,6 +424,71 @@ function Controller:UpdateTelefraggerConnection()
 			end
 		end
 
+		if not self.TelefraggerTracker then
+			self.TelefraggerTracker = {}
+		end
+
+		-- Clean up inactive telefragger tracks
+		local activeTelefraggers = {}
+		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+			if string.find(string.lower(enemy.Name), "telefragger") then
+				activeTelefraggers[enemy] = true
+			end
+		end
+		for enemy in pairs(self.TelefraggerTracker) do
+			if not activeTelefraggers[enemy] or not enemy.Parent then
+				self.TelefraggerTracker[enemy] = nil
+			end
+		end
+
+		-- Track telefraggers to predict teleportation times (specifically for extreme mode and below where there is no dash indicator)
+		for enemy in pairs(activeTelefraggers) do
+			local track = self.TelefraggerTracker[enemy]
+			local enemyRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy:FindFirstChild("Torso") or enemy:FindFirstChild("IndicatorPart")
+			local currentPos = enemyRoot and enemyRoot.Position
+			if currentPos then
+				if not track then
+					track = {
+						lastPosition = currentPos,
+						spawnTime = tick(),
+						lastTeleportTime = tick(),
+						hasTeleportedInitial = false,
+						cooldown = 5.0,
+					}
+					self.TelefraggerTracker[enemy] = track
+				else
+					-- Check for sudden teleportation (position jump > 10 studs)
+					local distMoved = (currentPos - track.lastPosition).Magnitude
+					if distMoved > 10 then
+						local now = tick()
+						local diff = now - track.lastTeleportTime
+						if diff > 1.5 and diff < 15 then
+							track.cooldown = diff
+						end
+						track.lastTeleportTime = now
+						track.hasTeleportedInitial = true
+					end
+					track.lastPosition = currentPos
+				end
+
+				-- Determine if we should trigger BackTrick based on this telefragger
+				local now = tick()
+				local timeSinceLast = now - track.lastTeleportTime
+				local timeSinceSpawn = now - track.spawnTime
+				
+				-- 1. Initial teleport prediction window (first 1.5 seconds of spawn)
+				if not track.hasTeleportedInitial and timeSinceSpawn < 1.5 then
+					isTargeted = true
+				end
+
+				-- 2. Periodic teleport prediction window (just before estimated cooldown)
+				local estCooldown = track.cooldown or 5.0
+				if timeSinceLast > estCooldown - 0.7 and timeSinceLast < estCooldown + 0.3 then
+					isTargeted = true
+				end
+			end
+		end
+
 		-- 1. Xử lý cơ chế BackTrick (Xoay hướng vật lý 180 độ, bù trừ khớp nối visual để server tính toán lệch ra sau lưng)
 		if self.TelefraggerBackTrick then
 			if isTargeted then
@@ -1581,44 +1646,57 @@ local function initializeICBMHook()
 		["Died"] = true,
 		["OblivionEvent"] = true,
 		["BroSecureMethod"] = true,
+		["GrappleReplicator"] = true,
 	}
-
-	local function handleRemoteCall(self, ...)
+ 
+ 	local function handleRemoteCall(self, ...)
 		local firstArg = ...
-
+ 
 		-- Lấy activeController hiện tại từ globals
 		local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
 		if not activeCtrl then
 			return false
 		end
-
+ 
 		-- Kiểm tra nhanh tên remote trước (O(1) lookup)
 		if not TargetRemoteNames[self.Name] then
 			return false
+		end
+ 
+		-- Trì hoãn cuộc gọi CreateHook để đồng bộ hóa trạng thái vật lý lên server (tránh bị từ chối do độ trễ ping)
+		if self.Name == "GrappleReplicator" and firstArg == "CreateHook" then
+			local args = { ... }
+			task.delay(0.06, function()
+				local originalNamecall = getgenv()._NULLSCAPE_Globals.OriginalNamecall
+				if originalNamecall then
+					originalNamecall(self, table.unpack(args))
+				end
+			end)
+			return true
 		end
 
 		-- Chạy logic chặn RemoteEvent thống nhất từ RemoteBlocking.luau
 		if self.Name == "Died" and firstArg == "VoidImplosion" and activeCtrl.VoidImplosionImmune == true then
 			return true
 		end
-
+ 
 		local args = { ... }
-
+ 
 		if activeCtrl.GuardianImmune == true and self.Name == "Died" and args[1] == "Guardian" then
 			return true
 		end
 		if activeCtrl.KolonaImmune == true and self.Name == "DiedFunc" and args[1] == "Kolona" then
 			return true
 		end
-
+ 
 		local block = RemoteBlocking.shouldBlockRemoteCall(self, args, activeCtrl)
 		if block then
 			return true
 		end
-
+ 
 		return false
 	end
-
+ 
 	-- Đăng ký dispatcher toàn cục
 	getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall = handleRemoteCall
 

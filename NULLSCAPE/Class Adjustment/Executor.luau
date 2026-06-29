@@ -170,9 +170,9 @@ function Executor.enable()
 			end
 
 			if GrappleRange and typeof(GrappleRange.cast) == "function" then
-				local success, result = pcall(GrappleRange.cast, self, forceRefresh, originalCast, ...)
-				if success then
-					return result
+				local results = packValues(pcall(GrappleRange.cast, self, forceRefresh, originalCast, ...))
+				if results[1] then
+					return table.unpack(results, 2, results.n)
 				end
 			end
 
