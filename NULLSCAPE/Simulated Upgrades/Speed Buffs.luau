@@ -6,9 +6,12 @@
 --    - SwiftnessRing = +10%
 --    - Adrenaline = +20%
 --    - SportShoes = +40%
+--    - Adrenaline is limited by the native index to MaxPlayers = 2
+--    - Last Man/Solo +20% is native movement.lastMan, not a simulated upgrade
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
 
 local BUFF_VALUES = {
     ["Swiftness Ring I (+10%)"] = 0.10,
@@ -18,11 +21,41 @@ local BUFF_VALUES = {
     ["Sport Shoes (+40%)"] = 0.40,
 }
 
+local BUFF_UPGRADE_KEYS = {
+    ["Swiftness Ring I (+10%)"] = "SwiftnessRing",
+    ["Swiftness Ring II (+10%)"] = "SwiftnessRing",
+    ["Swiftness Ring III (+10%)"] = "SwiftnessRing",
+    ["Adrenaline (+20%)"] = "Adrenaline",
+    ["Sport Shoes (+40%)"] = "SportShoes",
+}
+
 local Logic = {
     SelectedBuffs = {},
     OriginalUpdateSpeed = nil,
     Hooked = false,
 }
+
+local function isAdrenalineAvailable()
+    local solo = ReplicatedStorage:FindFirstChild("Solo")
+    if solo and solo.Value == true then
+        return true
+    end
+
+    return #Players:GetPlayers() <= 2
+end
+
+local function isNativeUpgradeAlreadyActive(movement, option)
+    local upgradeKey = BUFF_UPGRADE_KEYS[option]
+    if not (movement and upgradeKey and typeof(movement.HasUpgrade) == "function") then
+        return false
+    end
+
+    local success, enabled = pcall(function()
+        return movement:HasUpgrade(upgradeKey)
+    end)
+
+    return success and enabled == true
+end
 
 local function getMovementCore()
     local movement = ReplicatedStorage:FindFirstChild("Movement")
@@ -30,7 +63,7 @@ local function getMovementCore()
     return movement:FindFirstChild("MovementCore")
 end
 
-local function getTotalBonus(controller)
+local function getSimulatedBonus(controller, movement)
     local selectedBuffs = controller.SpeedBuffSelections or Logic.SelectedBuffs or {}
     local total = 0
 
@@ -39,7 +72,12 @@ local function getTotalBonus(controller)
     end
 
     for _, option in ipairs(selectedBuffs) do
-        total += BUFF_VALUES[option] or 0
+        if option == "Adrenaline (+20%)" and not isAdrenalineAvailable() then
+            continue
+        end
+        if not isNativeUpgradeAlreadyActive(movement, option) then
+            total += BUFF_VALUES[option] or 0
+        end
     end
 
     return total
@@ -49,7 +87,7 @@ local function applySpeedBuffs(controller, movement)
     if not controller.SpeedBuffsEnabled then return end
     if not movement then return end
 
-    local totalBonus = getTotalBonus(controller)
+    local totalBonus = getSimulatedBonus(controller, movement)
     if totalBonus <= 0 then
         return
     end
@@ -57,7 +95,7 @@ local function applySpeedBuffs(controller, movement)
     movement.movementSpeedMulti = (tonumber(movement.movementSpeedMulti) or 1) + totalBonus
 end
 
-function Logic.start(controller, gc)
+function Logic.start(controller, _gc)
     local MovementCoreModule = getMovementCore()
     if not MovementCoreModule then return end
 

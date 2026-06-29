@@ -166,7 +166,7 @@ local function getSwingClearanceScore(deps, grapple, candidate, position, anchor
     return cfg.MAP_ANCHOR_SWING_NARROW_PENALTY or 55
 end
 
-local function getAnchorSurfaceScore(deps, result)
+local function getAnchorSurfaceScore(deps, grapple, position, result, options)
     local cfg = deps.CFG
     local normal = result and result.Normal
     if not normal then
@@ -174,6 +174,13 @@ local function getAnchorSurfaceScore(deps, result)
     end
 
     if normal.Y <= -0.25 then
+        local allowUnderside = typeof(options) == "table" and options.allowUnderside == true
+        local rootPart = grapple and grapple.RootPart
+        local verticalOffset = rootPart and (position.Y - rootPart.Position.Y) or -math.huge
+        if allowUnderside and verticalOffset >= (cfg.MAP_ANCHOR_VOID_UNDERSIDE_MIN_VERTICAL or 12) then
+            return cfg.MAP_ANCHOR_VOID_UNDERSIDE_BONUS or -8
+        end
+
         return cfg.MAP_ANCHOR_SWING_UNDERSIDE_PENALTY or 105
     elseif math.abs(normal.Y) <= 0.45 then
         return cfg.MAP_ANCHOR_SWING_WALL_BONUS or -14
@@ -182,7 +189,7 @@ local function getAnchorSurfaceScore(deps, result)
     return 0
 end
 
-local function getSwingRoomScore(deps, grapple, candidate, position, distance, result)
+local function getSwingRoomScore(deps, grapple, candidate, position, distance, result, options)
     local cfg = deps.CFG
     local rootPart = grapple and grapple.RootPart
     local velocity = rootPart and rootPart.Velocity
@@ -240,7 +247,7 @@ local function getSwingRoomScore(deps, grapple, candidate, position, distance, r
     end
 
     return score
-        + getAnchorSurfaceScore(deps, result)
+        + getAnchorSurfaceScore(deps, grapple, position, result, options)
         + getSwingClearanceScore(deps, grapple, candidate, position, anchorUnit)
 end
 
@@ -361,7 +368,7 @@ local function getPathWidthScore(deps, grapple, candidate, position)
     return cfg.MAP_ANCHOR_OPT_NARROW_PATH_PENALTY or 80, "NarrowPath"
 end
 
-local function getAnchorScore(deps, grapple, candidate, position, distance, screenScore, result, routeThreat)
+local function getAnchorScore(deps, grapple, candidate, position, distance, screenScore, result, routeThreat, options)
     local cfg = deps.CFG
     local rootPart = grapple and grapple.RootPart
     if not rootPart then
@@ -402,7 +409,7 @@ local function getAnchorScore(deps, grapple, candidate, position, distance, scre
         end
     end
 
-    addBreakdown(breakdown, "SwingRoom", getSwingRoomScore(deps, grapple, candidate, position, distance, result))
+    addBreakdown(breakdown, "SwingRoom", getSwingRoomScore(deps, grapple, candidate, position, distance, result, options))
     local momentumScore, momentumReason = getMomentumRoomScore(deps, grapple, position)
     addBreakdown(breakdown, "MomentumRoom", momentumScore)
     local apexScore, apexReason = getArcApexScore(deps, grapple, position)
@@ -427,6 +434,7 @@ function MapSense.findBestVoidAnchor(deps, grapple, options)
 
     local driveMode = typeof(options) == "table" and options.driveMode == true
     local returnDecision = typeof(options) == "table" and options.returnDecision == true
+    local allowUnderside = not (typeof(options) == "table") or options.allowUnderside ~= false
     local anchors = MapSense.refresh(deps, false)
     if #anchors == 0 then
         return nil
@@ -459,7 +467,19 @@ function MapSense.findBestVoidAnchor(deps, grapple, options)
             local result, distance = deps.isLineClear(grapple, candidate.Instance, part, position, maxRange)
             if result and deps.isUsableResult(grapple, result) and deps.isPathSafeForHitbox(grapple, candidate.Instance, part, position, maxRange) then
                 local threat = deps.getRouteThreat and deps.getRouteThreat(rootPart.Position, position) or nil
-                local score, breakdown = getAnchorScore(deps, grapple, candidate, position, distance, screenScore, result, threat)
+                local score, breakdown = getAnchorScore(
+                    deps,
+                    grapple,
+                    candidate,
+                    position,
+                    distance,
+                    screenScore,
+                    result,
+                    threat,
+                    {
+                        allowUnderside = allowUnderside,
+                    }
+                )
                 if score < bestScore then
                     bestResult = result
                     bestInstance = candidate.Instance

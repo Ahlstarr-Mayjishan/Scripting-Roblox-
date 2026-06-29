@@ -123,7 +123,6 @@ local Controller = {
 	GrappleSharkTailMode = "Manual",
 	GrappleSharkTailStyle = "Balanced",
 	GrappleMomentumGuardEnabled = false,
-	GrappleJumpPadUsesBypassEnabled = false,
 	GrapplerStaminaRecoverySpeed = 1,
 	GrappleAdaptInputKey = readSavedAdaptInputKey(),
 	Destroyed = false,
@@ -204,7 +203,6 @@ function Controller:CleanUp()
 		self.GrappleSmartReelEnabled = false
 		self.GrappleSharkTailHelperEnabled = false
 		self.GrappleMomentumGuardEnabled = false
-		self.GrappleJumpPadUsesBypassEnabled = false
 		self.GrappleMapModel3DDebugEnabled = false
 		callExecutor("disableRailAssist")
 		callExecutor("disableGrappleAimAssist")
@@ -440,7 +438,6 @@ function Controller:HasAnyGrappleAssistFeature()
 		or self.GrappleSmartReelEnabled
 		or self.GrappleSharkTailHelperEnabled
 		or self.GrappleMomentumGuardEnabled
-		or self.GrappleJumpPadUsesBypassEnabled
 		or self.GrappleMapModel3DDebugEnabled
 end
 
@@ -683,17 +680,6 @@ function Controller:SetGrappleMomentumGuard(value)
 	end
 end
 
-function Controller:SetGrappleJumpPadUsesBypass(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	self.GrappleJumpPadUsesBypassEnabled = value == true
-	if self.GrappleJumpPadUsesBypassEnabled then
-		self.GrappleAssistSuiteEnabled = true
-	end
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleJumpPadUsesBypassEnabled = false
-		self.GrappleAssistSuiteEnabled = previousSuite
-	end
-end
 
 
 function Controller:SetGrappleAdaptInputKey(key)

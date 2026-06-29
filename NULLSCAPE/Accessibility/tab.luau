@@ -27,13 +27,32 @@ local DEFAULTS = {
 	GrappleSharkTailMode = "Manual",
 	GrappleSharkTailStyle = "Balanced",
 	GrappleMomentumGuardEnabled = false,
-	GrappleJumpPadUsesBypassEnabled = false,
 	GrappleAimAssistTargetPriority = "GrapplePoint",
 	GrapplerStaminaRecoverySpeed = 1,
 	GrappleAimAssistRangePriority = "Nearest",
 	GrappleAdaptInputKey = "T",
 	GrappleMapModel3DDebugEnabled = false,
 }
+
+local function makeLabelAutoResize(labelText)
+	local LocalPlayer = game.Players.LocalPlayer
+	local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
+	if not PlayerGui then return end
+
+	task.spawn(function()
+		task.wait(0.2)
+		for _, desc in ipairs(PlayerGui:GetDescendants()) do
+			if desc:IsA("TextLabel") and string.find(desc.Text, labelText, 1, true) then
+				local labelFrame = desc.Parent
+				if labelFrame and labelFrame:IsA("Frame") then
+					desc.AutomaticSize = Enum.AutomaticSize.Y
+					desc.TextWrapped = true
+					labelFrame.AutomaticSize = Enum.AutomaticSize.Y
+				end
+			end
+		end
+	end)
+end
 
 local function resolveController(Client, Controller)
 	if typeof(Controller) == "table" and rawget(Controller, "__AccessibilityProxy") ~= true then
@@ -494,9 +513,9 @@ return function(Client, Controller)
 	})
 
 	if Tab.CreateLabel then
-		Tab:CreateLabel("Smart Reel: requires real NinjaBelt.")
-		Tab:CreateLabel(" - Manual: uses p2 sub-ability to start reel while already grappled;")
-		Tab:CreateLabel(" - Automatic: starts reel when airborne, attached, path-safe, and off cooldown.")
+		local text = "Smart Reel: requires real NinjaBelt.\n - Manual: uses p2 sub-ability to start reel while already grappled;\n - Automatic: starts reel when airborne, attached, path-safe, and off cooldown."
+		Tab:CreateLabel(text)
+		makeLabelAutoResize("Smart Reel: requires real NinjaBelt.")
 	end
 
 	Tab:CreateDropdown({
@@ -526,10 +545,9 @@ return function(Client, Controller)
 	})
 
 	if Tab.CreateLabel then
-		Tab:CreateLabel("SharkTail Helper: requires NinjaBelt + SharkTail.")
-		Tab:CreateLabel(" - Manual: uses p2 when the SharkTail window is safe;")
-		Tab:CreateLabel(" - outside that window it can fallback to Smart Reel.")
-		Tab:CreateLabel(" - Automatic: uses score/timing instead of firing every frame.")
+		local text = "SharkTail Helper: requires NinjaBelt + SharkTail.\n - Manual: uses p2 when the SharkTail window is safe;\n - outside that window it can fallback to Smart Reel.\n - Automatic: uses score/timing instead of firing every frame."
+		Tab:CreateLabel(text)
+		makeLabelAutoResize("SharkTail Helper: requires NinjaBelt + SharkTail.")
 	end
 
 	Tab:CreateDropdown({
@@ -574,15 +592,6 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
-		Name = "JumpPad Uses Bypass",
-		Info = "Keeps Grapple JumpPads reusable/queryable for repeated pulls. Useful for testing repeated JumpPad grapples.",
-		CurrentValue = Controller.GrappleJumpPadUsesBypassEnabled or false,
-		Flag = "GrappleJumpPadUsesBypassToggle",
-		Callback = function(Value)
-			Controller:SetGrappleJumpPadUsesBypass(Value)
-		end,
-	})
 
 	Tab:CreateDropdown({
 		Name = "Grapple Target Priority",

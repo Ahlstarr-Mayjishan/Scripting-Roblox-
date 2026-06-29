@@ -40,6 +40,8 @@ local createControllerProxy = function(Client, Controller)
 		GrappleMaxRange = 90,
 		GrappleDisableGroundRelease = false,
 		GrappleNoReelCooldown = false,
+		GrappleSharkTailWindow = 0.25,
+		GrappleJumpPadUsesBypassEnabled = false,
 	}
 
 	return setmetatable({ __ClassAdjustmentProxy = true }, {
@@ -141,6 +143,29 @@ return function(Client, Controller)
 		Flag = "GrappleNoReelCooldownToggle",
 		Callback = function(Value)
 			Controller:SetGrappleNoReelCooldown(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "SharkTail Window",
+		Info = "Adjusts the timing window (in seconds) allowed to trigger SharkTail after releasing a reel.",
+		Range = { 0.25, 1 },
+		Increment = 0.05,
+		Suffix = "s",
+		CurrentValue = Controller.GrappleSharkTailWindow or 0.25,
+		Flag = "GrappleSharkTailWindowSlider",
+		Callback = function(Value)
+			Controller:SetGrappleSharkTailWindow(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "JumpPad Uses Bypass",
+		Info = "Keeps Grapple JumpPads reusable/queryable for repeated pulls. Useful for testing repeated JumpPad grapples.",
+		CurrentValue = Controller.GrappleJumpPadUsesBypassEnabled or false,
+		Flag = "GrappleJumpPadUsesBypassToggle",
+		Callback = function(Value)
+			Controller:SetGrappleJumpPadUsesBypass(Value)
 		end,
 	})
 end

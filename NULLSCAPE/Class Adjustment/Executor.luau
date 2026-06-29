@@ -125,6 +125,19 @@ function Executor.enable()
 				self.reelCooldown = false
 			end
 
+			if Control and Control.GrappleSharkTailWindow and self and self.Movement and self.Movement:HasUpgrade("SharkTail") and not self.sharkTailDisable and self.lastGrappleRelease and self.lastGrappleRelease > 0 then
+				local elapsed = time() - self.lastGrappleRelease
+				if elapsed <= Control.GrappleSharkTailWindow then
+					self.allowSharkTail = true
+					if self.UI and self.UI:FindFirstChild("Frame") then
+						pcall(function()
+							self.UI.Frame.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 130)
+							self.UI.Frame.Outline.UIStroke.Color = Color3.fromRGB(255, 255, 130)
+						end)
+					end
+				end
+			end
+
 			return table.unpack(stepResults, 2, stepResults.n)
 		end
 

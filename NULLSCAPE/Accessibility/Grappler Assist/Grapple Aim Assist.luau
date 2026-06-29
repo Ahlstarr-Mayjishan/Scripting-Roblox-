@@ -261,6 +261,8 @@ local CFG = {
 	MAP_ANCHOR_SWING_VERTICAL_RATIO_MAX = 1.35,
 	MAP_ANCHOR_SWING_VERTICAL_RATIO_PENALTY = 82,
 	MAP_ANCHOR_SWING_UNDERSIDE_PENALTY = 105,
+	MAP_ANCHOR_VOID_UNDERSIDE_MIN_VERTICAL = 12,
+	MAP_ANCHOR_VOID_UNDERSIDE_BONUS = -8,
 	MAP_ANCHOR_SWING_WALL_BONUS = -14,
 	MAP_ANCHOR_SWING_FORWARD_BONUS = -24,
 	MAP_ANCHOR_SWING_BEHIND_PENALTY = 70,
@@ -553,10 +555,8 @@ function Logic.isMomentumGuardEnabled()
 end
 
 function Logic.isJumpPadUsesBypassEnabled()
-	local controller = Logic.getController()
-	return controller
-		and controller.GrappleAssistSuiteEnabled == true
-		and controller.GrappleJumpPadUsesBypassEnabled == true
+	local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+	return Control and Control.GrappleJumpPadUsesBypassEnabled == true
 end
 
 function Logic.setMovementIntent(state, duration, reason)

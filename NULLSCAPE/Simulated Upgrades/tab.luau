@@ -4,6 +4,26 @@
 --  Dong vai tro tao tab "Mo phong Upgrades & Radar" tren giao dien Rayfield
 -- ]]
 
+local function makeLabelAutoResize(labelText)
+	local LocalPlayer = game.Players.LocalPlayer
+	local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
+	if not PlayerGui then return end
+
+	task.spawn(function()
+		task.wait(0.2)
+		for _, desc in ipairs(PlayerGui:GetDescendants()) do
+			if desc:IsA("TextLabel") and string.find(desc.Text, labelText, 1, true) then
+				local labelFrame = desc.Parent
+				if labelFrame and labelFrame:IsA("Frame") then
+					desc.AutomaticSize = Enum.AutomaticSize.Y
+					desc.TextWrapped = true
+					labelFrame.AutomaticSize = Enum.AutomaticSize.Y
+				end
+			end
+		end
+	end)
+end
+
 return function(Client, Controller)
 	local Tab = Client.Window:CreateTab("Upgrade Simulations", 4483362458)
 
@@ -67,9 +87,9 @@ return function(Client, Controller)
 	})
 
 	if Tab.CreateLabel then
-		Tab:CreateLabel("Note: 0 range represents Infinite (Map-wide) pick up.")
-		Tab:CreateLabel(" - Gifts have a server-side limit of 30 studs.")
-		Tab:CreateLabel(" - Instrument has no limit (0 = infinite range).")
+		local text = "Note: 0 range represents Infinite (Map-wide) pick up.\n - Gifts have a server-side limit of 30 studs.\n - Instrument has no limit (0 = infinite range)."
+		Tab:CreateLabel(text)
+		makeLabelAutoResize("Note: 0 range represents Infinite")
 	end
 
 	Tab:CreateSlider({
