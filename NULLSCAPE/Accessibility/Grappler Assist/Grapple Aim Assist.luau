@@ -2825,8 +2825,14 @@ function maintainBellBypass(grapple)
 
 	local movement = grapple and grapple.Movement
 	local part = grapple and grapple.grapplePart
-	if movement and movement.grappling and isBellInstance(part) then
-		holdBellBypass(part)
+	local rootPart = grapple and grapple.RootPart
+	if movement and movement.grappling and isBellInstance(part) and rootPart then
+		local distance = (rootPart.Position - part.Position).Magnitude
+		if distance > 12 then
+			holdBellBypass(part)
+		else
+			releaseBellBypass()
+		end
 	else
 		scheduleBellBypassRelease(0.5)
 	end
@@ -4300,6 +4306,25 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 		return result, direction
 	end
 
+	if hasClassCapability(grapple, "AimAssist") and Logic.isEnabled() then
+		local autoAimResult = scanNamedTargets(grapple, { driveMode = true, fullScan = true, forceCursor = false })
+		if Logic.isUsableResult(grapple, autoAimResult) then
+			if
+				hasClassCapability(grapple, "BellBypass")
+				and autoAimResult.Instance
+				and autoAimResult.Instance.Name == "Bell"
+			then
+				holdBellBypass(autoAimResult.Instance)
+			end
+			Logic.LastAssistDebug = {
+				Reason = "AutoAimCast",
+				Score = 0,
+				Target = autoAimResult.Instance.Name,
+			}
+			return autoAimResult, direction
+		end
+	end
+
 	if
 		CastIntent
 		and CastIntent.getCursorPreviewResult
@@ -5372,19 +5397,7 @@ function Logic.shouldSuppressGrappleCollisionCheck(grapple)
 end
 
 function Logic.beginGrappleCollisionBypass(grapple)
-	if not Logic.shouldSuppressGrappleCollisionCheck(grapple) then
-		return nil
-	end
-
-	local movement = grapple.Movement
-	local previousMoveCastParams = movement.moveCastParams
-	movement.moveCastParams = Logic.getNoCollisionMoveCastParams()
-
-	return function()
-		if movement then
-			movement.moveCastParams = previousMoveCastParams
-		end
-	end
+	return nil
 end
 
 function Logic.markGrappleBonkGrace(grapple, duration)
@@ -5569,7 +5582,7 @@ end
 function Logic.enable()
 	local globals = Logic.getGlobals()
 	Logic.resetRuntimeState(nil, "Enable")
-	if globals.GrappleAimAssistHooked then
+	if globals.GrappleAimAssistHooked and globals.activeGrappleAimAssist == Logic then
 		globals.activeGrappleAimAssist = Logic
 		Logic.ensureDiveBonkHook(globals)
 		watchAdaptInput()
@@ -5583,7 +5596,7 @@ function Logic.enable()
 	end
 	clearLegacyInfiniteStaminaHook(globals, grappleModule)
 
-	local originalCast = grappleModule.Cast
+	local originalCast = globals.GrappleAimAssistOriginalCast or grappleModule.Cast
 	globals.GrappleAimAssistOriginalCast = originalCast
 
 	grappleModule.Cast = function(self, forceRefresh, ...)
@@ -5610,7 +5623,7 @@ function Logic.enable()
 	end
 
 	if typeof(grappleModule.Start) == "function" then
-		local originalStart = grappleModule.Start
+		local originalStart = globals.GrappleAimAssistOriginalStart or grappleModule.Start
 		globals.GrappleAimAssistOriginalStart = originalStart
 
 		grappleModule.Start = function(self, result, ...)
@@ -5661,7 +5674,7 @@ function Logic.enable()
 	end
 
 	if typeof(grappleModule.SpecialAction) == "function" then
-		local originalSpecialAction = grappleModule.SpecialAction
+		local originalSpecialAction = globals.GrappleAimAssistOriginalSpecialAction or grappleModule.SpecialAction
 		globals.GrappleAimAssistOriginalSpecialAction = originalSpecialAction
 
 		grappleModule.SpecialAction = function(self, state, ...)
@@ -5697,7 +5710,7 @@ function Logic.enable()
 	end
 
 	if typeof(grappleModule.AltSpecialAction) == "function" then
-		local originalAltSpecialAction = grappleModule.AltSpecialAction
+		local originalAltSpecialAction = globals.GrappleAimAssistOriginalAltSpecialAction or grappleModule.AltSpecialAction
 		globals.GrappleAimAssistOriginalAltSpecialAction = originalAltSpecialAction
 
 		grappleModule.AltSpecialAction = function(self, state, ...)
@@ -5734,7 +5747,7 @@ function Logic.enable()
 
 
 	if typeof(grappleModule.Step) == "function" then
-		local originalStep = grappleModule.Step
+		local originalStep = globals.GrappleAimAssistOriginalStep or grappleModule.Step
 		globals.GrappleAimAssistOriginalStep = originalStep
 
 		grappleModule.Step = function(self, dt, ...)
@@ -5830,7 +5843,7 @@ function Logic.enable()
 	Logic.ensureDiveBonkHook(globals)
 
 	if typeof(grappleModule.End) == "function" then
-		local originalEnd = grappleModule.End
+		local originalEnd = globals.GrappleAimAssistOriginalEnd or grappleModule.End
 		globals.GrappleAimAssistOriginalEnd = originalEnd
 
 		grappleModule.End = function(self, ...)

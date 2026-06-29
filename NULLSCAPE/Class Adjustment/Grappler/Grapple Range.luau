@@ -12,6 +12,11 @@ local LocalPlayer = Players.LocalPlayer
 local Range = {}
 
 function Range.cast(grapple, forceRefresh, originalCast, ...)
+	local globals = getgenv()._NULLSCAPE_Globals
+	if globals and globals.activeGrappleAimAssist then
+		return originalCast(grapple, forceRefresh, ...)
+	end
+
 	local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
 	local maxRange = Control and Control.GrappleMaxRange or 90
 
