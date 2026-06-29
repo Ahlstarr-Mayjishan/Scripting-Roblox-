@@ -245,6 +245,7 @@ local CFG = {
 	MAP_ANCHOR_SCAN_INTERVAL = 1.2,
 	MAP_ANCHOR_SCAN_MAX_DESCENDANTS = 9000,
 	MAP_ANCHOR_MAX_CANDIDATES = 320,
+	MAP_ANCHOR_VOID_DETECTOR_RADIUS = 120,
 	MAP_ANCHOR_DISTANCE_WEIGHT = 0.03,
 	MAP_ANCHOR_SCREEN_WEIGHT = 36,
 	MAP_ANCHOR_UPWARD_BONUS = -62,
@@ -3217,6 +3218,66 @@ local function getEffectivePreferredTarget(grapple, preferredName)
 	return preferredName
 end
 
+local function getTargetSamplePositions(part, preferredPosition)
+	local positions = {}
+	local function add(position)
+		if typeof(position) ~= "Vector3" then
+			return
+		end
+		for _, existing in ipairs(positions) do
+			if (existing - position).Magnitude <= 0.1 then
+				return
+			end
+		end
+		table.insert(positions, position)
+	end
+
+	add(preferredPosition)
+	if not (part and part:IsA("BasePart")) then
+		return positions
+	end
+
+	local half = part.Size * 0.5
+	local cframe = part.CFrame
+	add(part.Position)
+	local samples = {
+		Vector3.new(half.X, 0, 0),
+		Vector3.new(-half.X, 0, 0),
+		Vector3.new(0, half.Y, 0),
+		Vector3.new(0, -half.Y, 0),
+		Vector3.new(0, 0, half.Z),
+		Vector3.new(0, 0, -half.Z),
+		Vector3.new(half.X, half.Y, half.Z),
+		Vector3.new(half.X, half.Y, -half.Z),
+		Vector3.new(-half.X, half.Y, half.Z),
+		Vector3.new(-half.X, half.Y, -half.Z),
+	}
+
+	for _, localPoint in ipairs(samples) do
+		if #positions >= CFG.CURSOR_TARGET_SAMPLE_LIMIT then
+			break
+		end
+		add(cframe:PointToWorldSpace(localPoint))
+	end
+
+	return positions
+end
+
+local function findCandidateLineClear(grapple, candidate, part, preferredPosition, maxRange, trySamples)
+	if not trySamples then
+		local result, distance = isLineClear(grapple, candidate.Instance, part, preferredPosition, maxRange)
+		return result, distance, preferredPosition
+	end
+
+	for _, position in ipairs(getTargetSamplePositions(part, preferredPosition)) do
+		local result, distance = isLineClear(grapple, candidate.Instance, part, position, maxRange)
+		if result and Logic.isUsableResult(grapple, result) then
+			return result, distance, position
+		end
+	end
+
+	return nil, nil, preferredPosition
+end
 local function scanNamedTargets(grapple, options)
 	local camera = Workspace.CurrentCamera
 	if not camera then
@@ -3311,11 +3372,19 @@ local function scanNamedTargets(grapple, options)
 						continue
 					end
 
-					local result, distance = isLineClear(grapple, candidate.Instance, part, position, maxRange)
+					local result, distance, hitPosition = findCandidateLineClear(
+						grapple,
+						candidate,
+						part,
+						position,
+						maxRange,
+						rangeMode == "Closest To Cursor" or forceCursor or rescueMode or emergencyBrakeMode or driveMode
+					)
+					local pathPosition = hitPosition or position
 					if
 						result
 						and Logic.isUsableResult(grapple, result)
-						and isPathSafeForHitbox(grapple, candidate.Instance, part, position, maxRange)
+						and isPathSafeForHitbox(grapple, candidate.Instance, part, pathPosition, maxRange)
 					then
 						local item = {
 							Name = candidate.Name,
@@ -3861,7 +3930,11 @@ local function tryPanicRescue(grapple)
 	local previewResult
 	if voidDanger then
 		previewResult = scanKillVoidSharkTailAnchor(grapple, { driveMode = true, returnDecision = true })
-			or scanMapVoidAnchor(grapple, { driveMode = true, returnDecision = true })
+			or scanMapVoidAnchor(grapple, {
+				driveMode = true,
+				returnDecision = true,
+				detectorRadius = CFG.MAP_ANCHOR_VOID_DETECTOR_RADIUS,
+			})
 	end
 	previewResult = previewResult or scanNamedTargets(grapple, { driveMode = true })
 	if not previewResult and voidDanger then
@@ -4043,7 +4116,10 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 		local mapResult
 		if isVoidRescueWindowActive() or isVoidRescueDanger(grapple) then
 			mapResult = scanKillVoidSharkTailAnchor(grapple, { driveMode = true })
-				or scanMapVoidAnchor(grapple, { driveMode = true })
+				or scanMapVoidAnchor(grapple, {
+					driveMode = true,
+					detectorRadius = CFG.MAP_ANCHOR_VOID_DETECTOR_RADIUS,
+				})
 		end
 		assistedResult = mapResult or scanNamedTargets(grapple, { fullScan = true, forceCursor = true }) or scanScreenSurface(grapple, { forceCursor = true })
 	end
@@ -4838,7 +4914,7 @@ local function applySafeLandingGuard(grapple)
 	return false
 end
 
-local function applyPanicStabilize(grapple)
+function Logic.applyPanicStabilize(grapple)
 	if not Logic.isEmergencyProtectionEnabled() or time() > (Logic.PanicStabilizeUntil or 0) then
 		return
 	end
@@ -4868,7 +4944,7 @@ local function applyPanicStabilize(grapple)
 	claimAssist("PanicStabilize", "PanicStabilize", 0.16)
 end
 
-local function applySharkTailStabilize(grapple)
+function Logic.applySharkTailStabilize(grapple)
 	if time() > (Logic.SharkTailStabilizeUntil or 0) then
 		return
 	end
@@ -5475,8 +5551,8 @@ function Logic.enable()
 			HealthMonitor.try("LandingAssist", Logic.applySmartReelLandingAssist, self)
 
 			HealthMonitor.try("MomentumGuard", applyMomentumGuard, self)
-			HealthMonitor.try("PanicStabilize", applyPanicStabilize, self)
-			HealthMonitor.try("SharkTailStabilize", applySharkTailStabilize, self)
+			HealthMonitor.try("PanicStabilize", Logic.applyPanicStabilize, self)
+			HealthMonitor.try("SharkTailStabilize", Logic.applySharkTailStabilize, self)
 			HealthMonitor.try("AdaptRecast", updateAdaptRecast, self)
 			return table.unpack(stepResults, 2, stepResults.n)
 		end

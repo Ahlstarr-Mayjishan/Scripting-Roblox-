@@ -53,6 +53,59 @@ local function isTargetHit(result, targetInstance, targetPart)
     return result.Instance == targetPart or result.Instance:IsDescendantOf(targetInstance)
 end
 
+local function getAnchorSamplePositions(part, preferredPosition)
+    local positions = {}
+    local function add(position)
+        if typeof(position) ~= "Vector3" then
+            return
+        end
+        for _, existing in ipairs(positions) do
+            if (existing - position).Magnitude <= 0.1 then
+                return
+            end
+        end
+        table.insert(positions, position)
+    end
+
+    add(preferredPosition)
+    if not (part and part:IsA("BasePart")) then
+        return positions
+    end
+
+    local half = part.Size * 0.5
+    local cframe = part.CFrame
+    add(part.Position)
+    local samples = {
+        Vector3.new(half.X, 0, 0),
+        Vector3.new(-half.X, 0, 0),
+        Vector3.new(0, half.Y, 0),
+        Vector3.new(0, -half.Y, 0),
+        Vector3.new(0, 0, half.Z),
+        Vector3.new(0, 0, -half.Z),
+        Vector3.new(half.X, half.Y, half.Z),
+        Vector3.new(half.X, half.Y, -half.Z),
+        Vector3.new(-half.X, half.Y, half.Z),
+        Vector3.new(-half.X, half.Y, -half.Z),
+    }
+
+    for _, localPoint in ipairs(samples) do
+        add(cframe:PointToWorldSpace(localPoint))
+    end
+
+    return positions
+end
+
+local function findAnchorLineClear(deps, grapple, candidate, preferredPosition, maxRange)
+    for _, position in ipairs(getAnchorSamplePositions(candidate.Part, preferredPosition)) do
+        local result, distance = deps.isLineClear(grapple, candidate.Instance, candidate.Part, position, maxRange)
+        if result and deps.isUsableResult(grapple, result) then
+            return result, distance, position
+        end
+    end
+
+    return nil, nil, preferredPosition
+end
+
 local function addAnchor(deps, anchors, seen, instance)
     if not (instance and instance.Parent) or seen[instance] then
         return
@@ -441,6 +494,8 @@ function MapSense.findBestVoidAnchor(deps, grapple, options)
     end
 
     local maxRange = deps.getAssistRange(grapple, driveMode)
+    local detectorRadius = typeof(options) == "table" and tonumber(options.detectorRadius) or nil
+    detectorRadius = detectorRadius or (deps.CFG.MAP_ANCHOR_VOID_DETECTOR_RADIUS or maxRange)
     local viewportSize = camera.ViewportSize
     local screenAnchor = viewportSize * 0.5
     local bestResult = nil
@@ -458,20 +513,26 @@ function MapSense.findBestVoidAnchor(deps, grapple, options)
         if part and part.Parent then
             evaluated = evaluated + 1
             local position = part.Position
-            local viewportPoint, onScreen = camera:WorldToViewportPoint(position)
+            local roughDistance = (position - rootPart.Position).Magnitude
+            if roughDistance > detectorRadius then
+                continue
+            end
+
+            local result, distance, hitPosition = findAnchorLineClear(deps, grapple, candidate, position, maxRange)
+            local scorePosition = hitPosition or position
+            local viewportPoint, onScreen = camera:WorldToViewportPoint(scorePosition)
             local screenScore = 0.75
             if onScreen then
                 screenScore = (Vector2.new(viewportPoint.X, viewportPoint.Y) - screenAnchor).Magnitude / math.max(viewportSize.X, viewportSize.Y)
             end
 
-            local result, distance = deps.isLineClear(grapple, candidate.Instance, part, position, maxRange)
-            if result and deps.isUsableResult(grapple, result) and deps.isPathSafeForHitbox(grapple, candidate.Instance, part, position, maxRange) then
-                local threat = deps.getRouteThreat and deps.getRouteThreat(rootPart.Position, position) or nil
+            if result and deps.isUsableResult(grapple, result) and deps.isPathSafeForHitbox(grapple, candidate.Instance, part, scorePosition, maxRange) then
+                local threat = deps.getRouteThreat and deps.getRouteThreat(rootPart.Position, scorePosition) or nil
                 local score, breakdown = getAnchorScore(
                     deps,
                     grapple,
                     candidate,
-                    position,
+                    scorePosition,
                     distance,
                     screenScore,
                     result,

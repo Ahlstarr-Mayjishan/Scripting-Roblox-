@@ -48,7 +48,7 @@ return function(Client, Controller)
 		Controller = {}
 	end
 
-	local Tab = Client.Window:CreateTab("Entities", 4483362458)
+	local Tab = Client.Window:CreateTab("Immunity", 4483362458)
 
 	Tab:CreateSection("Entities List - Touch Immunity")
 
@@ -270,7 +270,9 @@ return function(Client, Controller)
 	Tab:CreateDropdown({
 		Name = "Immunity Effect",
 		Options = { "Legit", "Blatant" },
-		CurrentOption = (resolveController(Client, Controller) and resolveController(Client, Controller).SpringerImmunityMode) or "Legit",
+		CurrentOption = (
+			resolveController(Client, Controller) and resolveController(Client, Controller).SpringerImmunityMode
+		) or "Legit",
 		MultipleOptions = false,
 		Flag = "SpringerImmunityModeDropdown",
 		Callback = function(Option)
