@@ -7,6 +7,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local UserInputService = game:GetService("UserInputService")
 
@@ -23,6 +24,7 @@ local ThreatModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assis
 local SafeLandingGuard = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SafeLandingGuard.luau")
 local TrajectoryAntiBonk = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TrajectoryAntiBonk.luau")
 local PredictionHorizon = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/PredictionHorizon.luau")
+local CastIntent = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/CastIntent.luau")
 local StaminaAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Stamina Assist.luau")
 
 local function packValues(...)
@@ -110,6 +112,7 @@ local Logic = {
 	LastLandingGuard = nil,
 	LastAntiBonkPrediction = nil,
 	LastPredictionHorizon = nil,
+	CastIntentState = CastIntent and CastIntent.newState and CastIntent.newState() or nil,
 	LastRuntimeCharacter = nil,
 	LastRuntimeRootPart = nil,
 	LastRuntimeMovement = nil,
@@ -162,6 +165,7 @@ local CFG = {
 	ADAPT_RECAST_TRIA_ARRIVAL_DISTANCE = 6,
 	ADAPT_RECAST_GRAPPLEPOINT_DISTANCE = 15,
 	ADAPT_RECAST_BOUNCE_DISTANCE = 7,
+	FRESH_CURSOR_CAST_WINDOW = 0.12,
 	ADAPT_DRIVE_FORWARD_BONUS = -34,
 	ADAPT_DRIVE_BACKWARD_PENALTY = 70,
 	ADAPT_DRIVE_CHAIN_LOOKAHEAD = 0.45,
@@ -329,6 +333,8 @@ local CFG = {
 	CURSOR_SPECIAL_FOCUS_BONUS = -18,
 	CURSOR_RECORRECT_CONFIDENCE_LIMIT = 0.2,
 	CURSOR_RECORRECT_SURFACE_NORMAL_Y_MAX = 0.55,
+	CURSOR_DIRECT_OVERRIDE_LIMIT = 0.08,
+	CURSOR_DIRECT_SURFACE_LIMIT = 0.035,
 	ASSIST_INPUT_INTENT_WEIGHT = 32,
 	ASSIST_VELOCITY_INTENT_WEIGHT = 14,
 	ASSIST_TARGET_LOCK_DURATION = 0.22,
@@ -2206,6 +2212,16 @@ local function getCameraScreenScore(camera, worldPosition, anchor)
 	return delta.Magnitude / math.max(viewportSize.X, viewportSize.Y)
 end
 
+local function getCastIntentDeps()
+	return {
+		Players = Players,
+		Workspace = Workspace,
+		getAssistRange = getAssistRange,
+		getScreenAnchor = getScreenAnchor,
+		getCameraScreenScore = getCameraScreenScore,
+	}
+end
+
 local function isLineClear(grapple, targetInstance, targetPart, targetPosition, maxRange)
 	local rootPart = grapple and grapple.RootPart
 	if not rootPart then
@@ -3161,8 +3177,19 @@ local function scanNamedTargets(grapple, options)
 		local part = candidate and candidate.Part
 		if part and part.Parent then
 			if candidate.Name ~= "Bell" or part.CanTouch or hasSavedBellImmunity(part) then
-				local position = part.Position
-				local screenScore = getCameraScreenScore(camera, position, screenAnchor)
+				local screenScore, focusPosition
+				if CastIntent and CastIntent.getPartScreenFocus then
+					screenScore, focusPosition = CastIntent.getPartScreenFocus(
+						camera,
+						part,
+						screenAnchor,
+						rangeMode == "Closest To Cursor"
+					)
+				end
+				local position = focusPosition or part.Position
+				if not screenScore then
+					screenScore = getCameraScreenScore(camera, position, screenAnchor)
+				end
 				if screenScore then
 					local isLockedTarget = candidate.Instance == Logic.LastAssistTargetInstance
 					if
@@ -3343,6 +3370,10 @@ local function scanScreenSurface(grapple, options)
 	local screenAnchor = forceCursor and getScreenAnchor(camera, "Closest To Cursor") or viewportSize * 0.5
 
 	for _, offset in ipairs(SCREEN_RAY_OFFSETS) do
+		if forceCursor and (math.abs(offset.X) > 0 or math.abs(offset.Y) > 0) then
+			continue
+		end
+
 		local screenPoint = screenAnchor + Vector2.new(offset.X * viewportSize.X, offset.Y * viewportSize.Y)
 		local ray = camera:ViewportPointToRay(screenPoint.X, screenPoint.Y)
 		local cameraHit = Workspace:Raycast(ray.Origin, ray.Direction.Unit * 2048, grapple.grappleParams)
@@ -3514,8 +3545,32 @@ local function getSoftOverrideResult(grapple, originalResult)
 	-- Nếu người chơi đang aim trực tiếp vào một mục tiêu hợp lệ (như JumpPad, GrapplePoint, Bell, TriaOrb),
 	-- tôn trọng ý định của họ và không tự động thay thế sang mục tiêu khác.
 	local originalTargetName = getResultTargetName(originalResult)
+	local cursorResult, _, cursorScreenScore
+	if CastIntent and CastIntent.getNativeCursorResult then
+		cursorResult, _, cursorScreenScore = CastIntent.getNativeCursorResult(getCastIntentDeps(), grapple)
+	end
+	if cursorResult and Logic.isUsableResult(grapple, cursorResult) then
+		local cursorTargetName = getResultTargetName(cursorResult)
+		local cursorLimit = cursorTargetName and CFG.CURSOR_DIRECT_OVERRIDE_LIMIT or CFG.CURSOR_DIRECT_SURFACE_LIMIT
+		if
+			cursorScreenScore
+			and cursorScreenScore <= cursorLimit
+			and not isSameAssistTarget(cursorResult, { Instance = originalResult.Instance })
+		then
+			Logic.LastAssistDebug = {
+				Reason = "NativeCursorOverride",
+				Score = cursorScreenScore,
+				Target = cursorTargetName or cursorResult.Instance.Name,
+			}
+			return cursorResult
+		end
+	end
+
 	if originalTargetName then
-		return nil
+		local _, originalScreenScore = getDirectResultAssistScore(grapple, originalResult, true)
+		if originalScreenScore and originalScreenScore <= CFG.CURSOR_DIRECT_OVERRIDE_LIMIT then
+			return nil
+		end
 	end
 
 	local decision = scanNamedTargets(grapple, {
@@ -3793,6 +3848,23 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 	end
 	if Logic.isJumpPadCommitGuardActive() then
 		return result, direction
+	end
+
+	local cursorResult, cursorDirection, cursorScreenScore
+	if CastIntent and CastIntent.getNativeCursorResult then
+		cursorResult, cursorDirection, cursorScreenScore = CastIntent.getNativeCursorResult(getCastIntentDeps(), grapple)
+	end
+	if cursorResult and Logic.isUsableResult(grapple, cursorResult) then
+		local cursorTargetName = getResultTargetName(cursorResult)
+		local cursorLimit = cursorTargetName and CFG.CURSOR_DIRECT_OVERRIDE_LIMIT or CFG.CURSOR_DIRECT_SURFACE_LIMIT
+		if cursorScreenScore and cursorScreenScore <= cursorLimit then
+			Logic.LastAssistDebug = {
+				Reason = "NativeCursorMissFix",
+				Score = cursorScreenScore,
+				Target = cursorTargetName or cursorResult.Instance.Name,
+			}
+			return cursorResult, cursorDirection
+		end
 	end
 
 	local assistedResult
@@ -4943,6 +5015,9 @@ function Logic.resetRuntimeState(grapple, reason)
 	Logic.LastLandingGuard = nil
 	Logic.LastAntiBonkPrediction = nil
 	Logic.LastPredictionHorizon = nil
+	if CastIntent and CastIntent.clear then
+		CastIntent.clear(Logic.CastIntentState)
+	end
 	Logic.AssistArbiterState = AssistArbiter and AssistArbiter.new and AssistArbiter.new() or nil
 
 	if HealthMonitor and typeof(HealthMonitor.reset) == "function" then
@@ -5001,13 +5076,23 @@ function Logic.enable()
 		if globals.activeGrappleAimAssist ~= Logic then
 			return originalCast(self, forceRefresh, ...)
 		end
+		local castForceRefresh = forceRefresh
+		if
+			CastIntent
+			and CastIntent.shouldUseFreshCursor
+			and CastIntent.shouldUseFreshCursor(Logic.CastIntentState)
+			and Logic.isEnabled()
+			and hasClassCapability(self, "AimAssist")
+		then
+			castForceRefresh = true
+		end
 		local assistedResults =
-			packValues(HealthMonitor.try("CastAssist", assistedCast, self, forceRefresh, originalCast, ...))
+			packValues(HealthMonitor.try("CastAssist", assistedCast, self, castForceRefresh, originalCast, ...))
 		if assistedResults[1] then
 			return table.unpack(assistedResults, 2, assistedResults.n)
 		end
 
-		return originalCast(self, forceRefresh, ...)
+		return originalCast(self, castForceRefresh, ...)
 	end
 
 	if typeof(grappleModule.Start) == "function" then
@@ -5055,6 +5140,31 @@ function Logic.enable()
 			end
 			maintainBellBypass(self)
 			return startResult
+		end
+	end
+
+	if typeof(grappleModule.SpecialAction) == "function" then
+		local originalSpecialAction = grappleModule.SpecialAction
+		globals.GrappleAimAssistOriginalSpecialAction = originalSpecialAction
+
+		grappleModule.SpecialAction = function(self, state, ...)
+			if globals.activeGrappleAimAssist ~= Logic then
+				return originalSpecialAction(self, state, ...)
+			end
+
+			if
+				state == Enum.UserInputState.End
+				and CastIntent
+				and CastIntent.markFreshCursorCast
+				and Logic.isSuiteEnabled()
+				and hasClassCapability(self, "AimAssist")
+				and self.Movement
+				and self.Movement.grappling ~= true
+			then
+				CastIntent.markFreshCursorCast(Logic.CastIntentState, CFG.FRESH_CURSOR_CAST_WINDOW)
+			end
+
+			return originalSpecialAction(self, state, ...)
 		end
 	end
 
@@ -5233,6 +5343,9 @@ function Logic.disable()
 	if grappleModule and globals.GrappleAimAssistOriginalEnd then
 		grappleModule.End = globals.GrappleAimAssistOriginalEnd
 	end
+	if grappleModule and globals.GrappleAimAssistOriginalSpecialAction then
+		grappleModule.SpecialAction = globals.GrappleAimAssistOriginalSpecialAction
+	end
 	if grappleModule and globals.GrappleAimAssistOriginalAltSpecialAction then
 		grappleModule.AltSpecialAction = globals.GrappleAimAssistOriginalAltSpecialAction
 	end
@@ -5248,6 +5361,7 @@ function Logic.disable()
 	globals.GrappleAimAssistOriginalStart = nil
 	globals.GrappleAimAssistOriginalStep = nil
 	globals.GrappleAimAssistOriginalEnd = nil
+	globals.GrappleAimAssistOriginalSpecialAction = nil
 	globals.GrappleAimAssistOriginalAltSpecialAction = nil
 	globals.GrappleAimAssistOriginalSharkTail = nil
 	globals.GrappleAimAssistOriginalDiveBonk = nil
@@ -5295,6 +5409,9 @@ function Logic.disable()
 	Logic.LastLandingGuard = nil
 	Logic.LastAntiBonkPrediction = nil
 	Logic.LastPredictionHorizon = nil
+	if CastIntent and CastIntent.clear then
+		CastIntent.clear(Logic.CastIntentState)
+	end
 	Logic.AssistArbiterState = AssistArbiter and AssistArbiter.new and AssistArbiter.new() or nil
 	if PhysicsProfile and PhysicsProfile.clear then
 		PhysicsProfile.clear()
