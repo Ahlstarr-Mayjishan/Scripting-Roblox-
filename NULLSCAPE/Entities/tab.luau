@@ -93,23 +93,23 @@ return function(Client, Controller)
 		table.insert(currentTelefraggerOptions, "Immunity")
 	end
 	if getFlag(Controller, "TelefraggerRedirect") then
-		table.insert(currentTelefraggerOptions, "BackTrick")
+		table.insert(currentTelefraggerOptions, "Auto-Dodge")
 	end
 
 	Tab:CreateDropdown({
 		Name = "Telefragger Hack Mode",
-		Options = { "Immunity", "BackTrick" },
+		Options = { "Immunity", "Auto-Dodge" },
 		CurrentOption = currentTelefraggerOptions,
 		MultipleOptions = true,
 		Flag = "TelefraggerHackDropdown",
 		Callback = function(Options)
 			local hasImmunity = false
-			local hasBackTrick = false
+			local hasAutoDodge = false
 			for _, opt in ipairs(Options) do
 				if opt == "Immunity" then
 					hasImmunity = true
-				elseif opt == "BackTrick" then
-					hasBackTrick = true
+				elseif opt == "Auto-Dodge" then
+					hasAutoDodge = true
 				end
 			end
 			local activeController = resolveController(nil, Controller)
@@ -118,7 +118,7 @@ return function(Client, Controller)
 					activeController:SetImmunity("Telefragger", hasImmunity)
 				end
 				if typeof(activeController.SetTelefraggerRedirect) == "function" then
-					activeController:SetTelefraggerRedirect(hasBackTrick)
+					activeController:SetTelefraggerRedirect(hasAutoDodge)
 				end
 			else
 				warn("[NULLSCAPE] Entities controller is not ready; ignored Telefragger Hack Mode change")

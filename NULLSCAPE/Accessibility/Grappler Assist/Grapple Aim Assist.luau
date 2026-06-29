@@ -908,13 +908,7 @@ function pulseSpecialAction(grapple)
 		end
 
 		local activeGrapple = grapple
-		if
-			not (
-				activeGrapple
-				and isActiveClassSpecial(activeGrapple)
-				and hasClassCapability(activeGrapple, "RescueAssist")
-			)
-		then
+		if not activeGrapple or typeof(activeGrapple) ~= "table" then
 			activeGrapple = getTrackedGrapple()
 		end
 		if not activeGrapple then
@@ -3158,7 +3152,7 @@ function scanNamedTargets(grapple, options)
 					end
 					if screenScore then
 						if (part == Logic.LastGrappledPart or candidate.Instance == Logic.LastGrappledPart) and time() - (Logic.LastGrappledTime or 0) < 0.8 then
-							if driveMode or (screenScore > 0.15) then
+							if screenScore > 0.15 then
 								continue
 							end
 						end

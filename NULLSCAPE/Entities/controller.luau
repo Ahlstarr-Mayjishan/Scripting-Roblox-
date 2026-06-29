@@ -81,8 +81,9 @@ local Controller = {
 	CatalystImmune = false,
 	nilEnemyImmune = false,
 	nilMirageImmune = false,
-	TelefraggerRedirect = false,
-	TelefraggerRedirectConnection = nil,
+	TelefraggerAutoDodge = false,
+	TelefraggerBackTrick = false,
+	TelefraggerConnection = nil,
 	WasRedirectingTelefragger = false,
 	RedirectRootJoint = nil,
 	RedirectOriginalC0 = nil,
@@ -296,16 +297,26 @@ local function restoreHooks()
 	end
 end
 
-function Controller:SetTelefraggerRedirect(value)
-	self.TelefraggerRedirect = value
-	if self.TelefraggerRedirectConnection then
+function Controller:SetTelefraggerAutoDodge(value)
+	self.TelefraggerAutoDodge = value
+	self:UpdateTelefraggerConnection()
+end
+
+function Controller:SetTelefraggerBackTrick(value)
+	self.TelefraggerBackTrick = value
+	self:UpdateTelefraggerConnection()
+end
+
+function Controller:UpdateTelefraggerConnection()
+	if self.TelefraggerConnection then
 		pcall(function()
-			self.TelefraggerRedirectConnection:Disconnect()
+			self.TelefraggerConnection:Disconnect()
 		end)
-		self.TelefraggerRedirectConnection = nil
+		self.TelefraggerConnection = nil
 	end
 
-	if self.WasRedirectingTelefragger then
+	-- Khôi phục trạng thái xoay khớp nếu BackTrick bị tắt
+	if not self.TelefraggerBackTrick and self.WasRedirectingTelefragger then
 		self.WasRedirectingTelefragger = false
 		local char = game.Players.LocalPlayer.Character
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -321,32 +332,34 @@ function Controller:SetTelefraggerRedirect(value)
 		end
 	end
 
-	if not value then
+	if not (self.TelefraggerAutoDodge or self.TelefraggerBackTrick) then
 		return
 	end
 
 	local RunService = game:GetService("RunService")
 	local LocalPlayer = game.Players.LocalPlayer
 
-	local function hasActiveIndicator(enemy)
-		if not (enemy and enemy.Parent) then
-			return false
+	-- Helper: Tính khoảng cách ngắn nhất từ điểm P đến đoạn thẳng AB
+	local function getDistanceToSegment(p, a, b)
+		local ab = b - a
+		local ap = p - a
+		local abLenSq = ab:Dot(ab)
+		if abLenSq < 1e-5 then
+			return (p - a).Magnitude, a
 		end
-		for _, name in ipairs({ "Mirror", "Surface", "HighlightGlass" }) do
-			local part = enemy:FindFirstChild(name, true)
-			if part and part:IsA("BasePart") and part.Transparency < 0.95 then
-				return true
-			end
-		end
-		local indicatorPart = enemy:FindFirstChild("IndicatorPart", true)
-		if indicatorPart then
-			for _, desc in ipairs(indicatorPart:GetDescendants()) do
-				if (desc:IsA("Beam") or desc:IsA("ParticleEmitter")) and desc.Enabled ~= false then
-					return true
-				end
-			end
-		end
-		return false
+		local t = ap:Dot(ab) / abLenSq
+		t = math.clamp(t, 0, 1)
+		local closest = a + t * ab
+		return (p - closest).Magnitude, closest
+	end
+
+	-- Helper: Kiểm tra vị trí sàn an toàn để tránh né xuống vực
+	local function isFloorSafe(pos)
+		local raycastParams = RaycastParams.new()
+		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+		raycastParams.FilterDescendantsInstances = { LocalPlayer.Character }
+		local rayResult = workspace:Raycast(pos + Vector3.new(0, 2, 0), Vector3.new(0, -15, 0), raycastParams)
+		return rayResult ~= nil
 	end
 
 	local function getRootJoint(char)
@@ -368,7 +381,7 @@ function Controller:SetTelefraggerRedirect(value)
 		return nil
 	end
 
-	self.TelefraggerRedirectConnection = RunService.Heartbeat:Connect(function()
+	self.TelefraggerConnection = RunService.Heartbeat:Connect(function(dt)
 		local char = LocalPlayer.Character
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 		local rootPart = char and char:FindFirstChild("HumanoidRootPart")
@@ -381,62 +394,124 @@ function Controller:SetTelefraggerRedirect(value)
 			return
 		end
 
+		local dangerSegment = nil
+		local minSegmentDist = math.huge
 		local isTargeted = false
+
+		-- Quét tất cả các chỉ thị (Indicator) hoạt động của Telefragger ở cự ly gần
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if string.find(string.lower(enemy.Name), "telefragger") then
-				if hasActiveIndicator(enemy) then
-					local dist = (rootPart.Position - enemy.Position).Magnitude
-					if dist < 120 then
-						isTargeted = true
-						break
+				local indicatorPart = enemy:FindFirstChild("IndicatorPart", true)
+				if indicatorPart then
+					local attachments = {}
+					for _, child in ipairs(indicatorPart:GetChildren()) do
+						if child:IsA("Attachment") then
+							table.insert(attachments, child)
+						end
+					end
+					-- Attachment và Attachment2 được sinh ra ở client biểu diễn vị trí bắt đầu và kết thúc của cú dash/teleport
+					if #attachments >= 2 then
+						local startPos = attachments[1].WorldPosition
+						local endPos = attachments[2].WorldPosition
+						local dist, closest = getDistanceToSegment(rootPart.Position, startPos, endPos)
+						if dist < 15 and dist < minSegmentDist then
+							minSegmentDist = dist
+							dangerSegment = { Start = startPos, End = endPos, Closest = closest }
+							isTargeted = true
+						end
 					end
 				end
 			end
 		end
 
-		if isTargeted then
-			local rootJoint = getRootJoint(char)
-			if rootJoint then
-				if not self.WasRedirectingTelefragger then
-					self.WasRedirectingTelefragger = true
-					self.RedirectRootJoint = rootJoint
-					self.RedirectOriginalC0 = rootJoint.C0
-					self.OriginalAutoRotate = humanoid.AutoRotate
-					humanoid.AutoRotate = false
-				end
+		-- 1. Xử lý cơ chế BackTrick (Xoay hướng vật lý 180 độ, bù trừ khớp nối visual để server tính toán lệch ra sau lưng)
+		if self.TelefraggerBackTrick then
+			if isTargeted then
+				local rootJoint = getRootJoint(char)
+				if rootJoint then
+					if not self.WasRedirectingTelefragger then
+						self.WasRedirectingTelefragger = true
+						self.RedirectRootJoint = rootJoint
+						self.RedirectOriginalC0 = rootJoint.C0
+						self.OriginalAutoRotate = humanoid.AutoRotate
+						humanoid.AutoRotate = false
+					end
 
-				local moveDir = humanoid.MoveDirection
-				local targetLook = Vector3.zero
-				if moveDir.Magnitude > 0.1 then
-					targetLook = -moveDir.Unit
-				else
-					local camera = workspace.CurrentCamera
-					if camera then
-						local camLook = camera.CFrame.LookVector
-						targetLook = -Vector3.new(camLook.X, 0, camLook.Z).Unit
+					local moveDir = humanoid.MoveDirection
+					local targetLook = Vector3.zero
+					if moveDir.Magnitude > 0.1 then
+						targetLook = -moveDir.Unit
+					else
+						local camera = workspace.CurrentCamera
+						if camera then
+							local camLook = camera.CFrame.LookVector
+							targetLook = -Vector3.new(camLook.X, 0, camLook.Z).Unit
+						end
+					end
+
+					if targetLook.Magnitude > 0.1 then
+						rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + targetLook, Vector3.yAxis)
+					end
+
+					local isR6 = (rootJoint.Parent == rootPart)
+					if isR6 then
+						rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, 0, math.pi)
+					else
+						rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, math.pi, 0)
 					end
 				end
-
-				if targetLook.Magnitude > 0.1 then
-					rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + targetLook, Vector3.yAxis)
-				end
-
-				local isR6 = (rootJoint.Parent == rootPart)
-				if isR6 then
-					rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, 0, math.pi)
-				else
-					rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, math.pi, 0)
+			else
+				if self.WasRedirectingTelefragger then
+					self.WasRedirectingTelefragger = false
+					if self.RedirectRootJoint and self.RedirectRootJoint.Parent then
+						pcall(function()
+							self.RedirectRootJoint.C0 = self.RedirectOriginalC0
+						end)
+					end
+					humanoid.AutoRotate = self.OriginalAutoRotate
 				end
 			end
-		else
-			if self.WasRedirectingTelefragger then
-				self.WasRedirectingTelefragger = false
-				if self.RedirectRootJoint and self.RedirectRootJoint.Parent then
-					pcall(function()
-						self.RedirectRootJoint.C0 = self.RedirectOriginalC0
-					end)
+		end
+
+		-- 2. Xử lý cơ chế Auto-Dodge (Né tránh di chuyển tịnh tiến sang ngang ra khỏi đường dash đỏ)
+		if self.TelefraggerAutoDodge and dangerSegment then
+			local startPos = dangerSegment.Start
+			local endPos = dangerSegment.End
+			local dir = (endPos - startPos).Unit
+			local perp = Vector3.new(-dir.Z, 0, dir.X).Unit
+
+			local moveDir = humanoid.MoveDirection
+			local slideDir = perp
+			if moveDir.Magnitude > 0.1 then
+				if moveDir:Dot(perp) < 0 then
+					slideDir = -perp
 				end
-				humanoid.AutoRotate = self.OriginalAutoRotate
+			else
+				local camera = workspace.CurrentCamera
+				if camera then
+					if camera.CFrame.RightVector:Dot(perp) < 0 then
+						slideDir = -perp
+					end
+				end
+			end
+
+			-- Thực hiện di chuyển né tránh (Auto-Dodge) bằng cách tịnh tiến mượt mà CFrame sang ngang
+			local speed = 32 -- studs/giây (rất mượt mà như cú trượt chân nhẹ, không bị giật hoặc tele)
+			local nextPos = rootPart.Position + slideDir * (dt * speed)
+			
+			if isFloorSafe(nextPos) then
+				rootPart.CFrame = rootPart.CFrame + slideDir * (dt * speed)
+			else
+				local altPos = rootPart.Position - slideDir * (dt * speed)
+				if isFloorSafe(altPos) then
+					rootPart.CFrame = rootPart.CFrame - slideDir * (dt * speed)
+				else
+					-- Dự phòng: Nếu hai bên đều là vực thẳm, di chuyển giật lùi dọc theo đường dash
+					local backPos = rootPart.Position - dir * (dt * speed)
+					if isFloorSafe(backPos) then
+						rootPart.CFrame = rootPart.CFrame - dir * (dt * speed)
+					end
+				end
 			end
 		end
 	end)
@@ -454,6 +529,12 @@ function Controller:CleanUp()
 			self.TelefraggerRedirectConnection:Disconnect()
 		end)
 		self.TelefraggerRedirectConnection = nil
+	end
+	if self.TelefraggerConnection then
+		pcall(function()
+			self.TelefraggerConnection:Disconnect()
+		end)
+		self.TelefraggerConnection = nil
 	end
 	if self.WasRedirectingTelefragger then
 		self.WasRedirectingTelefragger = false
