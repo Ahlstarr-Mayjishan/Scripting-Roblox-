@@ -556,9 +556,7 @@ local function loadModule(path)
 	end
 
 	if result == nil then
-		warn("[NULLSCAPE] WARNING: Module " .. tostring(path) .. " returned nil!")
-		moduleCache[path] = NIL_MODULE
-		return nil
+		error("[NULLSCAPE] Module " .. tostring(path) .. " returned nil! This indicates a file reading or download failure (such as an empty file or network block).", 2)
 	end
 
 	moduleCache[path] = result

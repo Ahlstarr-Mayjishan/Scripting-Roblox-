@@ -14,8 +14,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local LocalPlayer = Players.LocalPlayer
 
-local Executor = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/executor.luau")
 local Logic = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Radar logic.luau")
+local Executor = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/executor.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/GC.luau")
 local MatrixTetrahedron = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Matrix Tetrahedron.luau")
 local GraceWings = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Grace Wings.luau")
