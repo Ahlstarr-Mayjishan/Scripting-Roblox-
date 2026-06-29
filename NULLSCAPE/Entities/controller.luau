@@ -1185,11 +1185,11 @@ end
 
 -- Hook hệ thống trạng thái (Status Effects) để miễn nhiễm debuff ở chế độ Blatant
 local function initializeStatusEffectHook()
+	local globals = getgenv()._NULLSCAPE_Globals
 	local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
 	if StatusImmunity then
 		StatusImmunity.initialize()
 	end
-end
 
 	-- Hook SettingsHandler to bypass camera shakes, blurs, and flash effects natively
 	pcall(function()

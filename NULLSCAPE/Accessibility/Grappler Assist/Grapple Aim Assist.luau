@@ -348,8 +348,17 @@ local CFG = {
 	CURSOR_DIRECT_SURFACE_LIMIT = 0.035,
 	CURSOR_PREVIEW_RECORRECT_LIMIT = 0.28,
 	CURSOR_CAST_RECORRECT_LIMIT = 0.22,
-	CURSOR_TARGET_SAMPLE_LIMIT = 9,
+	CURSOR_TARGET_SAMPLE_LIMIT = 18,
 	CURSOR_SURFACE_DETECTOR_LIMIT = 0.24,
+	CURSOR_OPTIMAL_DISTANCE_MIN = 26,
+	CURSOR_OPTIMAL_DISTANCE_IDEAL = 72,
+	CURSOR_OPTIMAL_DISTANCE_MAX = 120,
+	CURSOR_OPTIMAL_VERTICAL_MIN = -18,
+	CURSOR_OPTIMAL_VERTICAL_IDEAL = 24,
+	CURSOR_OPTIMAL_VERTICAL_MAX = 72,
+	CURSOR_OPTIMAL_FLOOR_PENALTY = 42,
+	CURSOR_OPTIMAL_WALL_BONUS = -16,
+	CURSOR_OPTIMAL_HIGH_UNDERSIDE_BONUS = -10,
 	ASSIST_INPUT_INTENT_WEIGHT = 32,
 	ASSIST_VELOCITY_INTENT_WEIGHT = 14,
 	ASSIST_TARGET_LOCK_DURATION = 0.22,
@@ -3119,6 +3128,15 @@ local function getCursorReCorrectDeps()
 		isLineClear = isLineClear,
 		isUsableResult = Logic.isUsableResult,
 		isPathSafeForHitbox = isPathSafeForHitbox,
+		getAssistIntentDirections = getAssistIntentDirections,
+		getAssistIntentPenalty = getAssistIntentPenalty,
+		getRouteAssistBonus = getRouteAssistBonus,
+		getWrongAnchorPenalty = getWrongAnchorPenalty,
+		getSpecialAnchorBonus = getSpecialAnchorBonus,
+		getHorizontalVelocity = Logic.getHorizontalVelocity,
+		isVoidRescueActive = function(grapple)
+			return isVoidRescueWindowActive() or isVoidRescueDanger(grapple)
+		end,
 	}
 end
 
@@ -3988,6 +4006,9 @@ function Logic.isUsableResult(grapple, result)
 	if not instance then
 		return false
 	end
+	if instance.Parent == nil or typeof(result.Position) ~= "Vector3" then
+		return false
+	end
 
 	if instance.Name == "Bell" and instance.CanTouch == false and not hasSavedBellImmunity(instance) then
 		return false
@@ -4024,28 +4045,22 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 			reCorrectDecision =
 				getCursorReCorrectDecision(grapple, "CursorPreviewReCorrect", CFG.CURSOR_PREVIEW_RECORRECT_LIMIT)
 		end
-		if reCorrectDecision and reCorrectDecision.Result then
+		if reCorrectDecision and Logic.isUsableResult(grapple, reCorrectDecision.Result) then
 			return reCorrectDecision.Result, previewDirection
 		end
-		if previewResult then
+		if Logic.isUsableResult(grapple, previewResult) then
 			Logic.LastAssistDebug = {
 				Reason = "CursorPreview",
 				Score = previewScreenScore,
 				Target = previewTargetName or previewResult.Instance.Name,
 			}
 			return previewResult, previewDirection
-		elseif previewDirection then
-			Logic.LastAssistDebug = {
-				Reason = "CursorPreviewMiss",
-				Target = "MouseRay",
-			}
-			return nil, previewDirection
 		end
 	end
 
 	if Logic.isUsableResult(grapple, result) then
 		local overrideResult = getSoftOverrideResult(grapple, result)
-		if overrideResult then
+		if Logic.isUsableResult(grapple, overrideResult) then
 			if
 				hasClassCapability(grapple, "BellBypass")
 				and overrideResult.Instance
@@ -4070,7 +4085,7 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 	if CastIntent and CastIntent.getNativeCursorResult then
 		cursorResult, cursorDirection, cursorScreenScore = CastIntent.getNativeCursorResult(getCastIntentDeps(), grapple)
 	end
-	if cursorResult and Logic.isUsableResult(grapple, cursorResult) then
+	if Logic.isUsableResult(grapple, cursorResult) then
 		local cursorTargetName = getResultTargetName(cursorResult)
 		local cursorLimit = cursorTargetName and CFG.CURSOR_DIRECT_OVERRIDE_LIMIT or CFG.CURSOR_DIRECT_SURFACE_LIMIT
 		if cursorScreenScore and cursorScreenScore <= cursorLimit then
@@ -4084,7 +4099,7 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 	end
 
 	local cursorDecision = getCursorReCorrectDecision(grapple, "CursorCastReCorrect", CFG.CURSOR_CAST_RECORRECT_LIMIT)
-	if cursorDecision and cursorDecision.Result then
+	if cursorDecision and Logic.isUsableResult(grapple, cursorDecision.Result) then
 		return cursorDecision.Result, cursorDirection
 	end
 
@@ -4102,7 +4117,7 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 		end
 		assistedResult = mapResult or scanNamedTargets(grapple, { fullScan = true, forceCursor = true }) or scanScreenSurface(grapple, { forceCursor = true })
 	end
-	if assistedResult then
+	if Logic.isUsableResult(grapple, assistedResult) then
 		if
 			hasClassCapability(grapple, "BellBypass")
 			and assistedResult.Instance

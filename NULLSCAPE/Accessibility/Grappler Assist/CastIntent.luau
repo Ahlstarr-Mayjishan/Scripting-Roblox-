@@ -137,17 +137,17 @@ function CastIntent.getNativeCursorResult(deps, grapple)
 
 	local cameraHit = Workspace:Raycast(unitRay.Origin, unitRay.Direction.Unit * 2048, grapple.grappleParams)
 	if not cameraHit then
-		return nil, unitRay.Direction.Unit, nil
+		return nil, nil, nil
 	end
 
 	local offset = cameraHit.Position - rootPart.Position
 	if offset.Magnitude <= 0 or offset.Magnitude > getAssistRange(grapple, false) then
-		return nil, unitRay.Direction.Unit, nil
+		return nil, nil, nil
 	end
 
 	local result = Workspace:Raycast(rootPart.Position, offset, grapple.grappleParams)
 	if not result then
-		return nil, unitRay.Direction.Unit, nil
+		return nil, nil, nil
 	end
 
 	local anchor = getScreenAnchor(camera, "Closest To Cursor")

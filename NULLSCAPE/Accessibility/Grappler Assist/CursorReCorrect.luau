@@ -67,11 +67,15 @@ function CursorReCorrect.getTargetSamplePositions(cfg, part, preferredPosition)
 		Vector3.new(0, 0, -half.Z),
 		Vector3.new(half.X, half.Y, half.Z),
 		Vector3.new(half.X, half.Y, -half.Z),
+		Vector3.new(half.X, -half.Y, half.Z),
+		Vector3.new(half.X, -half.Y, -half.Z),
 		Vector3.new(-half.X, half.Y, half.Z),
 		Vector3.new(-half.X, half.Y, -half.Z),
+		Vector3.new(-half.X, -half.Y, half.Z),
+		Vector3.new(-half.X, -half.Y, -half.Z),
 	}
 
-	local limit = cfg and cfg.CURSOR_TARGET_SAMPLE_LIMIT or 9
+	local limit = cfg and cfg.CURSOR_TARGET_SAMPLE_LIMIT or 18
 	for _, localPoint in ipairs(samples) do
 		if #positions >= limit then
 			break
@@ -80,6 +84,93 @@ function CursorReCorrect.getTargetSamplePositions(cfg, part, preferredPosition)
 	end
 
 	return positions
+end
+
+local function getCursorAnchor(deps, camera)
+	if deps.getScreenAnchor then
+		return deps.getScreenAnchor(camera, "Closest To Cursor")
+	end
+	return camera.ViewportSize * 0.5
+end
+
+local function getAnchorQualityScore(deps, grapple, result, distance)
+	local cfg = deps.CFG
+	local rootPart = grapple and grapple.RootPart
+	if not (rootPart and result and typeof(result.Position) == "Vector3") then
+		return 0, "NoAnchorModel"
+	end
+
+	local targetPosition = result.Position
+	local offset = targetPosition - rootPart.Position
+	local vertical = offset.Y
+	local score = 0
+
+	local minDistance = cfg and cfg.CURSOR_OPTIMAL_DISTANCE_MIN or 26
+	local idealDistance = cfg and cfg.CURSOR_OPTIMAL_DISTANCE_IDEAL or 72
+	local maxDistance = cfg and cfg.CURSOR_OPTIMAL_DISTANCE_MAX or 120
+	if distance < minDistance then
+		score += (minDistance - distance) * 0.9
+	elseif distance <= maxDistance then
+		score += math.abs(distance - idealDistance) * 0.12
+	else
+		score += (distance - maxDistance) * 0.8
+	end
+
+	local minVertical = cfg and cfg.CURSOR_OPTIMAL_VERTICAL_MIN or -18
+	local idealVertical = cfg and cfg.CURSOR_OPTIMAL_VERTICAL_IDEAL or 24
+	local maxVertical = cfg and cfg.CURSOR_OPTIMAL_VERTICAL_MAX or 72
+	if vertical < minVertical then
+		score += (minVertical - vertical) * 1.1
+	elseif vertical > maxVertical then
+		score += (vertical - maxVertical) * 0.45
+	else
+		local verticalWindow = math.max(maxVertical - minVertical, 1)
+		local idealRatio = 1 - math.min(math.abs(vertical - idealVertical) / verticalWindow, 1)
+		score -= idealRatio * 12
+	end
+
+	local normal = result.Normal
+	if typeof(normal) == "Vector3" then
+		if normal.Y > 0.65 then
+			score += cfg and cfg.CURSOR_OPTIMAL_FLOOR_PENALTY or 42
+		elseif math.abs(normal.Y) <= 0.55 then
+			score += cfg and cfg.CURSOR_OPTIMAL_WALL_BONUS or -16
+		elseif normal.Y < -0.25 and vertical > 8 then
+			score += cfg and cfg.CURSOR_OPTIMAL_HIGH_UNDERSIDE_BONUS or -10
+		end
+	end
+
+	if deps.getAssistIntentDirections and deps.getAssistIntentPenalty then
+		local inputDirection, velocityDirection = deps.getAssistIntentDirections(grapple)
+		score += deps.getAssistIntentPenalty(rootPart, targetPosition, inputDirection, velocityDirection) * 0.28
+		if deps.getWrongAnchorPenalty then
+			score += deps.getWrongAnchorPenalty(rootPart, targetPosition, inputDirection, velocityDirection, false) * 0.25
+		end
+	end
+
+	if deps.getRouteAssistBonus then
+		score += deps.getRouteAssistBonus(rootPart, targetPosition) * 0.45
+	end
+
+	if deps.isVoidRescueActive and deps.isVoidRescueActive(grapple) then
+		if vertical >= 0 then
+			score -= 18
+		else
+			score += math.abs(vertical) * 0.8
+		end
+	end
+
+	return score, "OptimalAnchor"
+end
+
+local function scoreCandidateSample(deps, grapple, result, distance, samplePosition, preferredPosition)
+	local cfg = deps.CFG
+	local score = distance * (cfg and cfg.CURSOR_INTENT_DISTANCE_WEIGHT or 0.015)
+	if typeof(samplePosition) == "Vector3" and typeof(preferredPosition) == "Vector3" then
+		score += (samplePosition - preferredPosition).Magnitude * 0.18
+	end
+	local anchorScore = getAnchorQualityScore(deps, grapple, result, distance)
+	return score + anchorScore
 end
 
 function CursorReCorrect.findCandidateLineClear(deps, grapple, candidate, part, preferredPosition, maxRange, trySamples)
@@ -93,21 +184,29 @@ function CursorReCorrect.findCandidateLineClear(deps, grapple, candidate, part, 
 	end
 
 	local cfg = deps.CFG
+	local bestResult = nil
+	local bestDistance = nil
+	local bestPosition = preferredPosition
+	local bestScore = math.huge
 	for _, position in ipairs(CursorReCorrect.getTargetSamplePositions(cfg, part, preferredPosition)) do
 		local result, distance = deps.isLineClear(grapple, candidate.Instance, part, position, maxRange)
 		if result and (not deps.isUsableResult or deps.isUsableResult(grapple, result)) then
-			return result, distance, position
+			if
+				not deps.isPathSafeForHitbox
+				or deps.isPathSafeForHitbox(grapple, candidate.Instance, part, result.Position, maxRange)
+			then
+				local score = scoreCandidateSample(deps, grapple, result, distance, position, preferredPosition)
+				if score < bestScore then
+					bestResult = result
+					bestDistance = distance
+					bestPosition = result.Position
+					bestScore = score
+				end
+			end
 		end
 	end
 
-	return nil, nil, preferredPosition
-end
-
-local function getCursorAnchor(deps, camera)
-	if deps.getScreenAnchor then
-		return deps.getScreenAnchor(camera, "Closest To Cursor")
-	end
-	return camera.ViewportSize * 0.5
+	return bestResult, bestDistance, bestPosition
 end
 
 local function scoreSurface(deps, grapple, result, screenScore, driveMode, distance)
@@ -120,7 +219,8 @@ local function scoreSurface(deps, grapple, result, screenScore, driveMode, dista
 
 	local distanceWeight = cfg and cfg.CURSOR_INTENT_DISTANCE_WEIGHT or 0.015
 	local screenWeight = cfg and cfg.CURSOR_INTENT_SCREEN_WEIGHT or 1000
-	return screenScore * screenWeight + distance * distanceWeight + terrainScore, reason
+	local anchorScore, anchorReason = getAnchorQualityScore(deps, grapple, result, distance)
+	return screenScore * screenWeight + distance * distanceWeight + terrainScore + anchorScore, reason .. "/" .. anchorReason
 end
 
 function CursorReCorrect.scanSurfaceAroundCursor(deps, grapple, options)
