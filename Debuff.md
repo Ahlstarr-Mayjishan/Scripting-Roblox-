@@ -1,12 +1,12 @@
-# BÁO CÁO CÁC HIỆU ỨNG XẤU (DEBUFFS, CURSES & SCREEN EFFECTS) TRONG NULLSCAPE
+# BÁO CÁO CÁC HIỆU ỨNG XẤU (DEBUFFS, CURSES, SCREEN EFFECTS & KNOCKBACKS) TRONG NULLSCAPE
 
-Tài liệu này tổng hợp toàn bộ các hiệu ứng bất lợi (debuffs), lời nguyền (curses) và các hiệu ứng biến dạng màn hình (screen visual effects) ảnh hưởng trực tiếp đến Client và màn hình của người chơi trong game. Các thông tin dưới đây được tra cứu trực tiếp từ mã nguồn giải mã của game (`decompiled_Null.lua` và `MovementCore.luau`).
+Tài liệu này tổng hợp toàn bộ các hiệu ứng bất lợi (debuffs), lời nguyền (curses), hiệu ứng tối/biến dạng màn hình (screen visual effects) và cơ chế đẩy lùi (knockbacks) trong game. Các thông tin dưới đây được tra cứu và đối chiếu trực tiếp từ mã nguồn giải mã của game (`decompiled_Null.lua` và `MovementCore.luau`).
 
 ---
 
-## I. HIỆU ỨNG TRẠNG THÁI NỔI BẬT (STATUS EFFECTS - CLIENT-SIDE)
+## I. HIỆU ỨNG TRẠNG THÁI (STATUS EFFECTS - CLIENT-SIDE)
 
-Các hiệu ứng này được quản lý bởi hệ thống `StatusEffectHandler` trên Client và ảnh hưởng trực tiếp đến khả năng di chuyển hoặc giao diện của người chơi.
+Các hiệu ứng này được quản lý bởi hệ thống `StatusEffectHandler` trên Client, ảnh hưởng trực tiếp đến khả năng di chuyển hoặc giao diện của người chơi.
 
 ### 1. Concussion (Chấn thương)
 * **Nguồn kích hoạt**: Rung chuông (**Bell**) khi đang chịu lời nguyền **Concussion**.
@@ -51,79 +51,68 @@ Các hiệu ứng này được quản lý bởi hệ thống `StatusEffectHandl
 ### 7. Medal (Huy chương)
 * **Nguồn kích hoạt**: Lời nguyền **Medal**.
 * **Ảnh hưởng di chuyển**:
-  * **Tích cơ bản**: Tăng nhẹ tốc độ di chuyển thụ động thêm `10%`.
+  * **Tích cực**: Tăng nhẹ tốc độ di chuyển thụ động thêm `10%`.
   * **Tiêu cực**: Triệt tiêu hoàn toàn lượng gia tốc nhảy móc (**Grapple Jump Velocity Boost**) khi người chơi móc vào các tấm **JumpPad**. Giới hạn tốc độ bay tối đa thoát ra bị bóp mạnh từ `180` studs/s (hoặc `140` studs/s) xuống chỉ còn vỏn vẹn **`120` studs/s** (hoặc **`75` studs/s** nếu có thêm lời nguyền WeakJumpPads) (Dòng 1253 trong `MovementCore.luau`).
 
 ---
 
-## II. LỜI NGUYỀN MÔI TRƯỜNG & BIẾN DẠNG MÀN HÌNH (ENVIRONMENTAL CURSES & VISUAL EFFECTS)
+## II. HIỆU ỨNG TỐI MÀN HÌNH & BIẾN DẠNG THỊ GIÁC (SCREEN DARKENING & VISUAL EFFECTS)
 
-Các hiệu ứng này tác động lên toàn cảnh môi trường chơi, thời tiết hoặc bẻ cong camera để tăng độ khó và hạn chế tầm nhìn của người chơi.
+Các hiệu ứng tác động trực tiếp làm giảm độ sáng của màn hình, hạn chế tầm nhìn hoặc gây nhiễu loạn thị giác người chơi.
 
-### 1. Oblivion / Realistic Oblivion (Sự quên lãng)
+### 1. Darkness / Fear (Tối sầm màn hình)
+* **Nguồn kích hoạt**: Đạt phòng 100 (**Level 100**) hoặc một số khu vực đặc biệt.
+* **Hiệu ứng**: Bật `game.Lighting.Fear.Enabled = true`. Hiệu ứng này tạo một lớp bóng tối bao phủ xung quanh rìa màn hình (vignette) và kéo giảm tầm nhìn xa (Fog) xuống mức tối thiểu, khiến người chơi chỉ nhìn thấy khu vực rất gần xung quanh mình.
+
+### 2. Chế độ đồ họa kỳ dị (Peculiar Graphics Mode)
+* **Nguồn kích hoạt**: Cài đặt đồ họa trong game.
+* **Hiệu ứng**: Khi chế độ này được kích hoạt, hệ thống sẽ hạ chỉ số phơi sáng của màn hình xuống mức cực hạn: `game.Lighting.ExposureCompensation = -12`. Toàn bộ màn chơi sẽ chìm vào **bóng tối đen kịt như mực**, ngoại trừ các chi tiết tự phát sáng (**Neon**) là có thể hiển thị.
+
+### 3. Bão sét làm tối môi trường (Unkowned Biome Storm)
+* **Nguồn kích hoạt**: Các giai đoạn giông bão sét trong màn chơi.
+* **Hiệu ứng**: Môi trường xung quanh sẽ tự động tối sầm đi trước khi sét đánh thông qua việc hạ độ sáng môi trường của `game.Lighting.Ambient` từ `179` xuống `113` (`Color3.fromRGB(113, 113, 113)`).
+
+### 4. Oblivion / Realistic Oblivion (Sự quên lãng)
 * **Nguồn kích hoạt**: Lời nguyền thuộc nhóm Greater Curse.
-* **Hiệu ứng màn hình / Visual**:
-  * Tạo các hạt đen bụi mù mịt (`OblivionAttack`, `OblivionAmbient`) bay xung quanh góc nhìn của người chơi.
-  * Hiển thị một thanh đo mức độ phơi nhiễm màu tím (`OblivionBar`) trên màn hình. Mức độ phơi nhiễm càng cao, màn hình càng rung lắc dữ dội (`OblivionShake`), âm thanh cảnh báo càng dồn dập.
-  * Khi bắt đầu hoặc kết thúc (sống sót/chết), màn hình sẽ bị **lóa sáng cực mạnh** thông qua chỉnh sáng `game.Lighting.Oblivion` (`Brightness = 2`, `Contrast = 3`).
-* **Gameplay / Cơ chế**:
-  * **Mặc định (Oblivion)**: Hệ thống liên tục quét một tia raycast thẳng xuống dưới chân (`Vector3.new(0, -1024, 0)`). Người chơi bắt buộc phải đứng trên một bề mặt vững chắc. Nếu lơ lửng trên không trung hoặc rơi tự do quá lâu, thanh đo phơi nhiễm sẽ đầy và gây tử vong lập tức (**Obliterated**).
-  * **Realistic Oblivion**: Hướng quét tia ngược lên trời (`Vector3.new(0, 1024, 0)`). Người chơi bắt buộc phải đứng dưới các mái che/trần nhà. Đứng ngoài trời trống trải sẽ tích lũy phơi nhiễm và chết.
+* **Hiệu ứng màn hình**:
+  * Khi Convergence diễn ra, màn hình bị nhuộm xám tối qua `game.Lighting.Oblivion` (`Brightness = 0.26`, `Contrast = 0.65`, `TintColor = Color3.fromRGB(223, 167, 167)`).
+  * Khi bắt đầu hoặc kết thúc, màn hình sẽ bị **lóa sáng cực mạnh** thông qua chỉnh sáng (`Brightness = 2`, `Contrast = 3`).
+* **Gameplay**:
+  * **Mặc định (Oblivion)**: Quét tia raycast thẳng xuống chân (`Vector3.new(0, -1024, 0)`). Người chơi bắt buộc phải đứng trên một bề mặt vững chắc. Rơi tự do quá lâu sẽ làm đầy thanh đo phơi nhiễm và gây tử vong lập tức (**Obliterated**).
+  * **Realistic Oblivion**: Quét tia ngược lên trời (`Vector3.new(0, 1024, 0)`). Người chơi bắt buộc phải đứng dưới các mái che/trần nhà, nếu đứng ngoài trời trống trải sẽ chết.
 
-### 2. Pixelate (Điểm ảnh hóa)
+### 5. Pixelate (Điểm ảnh hóa)
 * **Nguồn kích hoạt**: Lời nguyền **Pixelate**.
-* **Hiệu ứng màn hình / Visual**:
-  * Làm nhòe và vỡ hạt pixel toàn bộ màn hình của người chơi bằng cách kích hoạt đối tượng `PixelateBlur` trong `Lighting`. Hiệu ứng này kéo dài vĩnh viễn suốt cả trận đấu, thậm chí ảnh hưởng cả khi bạn quay về Sảnh chờ (Lobby).
-
-### 3. Fear (Sợ hãi)
-* **Nguồn kích hoạt**: Kích hoạt khi người chơi đạt đến Phòng 100 (**Level 100**) hoặc một số khu vực đặc biệt.
-* **Hiệu ứng màn hình / Visual**:
-  * Kích hoạt tính năng `game.Lighting.Fear.Enabled = true`, tạo hiệu ứng tối sầm ở các góc màn hình (vignette) và giảm mạnh tầm nhìn xa để tạo không khí kinh dị.
-
-### 4. Rung nhiễu & Bão xoáy (Hiệu ứng Biome Storm - Level 5 đến 30+)
-Trong các màn chơi có cấp độ bão lớn (như bão sét trong biome Unkowned), Client sẽ bị ép chịu các hiệu ứng biến đổi ánh sáng/camera cực kỳ khó chịu:
-* **Pulsating Blur (Cấp 5+)**: Màn hình liên tục co giãn độ mờ (blur) theo hàm sin: `Blur.Size = math.sin(time() * 3) ^ 4 * v23 * 2`, gây mỏi mắt và khó ngắm bắn.
-* **Spinning Sun (Cấp 7+)**: Trục ánh sáng mặt trời liên tục xoay tròn 360 độ: `game.Lighting.GeographicLatitude = time() * 90 * v26 % 360`, khiến các bóng đổ của địa hình quay cuồng liên tục trên mặt đất.
-* **Viewport Shake/Tilt (Cấp 30+)**: Góc nghiêng camera (`CFrame.Angles`) liên tục bị bẻ cong theo các trục ngẫu nhiên dựa trên thuật toán tiếng ồn (`math.noise`), gây hiện tượng lệch tâm ngắm vật lý.
-
-### 5. Razorbloom (Chim bẫy)
-* **Nguồn kích hoạt**: Lời nguyền **Razorbloom**.
-* **Gameplay / Cơ chế**:
-  * Một con chim Razorbloom sẽ đậu trực tiếp lên đầu nhân vật của bạn. Nó sẽ liên tục gây bất lợi cho đến khi bạn đi qua và chạm vào một tấm **Jump Pad** để xua đuổi nó đi.
+* **Hiệu ứng**: Làm nhòe và vỡ hạt pixel toàn bộ màn hình của người chơi bằng cách kích hoạt đối tượng `PixelateBlur` trong `Lighting`. Hiệu ứng này kéo dài vĩnh viễn suốt cả trận đấu, thậm chí ảnh hưởng cả khi bạn quay về Sảnh chờ (Lobby).
 
 ---
 
-## III. CÁC LOẠI LỰC ĐẨY & GIẬT MÀN HÌNH (KNOCKBACKS & SHOCKWAVES)
+## III. CƠ CHẾ ĐẨY LÙI VÀ KHỐNG CHẾ LỰC (KNOCKBACK MECHANICS)
 
-Hệ thống tính toán lực đẩy (knockback) vật lý khi người chơi va chạm với các đợt sóng xung kích (shockwaves) hoặc các vụ nổ trong game:
+Cơ chế đẩy lùi từ các nguồn bẫy hoặc vật thể đặc biệt gây ảnh hưởng nghiêm trọng đến đà (momentum) của nhân vật.
 
 ### 1. Springer Shockwave (Sóng xung kích của Springer)
-* **Nguồn kích hoạt**: Người chơi chạm vào Part mang tên `SpringerShockwave`.
-* **Hiệu ứng vật lý (Knockback)**:
-  * Vectơ hướng đẩy ngang hướng từ tâm sóng xung kích ra ngoài: `Unit = ((RootPart.Position - Shockwave.Position) * Vector3.new(1, 0, 1)).Unit`.
-  * **Trường hợp chịu lời nguyền `Springloaded`**:
-    * Lực đẩy rất mạnh: `Vận tốc = Unit * 100 + Vector3.new(0, 120, 0)` (100 studs/s theo chiều ngang và 120 studs/s hất tung lên trời).
-    * Nếu Springer có thuộc tính `Big` (Khổng lồ): Lực đẩy nhân tiếp với `1.15` (115 studs/s ngang và 138 studs/s dọc).
-  * **Trường hợp bình thường (Không có Springloaded)**:
-    * Lực đẩy tiêu chuẩn: `Vận tốc = Unit * 40 + Vector3.new(0, 75, 0)` (40 studs/s ngang và 75 studs/s dọc).
-    * Nếu Springer có thuộc tính `Big`: Lực đẩy nhân tiếp với `1.3` (52 studs/s ngang và 97.5 studs/s dọc).
-* **Lời nguyền chí mạng (`SpringerKill`)**: 
-  * Nếu lời nguyền này đang hoạt động, chạm vào sóng xung kích Springer sẽ **gây tử vong ngay lập tức** thay vì bị đẩy.
-  * Nếu không chết, trạng thái Humanoid của người chơi chuyển thành `Freefall`, bị áp đặt đà bay và hướng đi theo vectơ lực đẩy trên. Áp dụng debounce **1 giây** trước khi có thể bị trúng đợt đẩy tiếp theo.
+Khi người chơi chạm vào vòng sóng xung kích của Springer (`SpringerShockwave`), game sẽ tính toán lực đẩy lùi dựa trên khoảng cách và các lời nguyền hiện có (Dòng 1033 trong `MovementCore.luau`):
+* **Hướng đẩy**: Hướng ngang đẩy ra xa tâm sóng xung kích: `local Unit = ((p1.RootPart.Position - p2.Position) * Vector3.new(1, 0, 1)).Unit`
+* **Cường độ lực đẩy (`v3`)**:
+  * **Trường hợp mặc định (Không có lời nguyền)**:
+    * Lực đẩy cơ bản: `Unit * 40` (ngang) + `Vector3.new(0, 75, 0)` (dọc).
+    * Nếu Springer có thuộc tính `"Big"`, lực đẩy nhân thêm **`1.3x`** (tổng: `52` ngang / `97.5` dọc).
+  * **Trường hợp có lời nguyền `Springloaded` (Cực đại)**:
+    * Lực đẩy tăng mạnh: **`Unit * 100` (ngang) + `Vector3.new(0, 120, 0)` (dọc)**.
+    * Nếu Springer có thuộc tính `"Big"`, lực đẩy nhân thêm **`1.15x`** (tổng: `115` ngang / `138` dọc).
+* **Lời nguyền `SpringerKill`**: Nếu lời nguyền này hoạt động, chạm vào sóng xung kích sẽ **chết ngay lập tức** thay vì bị đẩy lùi.
+* **Thời gian khống chế**: Nhân vật bị ép chuyển sang trạng thái `Freefall`, gán vận tốc bằng lực đẩy `v3` và khóa cứng hướng di chuyển điều khiển (`WantDirection` và `MoveDirection`) theo hướng đẩy trong vòng **1 giây** (debounce).
 
-### 2. Cursed Bell / Mighty Gong (Sóng đẩy của Chuông nguyền)
-* **Nguồn kích hoạt**: Chuông dịch chuyển tức thời (teleport) khi đang chịu lời nguyền **Mighty Gong**.
-* **Hiệu ứng vật lý (Knockback)**:
-  * Khi chuông dịch chuyển, nó tạo ra một quả cầu xung kích tàng hình nở rộng từ bán kính `85` studs lên `115` studs.
-  * Quét tất cả người chơi trong **bán kính 38 studs** tính từ tâm dịch chuyển.
-  * Mức độ đẩy tỷ lệ nghịch với khoảng cách từ người chơi đến tâm chuông:
-    `Vận tốc cộng thêm = Unit * (86 - Khoảng_Cách) * 2.35` (trong đó `Unit` hướng từ tâm chuông ra người chơi).
-    * *Đứng sát tâm chuông (0 studs)*: Bị thổi bay với tốc độ cực đại $\approx$ **`202.1` studs/s**!
-    * *Đứng ở mép tầm ảnh hưởng (38 studs)*: Bị đẩy với tốc độ $\approx$ **`112.8` studs/s**.
-  * **Cơ chế lây lan**: Trúng sóng đẩy này sẽ tự động kích hoạt sự kiện truyền trạng thái của chuông giống như bạn đã gõ chuông trực tiếp (kéo theo kích hoạt cấm nhảy `Concussion` hoặc khóa kỹ năng `Flesh` nếu các lời nguyền tương ứng đang có hiệu lực).
-
-### 3. Mart Slide (Đẩy do va chạm Mart)
-* **Nguồn kích hoạt**: Va chạm với quái vật **Mart** khi đang chịu lời nguyền **MartSlide**.
-* **Hiệu ứng vật lý (Knockback)**:
-  * Người chơi bị hất văng theo hướng ngẫu nhiên dựa trên vận tốc của Mart (giới hạn cap tối đa `80` studs/s) cộng thêm một xung lực hướng lên `Vector3.new(0, 20, 0)` và một vectơ ngẫu nhiên có độ lớn từ `45` đến `70` studs/s.
-  * Toàn bộ lực đẩy được nhân tỷ lệ thuận theo kích thước (`Scale`) của Mart (tối đa nhân `2.0`).
+### 2. Mighty Gong / Teleporting Bell Shockwave (Sóng xung kích của chuông)
+* **Nguồn kích hoạt**: Chuông (**Bell**) dịch chuyển (teleport) khi đang kích hoạt lời nguyền **Mighty Gong**.
+* **Cơ chế hoạt động**:
+  * Khi chuông chuẩn bị biến mất và dịch chuyển (`WarpIn`), sau **1 giây** trì hoãn sẽ kích hoạt sóng xung kích `Harmonizer` dạng quả cầu năng lượng phình to.
+  * **Bán kính ảnh hưởng**: **`38` studs** tính từ tâm chuông.
+* **Hậu quả khống chế**:
+  * **Hiệu ứng gián tiếp**: Tự động áp dụng tất cả hiệu ứng của một cú rung chuông trực tiếp (kích hoạt `Concussion` cấm nhảy nếu có lời nguyền Concussion, hoặc `Flesh` cấm kỹ năng nếu có Bloody Bell).
+  * **Lực đẩy lùi (Knockback)**: Đẩy người chơi ra xa tâm chuông với lực đẩy tăng dần khi càng ở gần tâm. Công thức tính vận tốc đẩy lùi:
+    $$\text{Velocity} = \text{Velocity} + \vec{u} \times (86 - d) \times 2.35$$
+    *(Trong đó $\vec{u}$ là vectơ đơn vị hướng ra xa tâm chuông, $d$ là khoảng cách từ người chơi đến tâm chuông).*
+    * Ở sát rìa vùng ảnh hưởng ($d = 38$ studs): Nhận lực đẩy **`112.8` studs/s**.
+    * Ở ngay tâm chuông ($d = 0$ studs): Nhận lực đẩy cực đại lên tới **`202.1` studs/s** (gần như thổi bay người chơi ra khỏi bản đồ).

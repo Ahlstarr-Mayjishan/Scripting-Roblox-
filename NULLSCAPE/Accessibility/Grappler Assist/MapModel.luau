@@ -6,7 +6,6 @@
 
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Players = game:GetService("Players")
 
 local MapModel = {
     Running = false,
@@ -14,11 +13,6 @@ local MapModel = {
     LastStepAt = 0,
     LastCenterKey = nil,
     LastInRound = nil,
-    DebugEnabled = false,
-    DebugGui = nil,
-    DebugContent = nil,
-    DebugStatus = nil,
-    DebugMode = "2.5D",
     Debug3DEnabled = false,
     Debug3DFolder = nil,
     LastDebug3DRenderAt = 0,
@@ -37,10 +31,6 @@ local DEFAULTS = {
     KILL_MARGIN = 12,
     MAX_PARTS_PER_CHUNK = 90,
     MAX_ANCHORS_PER_CHUNK = 36,
-    MINIMAP_SIZE = 190,
-    MINIMAP_SCALE = 0.34,
-    MINIMAP_ISO_Y_SCALE = 0.34,
-    MINIMAP_HEIGHT_SCALE = 0.16,
     DEBUG_3D_RENDER_INTERVAL = 0.24,
     DEBUG_3D_MAX_MARKERS = 160,
     DEBUG_3D_CHUNK_HEIGHT = 4,
@@ -108,20 +98,6 @@ local function clearChildren(parent)
     end
 end
 
-local function makeFrame(parent, name, position, size, color, transparency, zIndex)
-    local frame = Instance.new("Frame")
-    frame.Name = name
-    frame.AnchorPoint = Vector2.new(0.5, 0.5)
-    frame.Position = position
-    frame.Size = size
-    frame.BackgroundColor3 = color
-    frame.BackgroundTransparency = transparency or 0
-    frame.BorderSizePixel = 0
-    frame.ZIndex = zIndex or 1
-    frame.Parent = parent
-    return frame
-end
-
 local function makeDebugPart(parent, name, cframe, size, color, transparency)
     local part = Instance.new("Part")
     part.Name = name
@@ -164,175 +140,6 @@ local function getChunkDisplayY(chunk, fallbackY)
         return total / count
     end
     return fallbackY
-end
-
-local function projectMiniMapPoint(deps, worldPosition, originPosition, center)
-    local dx = worldPosition.X - originPosition.X
-    local dz = worldPosition.Z - originPosition.Z
-    local dy = worldPosition.Y - originPosition.Y
-    local scale = getCfg(deps, "MINIMAP_SCALE")
-    if MapModel.DebugMode == "2.5D" then
-        return center
-            + Vector2.new(
-                (dx - dz) * scale * 0.72,
-                (dx + dz) * scale * getCfg(deps, "MINIMAP_ISO_Y_SCALE") - dy * getCfg(deps, "MINIMAP_HEIGHT_SCALE")
-            )
-    end
-
-    return center + Vector2.new(dx * scale, dz * scale)
-end
-
-local function ensureDebugGui(deps)
-    if MapModel.DebugGui and MapModel.DebugGui.Parent then
-        return MapModel.DebugGui
-    end
-
-    local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-    if not playerGui then
-        return nil
-    end
-
-    local gui = Instance.new("ScreenGui")
-    gui.Name = "NULLSCAPE_MapModelMiniMap"
-    gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
-    gui.DisplayOrder = 9997
-
-    local size = getCfg(deps, "MINIMAP_SIZE")
-    local root = Instance.new("Frame")
-    root.Name = "Root"
-    root.AnchorPoint = Vector2.new(1, 0)
-    root.Position = UDim2.new(1, -18, 0, 86)
-    root.Size = UDim2.fromOffset(size, size + 30)
-    root.BackgroundColor3 = Color3.fromRGB(8, 12, 15)
-    root.BackgroundTransparency = 0.18
-    root.BorderSizePixel = 0
-    root.Parent = gui
-
-    local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.BackgroundTransparency = 1
-    title.Position = UDim2.fromOffset(8, 4)
-    title.Size = UDim2.new(1, -16, 0, 22)
-    title.Font = Enum.Font.GothamMedium
-    title.TextSize = 12
-    title.TextColor3 = Color3.fromRGB(230, 238, 240)
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Text = "Map Model " .. tostring(MapModel.DebugMode)
-    title.Parent = root
-
-    local content = Instance.new("Frame")
-    content.Name = "Content"
-    content.ClipsDescendants = true
-    content.Position = UDim2.fromOffset(8, 28)
-    content.Size = UDim2.fromOffset(size - 16, size - 16)
-    content.BackgroundColor3 = Color3.fromRGB(3, 5, 8)
-    content.BackgroundTransparency = 0.22
-    content.BorderSizePixel = 0
-    content.Parent = root
-
-    local status = Instance.new("TextLabel")
-    status.Name = "Status"
-    status.BackgroundTransparency = 1
-    status.Position = UDim2.fromOffset(8, size + 8)
-    status.Size = UDim2.new(1, -16, 0, 18)
-    status.Font = Enum.Font.Gotham
-    status.TextSize = 10
-    status.TextColor3 = Color3.fromRGB(190, 205, 210)
-    status.TextXAlignment = Enum.TextXAlignment.Left
-    status.Text = "waiting"
-    status.Parent = root
-
-    gui.Parent = playerGui
-    MapModel.DebugGui = gui
-    MapModel.DebugContent = content
-    MapModel.DebugStatus = status
-    return gui
-end
-
-local function renderMiniMap(deps, position)
-    if not MapModel.DebugEnabled then
-        return
-    end
-    if not ensureDebugGui(deps) then
-        return
-    end
-
-    local content = MapModel.DebugContent
-    if not content then
-        return
-    end
-    clearChildren(content)
-
-    local size = content.AbsoluteSize
-    local center = Vector2.new(size.X * 0.5, size.Y * 0.5)
-    local scale = getCfg(deps, "MINIMAP_SCALE")
-    local chunkSize = getCfg(deps, "CHUNK_SIZE") * scale * (MapModel.DebugMode == "2.5D" and 0.72 or 1)
-    local landings = 0
-    local anchors = 0
-
-    for _, chunk in pairs(MapModel.Chunks) do
-        local chunkY = getChunkDisplayY(chunk, position.Y)
-        local screen = projectMiniMapPoint(deps, Vector3.new(chunk.Center.X, chunkY, chunk.Center.Z), position, center)
-        if screen.X > -chunkSize and screen.X < size.X + chunkSize and screen.Y > -chunkSize and screen.Y < size.Y + chunkSize then
-            local hasLanding = #(chunk.Landings or {}) > 0
-            local hasAnchor = #(chunk.Anchors or {}) > 0
-            local color = Color3.fromRGB(145, 40, 52)
-            local transparency = 0.68
-            if hasLanding and hasAnchor then
-                color = Color3.fromRGB(70, 170, 135)
-                transparency = 0.48
-            elseif hasLanding then
-                color = Color3.fromRGB(50, 150, 95)
-                transparency = 0.55
-            elseif hasAnchor then
-                color = Color3.fromRGB(210, 170, 70)
-                transparency = 0.52
-            end
-
-            if MapModel.DebugMode == "2.5D" then
-                makeFrame(
-                    content,
-                    "ChunkShadow",
-                    UDim2.fromOffset(screen.X + 4, screen.Y + 5),
-                    UDim2.fromOffset(math.max(chunkSize - 2, 7), math.max(chunkSize * 0.48, 5)),
-                    Color3.fromRGB(0, 0, 0),
-                    0.72,
-                    0
-                )
-            end
-
-            makeFrame(
-                content,
-                "Chunk",
-                UDim2.fromOffset(screen.X, screen.Y),
-                UDim2.fromOffset(
-                    math.max(chunkSize - 2, 7),
-                    math.max((MapModel.DebugMode == "2.5D" and chunkSize * 0.52 or chunkSize) - 2, 5)
-                ),
-                color,
-                transparency,
-                1
-            )
-
-            for _, landing in ipairs(chunk.Landings or {}) do
-                landings = landings + 1
-                local point = projectMiniMapPoint(deps, landing.Position, position, center)
-                makeFrame(content, "Landing", UDim2.fromOffset(point.X, point.Y), UDim2.fromOffset(4, 4), Color3.fromRGB(85, 255, 145), 0, 3)
-            end
-            for _, anchor in ipairs(chunk.Anchors or {}) do
-                anchors = anchors + 1
-                local point = projectMiniMapPoint(deps, anchor.Position, position, center)
-                makeFrame(content, "Anchor", UDim2.fromOffset(point.X, point.Y), UDim2.fromOffset(5, 5), Color3.fromRGB(255, 220, 85), 0, 4)
-            end
-        end
-    end
-
-    makeFrame(content, "Player", UDim2.fromOffset(center.X, center.Y), UDim2.fromOffset(8, 8), Color3.fromRGB(245, 245, 245), 0, 8)
-    if MapModel.DebugStatus then
-        local nearbyChunks = MapModel.getNearbyChunks(deps, position, getCfg(deps, "CHUNK_SIZE") * getCfg(deps, "KEEP_RADIUS"))
-        MapModel.DebugStatus.Text = string.format("%s | %d chunks | %d landings | %d anchors", tostring(MapModel.DebugMode), #nearbyChunks, landings, anchors)
-    end
 end
 
 local function render3DModel(deps, position)
@@ -619,7 +426,6 @@ end
 function MapModel.stop()
     MapModel.Running = false
     MapModel.clear()
-    MapModel.setDebugEnabled(false)
     MapModel.setDebug3DEnabled(false)
 end
 
@@ -628,9 +434,6 @@ function MapModel.clear()
     MapModel.LastStepAt = 0
     MapModel.LastCenterKey = nil
     MapModel.LastInRound = nil
-    if MapModel.DebugContent then
-        clearChildren(MapModel.DebugContent)
-    end
     if MapModel.Debug3DFolder then
         clearChildren(MapModel.Debug3DFolder)
     end
@@ -657,7 +460,6 @@ function MapModel.step(deps, position, character, force)
     MapModel.Running = true
     local currentTime = now()
     if not force and currentTime - (MapModel.LastStepAt or 0) < getCfg(deps, "STEP_INTERVAL") then
-        renderMiniMap(deps, position)
         render3DModel(deps, position)
         return true
     end
@@ -668,7 +470,6 @@ function MapModel.step(deps, position, character, force)
     local centerKey = getChunkKey(cx, cz)
     local movedChunk = centerKey ~= MapModel.LastCenterKey
     if not force and not movedChunk and currentTime - (MapModel.LastStepAt or 0) < getCfg(deps, "RESCAN_INTERVAL") then
-        renderMiniMap(deps, position)
         render3DModel(deps, position)
         return true
     end
@@ -682,7 +483,6 @@ function MapModel.step(deps, position, character, force)
         end
     end
     trimOldChunks(cx, cz, getCfg(deps, "KEEP_RADIUS"))
-    renderMiniMap(deps, position)
     render3DModel(deps, position)
     return true
 end
@@ -861,32 +661,6 @@ function MapModel.snapshot()
         anchors = anchors + #(chunk.Anchors or {})
     end
     return string.format("MapModel:%d chunks/%d landings/%d anchors", count, landings, anchors)
-end
-
-function MapModel.setDebugEnabled(value)
-    MapModel.DebugEnabled = value == true
-    if not MapModel.DebugEnabled then
-        if MapModel.DebugGui then
-            MapModel.DebugGui:Destroy()
-        end
-        MapModel.DebugGui = nil
-        MapModel.DebugContent = nil
-        MapModel.DebugStatus = nil
-    end
-end
-
-function MapModel.setDebugMode(mode)
-    local selected = tostring(mode or "2.5D")
-    if selected ~= "Flat" and selected ~= "2.5D" then
-        selected = "2.5D"
-    end
-    MapModel.DebugMode = selected
-    if MapModel.DebugGui then
-        MapModel.DebugGui:Destroy()
-        MapModel.DebugGui = nil
-        MapModel.DebugContent = nil
-        MapModel.DebugStatus = nil
-    end
 end
 
 function MapModel.setDebug3DEnabled(value)

@@ -114,7 +114,6 @@ local Controller = {
 	GrappleAimAssistTargetPriority = "GrapplePoint",
 	GrappleAimAssistRangePriority = "Nearest",
 	GrappleAimAssistStrength = "Balanced",
-	GrappleMapModelDebugEnabled = false,
 	GrappleMapModel3DDebugEnabled = false,
 	AntiBonkEnabled = false,
 	GrappleSmartReelEnabled = false,
@@ -205,7 +204,6 @@ function Controller:CleanUp()
 		self.GrappleSharkTailHelperEnabled = false
 		self.GrappleMomentumGuardEnabled = false
 		self.GrappleJumpPadUsesBypassEnabled = false
-		self.GrappleMapModelDebugEnabled = false
 		self.GrappleMapModel3DDebugEnabled = false
 		callExecutor("disableRailAssist")
 		callExecutor("disableGrappleAimAssist")
@@ -414,7 +412,6 @@ function Controller:HasAnyGrappleAssistFeature()
 		or self.GrappleSharkTailHelperEnabled
 		or self.GrappleMomentumGuardEnabled
 		or self.GrappleJumpPadUsesBypassEnabled
-		or self.GrappleMapModelDebugEnabled
 		or self.GrappleMapModel3DDebugEnabled
 end
 
@@ -444,22 +441,6 @@ function Controller:GetGrappleAssistHealthStatus()
     return tostring(result)
 end
 
-function Controller:SetGrappleMapModelDebug(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	self.GrappleMapModelDebugEnabled = value == true
-	if self.GrappleMapModelDebugEnabled then
-		self.GrappleAssistSuiteEnabled = true
-	end
-
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleMapModelDebugEnabled = false
-		self.GrappleAssistSuiteEnabled = previousSuite
-		return
-	end
-
-	callExecutor("setGrappleMapModelDebug", self.GrappleMapModelDebugEnabled)
-end
-
 function Controller:SetGrappleMapModel3DDebug(value)
 	local previousSuite = self.GrappleAssistSuiteEnabled
 	self.GrappleMapModel3DDebugEnabled = value == true
@@ -479,9 +460,7 @@ end
 function Controller:SetGrappleAssistSuite(value)
     self.GrappleAssistSuiteEnabled = value == true
 	if not self.GrappleAssistSuiteEnabled then
-		self.GrappleMapModelDebugEnabled = false
 		self.GrappleMapModel3DDebugEnabled = false
-		callExecutor("setGrappleMapModelDebug", false)
 		callExecutor("setGrappleMapModel3DDebug", false)
 	end
 

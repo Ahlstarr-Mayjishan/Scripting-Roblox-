@@ -33,7 +33,6 @@ local DEFAULTS = {
 	GrappleAimAssistTargetPriority = "GrapplePoint",
 	GrappleAimAssistRangePriority = "Nearest",
 	GrappleAdaptInputKey = "T",
-	GrappleMapModelDebugEnabled = false,
 	GrappleMapModel3DDebugEnabled = false,
 }
 
@@ -276,16 +275,6 @@ return function(Client, Controller)
 		adaptInputStatusLabel =
 			Tab:CreateLabel("Grapple Adapt Input: " .. tostring(Controller.GrappleAdaptInputKey or "T"))
 	end
-
-	Tab:CreateToggle({
-		Name = "Map Model Mini Map",
-		Info = "Shows the chunk cache used by Grappler Assist. Green = landing, yellow = anchor, red = no known landing.",
-		CurrentValue = Controller.GrappleMapModelDebugEnabled or false,
-		Flag = "GrappleMapModelDebugToggle",
-		Callback = function(Value)
-			Controller:SetGrappleMapModelDebug(Value)
-		end,
-	})
 
 	Tab:CreateToggle({
 		Name = "Map Model 3D Debug",
