@@ -123,6 +123,7 @@ local Controller = {
 	GrappleSharkTailMode = "Manual",
 	GrappleSharkTailStyle = "Balanced",
 	GrappleMomentumGuardEnabled = false,
+	GrappleAntiDetachEnabled = false,
 	GrapplerStaminaRecoverySpeed = 1,
 	GrappleAdaptInputKey = readSavedAdaptInputKey(),
 	Destroyed = false,
@@ -203,6 +204,7 @@ function Controller:CleanUp()
 		self.GrappleSmartReelEnabled = false
 		self.GrappleSharkTailHelperEnabled = false
 		self.GrappleMomentumGuardEnabled = false
+		self.GrappleAntiDetachEnabled = false
 		self.GrappleMapModel3DDebugEnabled = false
 		callExecutor("disableRailAssist")
 		callExecutor("disableGrappleAimAssist")
@@ -438,6 +440,7 @@ function Controller:HasAnyGrappleAssistFeature()
 		or self.GrappleSmartReelEnabled
 		or self.GrappleSharkTailHelperEnabled
 		or self.GrappleMomentumGuardEnabled
+		or self.GrappleAntiDetachEnabled
 		or self.GrappleMapModel3DDebugEnabled
 end
 
@@ -676,6 +679,18 @@ function Controller:SetGrappleMomentumGuard(value)
 	end
 	if not self:RefreshGrappleAssistHook() then
 		self.GrappleMomentumGuardEnabled = false
+		self.GrappleAssistSuiteEnabled = previousSuite
+	end
+end
+
+function Controller:SetGrappleAntiDetach(value)
+	local previousSuite = self.GrappleAssistSuiteEnabled
+	self.GrappleAntiDetachEnabled = value == true
+	if self.GrappleAntiDetachEnabled then
+		self.GrappleAssistSuiteEnabled = true
+	end
+	if not self:RefreshGrappleAssistHook() then
+		self.GrappleAntiDetachEnabled = false
 		self.GrappleAssistSuiteEnabled = previousSuite
 	end
 end

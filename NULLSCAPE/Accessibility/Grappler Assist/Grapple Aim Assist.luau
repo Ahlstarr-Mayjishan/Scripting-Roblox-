@@ -583,6 +583,13 @@ function Logic.isMomentumGuardEnabled()
 		and controller.GrappleMomentumGuardEnabled == true
 end
 
+function Logic.isAntiDetachEnabled()
+	local controller = Logic.getController()
+	return controller
+		and controller.GrappleAssistSuiteEnabled == true
+		and controller.GrappleAntiDetachEnabled == true
+end
+
 function Logic.isJumpPadUsesBypassEnabled()
 	local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
 	return Control and Control.GrappleJumpPadUsesBypassEnabled == true
@@ -5479,11 +5486,18 @@ function Logic.enable()
 		local originalEnd = globals.GrappleAimAssistOriginalEnd or grappleModule.End
 		globals.GrappleAimAssistOriginalEnd = originalEnd
 
-		grappleModule.End = function(self, ...)
+		grappleModule.End = function(self, p2, ...)
 			if globals.activeGrappleAimAssist ~= Logic then
-				return originalEnd(self, ...)
+				return originalEnd(self, p2, ...)
 			end
 			Logic.LastKnownGrapple = self
+			if p2 == true and Logic.isAntiDetachEnabled() then
+				Logic.LastAssistDebug = {
+					Reason = "AntiDetachBlocked",
+					Target = "Grapple",
+				}
+				return nil
+			end
 			if isVoidRescueCommitLocked(self) then
 				Logic.LastAssistDebug = {
 					Reason = "VoidCommitEndLock",
@@ -5494,7 +5508,7 @@ function Logic.enable()
 			if hasClassCapability(self, "MomentumGuard") then
 				Logic.markGrappleBonkGrace(self, 0.45)
 			end
-			local endResult = originalEnd(self, ...)
+			local endResult = originalEnd(self, p2, ...)
 			scheduleBellBypassRelease(0.5)
 			return endResult
 		end

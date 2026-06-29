@@ -27,6 +27,7 @@ local DEFAULTS = {
 	GrappleSharkTailMode = "Manual",
 	GrappleSharkTailStyle = "Balanced",
 	GrappleMomentumGuardEnabled = false,
+	GrappleAntiDetachEnabled = false,
 	GrappleAimAssistTargetPriority = "GrapplePoint",
 	GrapplerStaminaRecoverySpeed = 1,
 	GrappleAimAssistRangePriority = "Nearest",
@@ -591,8 +592,15 @@ return function(Client, Controller)
 			Controller:SetGrappleMomentumGuard(Value)
 		end,
 	})
-
-
+	Tab:CreateToggle({
+		Name = "Grapple Anti-Detach",
+		Info = "Prevents grapple from automatically breaking when touching ground, overshooting targets, or running out of stamina.",
+		CurrentValue = Controller.GrappleAntiDetachEnabled or false,
+		Flag = "GrappleAntiDetachToggle",
+		Callback = function(Value)
+			Controller:SetGrappleAntiDetach(Value)
+		end,
+	})
 	Tab:CreateDropdown({
 		Name = "Grapple Target Priority",
 		Info = "Preferred target type when several visible safe targets are valid. Emergency protection can temporarily force TriaOrb priority.",
