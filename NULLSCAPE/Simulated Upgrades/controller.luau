@@ -25,6 +25,7 @@ local SpeedBuffs = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Speed Buff
 
 local Controller = {
 	RadarEnabled = false,
+	RadarFeatures = { "Gift", "Tripmine", "Cadance", "Altar", "Player", "Enemy" },
 	Destroyed = false,
 	inLobby = true,
 
@@ -322,6 +323,15 @@ end
 -- Bật/tắt radar tổng
 function Controller:SetRadarEnabled(value)
 	self.RadarEnabled = value
+	Logic.syncSimulatedUpgradeHud(self)
+end
+
+function Controller:SetRadarFeatures(value)
+	if typeof(value) == "table" then
+		self.RadarFeatures = value
+	else
+		self.RadarFeatures = {}
+	end
 	Logic.syncSimulatedUpgradeHud(self)
 end
 
@@ -781,6 +791,15 @@ local function restoreHooks()
 					globals.GetUpgradeStackHooked = nil
 					globals.OriginalGetUpgradeStack = nil
 				end
+				if globals.GetUpgradeChangedSignalHooked and globals.OriginalGetUpgradeChangedSignal then
+					if typeof(hookfunction) == "function" then
+						pcall(hookfunction, UpgradeHandler.GetUpgradeChangedSignal, globals.OriginalGetUpgradeChangedSignal)
+					else
+						UpgradeHandler.GetUpgradeChangedSignal = globals.OriginalGetUpgradeChangedSignal
+					end
+					globals.GetUpgradeChangedSignalHooked = nil
+					globals.OriginalGetUpgradeChangedSignal = nil
+				end
 			end
 		end
 	end)
@@ -1041,6 +1060,7 @@ task.spawn(function()
 end)
 
 local function hookUpgradeHandler()
+	getgenv()._NULLSCAPE_Globals.customUpgradeEvents = getgenv()._NULLSCAPE_Globals.customUpgradeEvents or {}
 	task.spawn(function()
 		local ClientModules = ReplicatedFirst:WaitForChild("ClientModules", 15)
 		local UpgradeHandlerModule = ClientModules and ClientModules:WaitForChild("UpgradeHandler", 15)
@@ -1079,6 +1099,52 @@ local function hookUpgradeHandler()
 								return getgenv()._NULLSCAPE_Globals.OriginalIsUpgradeEnabled(...)
 							end
 							getgenv()._NULLSCAPE_Globals.IsUpgradeEnabledHooked = true
+						end
+					end
+				end
+
+				if UpgradeHandler.GetUpgradeChangedSignal then
+					if typeof(hookfunction) == "function" then
+						if not getgenv()._NULLSCAPE_Globals.GetUpgradeChangedSignalHooked then
+							local oldGetUpgradeChangedSignal
+							oldGetUpgradeChangedSignal = hookfunction(UpgradeHandler.GetUpgradeChangedSignal, function(upgradeName)
+								local originalEvent = oldGetUpgradeChangedSignal(upgradeName)
+								local customUpgradeEvents = getgenv()._NULLSCAPE_Globals.customUpgradeEvents
+								local customEvent = customUpgradeEvents[upgradeName]
+								if not customEvent then
+									customEvent = Instance.new("BindableEvent")
+									customUpgradeEvents[upgradeName] = customEvent
+									if originalEvent then
+										originalEvent:Connect(function(...)
+											customEvent:Fire(...)
+										end)
+									end
+								end
+								return customEvent.Event
+							end)
+							getgenv()._NULLSCAPE_Globals.OriginalGetUpgradeChangedSignal = oldGetUpgradeChangedSignal
+							getgenv()._NULLSCAPE_Globals.GetUpgradeChangedSignalHooked = true
+						end
+					else
+						if not getgenv()._NULLSCAPE_Globals.GetUpgradeChangedSignalHooked then
+							local oldGetUpgradeChangedSignal = UpgradeHandler.GetUpgradeChangedSignal
+							getgenv()._NULLSCAPE_Globals.OriginalGetUpgradeChangedSignal = oldGetUpgradeChangedSignal
+							UpgradeHandler.GetUpgradeChangedSignal = function(upgradeName)
+								local originalEvent = getgenv()._NULLSCAPE_Globals.OriginalGetUpgradeChangedSignal(upgradeName)
+								local customUpgradeEvents = getgenv()._NULLSCAPE_Globals.customUpgradeEvents
+								local customEvent = customUpgradeEvents[upgradeName]
+								if not customEvent then
+									customEvent = Instance.new("BindableEvent")
+									customUpgradeEvents[upgradeName] = customEvent
+									if originalEvent then
+										originalEvent:Connect(function(...)
+											customEvent:Fire(...)
+										end)
+									end
+								end
+								return customEvent.Event
+							end
+							getgenv()._NULLSCAPE_Globals.GetUpgradeChangedSignalHooked = true
 						end
 					end
 				end

@@ -327,6 +327,8 @@ local CFG = {
 	CURSOR_INTENT_CONFIDENCE_LIMIT = 0.24,
 	CURSOR_SPECIAL_FOCUS_LIMIT = 0.055,
 	CURSOR_SPECIAL_FOCUS_BONUS = -18,
+	CURSOR_RECORRECT_CONFIDENCE_LIMIT = 0.2,
+	CURSOR_RECORRECT_SURFACE_NORMAL_Y_MAX = 0.55,
 	ASSIST_INPUT_INTENT_WEIGHT = 32,
 	ASSIST_VELOCITY_INTENT_WEIGHT = 14,
 	ASSIST_TARGET_LOCK_DURATION = 0.22,
@@ -3105,6 +3107,7 @@ local function scanNamedTargets(grapple, options)
 	local driveMode = typeof(options) == "table" and options.driveMode == true
 	local returnDecision = typeof(options) == "table" and options.returnDecision == true
 	local fullScan = typeof(options) == "table" and options.fullScan == true
+	local forceCursor = typeof(options) == "table" and options.forceCursor == true
 
 	local controller = Logic.getController()
 	local preferredName = Logic.normalizeTargetPriority(controller and controller.GrappleAimAssistTargetPriority)
@@ -3113,7 +3116,10 @@ local function scanNamedTargets(grapple, options)
 	local panicMode = emergencyBrakeMode and Logic.getCachedPanicRescueDanger(grapple)
 	preferredName = getEffectivePreferredTarget(grapple, preferredName)
 	local rangeMode = normalizeRangePriority(controller and controller.GrappleAimAssistRangePriority)
-	if emergencyBrakeMode or (not driveMode and shouldForceNearest(grapple)) then
+	if forceCursor and not rescueMode and not emergencyBrakeMode then
+		rangeMode = "Closest To Cursor"
+	end
+	if emergencyBrakeMode or (not forceCursor and not driveMode and shouldForceNearest(grapple)) then
 		rangeMode = "Nearest"
 	end
 
@@ -3141,7 +3147,7 @@ local function scanNamedTargets(grapple, options)
 	local bestDistance = nil
 	local bestScreenScore = nil
 	local bestReason = nil
-	local checks = (fullScan or driveMode or emergencyBrakeMode or rangeMode == "Closest To Cursor") and candidateCount
+	local checks = (forceCursor or fullScan or driveMode or emergencyBrakeMode or rangeMode == "Closest To Cursor") and candidateCount
 		or math.min(candidateCount, CFG.MAX_CANDIDATES_PER_CAST)
 
 	for _ = 1, checks do
@@ -3164,7 +3170,7 @@ local function scanNamedTargets(grapple, options)
 						and not rescueMode
 						and not emergencyBrakeMode
 						and not isLockedTarget
-						and screenScore > CFG.ASSIST_CURSOR_PREFILTER_LIMIT
+						and screenScore > (forceCursor and CFG.CURSOR_RECORRECT_CONFIDENCE_LIMIT or CFG.ASSIST_CURSOR_PREFILTER_LIMIT)
 					then
 						continue
 					end
@@ -3188,12 +3194,12 @@ local function scanNamedTargets(grapple, options)
 						else
 							local priorityScore = candidate.Name == preferredName and 0 or 1000
 							local score
-							if (driveMode and not emergencyBrakeMode) or panicMode or emergencyBrakeMode then
+							if (driveMode and not forceCursor and not emergencyBrakeMode) or panicMode or emergencyBrakeMode then
 								priorityScore = 0
 							elseif rescueMode then
 								priorityScore = rescuePriority[candidate.Name] or 1000
 							elseif rangeMode == "Closest To Cursor" then
-								priorityScore = candidate.Name == preferredName and CFG.CURSOR_INTENT_PREFERRED_BONUS
+								priorityScore = (forceCursor and 0) or (candidate.Name == preferredName and CFG.CURSOR_INTENT_PREFERRED_BONUS)
 									or 0
 								if
 									candidate.Name ~= "GrapplePoint"
@@ -3220,7 +3226,7 @@ local function scanNamedTargets(grapple, options)
 								rangeMode == "Closest To Cursor" and screenScore <= CFG.CURSOR_SPECIAL_FOCUS_LIMIT
 							)
 							local lockBonus = getAssistLockBonus(candidate.Instance)
-							if driveMode and not emergencyBrakeMode then
+							if driveMode and not forceCursor and not emergencyBrakeMode then
 								score = getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
 									+ specialBonus
 									+ wrongAnchorPenalty * 0.35
@@ -3327,15 +3333,17 @@ local function scanScreenSurface(grapple, options)
 
 	local driveMode = typeof(options) == "table" and options.driveMode == true
 	local returnDecision = typeof(options) == "table" and options.returnDecision == true
+	local forceCursor = typeof(options) == "table" and options.forceCursor == true
 	local viewportSize = camera.ViewportSize
 	local maxRange = getAssistRange(grapple, driveMode)
 	local bestResult = nil
 	local bestScore = math.huge
 	local bestReason = nil
 	local bestScreenScore = nil
+	local screenAnchor = forceCursor and getScreenAnchor(camera, "Closest To Cursor") or viewportSize * 0.5
 
 	for _, offset in ipairs(SCREEN_RAY_OFFSETS) do
-		local screenPoint = Vector2.new(viewportSize.X * (0.5 + offset.X), viewportSize.Y * (0.5 + offset.Y))
+		local screenPoint = screenAnchor + Vector2.new(offset.X * viewportSize.X, offset.Y * viewportSize.Y)
 		local ray = camera:ViewportPointToRay(screenPoint.X, screenPoint.Y)
 		local cameraHit = Workspace:Raycast(ray.Origin, ray.Direction.Unit * 2048, grapple.grappleParams)
 		if cameraHit then
@@ -3344,6 +3352,7 @@ local function scanScreenSurface(grapple, options)
 				local directHit = Workspace:Raycast(rootPart.Position, directOffset, grapple.grappleParams)
 				if
 					directHit
+					and (not forceCursor or not directHit.Normal or directHit.Normal.Y <= CFG.CURSOR_RECORRECT_SURFACE_NORMAL_Y_MAX)
 					and Logic.isUsableResult(grapple, directHit)
 					and isPathSafeForHitbox(
 						grapple,
@@ -3353,7 +3362,7 @@ local function scanScreenSurface(grapple, options)
 						maxRange
 					)
 				then
-					local screenScore = offset.Magnitude
+					local screenScore = (screenPoint - screenAnchor).Magnitude / math.max(viewportSize.X, viewportSize.Y)
 					local score, reason = getTerrainSurfaceScore(grapple, directHit, screenScore, driveMode)
 					if score < bestScore then
 						bestResult = directHit
@@ -3425,7 +3434,7 @@ local function isSameAssistTarget(result, decision)
 	return false
 end
 
-local function getDirectResultAssistScore(grapple, result)
+local function getDirectResultAssistScore(grapple, result, forceCursor)
 	local camera = Workspace.CurrentCamera
 	local rootPart = grapple and grapple.RootPart
 	if not (camera and rootPart and result and typeof(result.Position) == "Vector3") then
@@ -3434,7 +3443,9 @@ local function getDirectResultAssistScore(grapple, result)
 
 	local controller = Logic.getController()
 	local rangeMode = normalizeRangePriority(controller and controller.GrappleAimAssistRangePriority)
-	if shouldForceNearest(grapple) then
+	if forceCursor then
+		rangeMode = "Closest To Cursor"
+	elseif shouldForceNearest(grapple) then
 		rangeMode = "Nearest"
 	end
 
@@ -3510,6 +3521,7 @@ local function getSoftOverrideResult(grapple, originalResult)
 	local decision = scanNamedTargets(grapple, {
 		returnDecision = true,
 		fullScan = true,
+		forceCursor = true,
 	})
 	if not (decision and decision.Result) then
 		return nil
@@ -3518,7 +3530,7 @@ local function getSoftOverrideResult(grapple, originalResult)
 		return nil
 	end
 
-	local originalScore = getDirectResultAssistScore(grapple, originalResult)
+	local originalScore = getDirectResultAssistScore(grapple, originalResult, true)
 	local decisionScore = tonumber(decision.Score) or math.huge
 	local decisionScreenScore = tonumber(decision.ScreenScore) or math.huge
 	local strengthScale = getAimAssistStrengthScale()
@@ -3785,14 +3797,14 @@ local function assistedCast(grapple, forceRefresh, originalCast, ...)
 
 	local assistedResult
 	if Logic.AdaptDriveActive then
-		assistedResult = scanNamedTargets(grapple, { driveMode = true })
+		assistedResult = scanNamedTargets(grapple, { driveMode = true, fullScan = true, forceCursor = true })
 	else
 		local mapResult
 		if isVoidRescueWindowActive() or isVoidRescueDanger(grapple) then
 			mapResult = scanKillVoidSharkTailAnchor(grapple, { driveMode = true })
 				or scanMapVoidAnchor(grapple, { driveMode = true })
 		end
-		assistedResult = mapResult or scanNamedTargets(grapple) or scanScreenSurface(grapple)
+		assistedResult = mapResult or scanNamedTargets(grapple, { fullScan = true, forceCursor = true }) or scanScreenSurface(grapple, { forceCursor = true })
 	end
 	if assistedResult then
 		if

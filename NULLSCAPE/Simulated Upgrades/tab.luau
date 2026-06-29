@@ -10,7 +10,7 @@ return function(Client, Controller)
 	Tab:CreateSection("Radar")
 
 	Tab:CreateToggle({
-		Name = "Enable Radar",
+		Name = "Radar Upgrade",
 		CurrentValue = Controller.RadarEnabled,
 		Flag = "RadarEnabledToggle",
 		Callback = function(Value)
@@ -18,7 +18,16 @@ return function(Client, Controller)
 		end,
 	})
 
-
+	Tab:CreateDropdown({
+		Name = "Radar Selections",
+		Options = { "Gift", "Tripmine", "Cadance", "Altar", "Player", "Enemy" },
+		CurrentOption = Controller.RadarFeatures or { "Gift", "Tripmine", "Cadance", "Altar", "Player", "Enemy" },
+		MultipleOptions = true,
+		Flag = "RadarFeaturesDropdown",
+		Callback = function(Options)
+			Controller:SetRadarFeatures(Options)
+		end,
+	})
 
 	Tab:CreateSection("Gifts Magnet")
 

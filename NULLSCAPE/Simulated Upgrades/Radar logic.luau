@@ -68,8 +68,21 @@ local function collectDesiredSimulatedUpgrades(controller)
 		return desired
 	end
 
-	for _, cfg in pairs(Logic.FEATURES) do
-		desired[cfg.upgrade] = true
+	local features = controller.RadarFeatures or { "Gift", "Tripmine", "Cadance", "Altar", "Player", "Enemy" }
+	local featureMap = {
+		Gift = "HighlightGifts",
+		Tripmine = "HighlightTripmines",
+		Cadance = "RadarInstruments",
+		Altar = "RadarAltars",
+		Player = "RadarPlayer",
+		Enemy = "EnemyOnTop",
+	}
+
+	for _, featureName in ipairs(features) do
+		local upgradeName = featureMap[featureName]
+		if upgradeName then
+			desired[upgradeName] = true
+		end
 	end
 
 	return desired
@@ -125,6 +138,31 @@ function Logic.syncSimulatedUpgradeHud(controller)
 	for upgradeName in pairs(desired) do
 		ensureSimulatedUpgradeInt(upgrades, upgradeName)
 	end
+
+	-- Fire custom upgrade change signals for scripts listening via GetUpgradeChangedSignal (e.g. RadarInstruments/Cadence)
+	local globals = getgenv()._NULLSCAPE_Globals
+	if globals and type(globals.customUpgradeEvents) == "table" then
+		for _, name in ipairs(Logic.RADAR_UPGRADES) do
+			local event = globals.customUpgradeEvents[name]
+			if event then
+				local isDesired = desired[name] == true
+				pcall(function()
+					event:Fire(isDesired and 1 or 0)
+				end)
+			end
+		end
+	end
+
+	-- Untag and retag "Voting" tagged instances to force the game's Altar listener to re-evaluate (RadarAltars)
+	if desired["RadarAltars"] then
+		local CollectionService = game:GetService("CollectionService")
+		for _, instance in ipairs(CollectionService:GetTagged("Voting")) do
+			pcall(function()
+				CollectionService:RemoveTag(instance, "Voting")
+				CollectionService:AddTag(instance, "Voting")
+			end)
+		end
+	end
 end
 
 function Logic.shouldSpoofUpgradeEnabled(controller, upgradeName)
@@ -137,11 +175,10 @@ function Logic.shouldSpoofUpgradeEnabled(controller, upgradeName)
 		return false
 	end
 
-	-- Nếu nâng cấp thuộc danh sách Radar của game, tự động trả về true
-	for _, name in ipairs(Logic.RADAR_UPGRADES) do
-		if name == upgradeName then
-			return true, true
-		end
+	-- Kiểm tra nếu nâng cấp này nằm trong danh sách các mục được chọn
+	local desired = collectDesiredSimulatedUpgrades(controller)
+	if desired[upgradeName] then
+		return true, true
 	end
 
 	return false

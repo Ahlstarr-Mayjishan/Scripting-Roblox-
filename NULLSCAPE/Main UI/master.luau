@@ -93,6 +93,7 @@ pcall(function()
 
 		local defaultSettings = {
 			RadarEnabledToggle = false,
+			RadarFeaturesDropdown = { "Gift", "Tripmine", "Cadance", "Altar", "Player", "Enemy" },
 			ESPSelectionDropdown = {},
 			ESPStyleDropdown = "Highlight",
 			AltarFilterDropdown = "All",
