@@ -53,25 +53,7 @@ local Executor = {
 local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
 local RemoteBlocking = getgenv().loadModule("NULLSCAPE/Entities/RemoteBlocking.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
-
-local function getRootJoint(char)
-	local rootPart = char:FindFirstChild("HumanoidRootPart")
-	if not rootPart then
-		return nil
-	end
-	local r6Joint = rootPart:FindFirstChild("RootJoint")
-	if r6Joint and r6Joint:IsA("Motor6D") then
-		return r6Joint
-	end
-	local lowerTorso = char:FindFirstChild("LowerTorso")
-	if lowerTorso then
-		local r15Joint = lowerTorso:FindFirstChild("RootJoint")
-		if r15Joint and r15Joint:IsA("Motor6D") then
-			return r15Joint
-		end
-	end
-	return nil
-end
+local BackTrick = getgenv().loadModule("NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau")
 
 local hookedTelefraggers = setmetatable({}, { __mode = "k" })
 
@@ -353,19 +335,7 @@ function Controller:UpdateTelefraggerConnection()
 
 	-- Khôi phục trạng thái xoay khớp nếu BackTrick bị tắt
 	if not self.TelefraggerBackTrick and self.WasRedirectingTelefragger then
-		self.WasRedirectingTelefragger = false
-		local char = game.Players.LocalPlayer.Character
-		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			pcall(function()
-				humanoid.AutoRotate = self.OriginalAutoRotate
-			end)
-		end
-		if self.RedirectRootJoint and self.RedirectRootJoint.Parent then
-			pcall(function()
-				self.RedirectRootJoint.C0 = self.RedirectOriginalC0
-			end)
-		end
+		BackTrick.revert(self)
 	end
 
 	if not self.TelefraggerAutoDodge then
@@ -484,90 +454,7 @@ function Controller:UpdateTelefraggerConnection()
 end
 
 function Controller:TriggerSilentBackTrick()
-	if not self.TelefraggerBackTrick then
-		return
-	end
-
-	local char = game.Players.LocalPlayer.Character
-	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-	if not (humanoid and rootPart and humanoid.Health > 0) then
-		return
-	end
-
-	local rootJoint = getRootJoint(char)
-	if not rootJoint then
-		return
-	end
-
-	-- Tránh kích hoạt đè lên nhau nếu đang chạy
-	if self.WasRedirectingTelefragger then
-		return
-	end
-
-	self.WasRedirectingTelefragger = true
-	self.RedirectRootJoint = rootJoint
-	self.RedirectOriginalC0 = rootJoint.C0
-	self.OriginalAutoRotate = humanoid.AutoRotate
-	humanoid.AutoRotate = false
-
-	-- Bù trừ góc xoay 180 độ ở client bằng RootJoint để visual trông bình thường
-	local isR6 = (rootJoint.Parent == rootPart)
-	if isR6 then
-		rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, 0, math.pi)
-	else
-		rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, math.pi, 0)
-	end
-
-	-- Ép CFrame quay ngược liên tục trên mỗi frame thông qua Heartbeat trong suốt 80ms
-	local RunService = game:GetService("RunService")
-	local startTime = tick()
-	local duration = 0.08
-	local loopConn
-
-	loopConn = RunService.Heartbeat:Connect(function()
-		local now = tick()
-		-- Đảm bảo kiểm tra các điều kiện sinh tồn khi đang lặp
-		local curChar = game.Players.LocalPlayer.Character
-		local curHumanoid = curChar and curChar:FindFirstChildOfClass("Humanoid")
-		local curRoot = curChar and curChar:FindFirstChild("HumanoidRootPart")
-
-		if now - startTime > duration or not self.WasRedirectingTelefragger or not (curHumanoid and curRoot and curHumanoid.Health > 0) then
-			if loopConn then
-				loopConn:Disconnect()
-				loopConn = nil
-			end
-			self.WasRedirectingTelefragger = false
-			pcall(function()
-				if curHumanoid then
-					curHumanoid.AutoRotate = self.OriginalAutoRotate
-				end
-			end)
-			if rootJoint and rootJoint.Parent then
-				pcall(function()
-					rootJoint.C0 = self.RedirectOriginalC0
-				end)
-			end
-			return
-		end
-
-		-- Tính toán hướng đối lập trên mỗi frame
-		local moveDir = curHumanoid.MoveDirection
-		local targetLook = Vector3.zero
-		if moveDir.Magnitude > 0.1 then
-			targetLook = -moveDir.Unit
-		else
-			local camera = workspace.CurrentCamera
-			if camera then
-				local camLook = camera.CFrame.LookVector
-				targetLook = -Vector3.new(camLook.X, 0, camLook.Z).Unit
-			end
-		end
-
-		if targetLook.Magnitude > 0.1 then
-			curRoot.CFrame = CFrame.lookAt(curRoot.Position, curRoot.Position + targetLook, Vector3.yAxis)
-		end
-	end)
+	BackTrick.trigger(self)
 end
 
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
@@ -590,19 +477,7 @@ function Controller:CleanUp()
 		self.TelefraggerConnection = nil
 	end
 	if self.WasRedirectingTelefragger then
-		self.WasRedirectingTelefragger = false
-		local char = game.Players.LocalPlayer.Character
-		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			pcall(function()
-				humanoid.AutoRotate = self.OriginalAutoRotate
-			end)
-		end
-		if self.RedirectRootJoint and self.RedirectRootJoint.Parent then
-			pcall(function()
-				self.RedirectRootJoint.C0 = self.RedirectOriginalC0
-			end)
-		end
+		BackTrick.revert(self)
 	end
 
 	GC.cleanAll()
