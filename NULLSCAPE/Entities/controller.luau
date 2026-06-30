@@ -87,11 +87,13 @@ local Controller = {
 	CatalystImmune = false,
 	nilEnemyImmune = false,
 	nilMirageImmune = false,
+	SeamineImmune = false,
 	TelefraggerAutoDodge = false,
 	TelefraggerBackTrick = false,
 	TelefraggerBackTrickMode = "180",
-	TelefraggerDesyncDelay = 0.42,
-	TelefraggerBackTrickThread = nil,
+	TelefraggerDesyncDelay = 0.44,
+	TelefraggerActiveThreads = {},
+	TelefraggerActiveDesyncs = {},
 	TelefraggerConnection = nil,
 	WasRedirectingTelefragger = false,
 	RedirectRootJoint = nil,
@@ -211,6 +213,7 @@ local hasInRoundValue = false
 local folderConnections = {} -- key: folder -> value: list of connections
 local workspaceConnections = {} -- list of workspace-level connections
 local processedEntities = setmetatable({}, { __mode = "k" })
+local originalTouchStates = setmetatable({}, { __mode = "k" })
 
 -- Ngắt các kết nối quan sát thư mục và workspace
 local function disconnectFolderObservations()
@@ -322,6 +325,10 @@ end
 
 function Controller:SetTelefraggerDesyncDelay(value)
 	self.TelefraggerDesyncDelay = value
+end
+
+function Controller:SetSeamineImmune(value)
+	self.SeamineImmune = value
 end
 
 function Controller:SetICBMBurnImmune(value)
@@ -464,32 +471,67 @@ function Controller:UpdateTelefraggerConnection()
 	end)
 end
 
-function Controller:TriggerSilentBackTrick()
-	if self.TelefraggerBackTrickThread then
-		task.cancel(self.TelefraggerBackTrickThread)
-		self.TelefraggerBackTrickThread = nil
+function Controller:TriggerSilentBackTrick(enemy)
+	if not enemy then return end
+
+	-- Hủy luồng chờ cũ của Telefragger này nếu có
+	if self.TelefraggerActiveThreads[enemy] then
+		pcall(task.cancel, self.TelefraggerActiveThreads[enemy])
+		self.TelefraggerActiveThreads[enemy] = nil
 	end
 
-	self.TelefraggerBackTrickThread = task.delay(self.TelefraggerDesyncDelay or 0.42, function()
-		self.TelefraggerBackTrickThread = nil
-		BackTrick.trigger(self)
+	self.TelefraggerActiveThreads[enemy] = task.delay(self.TelefraggerDesyncDelay or 0.44, function()
+		self.TelefraggerActiveThreads[enemy] = nil
+		
+		-- Thêm vào danh sách đang desync active
+		local wasEmpty = (next(self.TelefraggerActiveDesyncs) == nil)
+		self.TelefraggerActiveDesyncs[enemy] = true
+		
+		if wasEmpty then
+			BackTrick.trigger(self)
+		end
 	end)
 end
 
-function Controller:CancelSilentBackTrick()
-	if self.TelefraggerBackTrickThread then
-		task.cancel(self.TelefraggerBackTrickThread)
-		self.TelefraggerBackTrickThread = nil
+function Controller:CancelSilentBackTrick(enemy)
+	if not enemy then return end
+
+	-- Hủy luồng chờ nếu chưa kích hoạt desync
+	if self.TelefraggerActiveThreads[enemy] then
+		pcall(task.cancel, self.TelefraggerActiveThreads[enemy])
+		self.TelefraggerActiveThreads[enemy] = nil
 	end
-	BackTrick.revert(self)
+
+	-- Xóa khỏi danh sách active
+	if self.TelefraggerActiveDesyncs[enemy] then
+		self.TelefraggerActiveDesyncs[enemy] = nil
+		
+		-- Nếu không còn thực thể nào đang desync thì khôi phục nhân vật
+		if next(self.TelefraggerActiveDesyncs) == nil then
+			BackTrick.revert(self)
+		end
+	end
 end
 
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
 function Controller:CleanUp()
-	if self.TelefraggerBackTrickThread then
-		pcall(task.cancel, self.TelefraggerBackTrickThread)
-		self.TelefraggerBackTrickThread = nil
+	-- Hủy tất cả các luồng chờ và dọn dẹp danh sách active
+	for enemy, thread in pairs(self.TelefraggerActiveThreads) do
+		pcall(task.cancel, thread)
 	end
+	table.clear(self.TelefraggerActiveThreads)
+	table.clear(self.TelefraggerActiveDesyncs)
+
+	pcall(function()
+		BackTrick.cleanup(self)
+	end)
+
+	for part, state in pairs(originalTouchStates) do
+		pcall(function()
+			part.CanTouch = state
+		end)
+	end
+	table.clear(originalTouchStates)
 
 	disconnectFolderObservations()
 	pcall(function()
@@ -1246,9 +1288,9 @@ local function processEntity(enemy)
 				if clientEvent and clientEvent:IsA("RemoteEvent") then
 					local telefraggerConn = clientEvent.OnClientEvent:Connect(function(actionName, p2)
 						if actionName == "SetTeleport" then
-							Controller:TriggerSilentBackTrick()
+							Controller:TriggerSilentBackTrick(enemy)
 						elseif actionName == "Indicator" then
-							Controller:CancelSilentBackTrick()
+							Controller:CancelSilentBackTrick(enemy)
 						end
 					end)
 					GC.registerEntityConnection(enemy, telefraggerConn)
@@ -1313,6 +1355,11 @@ end
 local function removeEntity(enemy)
 	processedEntities[enemy] = nil
 	GC.removeEntityConnections(enemy)
+	
+	if string.find(string.lower(enemy.Name), "telefragger") then
+		Controller:CancelSilentBackTrick(enemy)
+	end
+
 	for part, data in pairs(disabledShockwaves) do
 		if data.enemy == enemy then
 			restoreShockwave(part)
@@ -1403,10 +1450,62 @@ function Controller:ObserveFolder(folder)
 	folderConnections[folder] = conns
 end
 
+function Controller:UpdateTouchImmunityState()
+	local char = LocalPlayer.Character
+	if not char then return end
+
+	local rootPart = char:FindFirstChild("HumanoidRootPart")
+	if not rootPart then return end
+
+	local nearBell = false
+	local nearSpringer = false
+
+	local enemiesFolder = workspace:FindFirstChild("Enemies")
+	if enemiesFolder then
+		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
+			local name = enemy.Name
+			local enemyRoot = enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+			if enemyRoot then
+				local dist = (rootPart.Position - enemyRoot.Position).Magnitude
+				if string.find(name, "Bell") and dist < 16 then
+					nearBell = true
+				elseif string.find(name, "Springer") and dist < 42 then
+					nearSpringer = true
+				end
+			end
+		end
+	end
+
+	local shouldDisableTouch = (nearBell and self.BellImmune) or (nearSpringer and self.SpringerImmune)
+
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") then
+			if shouldDisableTouch then
+				if part.CanTouch then
+					if originalTouchStates[part] == nil then
+						originalTouchStates[part] = part.CanTouch
+					end
+					part.CanTouch = false
+				end
+			else
+				if originalTouchStates[part] ~= nil then
+					part.CanTouch = originalTouchStates[part]
+					originalTouchStates[part] = nil
+				end
+			end
+		end
+	end
+end
+
 -- Quét tìm thư mục Enemies và Skinwalkers trong Workspace và lắng nghe sự thay đổi
 local function startObservingFolders()
 	debugPrint("startObservingFolders called")
 	disconnectFolderObservations()
+
+	local touchImmConn = game:GetService("RunService").Heartbeat:Connect(function()
+		Controller:UpdateTouchImmunityState()
+	end)
+	table.insert(workspaceConnections, touchImmConn)
 
 	local function checkAndObserve(child)
 		if Controller.Destroyed then

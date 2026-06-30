@@ -55,10 +55,6 @@ local Controller = {
 	TripmineDetonationDistance = 15,
 	TripmineDetonationJitter = 2,
 	TripmineBlastSafeRadius = 8, -- Legacy: active tripmine detonation is disabled by Defuse Kits
-	ChargerTripmineAssistEnabled = false,
-	ChargerTripmineMode = "Auto",
-	ChargerTripmineDistance = 15,
-	ChargerTripmineJitter = 2,
 	SimulateDefuseKit = false,
 	DefuseKitStack = 3,
 
@@ -153,7 +149,6 @@ end
 local function hasUtilityWork()
 	return Controller.AutoCollectEnabled
 		or Controller.TripmineBarrierEnabled
-		or Controller.ChargerTripmineAssistEnabled
 		or Controller.MatrixTetrahedronEnabled
 		or Controller.GraceWingsEnabled
 		or Controller.AdvancedGravityCoilEnabled
@@ -229,7 +224,7 @@ local function startUtilityLoop()
 						Executor.updateMagnet(Controller, hrp)
 					end)
 				end
-				if Controller.TripmineBarrierEnabled or Controller.ChargerTripmineAssistEnabled then
+				if Controller.TripmineBarrierEnabled then
 					pcall(function()
 						Executor.updateBarriers(Controller, GC)
 					end)
@@ -656,24 +651,47 @@ function Controller:SetTripmineDetonationJitter(value)
 	self.TripmineDetonationJitter = value or 2
 end
 
+local function getClassAdjustmentController()
+	local globals = getgenv()._NULLSCAPE_Globals
+	if globals and typeof(globals.activeClassAdjustmentController) == "table" then
+		return globals.activeClassAdjustmentController
+	end
+
+	local success, control = pcall(function()
+		return getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+	end)
+
+	return success and control or nil
+end
+
 function Controller:SetChargerTripmineAssist(value)
-	self.ChargerTripmineAssistEnabled = value
-	startUtilityLoop()
+	local control = getClassAdjustmentController()
+	if control and typeof(control.SetChargerTripmineAssist) == "function" then
+		return control:SetChargerTripmineAssist(value)
+	end
 end
 
 function Controller:SetChargerTripmineMode(value)
-	self.ChargerTripmineMode = value or "Auto"
+	local control = getClassAdjustmentController()
+	if control and typeof(control.SetChargerTripmineMode) == "function" then
+		return control:SetChargerTripmineMode(value)
+	end
 end
 
 function Controller:SetChargerTripmineDistance(value)
-	self.ChargerTripmineDistance = value or 15
+	local control = getClassAdjustmentController()
+	if control and typeof(control.SetChargerTripmineDistance) == "function" then
+		return control:SetChargerTripmineDistance(value)
+	end
 end
 
 function Controller:SetChargerTripmineJitter(value)
-	self.ChargerTripmineJitter = value or 2
+	local control = getClassAdjustmentController()
+	if control and typeof(control.SetChargerTripmineJitter) == "function" then
+		return control:SetChargerTripmineJitter(value)
+	end
 end
 
--- Thiết lập bán kính an toàn trước khi kích nổ mìn
 function Controller:SetTripmineBlastSafeRadius(value)
 	self.TripmineBlastSafeRadius = value or 8
 end
@@ -703,7 +721,7 @@ function Controller:ReapplyRespawnFeatures()
 	claimActiveController(self)
 	startUtilityLoop()
 	if not self.inLobby then
-		if self.TripmineBarrierEnabled or self.ChargerTripmineAssistEnabled then
+		if self.TripmineBarrierEnabled then
 			pcall(function()
 				Executor.updateBarriers(self, GC)
 			end)

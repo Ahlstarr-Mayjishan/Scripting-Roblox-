@@ -42,6 +42,10 @@ local createControllerProxy = function(Client, Controller)
 		GrappleNoReelCooldown = false,
 		GrappleSharkTailWindow = 0.25,
 		GrappleJumpPadUsesBypassEnabled = false,
+		ChargerTripmineAssistEnabled = false,
+		ChargerTripmineMode = "Auto",
+		ChargerTripmineDistance = 15,
+		ChargerTripmineJitter = 2,
 	}
 
 	return setmetatable({ __ClassAdjustmentProxy = true }, {
@@ -166,6 +170,60 @@ return function(Client, Controller)
 		Flag = "GrappleJumpPadUsesBypassToggle",
 		Callback = function(Value)
 			Controller:SetGrappleJumpPadUsesBypass(Value)
+		end,
+	})
+
+	Tab:CreateSection("Charger")
+
+	Tab:CreateToggle({
+		Name = "Charger Tripmine Assist",
+		CurrentValue = Controller.ChargerTripmineAssistEnabled or false,
+		Flag = "ChargerTripmineAssistToggle",
+		Callback = function(Value)
+			Controller:SetChargerTripmineAssist(Value)
+		end,
+	})
+
+	Tab:CreateDropdown({
+		Name = "Charger Tripmine Mode",
+		Info = "Auto se chi kich khi dang lao vao/cua so gan; Passthrough va PreDetonate la mode thu cong.",
+		Options = { "Auto", "Passthrough", "PreDetonate" },
+		CurrentOption = (Controller.ChargerTripmineMode == "Passthrough" and "Passthrough")
+			or (Controller.ChargerTripmineMode == "PreDetonate" and "PreDetonate")
+			or "Auto",
+		MultipleOptions = false,
+		Flag = "ChargerTripmineModeDropdown",
+		Callback = function(Option)
+			local selected = Option
+			if typeof(Option) == "table" then
+				selected = Option[1]
+			end
+			Controller:SetChargerTripmineMode(selected)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Detonation Distance",
+		Info = "Charger Passthrough/PreDetonate distance.",
+		Range = { 5, 50 },
+		CurrentValue = Controller.ChargerTripmineDistance or 15,
+		Increment = 1,
+		ValueName = "Studs",
+		Flag = "ChargerTripmineDistanceSlider",
+		Callback = function(Value)
+			Controller:SetChargerTripmineDistance(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Detonation Jitter",
+		Range = { 0, 10 },
+		CurrentValue = Controller.ChargerTripmineJitter or 2,
+		Increment = 1,
+		ValueName = "Studs",
+		Flag = "ChargerTripmineJitterSlider",
+		Callback = function(Value)
+			Controller:SetChargerTripmineJitter(Value)
 		end,
 	})
 end

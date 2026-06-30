@@ -145,8 +145,8 @@ function Magnet.update(controller, hrp)
 	-- 1. GIFT COLLECTION
 	if hasGiftTarget then
 		local giftRange = controller.AutoCollectGiftRange or controller.AutoCollectRange or 20
-		if giftRange > 30 then
-			giftRange = 30 -- Server limit safety ceiling
+		if giftRange > 60 then
+			giftRange = 60 -- Server limit safety ceiling
 		end
 
 		local canCollectGift = true

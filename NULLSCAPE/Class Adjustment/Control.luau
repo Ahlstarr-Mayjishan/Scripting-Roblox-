@@ -18,6 +18,10 @@ local Control = {
 	GrappleNoReelCooldown = false,
 	GrappleSharkTailWindow = 0.25,
 	GrappleJumpPadUsesBypassEnabled = false,
+	ChargerTripmineAssistEnabled = false,
+	ChargerTripmineMode = "Auto",
+	ChargerTripmineDistance = 15,
+	ChargerTripmineJitter = 2,
 	Destroyed = false,
 	PermanentConnections = {},
 }
@@ -60,6 +64,14 @@ local function readSettings()
 		if decoded.GrappleJumpPadUsesBypassEnabled ~= nil then
 			Control.GrappleJumpPadUsesBypassEnabled = not not decoded.GrappleJumpPadUsesBypassEnabled
 		end
+		if decoded.ChargerTripmineAssistToggle ~= nil then
+			Control.ChargerTripmineAssistEnabled = not not decoded.ChargerTripmineAssistToggle
+		end
+		if decoded.ChargerTripmineModeDropdown ~= nil then
+			Control.ChargerTripmineMode = tostring(decoded.ChargerTripmineModeDropdown)
+		end
+		Control.ChargerTripmineDistance = tonumber(decoded.ChargerTripmineDistanceSlider) or Control.ChargerTripmineDistance
+		Control.ChargerTripmineJitter = tonumber(decoded.ChargerTripmineJitterSlider) or Control.ChargerTripmineJitter
 	end
 end
 
@@ -86,6 +98,10 @@ local function saveSettings()
 	data.GrappleNoReelCooldown = Control.GrappleNoReelCooldown
 	data.GrappleSharkTailWindowSlider = Control.GrappleSharkTailWindow
 	data.GrappleJumpPadUsesBypassEnabled = Control.GrappleJumpPadUsesBypassEnabled
+	data.ChargerTripmineAssistToggle = Control.ChargerTripmineAssistEnabled
+	data.ChargerTripmineModeDropdown = Control.ChargerTripmineMode
+	data.ChargerTripmineDistanceSlider = Control.ChargerTripmineDistance
+	data.ChargerTripmineJitterSlider = Control.ChargerTripmineJitter
 
 	pcall(function()
 		makefolder(SETTINGS_FOLDER)
@@ -108,6 +124,9 @@ function Control:initialize()
 	local Executor = getgenv().loadModule("NULLSCAPE/Class Adjustment/Executor.luau")
 	if Executor and typeof(Executor.enable) == "function" then
 		Executor.enable()
+	end
+	if Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
+		Executor.updateChargerTripmineAssist(self)
 	end
 
 	return true
@@ -186,6 +205,36 @@ end
 
 function Control:SetGrappleJumpPadUsesBypass(value)
 	self.GrappleJumpPadUsesBypassEnabled = value == true
+	saveSettings()
+end
+
+function Control:SetChargerTripmineAssist(value)
+	self.ChargerTripmineAssistEnabled = value == true
+	saveSettings()
+
+	local Executor = getgenv().loadModule("NULLSCAPE/Class Adjustment/Executor.luau")
+	if Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
+		Executor.updateChargerTripmineAssist(self)
+	end
+end
+
+function Control:SetChargerTripmineMode(value)
+	self.ChargerTripmineMode = value or "Auto"
+	saveSettings()
+
+	local Executor = getgenv().loadModule("NULLSCAPE/Class Adjustment/Executor.luau")
+	if Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
+		Executor.updateChargerTripmineAssist(self)
+	end
+end
+
+function Control:SetChargerTripmineDistance(value)
+	self.ChargerTripmineDistance = math.clamp(tonumber(value) or 15, 5, 50)
+	saveSettings()
+end
+
+function Control:SetChargerTripmineJitter(value)
+	self.ChargerTripmineJitter = math.clamp(tonumber(value) or 2, 0, 10)
 	saveSettings()
 end
 

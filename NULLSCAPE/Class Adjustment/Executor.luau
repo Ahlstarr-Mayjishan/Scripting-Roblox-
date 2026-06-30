@@ -15,6 +15,7 @@ local ReelPull = nil
 local SharkTailPull = nil
 local GrappleRecovery = nil
 local GrappleRange = nil
+local ChargerTripmineAssist = nil
 
 local MODULE_PATHS = {
 	AirControl = "NULLSCAPE/Class Adjustment/Grappler/Grapple Air Control.luau",
@@ -22,6 +23,7 @@ local MODULE_PATHS = {
 	SharkTailPull = "NULLSCAPE/Class Adjustment/Grappler/SharkTail Pull.luau",
 	GrappleRecovery = "NULLSCAPE/Class Adjustment/Grappler/Grapple Recovery.luau",
 	GrappleRange = "NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau",
+	ChargerTripmineAssist = "NULLSCAPE/Class Adjustment/Charger/Tripmine Assist.luau",
 }
 
 local function getGlobals()
@@ -54,6 +56,7 @@ local function loadAdjustmentModules()
 	SharkTailPull = SharkTailPull or getgenv().loadModule(MODULE_PATHS.SharkTailPull)
 	GrappleRecovery = GrappleRecovery or getgenv().loadModule(MODULE_PATHS.GrappleRecovery)
 	GrappleRange = GrappleRange or getgenv().loadModule(MODULE_PATHS.GrappleRange)
+	ChargerTripmineAssist = ChargerTripmineAssist or getgenv().loadModule(MODULE_PATHS.ChargerTripmineAssist)
 end
 
 local function applyStepAdjustments(self, dt)
@@ -190,10 +193,16 @@ end
 
 function Executor.disable()
 	HooksActive = false
+	if ChargerTripmineAssist and typeof(ChargerTripmineAssist.update) == "function" then
+		pcall(ChargerTripmineAssist.update, {
+			ChargerTripmineAssistEnabled = false,
+			ChargerTripmineMode = "Auto",
+		})
+	end
 end
 
 function Executor.restore()
-	HooksActive = false
+	Executor.disable()
 	local globals = getGlobals()
 	local grappleModule = getGrappleModule()
 	if grappleModule and HookedStep and grappleModule.Step == HookedStep then
@@ -211,6 +220,15 @@ function Executor.restore()
 		globals.ClassAdjustmentOriginalCast = nil
 		globals.ClassAdjustmentHookedCast = nil
 	end
+end
+
+function Executor.updateChargerTripmineAssist(controller)
+	ChargerTripmineAssist = ChargerTripmineAssist or getgenv().loadModule(MODULE_PATHS.ChargerTripmineAssist)
+	if ChargerTripmineAssist and typeof(ChargerTripmineAssist.update) == "function" then
+		return ChargerTripmineAssist.update(controller)
+	end
+
+	return nil
 end
 
 return Executor

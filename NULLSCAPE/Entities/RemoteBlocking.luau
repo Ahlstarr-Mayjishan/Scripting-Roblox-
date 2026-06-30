@@ -114,6 +114,18 @@ Logic.Config = {
         Remotes = { "Died" },
         Keywords = { "Skinwalker" },
         LegitKeywords = { "Skinwalker" }
+    },
+    ["Seamine"] = {
+        ControllerFlag = "SeamineImmune",
+        Remotes = { "ClientEvent" },
+        Keywords = { "Kill" },
+        LegitKeywords = { "Kill" }
+    },
+    ["SeamineUNC"] = {
+        ControllerFlag = "SeamineImmune",
+        Remotes = { "ClientEvent" },
+        Keywords = { "Kill" },
+        LegitKeywords = { "Kill" }
     }
 }
 
@@ -137,13 +149,12 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
     end
 
     -- Chặn riêng biệt hiệu ứng cháy (Burn curse) của ICBM nếu tùy chọn được bật
-    if controller.ICBMBurnImmune == true
-        and remote.ClassName == "RemoteEvent"
+    if remote.ClassName == "RemoteEvent"
         and remote.Name == "ClientEvent"
         and args[1] == "Combust" then
         local parent = remote.Parent
-        if parent and parent.Name == "ICBM" then
-            return true
+        if parent and string.find(parent.Name, "ICBM") then
+            return controller.ICBMBurnImmune == true
         end
     end
 

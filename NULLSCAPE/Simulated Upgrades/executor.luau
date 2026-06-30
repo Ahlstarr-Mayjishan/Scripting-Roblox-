@@ -7,7 +7,6 @@
 local Logic = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Radar logic.luau")
 local Magnet = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Magnet logic.luau")
 local Barrier = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Defuse Kits.luau")
-local ChargerAssist = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Charger Assists/Tripmine Charger Assist.luau")
 local Executor = {}
 local missingWarnings = {}
 
@@ -54,11 +53,6 @@ function Executor.updateBarriers(controller, gc)
     local updateBarrier = getCallable(Barrier, "update", "DefuseKits")
     if updateBarrier then
         updateBarrier(controller, gc)
-    end
-
-    local updateChargerAssist = getCallable(ChargerAssist, "update", "ChargerAssist")
-    if updateChargerAssist then
-        updateChargerAssist(controller, gc)
     end
 end
 

@@ -2169,11 +2169,35 @@ function isBellInstance(instance)
 end
 
 function Logic.isJumpPadInstance(instance)
-	return instance and instance.Name == "JumpPad" and instance:IsA("BasePart")
+	if not (instance and instance.Name == "JumpPad" and instance:IsA("BasePart")) then
+		return false
+	end
+
+	local ok, parent = pcall(function()
+		return instance.Parent
+	end)
+	if not ok or parent == nil then
+		return false
+	end
+
+	local nameOk, fullName = pcall(function()
+		return instance:GetFullName()
+	end)
+	if nameOk and string.find(string.lower(fullName), "seamine", 1, true) then
+		return false
+	end
+
+	return true
 end
 
 function cacheJumpPadState(part)
 	if not Logic.isJumpPadInstance(part) or Logic.JumpPadStates[part] then
+		return
+	end
+	local ok = pcall(function()
+		return part.Parent
+	end)
+	if not ok then
 		return
 	end
 
@@ -2197,6 +2221,12 @@ end
 
 function normalizeJumpPadForReuse(part)
 	if not Logic.isJumpPadInstance(part) then
+		return
+	end
+	local ok = pcall(function()
+		return part.Parent
+	end)
+	if not ok then
 		return
 	end
 
@@ -2228,6 +2258,12 @@ end
 
 function restoreJumpPad(part, state)
 	if not (part and part.Parent and state) then
+		return
+	end
+	local ok = pcall(function()
+		return part.Parent
+	end)
+	if not ok then
 		return
 	end
 
