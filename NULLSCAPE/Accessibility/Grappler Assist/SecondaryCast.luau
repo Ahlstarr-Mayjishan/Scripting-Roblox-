@@ -1,6 +1,6 @@
 --!nocheck
 -- [[
---  NULLSCAPE - Secondary Cast Skill (Adapt Drive / phím T) Module
+--  NULLSCAPE - Secondary Cast Skill (Adapt Drive / phim T) Module
 -- ]]
 
 local UserInputService = game:GetService("UserInputService")
@@ -12,8 +12,7 @@ local CFG
 function SecondaryCast.link(logicInstance)
 	Logic = logicInstance
 	CFG = Logic.CFG
-	
-	-- Khởi tạo các biến trên Logic nếu chưa tồn tại
+
 	Logic.AdaptDriveActive = Logic.AdaptDriveActive or false
 	Logic.LastAdaptInputPressed = Logic.LastAdaptInputPressed or 0
 	Logic.AdaptInputHeld = Logic.AdaptInputHeld or false
@@ -83,11 +82,7 @@ function SecondaryCast.applyGentleRecastAlignment(grapple, dt)
 	local movement = grapple and grapple.Movement
 	local inputDirection = Logic.getAssistFlatUnit(movement and movement.PlayerMoveDirection)
 	local velocityDirection = Logic.getAssistFlatUnit(rootPart.Velocity)
-	if
-		inputDirection
-		and velocityDirection
-		and inputDirection:Dot(velocityDirection) >= CFG.INTENT_CONTROL_SUPPRESS_DOT
-	then
+	if inputDirection and velocityDirection and inputDirection:Dot(velocityDirection) >= CFG.INTENT_CONTROL_SUPPRESS_DOT then
 		return false
 	end
 
@@ -171,13 +166,41 @@ function SecondaryCast.updateAdaptRecast(grapple)
 end
 
 function SecondaryCast.maintainAdaptInputHold(grapple)
-	-- Vô hiệu hóa việc tự động giữ/lặp recast để tôn trọng quy tắc "1 bấm 1 lần phóng neo"
-	return
+	if not (Logic.AdaptInputHeld == true and Logic.AdaptDriveActive == true) then
+		return
+	end
+	if not (grapple and Logic.isSuiteEnabled() and Logic.hasClassCapability(grapple, "AimAssist")) then
+		return
+	end
+	if Logic.AdaptRecastPending or SecondaryCast.isAwaitingAdaptAttach(grapple) then
+		return
+	end
+
+	local now = time()
+	local movement = grapple.Movement
+	if movement and (movement.grappling == true or grapple.jumpPadReel == true) then
+		local heldLongEnough = now - (Logic.AdaptInputBeganAt or 0) >= CFG.ADAPT_TAP_THRESHOLD
+		local pulseReady = now - (Logic.LastAdaptPulseAt or 0) >= CFG.ADAPT_RECAST_COOLDOWN
+		if heldLongEnough and pulseReady and Logic.hasReachedGrappleDestination(grapple) then
+			SecondaryCast.requestAdaptRecast(grapple)
+		else
+			SecondaryCast.applyGentleRecastAlignment(grapple, 1 / 60)
+		end
+		return
+	end
+
+	if now >= (Logic.AdaptRetryAt or 0) then
+		SecondaryCast.requestAdaptRecast(grapple)
+	end
 end
 
-function SecondaryCast.updateAdaptInputMode(grapple)
-	-- Vô hiệu hóa việc tự động phân biệt tap/hold
-	return
+function SecondaryCast.updateAdaptInputMode(_grapple)
+	if not Logic.AdaptInputHeld then
+		return
+	end
+	if time() - (Logic.AdaptInputBeganAt or 0) >= CFG.ADAPT_TAP_THRESHOLD then
+		Logic.AdaptDriveActive = true
+	end
 end
 
 function SecondaryCast.watchAdaptInput()
@@ -213,33 +236,51 @@ function SecondaryCast.watchAdaptInput()
 
 			Logic.AdaptInputHeld = false
 			Logic.AdaptInputBeganAt = 0
+			Logic.AdaptDriveActive = false
 		end)
 	)
 end
 
 function SecondaryCast.scanSecondaryCastTarget(grapple, originalResult)
-	-- 1. Siêu blatant: Ưu tiên tối đa tự động tìm và snap 100% vào điểm neo đặc biệt (Bells, JumpPads...) trong 360 độ (kể cả sau lưng/ngoài màn hình)
-	local blatantTarget = Logic.scanNamedTargets(grapple, {
+	local namedDecision = Logic.scanNamedTargets(grapple, {
 		driveMode = true,
 		fullScan = true,
 		forceCursor = false,
-		allowOffScreen = true
+		allowOffScreen = true,
+		returnDecision = true,
 	})
-	if blatantTarget then
-		return blatantTarget
+
+	local surfaceDecision
+	if typeof(Logic.scanScreenSurface) == "function" then
+		surfaceDecision = Logic.scanScreenSurface(grapple, {
+			driveMode = true,
+			returnDecision = true,
+		})
 	end
 
-	-- 2. Dự phòng 1: Nếu không có điểm đặc biệt nào xung quanh, tôn trọng hướng nhắm cụ thể của người chơi (vào tường, sàn, trần...)
+	if namedDecision and surfaceDecision then
+		local namedScore = tonumber(namedDecision.Score) or math.huge
+		local surfaceScore = tonumber(surfaceDecision.Score) or math.huge
+		if namedScore <= surfaceScore + CFG.ADAPT_DRIVE_SPECIAL_COMMIT_MARGIN then
+			return namedDecision.Result
+		end
+		if surfaceScore + CFG.ADAPT_DRIVE_SURFACE_OVERRIDE_MARGIN < namedScore then
+			return surfaceDecision.Result
+		end
+
+		return namedDecision.Result
+	end
+
+	if namedDecision then
+		return namedDecision.Result
+	end
+
+	if surfaceDecision then
+		return surfaceDecision.Result
+	end
+
 	if Logic.isUsableResult(grapple, originalResult) then
 		return originalResult
-	end
-
-	-- 3. Dự phòng 2: Nếu chỉ chuột vào khoảng không và không có điểm đặc biệt, tự quét bề mặt địa hình thường trên màn hình
-	if typeof(Logic.scanScreenSurface) == "function" then
-		return Logic.scanScreenSurface(grapple, {
-			driveMode = true,
-			returnDecision = true
-		})
 	end
 
 	return nil

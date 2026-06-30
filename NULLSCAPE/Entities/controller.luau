@@ -1468,7 +1468,14 @@ function Controller:UpdateTouchImmunityState()
 	if enemiesFolder then
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			local name = enemy.Name
-			local enemyRoot = enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+			local enemyRoot
+			if enemy:IsA("BasePart") then
+				enemyRoot = enemy
+			elseif enemy:IsA("Model") then
+				enemyRoot = enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+			else
+				enemyRoot = enemy:FindFirstChildWhichIsA("BasePart", true)
+			end
 			if enemyRoot then
 				local dist = (rootPart.Position - enemyRoot.Position).Magnitude
 				if string.find(name, "Bell") and dist < 16 then

@@ -4,29 +4,36 @@
 --  Temporarily replaces Grapple.Cast while enabled, then restores it fully when disabled.
 -- ]]
 
-ReplicatedStorage = game:GetService("ReplicatedStorage")
-ReplicatedFirst = game:GetService("ReplicatedFirst")
-RunService = game:GetService("RunService")
-Players = game:GetService("Players")
-Workspace = game:GetService("Workspace")
-UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
 
-ClassProfiles = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/ClassProfiles.luau")
-EmergencyDecision = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/EmergencyDecision.luau")
-TerrainSense = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TerrainSense.luau")
-IntentModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/IntentModel.luau")
-MapSense = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/MapSense.luau")
-HealthMonitor = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/HealthMonitor.luau")
-AssistArbiter = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/AssistArbiter.luau")
-VelocityAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/VelocityAssist.luau")
-PhysicsProfile = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/PhysicsProfile.luau")
-ThreatModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/ThreatModel.luau")
-SafeLandingGuard = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SafeLandingGuard.luau")
-TrajectoryAntiBonk = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TrajectoryAntiBonk.luau")
-PredictionHorizon = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/PredictionHorizon.luau")
-CastIntent = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/CastIntent.luau")
-CursorReCorrect = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/CursorReCorrect.luau")
-StaminaAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Stamina Assist.luau")
+local ClassProfiles = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/ClassProfiles.luau")
+local EmergencyDecision = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/EmergencyDecision.luau")
+local TerrainSense = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TerrainSense.luau")
+local IntentModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/IntentModel.luau")
+local MapSense = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/MapSense.luau")
+local HealthMonitor = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/HealthMonitor.luau")
+local AssistArbiter = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/AssistArbiter.luau")
+local AssistActions = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/AssistActions.luau")
+local AssistSettings = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/AssistSettings.luau")
+local CandidateRegistry = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/CandidateRegistry.luau")
+local VelocityAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/VelocityAssist.luau")
+local PhysicsProfile = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/PhysicsProfile.luau")
+local ThreatModel = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/ThreatModel.luau")
+local SafeLandingGuard = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/SafeLandingGuard.luau")
+local TrajectoryAntiBonk = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/TrajectoryAntiBonk.luau")
+local PredictionHorizon = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/PredictionHorizon.luau")
+local CastIntent = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/CastIntent.luau")
+local CursorReCorrect = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/CursorReCorrect.luau")
+local StaminaAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Stamina Assist.luau")
+
+local isPanicPressureActive
+local getPredictionHorizon
+local getSafeLandingGuard
 
 function packValues(...)
 	local values = { ... }
@@ -137,6 +144,14 @@ local VALID_TARGETS = {
 	TriaOrb = true,
 }
 
+Logic.CandidateRegistryState = CandidateRegistry.new(VALID_TARGETS, function(name, part)
+	if name == "JumpPad" and part and part.CanQuery == false and not Logic.isJumpPadUsesBypassEnabled() then
+		return false
+	end
+	return true
+end)
+Logic.Candidates = Logic.CandidateRegistryState.Candidates
+
 local TARGET_OPTIONS = {
 	"GrapplePoint",
 	"JumpPad",
@@ -186,6 +201,17 @@ local CFG = {
 	ADAPT_DRIVE_TRIA_CENTER_BONUS = -14,
 	ADAPT_DRIVE_SCREEN_WEIGHT = 65,
 	ADAPT_DRIVE_DISTANCE_WEIGHT = 0.018,
+	ADAPT_DRIVE_SPECIAL_BASE_BONUS = -42,
+	ADAPT_DRIVE_SPECIAL_FORWARD_BONUS = -34,
+	ADAPT_DRIVE_SPECIAL_FLOW_BONUS = -26,
+	ADAPT_DRIVE_SURFACE_PENALTY = 22,
+	ADAPT_DRIVE_SURFACE_FLOW_BONUS = -18,
+	ADAPT_DRIVE_SURFACE_BACK_PENALTY = 48,
+	ADAPT_DRIVE_ROUTE_BONUS = -28,
+	ADAPT_DRIVE_VERTICAL_UP_BONUS = -0.22,
+	ADAPT_DRIVE_VERTICAL_DOWN_PENALTY = 0.42,
+	ADAPT_DRIVE_SPECIAL_COMMIT_MARGIN = 58,
+	ADAPT_DRIVE_SURFACE_OVERRIDE_MARGIN = 18,
 	AUTO_RESCUE_SPEED = 135,
 	AUTO_RESCUE_COOLDOWN = 0.45,
 	AUTO_RESCUE_WINDOW = 0.3,
@@ -353,11 +379,13 @@ local CFG = {
 	CURSOR_INTENT_DISTANCE_WEIGHT = 1.2,
 	CURSOR_INTENT_PREFERRED_BONUS = -4,
 	CURSOR_INTENT_CONFIDENCE_LIMIT = 0.24,
-	CURSOR_SPECIAL_FOCUS_LIMIT = 0.055,
-	CURSOR_SPECIAL_FOCUS_BONUS = -18,
-	CURSOR_SPECIAL_TARGET_LIMIT = 0.42,
-	CURSOR_SPECIAL_TARGET_FORCE_LIMIT = 0.5,
-	CURSOR_SPECIAL_TARGET_BONUS = -65,
+	CURSOR_SPECIAL_FOCUS_LIMIT = 0.09,
+	CURSOR_SPECIAL_FOCUS_BONUS = -28,
+	CURSOR_SPECIAL_TARGET_LIMIT = 0.62,
+	CURSOR_SPECIAL_TARGET_FORCE_LIMIT = 0.72,
+	CURSOR_SPECIAL_TARGET_MAX_LIMIT = 0.84,
+	CURSOR_SPECIAL_TARGET_BONUS = -150,
+	CURSOR_SPECIAL_MAGNET_BONUS = -95,
 	CURSOR_RECORRECT_CONFIDENCE_LIMIT = 0.28,
 	CURSOR_RECORRECT_SURFACE_NORMAL_Y_MAX = 0.55,
 	CURSOR_RECORRECT_SCAN_INTERVAL = 0.05,
@@ -513,6 +541,26 @@ local SCREEN_RAY_OFFSETS = {
 	Vector2.new(-0.1, -0.06),
 }
 
+local DRIVE_SCREEN_RAY_OFFSETS = {
+	Vector2.new(0, 0),
+	Vector2.new(0.08, 0),
+	Vector2.new(-0.08, 0),
+	Vector2.new(0, 0.08),
+	Vector2.new(0, -0.08),
+	Vector2.new(0.16, 0),
+	Vector2.new(-0.16, 0),
+	Vector2.new(0, 0.16),
+	Vector2.new(0, -0.16),
+	Vector2.new(0.14, 0.1),
+	Vector2.new(-0.14, 0.1),
+	Vector2.new(0.14, -0.1),
+	Vector2.new(-0.14, -0.1),
+	Vector2.new(0.24, 0.12),
+	Vector2.new(-0.24, 0.12),
+	Vector2.new(0.24, -0.12),
+	Vector2.new(-0.24, -0.12),
+}
+
 function Logic.getGlobals()
 	local env = getgenv()
 	env._NULLSCAPE_Globals = env._NULLSCAPE_Globals or {}
@@ -520,82 +568,55 @@ function Logic.getGlobals()
 end
 
 function Logic.getController()
-	return Logic.getGlobals().activeAccessibilityController
+	return AssistSettings.getController(Logic.getGlobals())
 end
 
 function Logic.isEnabled()
-	local controller = Logic.getController()
-	return controller and controller.GrappleAimAssistEnabled == true and controller.GrappleAssistSuiteEnabled == true
+	return AssistSettings.isAimAssistEnabled(Logic.getController())
 end
 
 function Logic.isSuiteEnabled()
-	local controller = Logic.getController()
-	return controller and controller.GrappleAssistSuiteEnabled == true
+	return AssistSettings.isSuiteEnabled(Logic.getController())
 end
 
 function Logic.isRescueEnabled()
-	local controller = Logic.getController()
-	return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleRescueAssistEnabled == true
+	return AssistSettings.isRescueEnabled(Logic.getController())
 end
 
 function Logic.isEmergencyProtectionEnabled()
-	local controller = Logic.getController()
-	return controller
-		and controller.GrappleAssistSuiteEnabled == true
-		and controller.GrappleEmergencyProtectionEnabled == true
+	return AssistSettings.isEmergencyProtectionEnabled(Logic.getController())
 end
 
 function Logic.getEmergencyProtectionMode()
-	local controller = Logic.getController()
-	local mode = tostring(controller and controller.GrappleEmergencyProtectionMode or "Manual")
-	if mode == "Smart Auto" then
-		return "Smart Auto"
-	end
-	if mode == "Automatic" then
-		return "Automatic"
-	end
-	return "Manual"
+	return AssistSettings.getEmergencyProtectionMode(Logic.getController())
 end
 
 function Logic.getEmergencySpeedThreshold()
-	local controller = Logic.getController()
-	return math.clamp(tonumber(controller and controller.GrappleEmergencySpeedThreshold) or 220, 150, 320)
+	return AssistSettings.getEmergencySpeedThreshold(Logic.getController())
 end
 
 function Logic.getEmergencyFallThreshold()
-	local controller = Logic.getController()
-	return math.clamp(tonumber(controller and controller.GrappleEmergencyFallThreshold) or 125, 80, 220)
+	return AssistSettings.getEmergencyFallThreshold(Logic.getController())
 end
 
 function Logic.isAntiBonkEnabled()
-	local controller = Logic.getController()
-	return controller and controller.AntiBonkEnabled == true
+	return AssistSettings.isAntiBonkEnabled(Logic.getController())
 end
 
 function Logic.isSmartReelEnabled()
-	local controller = Logic.getController()
-	return controller and controller.GrappleAssistSuiteEnabled == true and controller.GrappleSmartReelEnabled == true
+	return AssistSettings.isSmartReelEnabled(Logic.getController())
 end
 
 function Logic.isSharkTailHelperEnabled()
-	local controller = Logic.getController()
-	return controller
-		and controller.GrappleAssistSuiteEnabled == true
-		and controller.GrappleSharkTailHelperEnabled == true
+	return AssistSettings.isSharkTailHelperEnabled(Logic.getController())
 end
 
 function Logic.isMomentumGuardEnabled()
-	local controller = Logic.getController()
-	return controller
-		and controller.GrappleAssistSuiteEnabled == true
-		and controller.GrappleMomentumGuardEnabled == true
+	return AssistSettings.isMomentumGuardEnabled(Logic.getController())
 end
 
 function Logic.isAntiDetachEnabled()
-	local controller = Logic.getController()
-	return controller
-		and controller.GrappleAssistSuiteEnabled == true
-		and controller.GrappleAntiDetachEnabled == true
+	return AssistSettings.isAntiDetachEnabled(Logic.getController())
 end
 
 function Logic.isJumpPadUsesBypassEnabled()
@@ -663,25 +684,15 @@ function Logic.markJumpPadCommit(grapple, jumpPadPart)
 end
 
 function Logic.isVoidRescueEnabled()
-	local controller = Logic.getController()
-	return controller
-		and controller.GrappleAssistSuiteEnabled == true
-		and controller.GrappleEmergencyProtectionEnabled == true
-		and controller.GrappleVoidRescueEnabled ~= false
+	return AssistSettings.isVoidRescueEnabled(Logic.getController())
 end
 
 function Logic.isWallSlamRescueEnabled()
-	local controller = Logic.getController()
-	return controller
-		and controller.GrappleAssistSuiteEnabled == true
-		and controller.GrappleEmergencyProtectionEnabled == true
-		and controller.GrappleWallSlamRescueEnabled == true
+	return AssistSettings.isWallSlamRescueEnabled(Logic.getController())
 end
 
 function Logic.getAdaptInputKeyCode()
-	local controller = Logic.getController()
-	local keyName = tostring(controller and controller.GrappleAdaptInputKey or "T")
-	return Enum.KeyCode[keyName] or Enum.KeyCode.T
+	return AssistSettings.getAdaptInputKeyCode(Logic.getController())
 end
 
 function Logic.isTextBoxFocused()
@@ -720,93 +731,16 @@ function normalizeRangePriority(value)
 	return "Nearest"
 end
 
-function normalizeMode(value)
-	value = tostring(value or "Manual")
-	if value == "Automatic" then
-		return "Automatic"
-	end
-	return "Manual"
-end
-
-function normalizeStyle(value)
-	value = tostring(value or "Balanced")
-	if SHARK_TAIL_STYLE_CONFIG[value] then
-		return value
-	end
-	return "Balanced"
-end
-
 function getTargetPart(instance)
-	if not instance then
-		return nil
-	end
-
-	if instance:IsA("BasePart") then
-		return instance
-	end
-
-	if instance:IsA("Model") and instance.PrimaryPart then
-		return instance.PrimaryPart
-	end
-
-	return instance:FindFirstChildWhichIsA("BasePart", true)
-end
-
-function getCandidateName(instance, part)
-	if instance and VALID_TARGETS[instance.Name] then
-		return instance.Name
-	end
-	if part and VALID_TARGETS[part.Name] then
-		return part.Name
-	end
-	return nil
-end
-
-function registerCandidate(instance)
-	local part = getTargetPart(instance)
-	local targetName = getCandidateName(instance, part)
-	if not part or not targetName then
-		return
-	end
-	if targetName == "JumpPad" and part.CanQuery == false and not Logic.isJumpPadUsesBypassEnabled() then
-		return
-	end
-
-	Logic.Candidates[instance] = {
-		Instance = instance,
-		Part = part,
-		Name = targetName,
-	}
-end
-
-function registerCandidateBranch(instance, root)
-	local current = instance
-	while current and current ~= root do
-		registerCandidate(current)
-		current = current.Parent
-	end
+	return CandidateRegistry.getTargetPart(instance)
 end
 
 function unregisterCandidate(instance)
-	if not instance then
-		return
-	end
-
-	Logic.Candidates[instance] = nil
-end
-
-function unregisterCandidateTree(instance)
-	unregisterCandidate(instance)
-	if not instance then
-		return
-	end
-
-	for _, descendant in ipairs(instance:GetDescendants()) do
-		unregisterCandidate(descendant)
-	end
+	return CandidateRegistry.unregister(Logic.CandidateRegistryState, instance)
 end
 
 function clearConnections()
+	CandidateRegistry.clearConnections(Logic.CandidateRegistryState)
 	for _, connection in ipairs(Logic.Connections) do
 		if connection then
 			pcall(function()
@@ -875,192 +809,54 @@ function getTrackedGrapple()
 end
 
 function fireSpecialAction(grapple, state)
-	local movement = grapple and grapple.Movement
-	if not (movement and typeof(movement.SpecialAction) == "function") then
-		return false
-	end
-
-	local success = pcall(function()
-		movement:SpecialAction(state)
-	end)
-
-	return success
+	return AssistActions.fireSpecialAction(grapple, state)
 end
 
 function pulseSpecialAction(grapple)
-	if time() - Logic.LastAdaptPulseAt < CFG.ADAPT_RECAST_COOLDOWN then
-		return false
-	end
-	if not fireSpecialAction(grapple, Enum.UserInputState.Begin) then
-		return false
-	end
-
-	Logic.LastAdaptPulseAt = time()
-	Logic.AdaptAwaitingAttachUntil = Logic.LastAdaptPulseAt + CFG.ADAPT_ATTACH_GRACE
-	Logic.AdaptRetryAt = Logic.AdaptAwaitingAttachUntil + CFG.ADAPT_RETRY_DELAY
-
-	local token = Logic.AdaptRecastToken + 1
-	Logic.AdaptRecastToken = token
-
-	task.delay(CFG.ADAPT_INPUT_PULSE_DURATION, function()
-		if Logic.AdaptRecastToken ~= token then
-			return
-		end
-
-		local activeGrapple = grapple
-		if not activeGrapple or typeof(activeGrapple) ~= "table" then
-			activeGrapple = getTrackedGrapple()
-		end
-		if not activeGrapple then
-			return
-		end
-
-		fireSpecialAction(activeGrapple, Enum.UserInputState.End)
-		Logic.AdaptDriveActive = false
-	end)
-
-	return true
+	return AssistActions.pulseSpecialAction(Logic, CFG, grapple, getTrackedGrapple)
 end
 
 function armAutoRescueWindow()
-	Logic.AutoRescueUntil = time() + CFG.AUTO_RESCUE_WINDOW
+	return AssistActions.armAutoRescueWindow(Logic, CFG)
 end
 
 function isAutoRescueWindowActive()
-	return time() <= (Logic.AutoRescueUntil or 0)
+	return AssistActions.isAutoRescueWindowActive(Logic)
 end
 
 
 function isEmergencyRescueRecastBlocked(grapple, ignoreTimeLock)
-	if not ignoreTimeLock and time() <= (Logic.EmergencyRescueLockUntil or 0) then
-		return true
-	end
-
-	if not ignoreTimeLock and Logic.isJumpPadCommitGuardActive() then
-		return true
-	end
-
-	local movement = grapple and grapple.Movement
-	if movement and (movement.grappling == true or grapple.jumpPadReel == true or Logic.isAwaitingAdaptAttach(grapple)) then
-		return true
-	end
-
-	return false
+	return AssistActions.isEmergencyRescueRecastBlocked(Logic, grapple, ignoreTimeLock)
 end
 
 function markEmergencyRescuePulse()
-	Logic.EmergencyRescueLockUntil =
-		math.max(Logic.EmergencyRescueLockUntil or 0, time() + CFG.EMERGENCY_RESCUE_RECAST_LOCK)
+	return AssistActions.markEmergencyRescuePulse(Logic, CFG)
 end
 
 function getAdaptHorizontalSpeed(grapple)
-	local rootPart = grapple and grapple.RootPart
-	local horizontal = Logic.getHorizontalVelocity(rootPart)
-	return horizontal.Magnitude, horizontal
+	return AssistActions.getAdaptHorizontalSpeed(grapple)
 end
 
 function getActiveGrappleTargetPosition(grapple)
-	local movement = grapple and grapple.Movement
-	if movement and typeof(movement.grapplePoint) == "Vector3" then
-		return movement.grapplePoint
-	end
-
-	local part = (movement and movement.grapplePart) or grapple and grapple.grapplePart
-	if part and part.Parent and part:IsA("BasePart") then
-		return part.Position
-	end
-
-	return nil
-end
-
-function getAdaptArrivalDistance(grapple)
-	local movement = grapple and grapple.Movement
-	local part = (movement and movement.grapplePart) or grapple and grapple.grapplePart
-	if part and part.Parent and part.Name == "TriaOrb" then
-		return CFG.ADAPT_RECAST_TRIA_ARRIVAL_DISTANCE
-	elseif part and part.Parent and part.Name == "GrapplePoint" then
-		return CFG.ADAPT_RECAST_GRAPPLEPOINT_DISTANCE
-	elseif part and part.Parent and (part.Name == "JumpPad" or part.Name == "Bell") then
-		return CFG.ADAPT_RECAST_BOUNCE_DISTANCE
-	end
-
-	local size = part and part.Parent and part:IsA("BasePart") and part.Size.Magnitude * 0.45 or 0
-	return math.max(CFG.ADAPT_RECAST_ARRIVAL_DISTANCE, size)
+	return AssistActions.getActiveGrappleTargetPosition(grapple)
 end
 
 function hasReachedGrappleDestination(grapple)
-	local rootPart = grapple and grapple.RootPart
-	local targetPosition = getActiveGrappleTargetPosition(grapple)
-	if not (rootPart and targetPosition) then
-		return true
-	end
-
-	local remainingDistance = (targetPosition - rootPart.Position).Magnitude
-	if remainingDistance <= getAdaptArrivalDistance(grapple) then
-		return true
-	end
-
-	local rootVelocity = rootPart.Velocity
-	if not rootVelocity then
-		return false
-	end
-
-	local toTarget = targetPosition - rootPart.Position
-	if toTarget.Magnitude <= 0.001 then
-		return true
-	end
-
-	return rootVelocity:Dot(toTarget.Unit) <= 0
+	return AssistActions.hasReachedGrappleDestination(CFG, grapple)
 end
 
 function clampAdaptRecastVelocity(grapple)
-	local rootPart = grapple and grapple.RootPart
-	if not rootPart then
-		return
-	end
-
-	local speed, horizontal = getAdaptHorizontalSpeed(grapple)
-	if speed <= CFG.ADAPT_RECAST_SAFE_SPEED or speed <= 0 then
-		return
-	end
-
-	local clampedHorizontal = horizontal.Unit * CFG.ADAPT_RECAST_CLAMP_SPEED
-	rootPart.Velocity = Vector3.new(clampedHorizontal.X, rootPart.Velocity.Y, clampedHorizontal.Z)
+	return AssistActions.clampAdaptRecastVelocity(CFG, grapple)
 end
-
-
-
-
-function rebuildCandidateCache()
-	table.clear(Logic.Candidates)
-
-	for _, descendant in ipairs(Workspace:GetDescendants()) do
-		if VALID_TARGETS[descendant.Name] then
-			registerCandidateBranch(descendant, Workspace)
-		end
-	end
-end
-
 function watchCandidateFolder()
-	clearConnections()
-	rebuildCandidateCache()
+	CandidateRegistry.watchWorkspace(Logic.CandidateRegistryState)
+	Logic.Candidates = Logic.CandidateRegistryState.Candidates
+end
 
-	table.insert(
-		Logic.Connections,
-		Workspace.DescendantAdded:Connect(function(descendant)
-			if VALID_TARGETS[descendant.Name] then
-				registerCandidateBranch(descendant, Workspace)
-			end
-		end)
-	)
-	table.insert(
-		Logic.Connections,
-		Workspace.DescendantRemoving:Connect(function(descendant)
-			if VALID_TARGETS[descendant.Name] then
-				unregisterCandidateTree(descendant)
-			end
-		end)
-	)
+function clearCandidateCache()
+	CandidateRegistry.clear(Logic.CandidateRegistryState)
+	Logic.Candidates = Logic.CandidateRegistryState.Candidates
+	Logic.CandidateCursor = 1
 end
 
 function getGrappleModule()
@@ -1737,13 +1533,11 @@ function Logic.getCachedPanicRescueDanger(grapple)
 end
 
 function getModeValue(key)
-	local controller = Logic.getController()
-	return normalizeMode(controller and controller[key])
+	return AssistSettings.getModeValue(Logic.getController(), key)
 end
 
 function getSharkTailStyle()
-	local controller = Logic.getController()
-	return normalizeStyle(controller and controller.GrappleSharkTailStyle)
+	return AssistSettings.getSharkTailStyle(Logic.getController(), SHARK_TAIL_STYLE_CONFIG)
 end
 
 function getSharkTailStyleConfig()
@@ -2110,6 +1904,25 @@ function getCameraScreenScore(camera, worldPosition, anchor)
 	return delta.Magnitude / math.max(viewportSize.X, viewportSize.Y)
 end
 
+function getSpecialTargetCursorLimit(forceCursor, explicitLimit)
+	local baseLimit = forceCursor and CFG.CURSOR_SPECIAL_TARGET_FORCE_LIMIT or CFG.CURSOR_SPECIAL_TARGET_LIMIT
+	if explicitLimit then
+		baseLimit = math.max(baseLimit, explicitLimit)
+	end
+
+	local strengthScale = getAimAssistStrengthScale()
+	local strengthBoost = math.clamp((strengthScale - 1.2) * 0.06, 0, 0.22)
+	return math.min(baseLimit + strengthBoost, CFG.CURSOR_SPECIAL_TARGET_MAX_LIMIT)
+end
+
+function getSpecialTargetMagnetBonus(screenScore, forceCursor)
+	local limit = getSpecialTargetCursorLimit(forceCursor, nil)
+	local closeness = math.clamp((limit - (tonumber(screenScore) or limit)) / math.max(limit, 0.001), 0, 1)
+	local strengthScale = getAimAssistStrengthScale()
+	local strengthWeight = math.clamp(strengthScale / 3, 0.45, 1.35)
+	return CFG.CURSOR_SPECIAL_TARGET_BONUS * strengthWeight + CFG.CURSOR_SPECIAL_MAGNET_BONUS * closeness
+end
+
 function getCastIntentDeps()
 	return {
 		Players = Players,
@@ -2152,15 +1965,7 @@ function isLineClear(grapple, targetInstance, targetPart, targetPosition, maxRan
 	return nil
 end
 
-function isTargetHit(result, targetInstance, targetPart)
-	if not result or not result.Instance then
-		return false
-	end
-
-	return result.Instance == targetPart or result.Instance:IsDescendantOf(targetInstance)
-end
-
-function isPathSafeForHitbox(grapple, targetInstance, targetPart, targetPosition, maxRange)
+function isPathSafeForHitbox(_grapple, _targetInstance, _targetPart, _targetPosition, _maxRange)
 	return true
 end
 
@@ -2441,11 +2246,7 @@ function maintainBellBypass(grapple)
 end
 
 function getCandidateList()
-	local list = {}
-	for _, candidate in pairs(Logic.Candidates) do
-		table.insert(list, candidate)
-	end
-	return list
+	return CandidateRegistry.toList(Logic.CandidateRegistryState)
 end
 
 function getMapSenseDeps()
@@ -2738,23 +2539,21 @@ function getSpecialAnchorBonus(grapple, targetName, targetPosition)
 end
 
 function getAimAssistStrengthScale()
-	local controller = Logic.getController()
-	local value = tostring(controller and controller.GrappleAimAssistStrength or "Balanced")
-	if value == "Light" then
-		return 1.2
-	elseif value == "Strong" then
-		return 3.0
-	elseif value == "Motor Accessibility" then
-		return 6.0
-	end
+	return AssistSettings.getAimAssistStrengthScale(Logic.getController())
+end
 
-	return 1.8
+function getAdaptDriveIntent(grapple)
+	local rootPart = grapple and grapple.RootPart
+	local movement = grapple and grapple.Movement
+	local inputDirection = getAssistFlatUnit(movement and movement.PlayerMoveDirection)
+	local velocityDirection = getAssistFlatUnit(rootPart and rootPart.Velocity)
+	local cameraDirection = getAssistFlatUnit(Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.LookVector)
+	return inputDirection or velocityDirection or cameraDirection, inputDirection, velocityDirection, cameraDirection
 end
 
 function getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
 	local rootPart = grapple and grapple.RootPart
-	local movement = grapple and grapple.Movement
-	if not (rootPart and movement) then
+	if not rootPart then
 		return math.huge
 	end
 
@@ -2763,11 +2562,14 @@ function getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
 	local horizontalSpeed = horizontal.Magnitude
 	local targetDirection = getAssistFlatUnit(position - rootPart.Position)
 	local velocityDirection = getAssistFlatUnit(horizontal)
-	local inputDirection = getAssistFlatUnit(movement.PlayerMoveDirection)
-	local cameraDirection = getAssistFlatUnit(Workspace.CurrentCamera and Workspace.CurrentCamera.CFrame.LookVector)
-	local intentDirection = inputDirection or velocityDirection or cameraDirection
+	local intentDirection, inputDirection = getAdaptDriveIntent(grapple)
+	local isSpecialTarget = VALID_TARGETS[candidate.Name] == true
+	local verticalOffset = position.Y - rootPart.Position.Y
 
 	local score = screenScore * CFG.ADAPT_DRIVE_SCREEN_WEIGHT + distance * CFG.ADAPT_DRIVE_DISTANCE_WEIGHT
+	if isSpecialTarget then
+		score = score + CFG.ADAPT_DRIVE_SPECIAL_BASE_BONUS
+	end
 	if candidate.Name == "GrapplePoint" then
 		score = score + CFG.ADAPT_DRIVE_GRAPPLEPOINT_BONUS
 	end
@@ -2776,9 +2578,26 @@ function getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
 		local intentDot = targetDirection:Dot(intentDirection)
 		if intentDot > 0.25 then
 			score = score + CFG.ADAPT_DRIVE_FORWARD_BONUS * math.clamp(intentDot, 0, 1)
+			if isSpecialTarget then
+				score = score + CFG.ADAPT_DRIVE_SPECIAL_FORWARD_BONUS * math.clamp(intentDot, 0, 1)
+			end
 		elseif intentDot < -0.15 then
 			score = score + CFG.ADAPT_DRIVE_BACKWARD_PENALTY * math.clamp(-intentDot, 0, 1)
 		end
+	end
+
+	if targetDirection and velocityDirection and targetDirection:Dot(velocityDirection) > 0.18 then
+		score = score + CFG.ADAPT_DRIVE_SPECIAL_FLOW_BONUS * math.clamp(targetDirection:Dot(velocityDirection), 0, 1)
+	end
+
+	if inputDirection and targetDirection and inputDirection:Dot(targetDirection) < -0.3 then
+		score = score + CFG.ADAPT_DRIVE_BACKWARD_PENALTY * 0.45
+	end
+
+	if verticalOffset > 0 then
+		score = score + math.min(verticalOffset, 80) * CFG.ADAPT_DRIVE_VERTICAL_UP_BONUS
+	else
+		score = score + math.min(math.abs(verticalOffset), 60) * CFG.ADAPT_DRIVE_VERTICAL_DOWN_PENALTY
 	end
 
 	if horizontalSpeed > 35 then
@@ -2786,7 +2605,8 @@ function getAdaptDriveScore(grapple, candidate, position, distance, screenScore)
 		local currentDistance = (position - rootPart.Position).Magnitude
 		local projectedDistance = (position - projected).Magnitude
 		if projectedDistance < currentDistance then
-			score = score - math.clamp((currentDistance - projectedDistance) / math.max(currentDistance, 1), 0, 1) * 22
+			score = score + CFG.ADAPT_DRIVE_ROUTE_BONUS
+				* math.clamp((currentDistance - projectedDistance) / math.max(currentDistance, 1), 0, 1)
 		end
 	end
 
@@ -3154,7 +2974,7 @@ function scanNamedTargets(grapple, options)
 						if VALID_TARGETS[candidate.Name] then
 							cursorFilterLimit = math.max(
 								cursorFilterLimit,
-								forceCursor and CFG.CURSOR_SPECIAL_TARGET_FORCE_LIMIT or CFG.CURSOR_SPECIAL_TARGET_LIMIT
+								getSpecialTargetCursorLimit(forceCursor, cursorLimit)
 							)
 						end
 						if
@@ -3164,6 +2984,7 @@ function scanNamedTargets(grapple, options)
 							and not isLockedTarget
 							and screenScore > cursorFilterLimit
 						then
+							cursorFilterLimit = cursorFilterLimit
 							-- Bỏ qua nếu lệch hồng tâm quá lớn
 						else
 							table.insert(validCandidates, {
@@ -3194,6 +3015,7 @@ function scanNamedTargets(grapple, options)
 			return a.roughDistance > b.roughDistance
 		end)
 	elseif rangeMode == "Random" then
+		validCandidates = validCandidates
 		-- Không cần sắp xếp
 	else -- "Nearest"
 		table.sort(validCandidates, function(a, b)
@@ -3201,8 +3023,8 @@ function scanNamedTargets(grapple, options)
 		end)
 	end
 
-	local maxExpensiveChecks = 8
-	local maxTotalChecks = 24
+	local maxExpensiveChecks = fullScan and (driveMode and 28 or 16) or 8
+	local maxTotalChecks = fullScan and (driveMode and 72 or 42) or 24
 	local checkedCount = 0
 	local totalChecks = 0
 
@@ -3217,7 +3039,6 @@ function scanNamedTargets(grapple, options)
 		local position = item.position
 		local screenScore = item.screenScore
 
-		evaluated = evaluated + 1
 		local result, distance, hitPosition
 		if CursorReCorrect and CursorReCorrect.findCandidateLineClear then
 			result, distance, hitPosition = CursorReCorrect.findCandidateLineClear(
@@ -3266,8 +3087,11 @@ function scanNamedTargets(grapple, options)
 							then
 								priorityScore = priorityScore + CFG.CURSOR_SPECIAL_FOCUS_BONUS
 							end
-							if VALID_TARGETS[candidate.Name] and screenScore <= CFG.CURSOR_SPECIAL_TARGET_LIMIT then
-								priorityScore = priorityScore + CFG.CURSOR_SPECIAL_TARGET_BONUS
+							if
+								VALID_TARGETS[candidate.Name]
+								and screenScore <= getSpecialTargetCursorLimit(forceCursor, cursorLimit)
+							then
+								priorityScore = priorityScore + getSpecialTargetMagnetBonus(screenScore, forceCursor)
 							end
 						end
 						local distanceScore = rangeMode == "Farthest" and -distance or distance
@@ -3388,7 +3212,7 @@ function scanNamedTargets(grapple, options)
 			/ math.max(viewportSize.X, viewportSize.Y)
 		local finalCursorLimit = cursorLimit or CFG.CURSOR_INTENT_CONFIDENCE_LIMIT
 		if VALID_TARGETS[bestTargetName] then
-			finalCursorLimit = math.max(finalCursorLimit, CFG.CURSOR_SPECIAL_TARGET_LIMIT)
+			finalCursorLimit = math.max(finalCursorLimit, getSpecialTargetCursorLimit(forceCursor, cursorLimit))
 		end
 		if cursorDistance > finalCursorLimit then
 			return nil
@@ -3434,7 +3258,8 @@ function scanScreenSurface(grapple, options)
 	local bestScreenScore = nil
 	local screenAnchor = forceCursor and getScreenAnchor(camera, "Closest To Cursor") or viewportSize * 0.5
 
-	for _, offset in ipairs(SCREEN_RAY_OFFSETS) do
+	local rayOffsets = driveMode and not forceCursor and DRIVE_SCREEN_RAY_OFFSETS or SCREEN_RAY_OFFSETS
+	for _, offset in ipairs(rayOffsets) do
 		if forceCursor and (math.abs(offset.X) > 0 or math.abs(offset.Y) > 0) then
 			continue
 		end
@@ -3460,6 +3285,25 @@ function scanScreenSurface(grapple, options)
 				then
 					local screenScore = (screenPoint - screenAnchor).Magnitude / math.max(viewportSize.X, viewportSize.Y)
 					local score, reason = getTerrainSurfaceScore(grapple, directHit, screenScore, driveMode)
+					if driveMode then
+						local movement = grapple and grapple.Movement
+						local inputDirection = getAssistFlatUnit(movement and movement.PlayerMoveDirection)
+						local velocityDirection = getAssistFlatUnit(rootPart.Velocity)
+						local cameraDirection = getAssistFlatUnit(camera.CFrame.LookVector)
+						local intentDirection = inputDirection or velocityDirection or cameraDirection
+						local targetDirection = getAssistFlatUnit(directHit.Position - rootPart.Position)
+						score = score + CFG.ADAPT_DRIVE_SURFACE_PENALTY
+						if targetDirection and intentDirection then
+							local dot = targetDirection:Dot(intentDirection)
+							if dot > 0.2 then
+								score = score + CFG.ADAPT_DRIVE_SURFACE_FLOW_BONUS * math.clamp(dot, 0, 1)
+								reason = tostring(reason) .. ":FlowForward"
+							elseif dot < -0.2 then
+								score = score + CFG.ADAPT_DRIVE_SURFACE_BACK_PENALTY * math.clamp(-dot, 0, 1)
+								reason = tostring(reason) .. ":FlowBack"
+							end
+						end
+					end
 					if score < bestScore then
 						bestResult = directHit
 						bestScore = score
@@ -3679,23 +3523,28 @@ function getSoftOverrideResult(grapple, originalResult)
 	local decisionScore = tonumber(decision.Score) or math.huge
 	local decisionScreenScore = tonumber(decision.ScreenScore) or math.huge
 	local strengthScale = getAimAssistStrengthScale()
+	local isDecisionSpecialTarget = decisionTargetName and VALID_TARGETS[decisionTargetName] == true
 	local requiredGap = CFG.SOFT_OVERRIDE_MIN_SCORE_GAP / strengthScale
 	local scoreGap = originalScore - decisionScore
-	if scoreGap < requiredGap then
+	if scoreGap < requiredGap and not isDecisionSpecialTarget then
 		return nil
 	end
 
 	-- Bắt buộc mục tiêu thay thế phải nằm trong phạm vi giới hạn của con trỏ chuột (Cursor Limit)
 	-- để không tự động snap sang mục tiêu quá xa khi người chơi đang aim vào địa hình.
 	local softCursorLimit = CFG.SOFT_OVERRIDE_CURSOR_LIMIT * strengthScale
-	if decisionTargetName and VALID_TARGETS[decisionTargetName] then
-		softCursorLimit = math.max(softCursorLimit, CFG.CURSOR_SPECIAL_TARGET_LIMIT)
+	if isDecisionSpecialTarget then
+		softCursorLimit = math.max(softCursorLimit, getSpecialTargetCursorLimit(true, nil))
 	end
 
 	-- Nếu con trỏ đang chỉ trực tiếp vào địa hình bình thường (không phải trời không và không phải điểm đặc biệt),
 	-- ta giới hạn chặt chẽ phạm vi hút của Soft Override để tôn trọng ý định bắn địa hình của người chơi.
 	if originalResult and not originalTargetName then
-		softCursorLimit = math.min(softCursorLimit, CFG.CURSOR_DIRECT_OVERRIDE_LIMIT)
+		if isDecisionSpecialTarget then
+			softCursorLimit = math.min(softCursorLimit, getSpecialTargetCursorLimit(true, nil))
+		else
+			softCursorLimit = math.min(softCursorLimit, CFG.CURSOR_DIRECT_OVERRIDE_LIMIT)
+		end
 	end
 
 	local hasClearCursorIntent = decisionScreenScore <= softCursorLimit
@@ -3930,7 +3779,7 @@ function panicRescueWatchdog()
 	tryPanicRescue(grapple)
 end
 
-function Logic.isUsableResult(grapple, result)
+function Logic.isUsableResult(_grapple, result)
 	if not result then
 		return false
 	end
@@ -5086,7 +4935,7 @@ function Logic.shouldSuppressGrappleCollisionCheck(grapple)
 	return lastRelease ~= nil and time() - lastRelease < 1.5 and rootPart.Velocity.Magnitude > 70
 end
 
-function Logic.beginGrappleCollisionBypass(grapple)
+function Logic.beginGrappleCollisionBypass(_grapple)
 	return nil
 end
 
@@ -5267,8 +5116,7 @@ function Logic.resetRuntimeState(grapple, reason)
 	end
 	Logic.NoCollisionMoveCastParams = nil
 	MapSense.clear()
-	table.clear(Logic.Candidates)
-	Logic.CandidateCursor = 1
+	clearCandidateCache()
 end
 
 function Logic.enable()
@@ -5482,11 +5330,15 @@ function Logic.enable()
 
 			local airborne = Logic.isInAir(self)
 			local emergencyAirborne = isEmergencyAirborne(self)
-			if Logic.isSuiteEnabled() and hasAnyGrappleAssistCapability(self) and emergencyAirborne then
+			if Logic.isSuiteEnabled() and hasAnyGrappleAssistCapability(self) then
 				if airborne and hasClassCapability(self, "AimAssist") then
 					HealthMonitor.try("AdaptInputMode", Logic.updateAdaptInputMode, self)
+					HealthMonitor.try("AdaptInputHold", Logic.maintainAdaptInputHold, self)
 				end
 
+			end
+
+			if Logic.isSuiteEnabled() and hasAnyGrappleAssistCapability(self) and emergencyAirborne then
 				local sharkTailPlanned = false
 				if airborne and Logic.isSharkTailHelperEnabled() and getModeValue("GrappleSharkTailMode") == "Automatic" then
 					local ok, planned = HealthMonitor.try("AutoSharkTail", planSmartSharkTail, self)
@@ -5507,9 +5359,6 @@ function Logic.enable()
 					HealthMonitor.try("PanicRescue", tryPanicRescue, self)
 				end
 				HealthMonitor.try("AutoMomentumRescue", tryAutoMomentumRescue, self)
-				if airborne then
-					HealthMonitor.try("AdaptInputHold", Logic.maintainAdaptInputHold, self)
-				end
 			end
 
 			Logic.CurrentGrappleStep = self
@@ -5718,7 +5567,7 @@ function Logic.disable()
 	clearInputConnections()
 	clearConnections()
 	MapSense.clear()
-	table.clear(Logic.Candidates)
+	clearCandidateCache()
 end
 
 function Logic.getTargetOptions()
@@ -5764,6 +5613,9 @@ function Logic.getHealthStatus()
 		or "Bonk:pending"
 	local horizonText = PredictionHorizon
 	return tostring(baseStatus)
+		.. " | "
+		.. tostring(intentText)
+		.. " | "
 		.. tostring(arbiterText)
 		.. " | "
 		.. tostring(profileText)
