@@ -141,8 +141,8 @@ return function(Client, Controller)
 		Name = "Tripmine Bypass Mode",
 		Info = "Blocker: tao vat can local de chan/repel truoc tripmine. Barrier: chi giu local iframes.",
 		Options = { "Blocker", "Barrier" },
-		CurrentOption = (Controller.TripmineMode == "Barrier" and "Barrier")
-			or "Blocker",
+		CurrentOption = (Controller.TripmineMode == "Blocker" and "Blocker")
+			or "Barrier",
 		MultipleOptions = false,
 		Flag = "TripmineModeDropdown",
 		Callback = function(Option)

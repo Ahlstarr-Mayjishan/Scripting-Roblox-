@@ -35,6 +35,24 @@ local lastCollectAt = {}
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
 globals.ChargerTripmineWatcherToken = watcherToken
+globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
+
+local IFRAME_OWNER = "ChargerAssist"
+
+local function getIframeOwners()
+    globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
+    return globals.TripmineIframeOwners
+end
+
+local function hasIframeOwner()
+    for _, owns in pairs(getIframeOwners()) do
+        if owns then
+            return true
+        end
+    end
+
+    return false
+end
 
 local function isChargerAssistMode(mode)
     return mode == AUTO_MODE or mode == PASSTHROUGH_MODE or mode == PREDETONATE_MODE
@@ -45,7 +63,15 @@ local function hasIframes()
 end
 
 local function addIframes()
+    getIframeOwners()[IFRAME_OWNER] = true
+
     if hasIframes() then
+        return
+    end
+
+    local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
+    if existing then
+        iframeObject = existing
         return
     end
 
@@ -56,6 +82,11 @@ local function addIframes()
 end
 
 local function removeIframes()
+    getIframeOwners()[IFRAME_OWNER] = nil
+    if hasIframeOwner() then
+        return
+    end
+
     if iframeObject then
         pcall(function()
             iframeObject:Destroy()

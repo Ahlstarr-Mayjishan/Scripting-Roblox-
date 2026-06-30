@@ -167,7 +167,7 @@ pcall(function()
 			SimulateDefuseKitToggle = false,
 			DefuseKitStackSlider = 3,
 			AutoCollectModeDropdown = "Legit",
-			TripmineModeDropdown = "Blocker",
+			TripmineModeDropdown = "Barrier",
 			ChargerTripmineAssistToggle = false,
 			ChargerTripmineModeDropdown = "Auto",
 			ChargerTripmineDistanceSlider = 15,

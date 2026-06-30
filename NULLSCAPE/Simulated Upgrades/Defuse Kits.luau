@@ -39,13 +39,39 @@ local blockerParts = {}
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
 globals.TripmineBarrierWatcherToken = watcherToken
+globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
+
+local IFRAME_OWNER = "DefuseKits"
+
+local function getIframeOwners()
+    globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
+    return globals.TripmineIframeOwners
+end
+
+local function hasIframeOwner()
+    for _, owns in pairs(getIframeOwners()) do
+        if owns then
+            return true
+        end
+    end
+
+    return false
+end
 
 local function hasIframes()
     return iframeObject ~= nil and iframeObject.Parent ~= nil
 end
 
 local function addIframes()
+    getIframeOwners()[IFRAME_OWNER] = true
+
     if hasIframes() then
+        return
+    end
+
+    local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
+    if existing then
+        iframeObject = existing
         return
     end
 
@@ -56,6 +82,11 @@ local function addIframes()
 end
 
 local function removeIframes()
+    getIframeOwners()[IFRAME_OWNER] = nil
+    if hasIframeOwner() then
+        return
+    end
+
     if iframeObject then
         pcall(function()
             iframeObject:Destroy()

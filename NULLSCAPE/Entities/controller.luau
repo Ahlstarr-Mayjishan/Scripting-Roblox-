@@ -89,6 +89,7 @@ local Controller = {
 	nilMirageImmune = false,
 	TelefraggerAutoDodge = false,
 	TelefraggerBackTrick = false,
+	TelefraggerBackTrickMode = "180",
 	TelefraggerConnection = nil,
 	WasRedirectingTelefragger = false,
 	RedirectRootJoint = nil,
@@ -311,6 +312,10 @@ end
 function Controller:SetTelefraggerBackTrick(value)
 	self.TelefraggerBackTrick = value
 	self:UpdateTelefraggerConnection()
+end
+
+function Controller:SetTelefraggerBackTrickMode(value)
+	self.TelefraggerBackTrickMode = value
 end
 
 function Controller:SetICBMBurnImmune(value)
@@ -1592,6 +1597,7 @@ local function initializeICBMHook()
 		["OblivionEvent"] = true,
 		["BroSecureMethod"] = true,
 		["GrappleReplicator"] = true,
+		["UnreliableRemoteEvent"] = true,
 	}
  
  	local function handleRemoteCall(self, ...)
@@ -1603,6 +1609,25 @@ local function initializeICBMHook()
 			return false
 		end
  
+		-- ── HOOK GỬI CAMERA GIẢ LẬP CHO NGƯỜI XEM (SPECTATOR FLICK) ──
+		if self.Name == "UnreliableRemoteEvent" and firstArg == 0 then
+			if activeCtrl.FlickFakeSpectatorEnabled and activeCtrl.CurrentFlickAngle then
+				local args = { ... }
+				local originalCFrame = args[3]
+				if typeof(originalCFrame) == "CFrame" then
+					-- Xoay CFrame camera gửi lên server theo góc xoay động hiện tại
+					args[3] = originalCFrame * CFrame.Angles(0, activeCtrl.CurrentFlickAngle, 0)
+					
+					local originalFireServer = getgenv()._NULLSCAPE_Globals.OriginalFireServer
+					if originalFireServer then
+						pcall(originalFireServer, self, args[1], args[2], args[3])
+						return true -- Chặn gói tin gốc không cho gửi đi
+					end
+				end
+			end
+			return false
+		end
+
 		-- Kiểm tra nhanh tên remote trước (O(1) lookup)
 		if not TargetRemoteNames[self.Name] then
 			return false

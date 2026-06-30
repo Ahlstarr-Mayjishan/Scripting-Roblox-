@@ -51,7 +51,7 @@ local Controller = {
 	SpeedBuffSelections = {},
 
 	TripmineBarrierEnabled = false,
-	TripmineMode = "Blocker", -- "Blocker" (chan/day khoi min) | "Barrier" (local iframe only)
+	TripmineMode = "Barrier", -- "Barrier" (local iframe only) | "Blocker" (chan/day khoi min)
 	TripmineDetonationDistance = 15,
 	TripmineDetonationJitter = 2,
 	TripmineBlastSafeRadius = 8, -- Legacy: active tripmine detonation is disabled by Defuse Kits
@@ -643,7 +643,7 @@ end
 
 -- Thiết lập chế độ chống mìn (Passthrough / PreDetonate / Barrier)
 function Controller:SetTripmineMode(value)
-	self.TripmineMode = value or "Blocker"
+	self.TripmineMode = value or "Barrier"
 end
 
 -- Thiết lập khoảng cách kích nổ mìn cơ sở
