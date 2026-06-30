@@ -144,12 +144,51 @@ local VALID_TARGETS = {
 	TriaOrb = true,
 }
 
+local function isDescendantOfNamedAncestor(instance, ancestorName)
+	local current = instance
+	while current and current ~= Workspace do
+		if current.Name == ancestorName then
+			return true, current
+		end
+		current = current.Parent
+	end
+	return false, nil
+end
+
+local function resolveSpecialTargetName(instance, part)
+	local target = part or instance
+	if not target then
+		return nil
+	end
+	if VALID_TARGETS[target.Name] then
+		return target.Name
+	end
+	if instance and VALID_TARGETS[instance.Name] then
+		return instance.Name
+	end
+
+	local current = target.Parent
+	while current and current ~= Workspace do
+		if VALID_TARGETS[current.Name] then
+			return current.Name
+		end
+		current = current.Parent
+	end
+
+	local inJumpPads = isDescendantOfNamedAncestor(target, "JumpPads")
+	if inJumpPads then
+		return "JumpPad"
+	end
+
+	return nil
+end
+
 Logic.CandidateRegistryState = CandidateRegistry.new(VALID_TARGETS, function(name, part)
 	if name == "JumpPad" and part and part.CanQuery == false and not Logic.isJumpPadUsesBypassEnabled() then
 		return false
 	end
 	return true
-end)
+end, resolveSpecialTargetName)
 Logic.Candidates = Logic.CandidateRegistryState.Candidates
 
 local TARGET_OPTIONS = {
@@ -1979,7 +2018,7 @@ function isBellInstance(instance)
 end
 
 function Logic.isJumpPadInstance(instance)
-	if not (instance and instance.Name == "JumpPad" and instance:IsA("BasePart")) then
+	if not (instance and instance:IsA("BasePart")) then
 		return false
 	end
 
@@ -1997,7 +2036,7 @@ function Logic.isJumpPadInstance(instance)
 		return false
 	end
 
-	return true
+	return resolveSpecialTargetName(instance, instance) == "JumpPad"
 end
 
 function cacheJumpPadState(part)
@@ -3969,10 +4008,6 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 			holdBellBypass(assistedResult.Instance)
 		end
 		return assistedResult
-	end
-
-	if isAdaptDriveCastActive() then
-		return nil, direction
 	end
 
 	return result, direction

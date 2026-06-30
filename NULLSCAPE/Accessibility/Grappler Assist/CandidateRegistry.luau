@@ -8,12 +8,13 @@ local Workspace = game:GetService("Workspace")
 
 local CandidateRegistry = {}
 
-function CandidateRegistry.new(validTargets, isTargetUsable)
+function CandidateRegistry.new(validTargets, isTargetUsable, resolveTarget)
 	return {
 		Candidates = {},
 		Connections = {},
 		ValidTargets = validTargets or {},
 		IsTargetUsable = isTargetUsable,
+		ResolveTarget = resolveTarget,
 	}
 end
 
@@ -35,11 +36,24 @@ end
 
 function CandidateRegistry.getCandidateName(state, instance, part)
 	local validTargets = state and state.ValidTargets or {}
+	if state and state.ResolveTarget then
+		local resolvedName = state.ResolveTarget(instance, part)
+		if resolvedName and validTargets[resolvedName] then
+			return resolvedName
+		end
+	end
 	if instance and validTargets[instance.Name] then
 		return instance.Name
 	end
 	if part and validTargets[part.Name] then
 		return part.Name
+	end
+	local current = part and part.Parent or instance and instance.Parent
+	while current and current ~= Workspace do
+		if validTargets[current.Name] then
+			return current.Name
+		end
+		current = current.Parent
 	end
 	return nil
 end
@@ -58,7 +72,7 @@ function CandidateRegistry.register(state, instance)
 		return
 	end
 
-	state.Candidates[instance] = {
+	state.Candidates[part] = {
 		Instance = instance,
 		Part = part,
 		Name = targetName,
@@ -66,10 +80,8 @@ function CandidateRegistry.register(state, instance)
 end
 
 function CandidateRegistry.registerBranch(state, instance, root)
-	local current = instance
-	while current and current ~= root do
-		CandidateRegistry.register(state, current)
-		current = current.Parent
+	if instance ~= root then
+		CandidateRegistry.register(state, instance)
 	end
 end
 
@@ -78,7 +90,8 @@ function CandidateRegistry.unregister(state, instance)
 		return
 	end
 
-	state.Candidates[instance] = nil
+	local part = CandidateRegistry.getTargetPart(instance)
+	state.Candidates[part or instance] = nil
 end
 
 function CandidateRegistry.unregisterTree(state, instance)
@@ -122,11 +135,8 @@ function CandidateRegistry.rebuild(state)
 	end
 
 	table.clear(state.Candidates)
-	local validTargets = state.ValidTargets or {}
 	for _, descendant in ipairs(Workspace:GetDescendants()) do
-		if validTargets[descendant.Name] then
-			CandidateRegistry.registerBranch(state, descendant, Workspace)
-		end
+		CandidateRegistry.registerBranch(state, descendant, Workspace)
 	end
 end
 
@@ -141,17 +151,13 @@ function CandidateRegistry.watchWorkspace(state)
 	table.insert(
 		state.Connections,
 		Workspace.DescendantAdded:Connect(function(descendant)
-			if state.ValidTargets[descendant.Name] then
-				CandidateRegistry.registerBranch(state, descendant, Workspace)
-			end
+			CandidateRegistry.registerBranch(state, descendant, Workspace)
 		end)
 	)
 	table.insert(
 		state.Connections,
 		Workspace.DescendantRemoving:Connect(function(descendant)
-			if state.ValidTargets[descendant.Name] then
-				CandidateRegistry.unregisterTree(state, descendant)
-			end
+			CandidateRegistry.unregisterTree(state, descendant)
 		end)
 	)
 end

@@ -104,6 +104,8 @@ function SecondaryCast.requestAdaptRecast(grapple)
 			Score = math.huge,
 			Target = "None",
 		}
+		Logic.AdaptDriveActive = false
+		Logic.AdaptDriveActiveUntil = 0
 		Logic.AdaptRetryAt = now + CFG.ADAPT_RETRY_DELAY
 		return false
 	end
