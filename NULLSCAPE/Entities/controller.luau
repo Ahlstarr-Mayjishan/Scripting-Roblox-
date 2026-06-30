@@ -90,6 +90,8 @@ local Controller = {
 	TelefraggerAutoDodge = false,
 	TelefraggerBackTrick = false,
 	TelefraggerBackTrickMode = "180",
+	TelefraggerDesyncDelay = 0.42,
+	TelefraggerBackTrickThread = nil,
 	TelefraggerConnection = nil,
 	WasRedirectingTelefragger = false,
 	RedirectRootJoint = nil,
@@ -318,6 +320,10 @@ function Controller:SetTelefraggerBackTrickMode(value)
 	self.TelefraggerBackTrickMode = value
 end
 
+function Controller:SetTelefraggerDesyncDelay(value)
+	self.TelefraggerDesyncDelay = value
+end
+
 function Controller:SetICBMBurnImmune(value)
 	self.ICBMBurnImmune = value
 end
@@ -459,11 +465,32 @@ function Controller:UpdateTelefraggerConnection()
 end
 
 function Controller:TriggerSilentBackTrick()
-	BackTrick.trigger(self)
+	if self.TelefraggerBackTrickThread then
+		task.cancel(self.TelefraggerBackTrickThread)
+		self.TelefraggerBackTrickThread = nil
+	end
+
+	self.TelefraggerBackTrickThread = task.delay(self.TelefraggerDesyncDelay or 0.42, function()
+		self.TelefraggerBackTrickThread = nil
+		BackTrick.trigger(self)
+	end)
+end
+
+function Controller:CancelSilentBackTrick()
+	if self.TelefraggerBackTrickThread then
+		task.cancel(self.TelefraggerBackTrickThread)
+		self.TelefraggerBackTrickThread = nil
+	end
+	BackTrick.revert(self)
 end
 
 -- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
 function Controller:CleanUp()
+	if self.TelefraggerBackTrickThread then
+		pcall(task.cancel, self.TelefraggerBackTrickThread)
+		self.TelefraggerBackTrickThread = nil
+	end
+
 	disconnectFolderObservations()
 	pcall(function()
 		Executor.disableSpecialImmunity()
@@ -1218,8 +1245,10 @@ local function processEntity(enemy)
 				local clientEvent = enemy:WaitForChild("ClientEvent", 5)
 				if clientEvent and clientEvent:IsA("RemoteEvent") then
 					local telefraggerConn = clientEvent.OnClientEvent:Connect(function(actionName, p2)
-						if actionName == "SetTeleport" or actionName == "Indicator" then
+						if actionName == "SetTeleport" then
 							Controller:TriggerSilentBackTrick()
+						elseif actionName == "Indicator" then
+							Controller:CancelSilentBackTrick()
 						end
 					end)
 					GC.registerEntityConnection(enemy, telefraggerConn)
@@ -1586,6 +1615,47 @@ local function initializeBellBlindnessHook()
 	end)
 end
 
+-- Hook AnimationManager để phục vụ tính năng BackTrick của Telefragger
+local function initializeMovementHook()
+	local success, err = pcall(function()
+		local ReplicatedStorage = game:GetService("ReplicatedStorage")
+		local movementFolder = ReplicatedStorage:WaitForChild("Movement", 15)
+		if movementFolder then
+			local animManagerScript = movementFolder:WaitForChild("AnimationManager", 15)
+			if animManagerScript and animManagerScript:IsA("ModuleScript") then
+				local AnimationManager = require(animManagerScript)
+				if typeof(AnimationManager) == "table" then
+					if AnimationManager.FaceMoveDirection and not getgenv()._NULLSCAPE_Globals.AnimManagerHooked then
+						local oldFaceMoveDirection = AnimationManager.FaceMoveDirection
+						AnimationManager.FaceMoveDirection = function(self, ...)
+							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+							if activeCtrl and activeCtrl.WasRedirectingTelefragger then
+								return
+							end
+							return oldFaceMoveDirection(self, ...)
+						end
+
+						local oldFaceDirection = AnimationManager.FaceDirection
+						AnimationManager.FaceDirection = function(self, ...)
+							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+							if activeCtrl and activeCtrl.WasRedirectingTelefragger then
+								return
+							end
+							return oldFaceDirection(self, ...)
+						end
+
+						getgenv()._NULLSCAPE_Globals.AnimManagerHooked = true
+						debugPrint("Successfully hooked AnimationManager FaceMoveDirection & FaceDirection!")
+					end
+				end
+			end
+		end
+	end)
+	if not success then
+		warn("Failed to hook AnimationManager:", err)
+	end
+end
+
 -- Hook để chặn RemoteEvent báo tử của thực thể Client-side (như ICBM và Springer) một cách an toàn
 local function initializeICBMHook()
 	-- Xây dựng bảng tra cứu nhanh O(1) tên các RemoteEvent cần chặn
@@ -1615,14 +1685,9 @@ local function initializeICBMHook()
 				local args = { ... }
 				local originalCFrame = args[3]
 				if typeof(originalCFrame) == "CFrame" then
-					-- Xoay CFrame camera gửi lên server theo góc xoay động hiện tại
-					args[3] = originalCFrame * CFrame.Angles(0, activeCtrl.CurrentFlickAngle, 0)
-					
-					local originalFireServer = getgenv()._NULLSCAPE_Globals.OriginalFireServer
-					if originalFireServer then
-						pcall(originalFireServer, self, args[1], args[2], args[3])
-						return true -- Chặn gói tin gốc không cho gửi đi
-					end
+					-- Xoay CFrame camera gửi lên server (nhân bên TRÁI để tạo hiệu ứng xoay quỹ đạo quanh nhân vật)
+					args[3] = CFrame.Angles(0, activeCtrl.CurrentFlickAngle, 0) * originalCFrame
+					return true, args -- Chặn cuộc gọi gốc và trả về danh sách tham số mới
 				end
 			end
 			return false
@@ -1703,8 +1768,11 @@ local function initializeICBMHook()
 					if isRemote then
 						local dispatcher = getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall
 						if dispatcher then
-							local success, shouldBlock = pcall(dispatcher, self, ...)
+							local success, shouldBlock, modifiedArgs = pcall(dispatcher, self, ...)
 							if success and shouldBlock then
+								if modifiedArgs then
+									return oldNamecall(self, table.unpack(modifiedArgs))
+								end
 								if isRemoteFunction then
 									return nil -- Chặn đứng InvokeServer và trả về nil
 								end
@@ -1733,8 +1801,11 @@ local function initializeICBMHook()
 				oldFireServer = hookfunction(remoteProto.FireServer, function(self, ...)
 					local dispatcher = getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall
 					if dispatcher then
-						local success, shouldBlock = pcall(dispatcher, self, ...)
+						local success, shouldBlock, modifiedArgs = pcall(dispatcher, self, ...)
 						if success and shouldBlock then
+							if modifiedArgs then
+								return oldFireServer(self, table.unpack(modifiedArgs))
+							end
 							return -- Chặn đứng cuộc gọi
 						end
 					end
@@ -1746,8 +1817,11 @@ local function initializeICBMHook()
 				oldInvokeServer = hookfunction(funcProto.InvokeServer, function(self, ...)
 					local dispatcher = getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall
 					if dispatcher then
-						local success, shouldBlock = pcall(dispatcher, self, ...)
+						local success, shouldBlock, modifiedArgs = pcall(dispatcher, self, ...)
 						if success and shouldBlock then
+							if modifiedArgs then
+								return oldInvokeServer(self, table.unpack(modifiedArgs))
+							end
 							return nil -- Chặn đứng cuộc gọi và trả về nil
 						end
 					end
@@ -1836,6 +1910,7 @@ task.spawn(function()
 	end
 end)
 
+task.spawn(initializeMovementHook)
 task.spawn(initializeICBMHook)
 task.spawn(initializeStatusEffectHook)
 task.spawn(initializeBellBlindnessHook)

@@ -1,6 +1,7 @@
 -- [[
 --  NULLSCAPE - BackTrick (TeleFragger) Module
---  Vai trò: Điều khiển hành vi xoay ngược CFrame vật lý, góc camera gửi lên server và bù trừ trực quan để né tránh Telefragger
+--  Vai trò: Đánh lừa hướng teleport của Telefragger bằng phương pháp Desync Vật lý siêu ngắn (Stealth Desync)
+--  Không xoay camera spectator, không xoay hình ảnh trên màn hình Client, chỉ desync 180 độ vật lý trên server trong 60ms.
 -- ]]
 
 local BackTrick = {}
@@ -27,26 +28,8 @@ local function getRootJoint(char)
 	return nil
 end
 
--- Helper: Tính hướng nhìn cơ sở dựa theo di chuyển hoặc hướng camera của Client
-local function getBaseLookDirection(humanoid)
-	local moveDir = humanoid.MoveDirection
-	if moveDir.Magnitude > 0.1 then
-		return moveDir.Unit
-	else
-		local camera = workspace.CurrentCamera
-		if camera then
-			local camLook = camera.CFrame.LookVector
-			return Vector3.new(camLook.X, 0, camLook.Z).Unit
-		end
-	end
-	return Vector3.zero
-end
-
--- Kích hoạt cú đảo hướng BackTrick vật lý, camera spectator mượt mà và bù trừ trực quan ở Client
--- Hỗ trợ chế độ xoay: 
---  - "180" (quay đầu ra sau rồi xoay lại, có xoay camera spectator đi kèm)
---  - "360" (chỉ xoay nhân vật 1 vòng khi ở trên không, camera spectator không bị xoay theo)
-function BackTrick.trigger(controller, mode)
+-- Kích hoạt cú đảo hướng BackTrick bằng Stealth Desync (Siêu ngắn, không xoay camera, không xoay visual)
+function BackTrick.trigger(controller)
 	if not controller.TelefraggerBackTrick then
 		return
 	end
@@ -68,131 +51,53 @@ function BackTrick.trigger(controller, mode)
 		return
 	end
 
-	-- Lấy chế độ xoay từ đối số truyền vào hoặc thuộc tính cấu hình (mặc định là "180")
-	local activeMode = mode or controller.TelefraggerBackTrickMode or "180"
-
-	-- Điều kiện riêng cho 360: Chỉ thực thi khi đang ở trên không (rơi tự do)
-	if activeMode == "360" then
-		local inAir = (humanoid.FloorMaterial == Enum.Material.Air) or (humanoid:GetState() == Enum.HumanoidStateType.Freefall)
-		if not inAir then
-			return
-		end
-	end
-
 	controller.WasRedirectingTelefragger = true
-	
-	-- 360 độ KHÔNG cần xoay camera theo, chỉ xoay nhân vật (chỉ có 180 mới bật camera hook)
-	if activeMode == "180" then
-		controller.FlickFakeSpectatorEnabled = true
-	else
-		controller.FlickFakeSpectatorEnabled = false
-	end
-	
+	controller.FlickFakeSpectatorEnabled = false -- Không xoay camera spectator
 	controller.RedirectRootJoint = rootJoint
 	controller.RedirectOriginalC0 = rootJoint.C0
-	controller.OriginalAutoRotate = humanoid.AutoRotate
-	humanoid.AutoRotate = false
-	controller.CurrentFlickAngle = 0
 
 	local isR6 = (rootJoint.Parent == rootPart)
 	local startTime = tick()
-	local loopConn
+	local duration = 0.06 -- 60ms (đủ gửi gói tin vật lý desync, cực kỳ khó bị phát hiện)
 
-	if activeMode == "360" then
-		-- Cấu hình xoay tròn 360 độ (0.25 giây)
-		local duration = 0.25
-		loopConn = RunService.Heartbeat:Connect(function()
-			local now = tick()
-			local elapsed = now - startTime
+	-- 1. Lưu CFrame gốc trước khi desync
+	local originalCFrame = rootPart.CFrame
 
-			local curChar = game.Players.LocalPlayer.Character
-			local curHumanoid = curChar and curChar:FindFirstChildOfClass("Humanoid")
-			local curRoot = curChar and curChar:FindFirstChild("HumanoidRootPart")
+	-- 2. Ép xoay HumanoidRootPart vật lý 180 độ để đồng bộ lên Server
+	rootPart.CFrame = originalCFrame * CFrame.Angles(0, math.pi, 0)
 
-			if elapsed > duration or not controller.WasRedirectingTelefragger or not (curHumanoid and curRoot and curHumanoid.Health > 0) then
-				if loopConn then
-					loopConn:Disconnect()
-					loopConn = nil
-				end
-				BackTrick.revert(controller)
-				return
-			end
-
-			-- Ease In Out Sine cho chuyển động xoay 360 độ rất mượt
-			local t = elapsed / duration
-			local alpha = (1 - math.cos(t * math.pi)) / 2
-			local angle = (math.pi * 2) * alpha
-
-			-- Đảo hướng vật lý trên Server
-			local baseLook = getBaseLookDirection(curHumanoid)
-			if baseLook.Magnitude > 0.1 then
-				local rotatedCFrame = CFrame.lookAt(Vector3.zero, baseLook) * CFrame.Angles(0, angle, 0)
-				curRoot.CFrame = CFrame.lookAt(curRoot.Position, curRoot.Position + rotatedCFrame.LookVector, Vector3.yAxis)
-			end
-
-			-- Bù trừ góc xoay ở client để hiển thị bình thường
-			if isR6 then
-				rootJoint.C0 = controller.RedirectOriginalC0 * CFrame.Angles(0, 0, -angle)
-			else
-				rootJoint.C0 = controller.RedirectOriginalC0 * CFrame.Angles(0, -angle, 0)
-			end
-		end)
+	-- 3. Bù trừ hình ảnh trên client ngay lập tức để người chơi nhìn thấy nhân vật vẫn di chuyển bình thường
+	if isR6 then
+		rootJoint.C0 = controller.RedirectOriginalC0 * CFrame.Angles(0, 0, -math.pi)
 	else
-		-- Cấu hình xoay 180 độ (0.3 giây tổng cộng)
-		local flickOutTime = 0.1
-		local holdTime = 0.1
-		local flickInTime = 0.1
-		local totalDuration = flickOutTime + holdTime + flickInTime
-
-		loopConn = RunService.Heartbeat:Connect(function()
-			local now = tick()
-			local elapsed = now - startTime
-
-			local curChar = game.Players.LocalPlayer.Character
-			local curHumanoid = curChar and curChar:FindFirstChildOfClass("Humanoid")
-			local curRoot = curChar and curChar:FindFirstChild("HumanoidRootPart")
-
-			if elapsed > totalDuration or not controller.WasRedirectingTelefragger or not (curHumanoid and curRoot and curHumanoid.Health > 0) then
-				if loopConn then
-					loopConn:Disconnect()
-					loopConn = nil
-				end
-				BackTrick.revert(controller)
-				return
-			end
-
-			-- Nội suy góc xoay động cho 180 độ
-			local angle = 0
-			if elapsed < flickOutTime then
-				local t = elapsed / flickOutTime
-				angle = math.pi * math.sin(t * (math.pi / 2))
-			elseif elapsed < (flickOutTime + holdTime) then
-				angle = math.pi
-			else
-				local t = (elapsed - (flickOutTime + holdTime)) / flickInTime
-				angle = math.pi * math.sin((1 - t) * (math.pi / 2))
-			end
-
-			controller.CurrentFlickAngle = angle
-
-			-- Đảo hướng vật lý trên Server
-			local baseLook = getBaseLookDirection(curHumanoid)
-			if baseLook.Magnitude > 0.1 then
-				local rotatedCFrame = CFrame.lookAt(Vector3.zero, baseLook) * CFrame.Angles(0, angle, 0)
-				curRoot.CFrame = CFrame.lookAt(curRoot.Position, curRoot.Position + rotatedCFrame.LookVector, Vector3.yAxis)
-			end
-
-			-- Bù trừ góc xoay ở client để hiển thị bình thường
-			if isR6 then
-				rootJoint.C0 = controller.RedirectOriginalC0 * CFrame.Angles(0, 0, -angle)
-			else
-				rootJoint.C0 = controller.RedirectOriginalC0 * CFrame.Angles(0, -angle, 0)
-			end
-		end)
+		rootJoint.C0 = controller.RedirectOriginalC0 * CFrame.Angles(0, -math.pi, 0)
 	end
+
+	-- 4. Chạy vòng lặp duy trì desync trong 60ms để chống lại sự đè CFrame từ game
+	local loopConn
+	loopConn = RunService.Heartbeat:Connect(function()
+		local now = tick()
+		local elapsed = now - startTime
+
+		local curChar = game.Players.LocalPlayer.Character
+		local curHumanoid = curChar and curChar:FindFirstChildOfClass("Humanoid")
+		local curRoot = curChar and curChar:FindFirstChild("HumanoidRootPart")
+
+		if elapsed > duration or not controller.WasRedirectingTelefragger or not (curHumanoid and curRoot and curHumanoid.Health > 0) then
+			if loopConn then
+				loopConn:Disconnect()
+				loopConn = nil
+			end
+			BackTrick.revert(controller)
+			return
+		end
+
+		-- Giữ hướng xoay vật lý ngược mặt
+		curRoot.CFrame = originalCFrame * CFrame.Angles(0, math.pi, 0)
+	end)
 end
 
--- Khôi phục trạng thái khớp xoay và AutoRotate về trạng thái gốc trước khi tráo đổi
+-- Khôi phục trạng thái khớp xoay về trạng thái gốc trước khi tráo đổi
 function BackTrick.revert(controller)
 	if controller.WasRedirectingTelefragger then
 		controller.WasRedirectingTelefragger = false
@@ -200,12 +105,12 @@ function BackTrick.revert(controller)
 		controller.CurrentFlickAngle = nil
 
 		local char = game.Players.LocalPlayer.Character
-		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			pcall(function()
-				humanoid.AutoRotate = controller.OriginalAutoRotate
-			end)
+		local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+		if rootPart then
+			-- Xoay thêm 180 độ để quay đầu về hướng cũ (giữ nguyên vị trí mới đã di chuyển)
+			rootPart.CFrame = rootPart.CFrame * CFrame.Angles(0, math.pi, 0)
 		end
+
 		if controller.RedirectRootJoint and controller.RedirectOriginalC0 then
 			pcall(function()
 				controller.RedirectRootJoint.C0 = controller.RedirectOriginalC0
