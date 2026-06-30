@@ -145,25 +145,12 @@ local VALID_TARGETS = {
 }
 
 local function resolveSpecialTargetName(instance, part)
-	local target = part or instance
-	if not target then
-		return nil
+	if part and part:IsA("BasePart") and VALID_TARGETS[part.Name] then
+		return part.Name
 	end
-	if VALID_TARGETS[target.Name] then
-		return target.Name
-	end
-	if instance and VALID_TARGETS[instance.Name] then
+	if instance and instance:IsA("BasePart") and VALID_TARGETS[instance.Name] then
 		return instance.Name
 	end
-
-	local current = target.Parent
-	while current and current ~= Workspace do
-		if VALID_TARGETS[current.Name] then
-			return current.Name
-		end
-		current = current.Parent
-	end
-
 	return nil
 end
 
@@ -201,14 +188,14 @@ local MOVEMENT_INTENT = {
 
 local CFG = {
 	ADAPT_INPUT_PULSE_DURATION = 0.05,
-	ADAPT_TAP_THRESHOLD = 0.16,
+	ADAPT_TAP_THRESHOLD = 0.1,
 	ADAPT_RECAST_RELEASE_DELAY = 0.045,
-	ADAPT_RECAST_COOLDOWN = 0.12,
+	ADAPT_RECAST_COOLDOWN = 0.09,
 	ADAPT_RECAST_MAX_WAIT = 0.35,
 	ADAPT_ATTACH_GRACE = 0.18,
-	ADAPT_RETRY_DELAY = 0.26,
-	ADAPT_PREPARED_TARGET_TTL = 0.22,
-	ADAPT_TAP_DRIVE_GRACE = 0.18,
+	ADAPT_RETRY_DELAY = 0.18,
+	ADAPT_PREPARED_TARGET_TTL = 0.32,
+	ADAPT_TAP_DRIVE_GRACE = 0.28,
 	ADAPT_RECAST_SAFE_SPEED = 92,
 	ADAPT_RECAST_CLAMP_SPEED = 78,
 	ADAPT_RECAST_ARRIVAL_DISTANCE = 7,
@@ -5064,6 +5051,9 @@ function Logic.resetRuntimeState(grapple, reason)
 	Logic.AdaptRecastReleaseAt = 0
 	Logic.AdaptAwaitingAttachUntil = 0
 	Logic.AdaptRetryAt = 0
+	Logic.AdaptPreparedTarget = nil
+	Logic.AdaptPreparedTargetAt = 0
+	Logic.AdaptDriveActiveUntil = 0
 	Logic.AutoRescueUntil = 0
 	Logic.LastAutoRescuePulseAt = 0
 	Logic.LastPanicRescuePulseAt = 0
@@ -5171,6 +5161,13 @@ function Logic.enable()
 
 	local originalCast = globals.GrappleAimAssistOriginalCast or grappleModule.Cast
 	globals.GrappleAimAssistOriginalCast = originalCast
+	Logic.getNativeCastResult = function(grapple, forceRefresh)
+		local success, result, direction = pcall(originalCast, grapple, forceRefresh == true)
+		if success then
+			return result, direction
+		end
+		return nil, nil
+	end
 
 	grappleModule.Cast = function(self, forceRefresh, ...)
 		if globals.activeGrappleAimAssist ~= Logic then
@@ -5514,6 +5511,7 @@ function Logic.disable()
 	globals.GrappleAimAssistOriginalSharkTail = nil
 	globals.GrappleAimAssistOriginalDiveBonk = nil
 	globals.GrappleAimAssistHooked = false
+	Logic.getNativeCastResult = nil
 	Logic.CurrentGrappleStep = nil
 	Logic.LastKnownGrapple = nil
 	Logic.LastGrappleMovement = nil

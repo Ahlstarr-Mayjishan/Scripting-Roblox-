@@ -42,18 +42,11 @@ function CandidateRegistry.getCandidateName(state, instance, part)
 			return resolvedName
 		end
 	end
-	if instance and validTargets[instance.Name] then
-		return instance.Name
-	end
 	if part and validTargets[part.Name] then
 		return part.Name
 	end
-	local current = part and part.Parent or instance and instance.Parent
-	while current and current ~= Workspace do
-		if validTargets[current.Name] then
-			return current.Name
-		end
-		current = current.Parent
+	if instance and instance:IsA("BasePart") and validTargets[instance.Name] then
+		return instance.Name
 	end
 	return nil
 end
@@ -73,7 +66,7 @@ function CandidateRegistry.register(state, instance)
 	end
 
 	state.Candidates[part] = {
-		Instance = instance,
+		Instance = part,
 		Part = part,
 		Name = targetName,
 	}

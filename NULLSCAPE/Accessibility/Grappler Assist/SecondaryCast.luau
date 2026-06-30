@@ -37,6 +37,17 @@ function SecondaryCast.prepareDriveTarget(grapple, originalResult)
 	end
 
 	local target = SecondaryCast.scanSecondaryCastTarget(grapple, originalResult, false)
+	if not Logic.isUsableResult(grapple, target) and typeof(Logic.getNativeCastResult) == "function" then
+		local nativeResult = Logic.getNativeCastResult(grapple, true)
+		if Logic.isUsableResult(grapple, nativeResult) then
+			target = nativeResult
+			Logic.LastAssistDebug = {
+				Reason = "SecondaryNativeFallback",
+				Score = 0,
+				Target = nativeResult.Instance and nativeResult.Instance.Name or "Native",
+			}
+		end
+	end
 	if not Logic.isUsableResult(grapple, target) then
 		Logic.AdaptPreparedTarget = nil
 		Logic.AdaptPreparedTargetAt = 0
