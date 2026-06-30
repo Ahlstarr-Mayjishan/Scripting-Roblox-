@@ -7,6 +7,8 @@
 -- ]]
 
 local getgenv = getgenv
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local activeCallbacks = {}
 
@@ -360,7 +362,6 @@ function Controller:UpdateTelefraggerConnection()
 		return
 	end
 
-	local RunService = game:GetService("RunService")
 	local LocalPlayer = game.Players.LocalPlayer
 
 	-- Helper: Tính khoảng cách ngắn nhất từ điểm P đến đoạn thẳng AB
@@ -1451,7 +1452,10 @@ function Controller:ObserveFolder(folder)
 end
 
 function Controller:UpdateTouchImmunityState()
-	local char = LocalPlayer.Character
+	local localPlayer = Players.LocalPlayer
+	if not localPlayer then return end
+
+	local char = localPlayer.Character
 	if not char then return end
 
 	local rootPart = char:FindFirstChild("HumanoidRootPart")
@@ -1502,7 +1506,7 @@ local function startObservingFolders()
 	debugPrint("startObservingFolders called")
 	disconnectFolderObservations()
 
-	local touchImmConn = game:GetService("RunService").Heartbeat:Connect(function()
+	local touchImmConn = RunService.Heartbeat:Connect(function()
 		Controller:UpdateTouchImmunityState()
 	end)
 	table.insert(workspaceConnections, touchImmConn)
