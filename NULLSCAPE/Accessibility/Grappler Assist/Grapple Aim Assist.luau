@@ -144,17 +144,6 @@ local VALID_TARGETS = {
 	TriaOrb = true,
 }
 
-local function isDescendantOfNamedAncestor(instance, ancestorName)
-	local current = instance
-	while current and current ~= Workspace do
-		if current.Name == ancestorName then
-			return true, current
-		end
-		current = current.Parent
-	end
-	return false, nil
-end
-
 local function resolveSpecialTargetName(instance, part)
 	local target = part or instance
 	if not target then
@@ -173,11 +162,6 @@ local function resolveSpecialTargetName(instance, part)
 			return current.Name
 		end
 		current = current.Parent
-	end
-
-	local inJumpPads = isDescendantOfNamedAncestor(target, "JumpPads")
-	if inJumpPads then
-		return "JumpPad"
 	end
 
 	return nil
