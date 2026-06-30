@@ -3,9 +3,6 @@
 --  NULLSCAPE - Grapple Reel Pull Adjustment
 -- ]]
 
-local PhysicsProfile = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/PhysicsProfile.luau")
-local VelocityAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/VelocityAssist.luau")
-
 local ReelPull = {}
 
 
@@ -18,16 +15,60 @@ local function getControl()
 	CachedControl = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
 	return CachedControl
 end
+
+local function hasUpgrade(movement, upgradeName)
+	if not (movement and typeof(movement.HasUpgrade) == "function") then
+		return false
+	end
+	local success, result = pcall(function()
+		return movement:HasUpgrade(upgradeName)
+	end)
+	return success and result == true
+end
+
+local function hasMovementFlag(movement, flagName)
+	if not movement then
+		return false
+	end
+
+	local value = movement[flagName]
+	return value == true or (typeof(value) == "number" and value > 0)
+end
+
+local function characterHas(grapple, name)
+	local rootPart = grapple and grapple.RootPart
+	local character = rootPart and rootPart.Parent
+	return character and character:FindFirstChild(name) ~= nil
+end
+
+local function getPullScale(grapple)
+	local movement = grapple and grapple.Movement
+	local lowGravity = hasUpgrade(movement, "AdvancedGravityCoil")
+		or characterHas(grapple, "HighriseLowGravity")
+		or characterHas(grapple, "Highrise")
+		or hasMovementFlag(movement, "HighriseLowGravity")
+
+	return lowGravity and 0.78 or 1
+end
+
+local function applyVelocityDelta(rootPart, delta, maxDelta)
+	if not (rootPart and typeof(delta) == "Vector3") then
+		return false
+	end
+	if delta.Magnitude > maxDelta then
+		delta = delta.Unit * maxDelta
+	end
+	if delta.Magnitude <= 0.001 then
+		return false
+	end
+
+	rootPart.Velocity += delta
+	return true
+end
+
 function ReelPull.apply(grapple)
 	local rootPart = grapple and grapple.RootPart
 	if not (grapple and rootPart and grapple.jumpPadReel) then
-		return
-	end
-
-	-- Prevent interference if landing assist is active
-	local globals = getgenv()._NULLSCAPE_Globals
-	local aimAssist = globals and globals.activeGrappleAimAssist
-	if aimAssist and typeof(aimAssist.SmartReelLandingAssistUntil) == "number" and time() <= aimAssist.SmartReelLandingAssistUntil then
 		return
 	end
 
@@ -37,15 +78,10 @@ function ReelPull.apply(grapple)
 		return
 	end
 
-	local profile = PhysicsProfile.get(nil, grapple)
-	multiplier = 1 + (multiplier - 1) * (tonumber(profile and profile.PullScale) or 1)
+	multiplier = 1 + (multiplier - 1) * getPullScale(grapple)
 
 	local desiredVelocity = rootPart.Velocity * multiplier
-	if VelocityAssist and VelocityAssist.applyDelta then
-		VelocityAssist.applyDelta(rootPart, desiredVelocity - rootPart.Velocity, 38, "ReelPull")
-	else
-		rootPart.Velocity = desiredVelocity
-	end
+	applyVelocityDelta(rootPart, desiredVelocity - rootPart.Velocity, 38)
 end
 
 return ReelPull

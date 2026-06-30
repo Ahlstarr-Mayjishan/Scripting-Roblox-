@@ -6,7 +6,6 @@
 local getgenv = getgenv
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local HttpService = game:GetService("HttpService")
 
 local executorLoaded, Executor = pcall(function()
 	return getgenv().loadModule("NULLSCAPE/Accessibility/executor.luau")
@@ -41,58 +40,6 @@ local function callExecutor(methodName, ...)
 	return result ~= false
 end
 
-local SETTINGS_FOLDER = "NULLSCAPE"
-local SETTINGS_FILE = SETTINGS_FOLDER .. "/master_settings.json"
-local ADAPT_INPUT_FLAG = "GrappleAdaptInputKeybind"
-
-local function normalizeKeyName(key)
-	local rawKey = tostring(key or "")
-	local keyName = rawKey:match("%.([^%.]+)$") or rawKey
-	if keyName == "" or keyName == "true" or keyName == "false" then
-		return nil
-	end
-
-	return keyName
-end
-
-local function readSavedAdaptInputKey()
-	if not (isfile and readfile and isfile(SETTINGS_FILE)) then
-		return "T"
-	end
-
-	local success, decoded = pcall(function()
-		return HttpService:JSONDecode(readfile(SETTINGS_FILE))
-	end)
-	if not (success and type(decoded) == "table") then
-		return "T"
-	end
-
-	return normalizeKeyName(decoded[ADAPT_INPUT_FLAG]) or "T"
-end
-
-local function writeSavedAdaptInputKey(keyName)
-	if not (makefolder and writefile and readfile and isfile) then
-		return
-	end
-
-	local data = {}
-	if isfile(SETTINGS_FILE) then
-		local success, decoded = pcall(function()
-			return HttpService:JSONDecode(readfile(SETTINGS_FILE))
-		end)
-		if success and type(decoded) == "table" then
-			data = decoded
-		end
-	end
-
-	data[ADAPT_INPUT_FLAG] = keyName
-
-	pcall(function()
-		makefolder(SETTINGS_FOLDER)
-		writefile(SETTINGS_FILE, HttpService:JSONEncode(data))
-	end)
-end
-
 local Controller = {
 	SpringerAutoJumpEnabled = false,
 	InfiniteAirJumpEnabled = false,
@@ -103,29 +50,8 @@ local Controller = {
 	RailAutoCaptureRange = 4,
 	GrapplerStaminaMode = "Off",
 	StaminaMode = "Off",
-	GrappleAssistSuiteEnabled = false,
-	GrappleAimAssistEnabled = false,
-	GrappleRescueAssistEnabled = false,
-	GrappleEmergencyProtectionEnabled = false,
-	GrappleVoidRescueEnabled = true,
-	GrappleWallSlamRescueEnabled = false,
-	GrappleEmergencyProtectionMode = "Manual",
-	GrappleEmergencySpeedThreshold = 220,
-	GrappleEmergencyFallThreshold = 125,
-	GrappleAimAssistTargetPriority = "GrapplePoint",
-	GrappleAimAssistRangePriority = "Nearest",
-	GrappleAimAssistStrength = "Balanced",
-	GrappleMapModel3DDebugEnabled = false,
 	AntiBonkEnabled = false,
-	GrappleSmartReelEnabled = false,
-	GrappleSmartReelMode = "Manual",
-	GrappleSharkTailHelperEnabled = false,
-	GrappleSharkTailMode = "Manual",
-	GrappleSharkTailStyle = "Balanced",
-	GrappleMomentumGuardEnabled = false,
-	GrappleAntiDetachEnabled = false,
 	GrapplerStaminaRecoverySpeed = 1,
-	GrappleAdaptInputKey = readSavedAdaptInputKey(),
 	Destroyed = false,
 
 	EnemiesFolder = nil,
@@ -197,17 +123,7 @@ function Controller:CleanUp()
 		self.GrapplerStaminaMode = "Off"
 		self.StaminaMode = "Off"
 		callExecutor("disableStaminaAssist")
-		self.GrappleAssistSuiteEnabled = false
-		self.GrappleAimAssistEnabled = false
-		self.GrappleRescueAssistEnabled = false
-		self.GrappleEmergencyProtectionEnabled = false
-		self.GrappleSmartReelEnabled = false
-		self.GrappleSharkTailHelperEnabled = false
-		self.GrappleMomentumGuardEnabled = false
-		self.GrappleAntiDetachEnabled = false
-		self.GrappleMapModel3DDebugEnabled = false
 		callExecutor("disableRailAssist")
-		callExecutor("disableGrappleAimAssist")
 		callExecutor("disableAntiBonk")
 	end
 	GC.cleanAll()
@@ -315,7 +231,6 @@ function Controller:ReapplyRespawnFeatures()
 		callExecutor("initializeAntiBonk")
 	end
 
-	self:RefreshGrappleAssistHook()
 	self:RefreshRailAssistHook()
 	self:updateSpringerAutoJumpState()
 end
@@ -401,19 +316,6 @@ function Controller:SetStaminaMode(mode)
 		callExecutor("disableStaminaAssist")
 	end
 
-	if not self:RefreshGrappleAssistHook() then
-		self.GrapplerStaminaMode = previousMode or "Off"
-		self.StaminaMode = previousStaminaMode or "Off"
-		if getgenv().Rayfield then
-			getgenv().Rayfield:Notify({
-				Title = "Accessibility Config",
-				Content = "Grapple module is not available yet",
-				Duration = 3,
-			})
-		end
-		return
-	end
-
 	if getgenv().Rayfield then
 		getgenv().Rayfield:Notify({
 			Title = "Accessibility Config",
@@ -429,195 +331,6 @@ end
 
 function Controller:SetGrapplerStaminaRecoverySpeed(value)
 	self.GrapplerStaminaRecoverySpeed = math.clamp(tonumber(value) or 1, 1, 10)
-end
-
-function Controller:HasAnyGrappleAssistFeature()
-	return self.GrappleAimAssistEnabled
-		or self.GrappleRescueAssistEnabled
-		or self.GrappleEmergencyProtectionEnabled
-		or (self.GrappleEmergencyProtectionEnabled and self.GrappleVoidRescueEnabled)
-		or (self.GrappleEmergencyProtectionEnabled and self.GrappleWallSlamRescueEnabled)
-		or self.GrappleSmartReelEnabled
-		or self.GrappleSharkTailHelperEnabled
-		or self.GrappleMomentumGuardEnabled
-		or self.GrappleAntiDetachEnabled
-		or self.GrappleMapModel3DDebugEnabled
-end
-
-function Controller:RefreshGrappleAssistHook()
-    if self.GrappleAssistSuiteEnabled and self:HasAnyGrappleAssistFeature() then
-        if not callExecutor("enableGrappleAimAssist") then
-            return false
-		end
-	else
-		callExecutor("disableGrappleAimAssist")
-	end
-
-    return true
-end
-
-function Controller:GetGrappleAssistHealthStatus()
-    local method = Executor and Executor.getGrappleAimAssistHealthStatus
-    if typeof(method) ~= "function" then
-        return "Core pending"
-    end
-
-    local success, result = pcall(method)
-    if not success then
-        return "Core status error"
-    end
-
-    return tostring(result)
-end
-
-function Controller:SetGrappleMapModel3DDebug(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	self.GrappleMapModel3DDebugEnabled = value == true
-	if self.GrappleMapModel3DDebugEnabled then
-		self.GrappleAssistSuiteEnabled = true
-	end
-
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleMapModel3DDebugEnabled = false
-		self.GrappleAssistSuiteEnabled = previousSuite
-		return
-	end
-
-	callExecutor("setGrappleMapModel3DDebug", self.GrappleMapModel3DDebugEnabled)
-end
-
-function Controller:SetGrappleAssistSuite(value)
-    self.GrappleAssistSuiteEnabled = value == true
-	if not self.GrappleAssistSuiteEnabled then
-		self.GrappleMapModel3DDebugEnabled = false
-		callExecutor("setGrappleMapModel3DDebug", false)
-	end
-
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleAssistSuiteEnabled = false
-		if getgenv().Rayfield then
-			getgenv().Rayfield:Notify({
-				Title = "Accessibility Config",
-				Content = "Grapple module is not available yet",
-				Duration = 3,
-			})
-		end
-		return
-	end
-
-	if getgenv().Rayfield then
-		getgenv().Rayfield:Notify({
-			Title = "Accessibility Config",
-			Content = (self.GrappleAssistSuiteEnabled and "Activated" or "Disabled") .. " Grapple Assist Suite",
-			Duration = 2,
-		})
-	end
-end
-
-function Controller:SetGrappleAimAssist(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	self.GrappleAimAssistEnabled = value == true
-	if self.GrappleAimAssistEnabled then
-		self.GrappleAssistSuiteEnabled = true
-	end
-
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleAimAssistEnabled = false
-		self.GrappleAssistSuiteEnabled = previousSuite
-		if getgenv().Rayfield then
-			getgenv().Rayfield:Notify({
-				Title = "Accessibility Config",
-				Content = "Grapple module is not available yet",
-				Duration = 3,
-			})
-		end
-		return
-	end
-
-	if getgenv().Rayfield then
-		getgenv().Rayfield:Notify({
-			Title = "Accessibility Config",
-			Content = (self.GrappleAimAssistEnabled and "Activated" or "Disabled") .. " Grapple Aim Assist",
-			Duration = 2,
-		})
-	end
-end
-
-function Controller:SetGrappleRescueAssist(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	self.GrappleRescueAssistEnabled = value == true
-	if self.GrappleRescueAssistEnabled then
-		self.GrappleAssistSuiteEnabled = true
-	end
-
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleRescueAssistEnabled = false
-		self.GrappleAssistSuiteEnabled = previousSuite
-	end
-end
-
-function Controller:SetGrappleEmergencyProtection(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	self.GrappleEmergencyProtectionEnabled = value == true
-	if self.GrappleEmergencyProtectionEnabled then
-		self.GrappleAssistSuiteEnabled = true
-	end
-
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleEmergencyProtectionEnabled = false
-		self.GrappleAssistSuiteEnabled = previousSuite
-	end
-end
-
-function Controller:SetGrappleVoidRescue(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	self.GrappleVoidRescueEnabled = value == true
-	if self.GrappleVoidRescueEnabled and self.GrappleEmergencyProtectionEnabled then
-		self.GrappleAssistSuiteEnabled = true
-	end
-
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleVoidRescueEnabled = false
-		self.GrappleAssistSuiteEnabled = previousSuite
-	end
-end
-
-function Controller:SetGrappleWallSlamRescue(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	local previousEmergencyProtection = self.GrappleEmergencyProtectionEnabled
-	self.GrappleWallSlamRescueEnabled = value == true
-	if self.GrappleWallSlamRescueEnabled then
-		self.GrappleAssistSuiteEnabled = true
-		self.GrappleEmergencyProtectionEnabled = true
-	end
-
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleWallSlamRescueEnabled = false
-		self.GrappleEmergencyProtectionEnabled = previousEmergencyProtection
-		self.GrappleAssistSuiteEnabled = previousSuite
-	end
-end
-
-function Controller:SetGrappleEmergencyProtectionMode(mode)
-	local selected = mode
-	if typeof(selected) == "table" then
-		selected = selected[1]
-	end
-	selected = tostring(selected or "Manual")
-
-	if selected ~= "Manual" and selected ~= "Smart Auto" and selected ~= "Automatic" then
-		selected = "Manual"
-	end
-
-	self.GrappleEmergencyProtectionMode = selected
-end
-
-function Controller:SetGrappleEmergencySpeedThreshold(value)
-	self.GrappleEmergencySpeedThreshold = math.clamp(tonumber(value) or 220, 150, 320)
-end
-
-function Controller:SetGrappleEmergencyFallThreshold(value)
-	self.GrappleEmergencyFallThreshold = math.clamp(tonumber(value) or 125, 80, 220)
 end
 
 function Controller:SetAntiBonk(value)
@@ -645,138 +358,6 @@ function Controller:SetAntiBonk(value)
 			Duration = 2,
 		})
 	end
-end
-
-function Controller:SetGrappleSmartReel(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	self.GrappleSmartReelEnabled = value == true
-	if self.GrappleSmartReelEnabled then
-		self.GrappleAssistSuiteEnabled = true
-	end
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleSmartReelEnabled = false
-		self.GrappleAssistSuiteEnabled = previousSuite
-	end
-end
-
-function Controller:SetGrappleSharkTailHelper(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	self.GrappleSharkTailHelperEnabled = value == true
-	if self.GrappleSharkTailHelperEnabled then
-		self.GrappleAssistSuiteEnabled = true
-	end
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleSharkTailHelperEnabled = false
-		self.GrappleAssistSuiteEnabled = previousSuite
-	end
-end
-
-function Controller:SetGrappleMomentumGuard(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	self.GrappleMomentumGuardEnabled = value == true
-	if self.GrappleMomentumGuardEnabled then
-		self.GrappleAssistSuiteEnabled = true
-	end
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleMomentumGuardEnabled = false
-		self.GrappleAssistSuiteEnabled = previousSuite
-	end
-end
-
-function Controller:SetGrappleAntiDetach(value)
-	local previousSuite = self.GrappleAssistSuiteEnabled
-	self.GrappleAntiDetachEnabled = value == true
-	if self.GrappleAntiDetachEnabled then
-		self.GrappleAssistSuiteEnabled = true
-	end
-	if not self:RefreshGrappleAssistHook() then
-		self.GrappleAntiDetachEnabled = false
-		self.GrappleAssistSuiteEnabled = previousSuite
-	end
-end
-
-
-
-function Controller:SetGrappleAdaptInputKey(key)
-	local keyName = normalizeKeyName(key)
-	if keyName then
-		self.GrappleAdaptInputKey = keyName
-		writeSavedAdaptInputKey(keyName)
-	end
-end
-
-function Controller:SetGrappleSmartReelMode(mode)
-	local selected = mode
-	if typeof(selected) == "table" then
-		selected = selected[1]
-	end
-	selected = tostring(selected or "Manual")
-	self.GrappleSmartReelMode = selected == "Automatic" and "Automatic" or "Manual"
-end
-
-function Controller:SetGrappleSharkTailMode(mode)
-	local selected = mode
-	if typeof(selected) == "table" then
-		selected = selected[1]
-	end
-	selected = tostring(selected or "Manual")
-	self.GrappleSharkTailMode = selected == "Automatic" and "Automatic" or "Manual"
-end
-
-function Controller:SetGrappleSharkTailStyle(style)
-	local selected = style
-	if typeof(selected) == "table" then
-		selected = selected[1]
-	end
-	selected = tostring(selected or "Balanced")
-
-	if selected ~= "Conservative" and selected ~= "Balanced" and selected ~= "Aggressive" and selected ~= "Emergency Only" then
-		selected = "Balanced"
-	end
-
-	self.GrappleSharkTailStyle = selected
-end
-
-function Controller:SetGrappleAimAssistTargetPriority(option)
-	local selected = option
-	if typeof(selected) == "table" then
-		selected = selected[1]
-	end
-	selected = tostring(selected or "GrapplePoint")
-
-	if selected ~= "GrapplePoint" and selected ~= "JumpPad" and selected ~= "Bell" and selected ~= "TriaOrb" then
-		selected = "GrapplePoint"
-	end
-
-	self.GrappleAimAssistTargetPriority = selected
-end
-
-function Controller:SetGrappleAimAssistRangePriority(option)
-	local selected = option
-	if typeof(selected) == "table" then
-		selected = selected[1]
-	end
-	selected = tostring(selected or "Nearest")
-
-	if selected ~= "Nearest" and selected ~= "Farthest" and selected ~= "Closest To Cursor" and selected ~= "Random" then
-		selected = "Nearest"
-	end
-
-	self.GrappleAimAssistRangePriority = selected
-end
-
-function Controller:SetGrappleAimAssistStrength(option)
-	local selected = option
-	if typeof(selected) == "table" then
-		selected = selected[1]
-	end
-	selected = tostring(selected or "Balanced")
-
-	if selected ~= "Light" and selected ~= "Balanced" and selected ~= "Strong" and selected ~= "Motor Accessibility" then
-		selected = "Balanced"
-	end
-
-	self.GrappleAimAssistStrength = selected
 end
 
 local function handleSpringerShockwave(enemy, child)
@@ -894,7 +475,6 @@ local function setInLobby(val)
 	inLobby = val
 	if val then
 		disconnectFolderObservations()
-		callExecutor("clearGrappleMapModel")
 		Controller:CleanUp()
 	else
 		Controller:updateSpringerAutoJumpState()

@@ -9,7 +9,6 @@ local MODULE_PATHS = {
     InfiniteAirJump = "NULLSCAPE/Accessibility/Infinite Air Jump.luau",
     AntiBonk = "NULLSCAPE/Accessibility/Anti Bonk.luau",
     StaminaAssist = "NULLSCAPE/Accessibility/Stamina Assist.luau",
-    GrappleAimAssist = "NULLSCAPE/Accessibility/Grappler Assist/Grapple Aim Assist.luau",
     RailAssist = "NULLSCAPE/Accessibility/Rail Assist.luau",
 }
 
@@ -156,41 +155,6 @@ end
 
 function Executor.initializeGrapplerInfiniteStamina()
     return Executor.initializeStaminaAssist()
-end
-
-function Executor.enableGrappleAimAssist()
-    return callModule("GrappleAimAssist", "enable")
-end
-
-function Executor.disableGrappleAimAssist()
-    callModule("GrappleAimAssist", "disable")
-end
-
-function Executor.clearGrappleMapModel()
-    callModule("GrappleAimAssist", "clearMapModel")
-end
-
-function Executor.setGrappleMapModel3DDebug(value)
-    callModule("GrappleAimAssist", "setMapModel3DDebugEnabled", value == true)
-end
-
-function Executor.getGrappleAimAssistHealthStatus()
-    local failure = getFailureText("GrappleAimAssist")
-    if failure then
-        return failure
-    end
-
-    local module = loadAccessibilityModule("GrappleAimAssist")
-    if module and typeof(module.getHealthStatus) == "function" then
-        local success, result = pcall(function()
-            return module.getHealthStatus()
-        end)
-        if success then
-            return tostring(result)
-        end
-    end
-
-    return "Core pending"
 end
 
 function Executor.enableRailAssist()

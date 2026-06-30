@@ -129,30 +129,10 @@ pcall(function()
 			RailSpeedMultiplierSlider = 1.1,
 			RailAutoDelaySlider = 1.5,
 			RailAutoCaptureRangeSlider = 4,
-			GrappleAssistSuiteToggle = false,
-			GrappleAimAssistToggle = false,
-			GrappleAimAssistStrengthDropdown = "Balanced",
-			GrappleRescueAssistToggle = false,
-			GrappleEmergencyProtectionToggle = false,
-			GrappleVoidRescueToggle = true,
-			GrappleWallSlamRescueToggle = false,
-			GrappleEmergencyProtectionModeDropdown = "Manual",
-			GrappleEmergencySpeedThresholdSlider = 220,
-			GrappleEmergencyFallThresholdSlider = 125,
-			GrappleAntiBonkToggle = false,
-			GrappleSmartReelToggle = false,
-			GrappleSmartReelModeDropdown = "Manual",
-			GrappleSharkTailHelperToggle = false,
-			GrappleSharkTailModeDropdown = "Manual",
-			GrappleSharkTailStyleDropdown = "Balanced",
-			GrappleMomentumGuardToggle = false,
 			GrappleAirControlMultiplierSlider = 0,
 			GrappleReelPullMultiplierSlider = 1.1,
 			GrappleSharkTailPullMultiplierSlider = 1.1,
 			GrappleJumpPadUsesBypassToggle = false,
-			GrappleAdaptInputKeybind = "T",
-			GrappleAimAssistTargetPriorityDropdown = "GrapplePoint",
-			GrappleAimAssistRangePriorityDropdown = "Nearest",
 			SpringerImmunityModeDropdown = "Legit",
 			MatrixTetrahedronToggle = false,
 			MomentumReductionSlider = 100, -- Mặc định là 100% giảm quán tính
@@ -193,7 +173,6 @@ pcall(function()
 		end
 
 		local aliases = {
-			AntiBonkToggle = "GrappleAntiBonkToggle",
 			CollectMedalKeybind = "CollectMedalKeybindKeybind",
 		}
 

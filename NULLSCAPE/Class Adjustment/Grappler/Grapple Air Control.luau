@@ -4,8 +4,6 @@
 -- ]]
 
 local Workspace = game:GetService("Workspace")
-local PhysicsProfile = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/PhysicsProfile.luau")
-local VelocityAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler Assist/VelocityAssist.luau")
 
 local AirControl = {}
 
@@ -27,6 +25,58 @@ local function hasUpgrade(movement, upgradeName)
 		return movement:HasUpgrade(upgradeName)
 	end)
 	return success and result == true
+end
+
+local function hasMovementFlag(movement, flagName)
+	if not movement then
+		return false
+	end
+
+	local value = movement[flagName]
+	return value == true or (typeof(value) == "number" and value > 0)
+end
+
+local function characterHas(grapple, name)
+	local rootPart = grapple and grapple.RootPart
+	local character = rootPart and rootPart.Parent
+	return character and character:FindFirstChild(name) ~= nil
+end
+
+local function getPhysicsProfile(grapple)
+	local movement = grapple and grapple.Movement
+	local graceWings = hasUpgrade(movement, "GraceWings")
+	local lowGravity = hasUpgrade(movement, "AdvancedGravityCoil")
+		or characterHas(grapple, "HighriseLowGravity")
+		or characterHas(grapple, "Highrise")
+		or hasMovementFlag(movement, "HighriseLowGravity")
+
+	local airControlScale = 1
+	if graceWings then
+		airControlScale += 0.35
+	end
+	if lowGravity then
+		airControlScale += 0.2
+	end
+
+	return {
+		AirControlScale = airControlScale,
+		LowGravity = lowGravity,
+	}
+end
+
+local function applyVelocityDelta(rootPart, delta, maxDelta)
+	if not (rootPart and typeof(delta) == "Vector3") then
+		return false
+	end
+	if delta.Magnitude > maxDelta then
+		delta = delta.Unit * maxDelta
+	end
+	if delta.Magnitude <= 0.001 then
+		return false
+	end
+
+	rootPart.Velocity += delta
+	return true
 end
 
 function AirControl.apply(grapple, dt)
@@ -55,7 +105,7 @@ function AirControl.apply(grapple, dt)
 	local levelAlpha = math.clamp(controlLevel / 10, 0, 1)
 	local velocity = rootPart.Velocity
 	local horizontalVelocity = Vector3.new(velocity.X, 0, velocity.Z)
-	local profile = PhysicsProfile.get(nil, grapple)
+	local profile = getPhysicsProfile(grapple)
 	local graceWingsMultiplier = hasUpgrade(movement, "GraceWings") and 1.5 or 1
 	local profileAirScale = tonumber(profile and profile.AirControlScale) or 1
 	local movementSpeedMultiplier = tonumber(movement.movementSpeedMulti) or 1
@@ -98,11 +148,7 @@ function AirControl.apply(grapple, dt)
 	end
 
 	local desiredVelocity = Vector3.new(nextHorizontal.X, nextY, nextHorizontal.Z)
-	if VelocityAssist and VelocityAssist.applyDelta then
-		VelocityAssist.applyDelta(rootPart, desiredVelocity - rootPart.Velocity, 26 + controlLevel * 4, "AirControl")
-	else
-		rootPart.Velocity = desiredVelocity
-	end
+	applyVelocityDelta(rootPart, desiredVelocity - rootPart.Velocity, 26 + controlLevel * 4)
 end
 
 return AirControl
