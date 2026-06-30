@@ -511,23 +511,6 @@ function Controller:TriggerSilentBackTrick()
 	self.OriginalAutoRotate = humanoid.AutoRotate
 	humanoid.AutoRotate = false
 
-	-- Xác định hướng đối lập của di chuyển hoặc camera để quay ngược 180 độ
-	local moveDir = humanoid.MoveDirection
-	local targetLook = Vector3.zero
-	if moveDir.Magnitude > 0.1 then
-		targetLook = -moveDir.Unit
-	else
-		local camera = workspace.CurrentCamera
-		if camera then
-			local camLook = camera.CFrame.LookVector
-			targetLook = -Vector3.new(camLook.X, 0, camLook.Z).Unit
-		end
-	end
-
-	if targetLook.Magnitude > 0.1 then
-		rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + targetLook, Vector3.yAxis)
-	end
-
 	-- Bù trừ góc xoay 180 độ ở client bằng RootJoint để visual trông bình thường
 	local isR6 = (rootJoint.Parent == rootPart)
 	if isR6 then
@@ -536,19 +519,53 @@ function Controller:TriggerSilentBackTrick()
 		rootJoint.C0 = self.RedirectOriginalC0 * CFrame.Angles(0, math.pi, 0)
 	end
 
-	-- Hoàn trả trạng thái ban đầu sau đúng 80 miligiây (siêu nhanh)
-	task.delay(0.08, function()
-		if not self.WasRedirectingTelefragger then
+	-- Ép CFrame quay ngược liên tục trên mỗi frame thông qua Heartbeat trong suốt 80ms
+	local RunService = game:GetService("RunService")
+	local startTime = tick()
+	local duration = 0.08
+	local loopConn
+
+	loopConn = RunService.Heartbeat:Connect(function()
+		local now = tick()
+		-- Đảm bảo kiểm tra các điều kiện sinh tồn khi đang lặp
+		local curChar = game.Players.LocalPlayer.Character
+		local curHumanoid = curChar and curChar:FindFirstChildOfClass("Humanoid")
+		local curRoot = curChar and curChar:FindFirstChild("HumanoidRootPart")
+
+		if now - startTime > duration or not self.WasRedirectingTelefragger or not (curHumanoid and curRoot and curHumanoid.Health > 0) then
+			if loopConn then
+				loopConn:Disconnect()
+				loopConn = nil
+			end
+			self.WasRedirectingTelefragger = false
+			pcall(function()
+				if curHumanoid then
+					curHumanoid.AutoRotate = self.OriginalAutoRotate
+				end
+			end)
+			if rootJoint and rootJoint.Parent then
+				pcall(function()
+					rootJoint.C0 = self.RedirectOriginalC0
+				end)
+			end
 			return
 		end
-		self.WasRedirectingTelefragger = false
-		pcall(function()
-			humanoid.AutoRotate = self.OriginalAutoRotate
-		end)
-		if rootJoint and rootJoint.Parent then
-			pcall(function()
-				rootJoint.C0 = self.RedirectOriginalC0
-			end)
+
+		-- Tính toán hướng đối lập trên mỗi frame
+		local moveDir = curHumanoid.MoveDirection
+		local targetLook = Vector3.zero
+		if moveDir.Magnitude > 0.1 then
+			targetLook = -moveDir.Unit
+		else
+			local camera = workspace.CurrentCamera
+			if camera then
+				local camLook = camera.CFrame.LookVector
+				targetLook = -Vector3.new(camLook.X, 0, camLook.Z).Unit
+			end
+		end
+
+		if targetLook.Magnitude > 0.1 then
+			curRoot.CFrame = CFrame.lookAt(curRoot.Position, curRoot.Position + targetLook, Vector3.yAxis)
 		end
 	end)
 end
