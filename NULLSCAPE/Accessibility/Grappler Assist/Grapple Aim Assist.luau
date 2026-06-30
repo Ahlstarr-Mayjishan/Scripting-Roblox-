@@ -184,6 +184,8 @@ local CFG = {
 	ADAPT_RECAST_MAX_WAIT = 0.35,
 	ADAPT_ATTACH_GRACE = 0.18,
 	ADAPT_RETRY_DELAY = 0.26,
+	ADAPT_PREPARED_TARGET_TTL = 0.22,
+	ADAPT_TAP_DRIVE_GRACE = 0.18,
 	ADAPT_RECAST_SAFE_SPEED = 92,
 	ADAPT_RECAST_CLAMP_SPEED = 78,
 	ADAPT_RECAST_ARRIVAL_DISTANCE = 7,
@@ -763,11 +765,14 @@ function clearInputConnections()
 	Logic.AdaptInputHeld = false
 	Logic.AdaptInputBeganAt = 0
 	Logic.AdaptDriveActive = false
+	Logic.AdaptDriveActiveUntil = 0
 	Logic.AdaptRecastToken = Logic.AdaptRecastToken + 1
 	Logic.AdaptRecastPending = false
 	Logic.AdaptRecastReleaseIssued = false
 	Logic.AdaptAwaitingAttachUntil = 0
 	Logic.AdaptRetryAt = 0
+	Logic.AdaptPreparedTarget = nil
+	Logic.AdaptPreparedTargetAt = 0
 end
 
 function getClassId(grapple)
@@ -2542,6 +2547,10 @@ function getAimAssistStrengthScale()
 	return AssistSettings.getAimAssistStrengthScale(Logic.getController())
 end
 
+function isAdaptDriveCastActive()
+	return Logic.AdaptDriveActive == true or time() <= (Logic.AdaptDriveActiveUntil or 0)
+end
+
 function getAdaptDriveIntent(grapple)
 	local rootPart = grapple and grapple.RootPart
 	local movement = grapple and grapple.Movement
@@ -2959,7 +2968,7 @@ function scanNamedTargets(grapple, options)
 					if not screenScore then
 						screenScore = getCameraScreenScore(camera, position, screenAnchor)
 					end
-					if not screenScore and (Logic.AdaptDriveActive or (options and options.allowOffScreen)) then
+					if not screenScore and (isAdaptDriveCastActive() or (options and options.allowOffScreen)) then
 						screenScore = 1.0
 					end
 					if screenScore then
@@ -3813,8 +3822,9 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 		return result, direction
 	end
 
-	if Logic.AdaptDriveActive and hasClassCapability(grapple, "AimAssist") and Logic.isEnabled() then
-		local secondaryTarget = Logic.scanSecondaryCastTarget(grapple, result)
+	if isAdaptDriveCastActive() and hasClassCapability(grapple, "AimAssist") and Logic.isEnabled() then
+		local secondaryTarget = Logic.consumePreparedDriveTarget and Logic.consumePreparedDriveTarget(grapple)
+			or Logic.scanSecondaryCastTarget(grapple, result)
 		if Logic.isUsableResult(grapple, secondaryTarget) then
 			if
 				not forceRefresh
@@ -3936,7 +3946,7 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 	end
 
 	local assistedResult
-	if Logic.AdaptDriveActive then
+	if isAdaptDriveCastActive() then
 		assistedResult = scanNamedTargets(grapple, { driveMode = true, fullScan = true, forceCursor = false })
 	else
 		local mapResult
@@ -3959,6 +3969,10 @@ function assistedCast(grapple, forceRefresh, originalCast, ...)
 			holdBellBypass(assistedResult.Instance)
 		end
 		return assistedResult
+	end
+
+	if isAdaptDriveCastActive() then
+		return nil, direction
 	end
 
 	return result, direction
@@ -5659,5 +5673,7 @@ Logic.requestAdaptRecast = SecondaryCast.requestAdaptRecast
 Logic.applyGentleRecastAlignment = SecondaryCast.applyGentleRecastAlignment
 Logic.isAdaptInputHeld = SecondaryCast.isAdaptInputHeld
 Logic.getLastAdaptInputPressed = SecondaryCast.getLastAdaptInputPressed
+Logic.prepareDriveTarget = SecondaryCast.prepareDriveTarget
+Logic.consumePreparedDriveTarget = SecondaryCast.consumePreparedDriveTarget
 
 return Logic

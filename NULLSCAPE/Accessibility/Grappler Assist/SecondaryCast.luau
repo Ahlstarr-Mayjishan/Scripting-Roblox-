@@ -14,6 +14,7 @@ function SecondaryCast.link(logicInstance)
 	CFG = Logic.CFG
 
 	Logic.AdaptDriveActive = Logic.AdaptDriveActive or false
+	Logic.AdaptDriveActiveUntil = Logic.AdaptDriveActiveUntil or 0
 	Logic.LastAdaptInputPressed = Logic.LastAdaptInputPressed or 0
 	Logic.AdaptInputHeld = Logic.AdaptInputHeld or false
 	Logic.AdaptInputBeganAt = Logic.AdaptInputBeganAt or 0
@@ -25,7 +26,45 @@ function SecondaryCast.link(logicInstance)
 	Logic.AdaptRecastRequestedAt = Logic.AdaptRecastRequestedAt or 0
 	Logic.AdaptRecastReleaseAt = Logic.AdaptRecastReleaseAt or 0
 	Logic.AdaptRecastToken = Logic.AdaptRecastToken or 0
+	Logic.AdaptPreparedTarget = Logic.AdaptPreparedTarget or nil
+	Logic.AdaptPreparedTargetAt = Logic.AdaptPreparedTargetAt or 0
 	Logic.InputConnections = Logic.InputConnections or {}
+end
+
+function SecondaryCast.prepareDriveTarget(grapple, originalResult)
+	if not (grapple and Logic.AdaptDriveActive == true) then
+		return nil
+	end
+
+	local target = SecondaryCast.scanSecondaryCastTarget(grapple, originalResult, false)
+	if not Logic.isUsableResult(grapple, target) then
+		Logic.AdaptPreparedTarget = nil
+		Logic.AdaptPreparedTargetAt = 0
+		return nil
+	end
+
+	Logic.AdaptPreparedTarget = target
+	Logic.AdaptPreparedTargetAt = time()
+	return target
+end
+
+function SecondaryCast.consumePreparedDriveTarget(grapple)
+	local target = Logic.AdaptPreparedTarget
+	if not Logic.isUsableResult(grapple, target) then
+		Logic.AdaptPreparedTarget = nil
+		Logic.AdaptPreparedTargetAt = 0
+		return nil
+	end
+
+	if time() - (Logic.AdaptPreparedTargetAt or 0) > CFG.ADAPT_PREPARED_TARGET_TTL then
+		Logic.AdaptPreparedTarget = nil
+		Logic.AdaptPreparedTargetAt = 0
+		return nil
+	end
+
+	Logic.AdaptPreparedTarget = nil
+	Logic.AdaptPreparedTargetAt = 0
+	return target
 end
 
 function SecondaryCast.isAwaitingAdaptAttach(grapple)
@@ -57,6 +96,16 @@ function SecondaryCast.requestAdaptRecast(grapple)
 		Logic.AdaptRecastReleaseAt = now
 		Logic.markGrappleBonkGrace(grapple, 0.5)
 		return Logic.AdaptRecastReleaseIssued
+	end
+
+	if not SecondaryCast.prepareDriveTarget(grapple, nil) then
+		Logic.LastAssistDebug = {
+			Reason = "SecondaryNoDriveTarget",
+			Score = math.huge,
+			Target = "None",
+		}
+		Logic.AdaptRetryAt = now + CFG.ADAPT_RETRY_DELAY
+		return false
 	end
 
 	return Logic.pulseSpecialAction(grapple)
@@ -162,6 +211,15 @@ function SecondaryCast.updateAdaptRecast(grapple)
 
 	Logic.AdaptRecastPending = false
 	Logic.AdaptRecastReleaseIssued = false
+	if not SecondaryCast.prepareDriveTarget(grapple, nil) then
+		Logic.LastAssistDebug = {
+			Reason = "SecondaryNoDriveTarget",
+			Score = math.huge,
+			Target = "None",
+		}
+		Logic.AdaptRetryAt = now + CFG.ADAPT_RETRY_DELAY
+		return
+	end
 	Logic.pulseSpecialAction(grapple)
 end
 
@@ -236,12 +294,17 @@ function SecondaryCast.watchAdaptInput()
 
 			Logic.AdaptInputHeld = false
 			Logic.AdaptInputBeganAt = 0
-			Logic.AdaptDriveActive = false
+			if Logic.AdaptPreparedTarget then
+				Logic.AdaptDriveActiveUntil = time() + CFG.ADAPT_TAP_DRIVE_GRACE
+			else
+				Logic.AdaptDriveActive = false
+				Logic.AdaptDriveActiveUntil = 0
+			end
 		end)
 	)
 end
 
-function SecondaryCast.scanSecondaryCastTarget(grapple, originalResult)
+function SecondaryCast.scanSecondaryCastTarget(grapple, originalResult, allowOriginalFallback)
 	local namedDecision = Logic.scanNamedTargets(grapple, {
 		driveMode = true,
 		fullScan = true,
@@ -279,7 +342,7 @@ function SecondaryCast.scanSecondaryCastTarget(grapple, originalResult)
 		return surfaceDecision.Result
 	end
 
-	if Logic.isUsableResult(grapple, originalResult) then
+	if allowOriginalFallback ~= false and Logic.isUsableResult(grapple, originalResult) then
 		return originalResult
 	end
 
