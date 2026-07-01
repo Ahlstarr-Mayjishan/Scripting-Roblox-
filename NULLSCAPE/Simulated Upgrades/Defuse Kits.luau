@@ -224,6 +224,14 @@ local function startWatcher()
 				addIframes()
 				lastChargerState = nil
 			elseif mode == IMMUNITY_MODE then
+				-- Tự động làm mới: Chỉ gửi tín hiệu giả lập khi Server chưa bật hoặc vừa bị tắt thuộc tính ChargingCheck
+				local char = LocalPlayer.Character
+				if char and char:GetAttribute("ChargingCheck") ~= true then
+					pcall(function()
+						ChargerEvent:FireServer(true)
+					end)
+				end
+
 				if hasIframes() and os.clock() >= immunityPulseUntil then
 					removeIframes()
 				end
