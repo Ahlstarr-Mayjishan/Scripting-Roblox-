@@ -30,6 +30,10 @@ local SPECIAL_TARGETS = {
 
 local MAX_SCAN_CANDIDATES = 350
 local DEFAULT_RANGE = 90
+local MAX_FALLBACK_TRANSPARENCY = 0.72
+local MAX_FALLBACK_AXIS = 160
+local HIT_POINT_TOLERANCE = 6
+local HIT_OVERSHOOT = 2
 
 local function getRange(controller)
 	return math.clamp(tonumber(controller and controller.GrappleAssistRange) or DEFAULT_RANGE, 30, 140)
@@ -49,6 +53,10 @@ end
 
 local function shouldTargetRails(controller)
 	return not (controller and controller.GrappleAssistRailTargetingEnabled == false)
+end
+
+local function isAliveBasePart(part)
+	return part and part:IsA("BasePart") and part.Parent ~= nil and part:IsDescendantOf(Workspace)
 end
 
 local function hasTag(instance, tagName)
@@ -108,12 +116,26 @@ function Targeting.getAimDirection(grapple)
 end
 
 local function isCandidate(part)
-	if not (part and part:IsA("BasePart")) then
+	if not isAliveBasePart(part) then
 		return false
 	end
 
 	if getSpecialTargetName(part) then
 		return true
+	end
+
+	if RailMemory and typeof(RailMemory.isRailPart) == "function" and RailMemory.isRailPart(part) then
+		return true
+	end
+
+	local size = part.Size
+	local maxAxis = math.max(size.X, size.Y, size.Z)
+	if maxAxis > MAX_FALLBACK_AXIS then
+		return false
+	end
+
+	if part.Transparency > MAX_FALLBACK_TRANSPARENCY then
+		return false
 	end
 
 	return part.CanCollide == true and part.Transparency < 1
@@ -158,18 +180,38 @@ local function canUseHit(hit, candidate)
 	end
 
 	local instance = hit.Instance
+	if not isAliveBasePart(instance) then
+		return false
+	end
+
 	return instance == candidate or instance:IsDescendantOf(candidate) or candidate:IsDescendantOf(instance)
 end
 
-local function getCandidateHit(origin, aimDirection, candidate, controller, minDot, grapple, intent)
+local function getSurfaceTargetPoint(part, origin)
+	local localOrigin = part.CFrame:PointToObjectSpace(origin)
+	local halfSize = part.Size * 0.5
+	local clamped = Vector3.new(
+		math.clamp(localOrigin.X, -halfSize.X, halfSize.X),
+		math.clamp(localOrigin.Y, -halfSize.Y, halfSize.Y),
+		math.clamp(localOrigin.Z, -halfSize.Z, halfSize.Z)
+	)
+
+	return part.CFrame:PointToWorldSpace(clamped)
+end
+
+local function getCandidateHit(origin, aimDirection, candidate, controller, minDot, maxRange, grapple, intent)
 	local part = getCandidatePart(candidate)
-	if not (part and part:IsA("BasePart")) then
+	if not isCandidate(part) then
 		return nil, -math.huge
 	end
 
-	local offset = part.Position - origin
+	local targetPoint = getSurfaceTargetPoint(part, origin)
+	local offset = targetPoint - origin
 	local distance = offset.Magnitude
 	if distance <= 3 then
+		return nil, -math.huge
+	end
+	if distance > maxRange then
 		return nil, -math.huge
 	end
 
@@ -179,8 +221,11 @@ local function getCandidateHit(origin, aimDirection, candidate, controller, minD
 		return nil, -math.huge
 	end
 
-	local hit = Workspace:Raycast(origin, direction * distance, grapple.grappleParams)
+	local hit = Workspace:Raycast(origin, direction * (distance + HIT_OVERSHOOT), grapple.grappleParams)
 	if not canUseHit(hit, part) then
+		return nil, -math.huge
+	end
+	if (hit.Position - targetPoint).Magnitude > HIT_POINT_TOLERANCE then
 		return nil, -math.huge
 	end
 
@@ -231,13 +276,14 @@ local function getCandidateHit(origin, aimDirection, candidate, controller, minD
 	return hit, score
 end
 
-local function pickBestFromCandidates(candidates, origin, aimDirection, controller, minDot, grapple, intent)
+local function pickBestFromCandidates(candidates, origin, aimDirection, controller, minDot, maxRange, grapple, intent)
 	local bestHit = nil
 	local bestScore = -math.huge
 	local secondScore = -math.huge
 
 	for _, candidate in ipairs(candidates) do
-		local hit, score = getCandidateHit(origin, aimDirection, candidate, controller, minDot, grapple, intent)
+		local hit, score =
+			getCandidateHit(origin, aimDirection, candidate, controller, minDot, maxRange, grapple, intent)
 		if hit and score > bestScore then
 			secondScore = bestScore
 			bestScore = score
@@ -310,12 +356,12 @@ function Targeting.findBestAssistHit(grapple, controller)
 	AnchorMemory.refreshBudgeted(nil, controller)
 	local cachedAnchors = AnchorMemory.getNearbyAnchors(origin, maxRange, controller)
 	local bestHit, bestScore, secondScore =
-		pickBestFromCandidates(cachedAnchors, origin, aimDirection, controller, minDot, grapple, intent)
+		pickBestFromCandidates(cachedAnchors, origin, aimDirection, controller, minDot, maxRange, grapple, intent)
 
 	if shouldTargetRails(controller) and RailMemory and typeof(RailMemory.getNearbyRails) == "function" then
 		local nearbyRails = RailMemory.getNearbyRails(origin, maxRange)
 		local railHit, railScore, railSecondScore =
-			pickBestFromCandidates(nearbyRails, origin, aimDirection, controller, minDot, grapple, intent)
+			pickBestFromCandidates(nearbyRails, origin, aimDirection, controller, minDot, maxRange, grapple, intent)
 		if railSecondScore and railSecondScore > secondScore then
 			secondScore = railSecondScore
 		end
@@ -338,18 +384,14 @@ function Targeting.findBestAssistHit(grapple, controller)
 				AnchorMemory.remember(descendant, "targeting-scan", controller)
 			end
 
-			local offset = descendant.Position - origin
-			local distance = offset.Magnitude
-			if distance > 3 and distance <= maxRange then
-				local hit, score =
-					getCandidateHit(origin, aimDirection, descendant, controller, minDot, grapple, intent)
-				if hit and score > bestScore then
-					secondScore = bestScore
-					bestScore = score
-					bestHit = hit
-				elseif hit and score > secondScore then
-					secondScore = score
-				end
+			local hit, score =
+				getCandidateHit(origin, aimDirection, descendant, controller, minDot, maxRange, grapple, intent)
+			if hit and score > bestScore then
+				secondScore = bestScore
+				bestScore = score
+				bestHit = hit
+			elseif hit and score > secondScore then
+				secondScore = score
 			end
 		end
 	end
