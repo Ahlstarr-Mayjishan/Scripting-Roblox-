@@ -42,7 +42,7 @@ function Range.cast(grapple, forceRefresh, originalCast, ...)
 			recordRangeCast(grapple)
 			return hit
 		end
-		if VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
+		if easierVoidCast and VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
 			local voidHit = VoidCastAssist.find(grapple, direction, maxRange)
 			if voidHit then
 				recordRangeCast(grapple)
@@ -70,8 +70,12 @@ function Range.cast(grapple, forceRefresh, originalCast, ...)
 			Workspace:Raycast(rayOrigin, CurrentCamera.CFrame.LookVector * maxRange, grapple.grappleParams)
 		if cameraHit == nil then
 			aimDirection = CurrentCamera.CFrame.LookVector
-			if VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
-				return VoidCastAssist.find(grapple, aimDirection, maxRange)
+			if easierVoidCast and VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
+				local voidHit = VoidCastAssist.find(grapple, aimDirection, maxRange)
+				if voidHit then
+					recordRangeCast(grapple)
+					return voidHit
+				end
 			end
 			return nil, aimDirection
 		end
@@ -85,7 +89,7 @@ function Range.cast(grapple, forceRefresh, originalCast, ...)
 
 		if mouseHit == nil then
 			aimDirection = unitRay.Direction.Unit
-			if VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
+			if easierVoidCast and VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
 				local voidHit = VoidCastAssist.find(grapple, aimDirection, maxRange)
 				if voidHit then
 					recordRangeCast(grapple)
@@ -106,7 +110,7 @@ function Range.cast(grapple, forceRefresh, originalCast, ...)
 		return hit
 	end
 
-	if VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
+	if easierVoidCast and VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
 		local voidHit = VoidCastAssist.find(grapple, aimDirection or castDirection, maxRange)
 		if voidHit then
 			recordRangeCast(grapple)

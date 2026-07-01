@@ -186,16 +186,6 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
-		Name = "Easier Void Cast",
-		Info = "Widens KillVoid acquisition when the native grapple ray misses or is barely off target.",
-		CurrentValue = Controller.GrappleEasierVoidCast or false,
-		Flag = "GrappleEasierVoidCastToggle",
-		Callback = function(Value)
-			Controller:SetGrappleEasierVoidCast(Value)
-		end,
-	})
-
 	Tab:CreateSlider({
 		Name = "SharkTail Window",
 		Info = "Adjusts the timing window (in seconds) allowed to trigger SharkTail after releasing a reel.",
