@@ -17,8 +17,9 @@ local IFRAMES_MODE = "I-Frames"
 local IMMUNITY_MODE = "Immunity"
 local ACTIVE_WATCH_INTERVAL = 0.12
 local IDLE_WATCH_INTERVAL = 0.35
-local IMMUNITY_REFRESH_TIME = 0.5
 local IMMUNITY_SERVER_PULSE_INTERVAL = 0.8
+local IMMUNITY_REARM_DELAY = 0.12
+local IMMUNITY_REARM_RETRY_DELAY = 0.45
 
 local activeController = nil
 local watcherRunning = false
@@ -27,8 +28,10 @@ local iframeObject = nil
 local lastChargerState = nil
 local lastRefreshAt = 0
 local lastServerPulseAt = 0
-local immunityPulseUntil = 0
 local lastMode = OFF_MODE
+local playerChildConnection = nil
+local rearmToken = 0
+local pulseChargerImmunity = nil
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
@@ -182,20 +185,10 @@ local function refreshImmunity()
 		return
 	end
 	lastRefreshAt = now
-	immunityPulseUntil = now + IMMUNITY_REFRESH_TIME
 
-	removeIframes()
-	task.defer(function()
-		if isImmunityModeActive() then
-			addIframes()
-			task.delay(IMMUNITY_REFRESH_TIME, function()
-				if isImmunityModeActive() then
-					immunityPulseUntil = 0
-					removeIframes()
-				end
-			end)
-		end
-	end)
+	if pulseChargerImmunity then
+		pulseChargerImmunity(true)
+	end
 end
 
 local function getNativeChargerState()
@@ -227,7 +220,7 @@ local function watchNativeChargerState()
 	lastChargerState = charging
 end
 
-local function pulseChargerImmunity(force)
+pulseChargerImmunity = function(force)
 	if not isImmunityModeActive() then
 		return
 	end
@@ -240,6 +233,39 @@ local function pulseChargerImmunity(force)
 	lastServerPulseAt = now
 	pcall(function()
 		ChargerEvent:FireServer(true)
+	end)
+end
+
+local function scheduleImmunityRearm(delaySeconds)
+	if not isImmunityModeActive() then
+		return
+	end
+
+	rearmToken += 1
+	local token = rearmToken
+	task.delay(delaySeconds or IMMUNITY_REARM_DELAY, function()
+		if token ~= rearmToken or not isImmunityModeActive() then
+			return
+		end
+
+		pulseChargerImmunity(true)
+		task.delay(IMMUNITY_REARM_RETRY_DELAY, function()
+			if token == rearmToken and isImmunityModeActive() then
+				pulseChargerImmunity(true)
+			end
+		end)
+	end)
+end
+
+local function bindImmunityRearmWatcher()
+	if playerChildConnection then
+		return
+	end
+
+	playerChildConnection = LocalPlayer.ChildAdded:Connect(function(child)
+		if child.Name == "CANCELCHARGE" or child.Name == "TRIP_IFRAMES" then
+			scheduleImmunityRearm(IMMUNITY_REARM_DELAY)
+		end
 	end)
 end
 
@@ -259,9 +285,9 @@ local function startWatcher()
 
 			local mode = getBarrierMode()
 			if mode ~= lastMode then
-				local oldMode = lastMode
+				rearmToken += 1
 				lastMode = mode
-				if mode == IMMUNITY_MODE or mode == OFF_MODE then
+				if mode == OFF_MODE or mode == IMMUNITY_MODE then
 					removeIframes(true)
 				end
 			end
@@ -286,9 +312,6 @@ local function startWatcher()
 				local isNativeCharger = movementInstance and (movementInstance.ClassID == "class/Charger")
 
 				if isNativeCharger then
-					if hasIframes() and os.clock() >= immunityPulseUntil then
-						removeIframes()
-					end
 					watchNativeChargerState()
 				end
 			end
@@ -300,15 +323,25 @@ end
 
 function Barrier.update(controller)
 	activeController = controller
+	local mode = getBarrierMode()
+	local previousMode = lastMode
+	lastMode = mode
+	if previousMode ~= mode then
+		rearmToken += 1
+	end
 
-	if getBarrierMode() == OFF_MODE then
+	if mode == OFF_MODE then
 		removeIframes(true)
-	elseif getBarrierMode() == IMMUNITY_MODE then
+	elseif mode == IMMUNITY_MODE then
+		if previousMode ~= IMMUNITY_MODE then
+			removeIframes(true)
+		end
 		pulseChargerImmunity(true)
 	end
 end
 
 function Barrier.Init()
+	bindImmunityRearmWatcher()
 	startWatcher()
 	-- Dọn dẹp TRIP_IFRAMES cũ nếu có khi load/reload script
 	local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
