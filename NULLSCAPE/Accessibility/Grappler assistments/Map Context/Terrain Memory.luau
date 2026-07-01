@@ -6,7 +6,10 @@
 
 local Workspace = game:GetService("Workspace")
 
-local SpatialIndex = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Spatial Index.luau")
+local sharedGlobals = getgenv()._NULLSCAPE_Globals or {}
+getgenv()._NULLSCAPE_Globals = sharedGlobals
+
+local SpatialIndex = sharedGlobals.MapContextSpatialIndex
 if not (SpatialIndex and typeof(SpatialIndex.new) == "function") then
 	SpatialIndex = {}
 
@@ -106,6 +109,7 @@ if not (SpatialIndex and typeof(SpatialIndex.new) == "function") then
 		return results
 	end
 end
+sharedGlobals.MapContextSpatialIndex = SpatialIndex
 
 local BUCKET_SIZE = 128
 local DEFAULT_QUERY_RADIUS = 96

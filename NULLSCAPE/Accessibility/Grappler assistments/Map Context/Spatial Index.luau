@@ -5,6 +5,8 @@
 -- ]]
 
 local SpatialIndex = {}
+local sharedGlobals = getgenv()._NULLSCAPE_Globals or {}
+getgenv()._NULLSCAPE_Globals = sharedGlobals
 
 local DEFAULT_BUCKET_SIZE = 128
 
@@ -111,5 +113,7 @@ function SpatialIndex.query(index, origin, radius)
 
 	return results
 end
+
+sharedGlobals.MapContextSpatialIndex = SpatialIndex
 
 return SpatialIndex

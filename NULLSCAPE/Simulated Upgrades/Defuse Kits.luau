@@ -167,6 +167,11 @@ local function watchNativeChargerState()
 end
 
 local function installChargerEventWatcher()
+	-- Luôn cập nhật hàm callback mới nhất vào bảng toàn cục khi reload script
+	globals.DefuseKitsOnFireServer = function()
+		refreshImmunity()
+	end
+
 	if globals.DefuseKitsChargerEventHooked then
 		return
 	end
@@ -182,7 +187,11 @@ local function installChargerEventWatcher()
 			local args = { ... }
 
 			if self == ChargerEvent and method == "FireServer" and args[1] == false then
-				task.defer(refreshImmunity)
+				task.defer(function()
+					if globals.DefuseKitsOnFireServer then
+						globals.DefuseKitsOnFireServer()
+					end
+				end)
 			end
 
 			return oldNamecall(self, ...)
