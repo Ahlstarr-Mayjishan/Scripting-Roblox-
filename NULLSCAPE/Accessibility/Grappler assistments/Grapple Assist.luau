@@ -13,7 +13,7 @@ local ReelSaver = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistm
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
 local FailFeedback = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Fail Feedback Loop.luau")
 
-local HOOK_VERSION = 5
+local HOOK_VERSION = 6
 
 local Logic = {
 	Controller = nil,

@@ -13,15 +13,25 @@ local Range = {}
 
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 local VoidCastAssist = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Void Cast Assist.luau")
+local CachedControl = nil
+
+local function getControl()
+	if CachedControl then
+		return CachedControl
+	end
+
+	CachedControl = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+	return CachedControl
+end
 
 function Range.getEffectiveRange()
-	local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+	local Control = getControl()
 	local rangeSetting = Control and tonumber(Control.GrappleMaxRange) or 90
 	return rangeSetting <= 0 and 5000 or rangeSetting
 end
 
 function Range.isEasierVoidCastEnabled()
-	local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+	local Control = getControl()
 	return Control and Control.GrappleEasierVoidCast == true
 end
 
