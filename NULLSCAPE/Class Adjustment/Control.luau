@@ -44,6 +44,17 @@ local function claimActiveController(controller)
 	return globals.activeClassAdjustmentController == controller
 end
 
+local function normalizeChargerTripmineMode(value)
+	value = tostring(value or "Auto")
+	if value == "Passthrough" then
+		return "PassBatch"
+	end
+	if value == "PassBatch" or value == "PreDetonate" or value == "Auto" then
+		return value
+	end
+	return "Auto"
+end
+
 local function readSettings()
 	if not (isfile and readfile and isfile(SETTINGS_FILE)) then
 		return
@@ -86,7 +97,7 @@ local function readSettings()
 			Control.ChargerTripmineAssistEnabled = not not decoded.ChargerTripmineAssistToggle
 		end
 		if decoded.ChargerTripmineModeDropdown ~= nil then
-			Control.ChargerTripmineMode = tostring(decoded.ChargerTripmineModeDropdown)
+			Control.ChargerTripmineMode = normalizeChargerTripmineMode(decoded.ChargerTripmineModeDropdown)
 		end
 		Control.ChargerTripmineDistance = tonumber(decoded.ChargerTripmineDistanceSlider)
 			or Control.ChargerTripmineDistance
@@ -264,7 +275,7 @@ function Control:SetChargerTripmineAssist(value)
 end
 
 function Control:SetChargerTripmineMode(value)
-	self.ChargerTripmineMode = value or "Auto"
+	self.ChargerTripmineMode = normalizeChargerTripmineMode(value)
 	saveSettings()
 
 	local Executor = getgenv().loadModule("NULLSCAPE/Class Adjustment/Executor.luau")

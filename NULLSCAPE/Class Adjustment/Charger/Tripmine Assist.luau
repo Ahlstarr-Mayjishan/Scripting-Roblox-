@@ -1,7 +1,7 @@
 --!nocheck
 -- [[
 --  NULLSCAPE - Charger Tripmine Assists
---  Temporary home for tripmine Passthrough / PreDetonate style helpers.
+--  Temporary home for tripmine PassBatch / PreDetonate style helpers.
 --  These modes are intentionally separate from Defuse Kits because they depend
 --  on movement/class timing and are not reliable server-side immunity.
 -- ]]
@@ -13,7 +13,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 
-local PASSTHROUGH_MODE = "Passthrough"
 local PREDETONATE_MODE = "PreDetonate"
 local AUTO_MODE = "Auto"
 local PASS_BATCH_MODE = "PassBatch"
@@ -25,7 +24,8 @@ local ACTIVE_WATCH_INTERVAL = 0.08
 local IDLE_WATCH_INTERVAL = 0.35
 local PASS_BATCH_DISTANCE = 60
 local PASS_BATCH_CORRIDOR = 9
-local PASS_BATCH_MAX_TIME = 0.4
+local PASS_BATCH_MAX_TIME = 0.22
+local PASS_BATCH_IDLE_FLUSH = 0.1
 local PASS_BATCH_MAX_COUNT = 5
 local PASS_BATCH_MIN_SPEED = 22
 
@@ -35,12 +35,12 @@ local watcherToken = {}
 local cachedGCH = nil
 local iframeObject = nil
 local processedMines = {}
-local passthroughState = {}
 local logs = {}
 local lastCollectAt = {}
 local passBatch = nil
 local passBatchLocked = false
 local previousHrpPos = nil
+local characterConnection = nil
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
@@ -65,7 +65,7 @@ local function hasIframeOwner()
 end
 
 local function isChargerAssistMode(mode)
-	return mode == AUTO_MODE or mode == PASSTHROUGH_MODE or mode == PREDETONATE_MODE or mode == PASS_BATCH_MODE
+	return mode == AUTO_MODE or mode == PREDETONATE_MODE or mode == PASS_BATCH_MODE
 end
 
 local function hasIframes()
@@ -140,13 +140,11 @@ end
 local function clearMineState(giftId)
 	processedMines[giftId] = nil
 	processedMines["__dist_" .. giftId] = nil
-	passthroughState[giftId] = nil
 	lastCollectAt[giftId] = nil
 end
 
 local function clearState()
 	table.clear(processedMines)
-	table.clear(passthroughState)
 	table.clear(logs)
 	table.clear(lastCollectAt)
 	passBatch = nil
@@ -223,7 +221,9 @@ local function isCharging(char, hrp)
 		return false
 	end
 
-	if humanoid:GetAttribute("UsingAbility") ~= true then
+	local usingAbility = humanoid:GetAttribute("UsingAbility") == true
+	local chargingCheck = char:GetAttribute("ChargingCheck") == true
+	if not (usingAbility or chargingCheck) then
 		return false
 	end
 
@@ -326,8 +326,11 @@ local function updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
 		end
 		passBatchLocked = false
 		previousHrpPos = nil
+		removeIframes()
 		return
 	end
+
+	addIframes()
 
 	if passBatchLocked then
 		previousHrpPos = hrpPos
@@ -343,18 +346,20 @@ local function updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
 	for giftId, gift in pairs(GCH.Gifts) do
 		if gift.Tripmine and not gift.Collected and not processedMines[giftId] then
 			local giftPos = getGiftPosition(gift)
+			local dist = giftPos and (hrpPos - giftPos).Magnitude or math.huge
 			local segmentInfo = giftPos and getSegmentInfo(previousHrpPos, hrpPos, giftPos)
-			if
-				segmentInfo
+			local wasPassed = segmentInfo
 				and segmentInfo.alpha > 0
 				and segmentInfo.alpha < 1
 				and segmentInfo.distance <= PASS_BATCH_CORRIDOR
-			then
+			local isOverlapping = dist <= NEAR_PASS_DISTANCE
+
+			if wasPassed or isOverlapping then
 				table.insert(candidates, {
 					id = giftId,
 					gift = gift,
 					pos = giftPos,
-					alpha = segmentInfo.alpha,
+					alpha = segmentInfo and segmentInfo.alpha or 1,
 				})
 			end
 		end
@@ -379,6 +384,7 @@ local function updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
 		if
 			anchorDistance >= batchDistance
 			or now - passBatch.startTime >= PASS_BATCH_MAX_TIME
+			or now - passBatch.lastAddTime >= PASS_BATCH_IDLE_FLUSH
 			or #passBatch.items >= PASS_BATCH_MAX_COUNT
 		then
 			flushPassBatch("PassBatchFlush", hrpPos, true)
@@ -407,6 +413,16 @@ local function startWatcher()
 	end
 	watcherRunning = true
 
+	if not characterConnection and LocalPlayer then
+		characterConnection = LocalPlayer.CharacterAdded:Connect(function()
+			clearState()
+			cachedGCH = nil
+			if activeController and activeController.ChargerTripmineMode == PASS_BATCH_MODE then
+				removeIframes()
+			end
+		end)
+	end
+
 	task.spawn(function()
 		local cleanedIdle = false
 		while not globals or globals.ChargerTripmineWatcherToken == watcherToken do
@@ -428,11 +444,13 @@ local function startWatcher()
 			end
 			cleanedIdle = false
 
-			addIframes()
-
 			local char = LocalPlayer.Character
 			local hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if not hrp then
+				if mode == PASS_BATCH_MODE then
+					removeIframes()
+					clearState()
+				end
 				continue
 			end
 
@@ -466,6 +484,7 @@ local function startWatcher()
 				updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
 				continue
 			else
+				addIframes()
 				if passBatch then
 					flushPassBatch("PassBatchModeChanged", hrpPos, false)
 				end
@@ -485,22 +504,6 @@ local function startWatcher()
 				end
 
 				local dist = (hrpPos - giftPos).Magnitude
-				if mode == PASSTHROUGH_MODE or mode == AUTO_MODE then
-					local state = passthroughState[giftId]
-					if not state and dist < NEAR_PASS_DISTANCE then
-						passthroughState[giftId] = "inside"
-						local targetDist = baseDist + (jitter > 0 and math.random(-jitter, jitter) or 0)
-						processedMines["__dist_" .. giftId] = math.max(targetDist, NEAR_PASS_DISTANCE)
-						tryCollectTripmine(giftId, gift, "PassthroughEntered", dist)
-					elseif state == "inside" then
-						local targetDist = processedMines["__dist_" .. giftId] or baseDist
-						if dist >= targetDist then
-							logOnce(giftId, "PassthroughExited", dist)
-							clearMineState(giftId)
-						end
-					end
-				end
-
 				if mode == PREDETONATE_MODE or mode == AUTO_MODE then
 					if processedMines[giftId] then
 						continue
@@ -539,6 +542,9 @@ end
 
 function ChargerAssist.update(controller)
 	activeController = controller
+	if controller and controller.ChargerTripmineMode == "Passthrough" then
+		controller.ChargerTripmineMode = PASS_BATCH_MODE
+	end
 
 	if not (controller.ChargerTripmineAssistEnabled and isChargerAssistMode(controller.ChargerTripmineMode)) then
 		removeIframes()
@@ -548,7 +554,7 @@ end
 
 function ChargerAssist.Init()
 	startWatcher()
-	print("[NULLSCAPE Charger Assist] Module ready. Modes: Auto | PassBatch | Passthrough | PreDetonate")
+	print("[NULLSCAPE Charger Assist] Module ready. Modes: Auto | PassBatch | PreDetonate")
 end
 
 ChargerAssist.Init()

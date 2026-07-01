@@ -151,6 +151,7 @@ pcall(function()
 			ChargerTripmineAssistToggle = false,
 			ChargerTripmineModeDropdown = "Auto",
 			ChargerTripmineDistanceSlider = 15,
+			ChargerTripmineBatchDistanceSlider = 60,
 			ChargerTripmineJitterSlider = 2,
 			GraceWingsToggle = false,
 			GraceWingsAirControlSlider = 1.1,
@@ -192,7 +193,8 @@ pcall(function()
 			end
 		end
 
-		if type(currentSettings.GrappleAirControlMultiplierSlider) == "number"
+		if
+			type(currentSettings.GrappleAirControlMultiplierSlider) == "number"
 			and currentSettings.GrappleAirControlMultiplierSlider > 0
 			and currentSettings.GrappleAirControlMultiplierSlider <= 1.1
 		then
@@ -458,8 +460,6 @@ end
 local SettingsTab = Window:CreateTab("Settings", 4483362458)
 Client.Tabs["Settings"] = SettingsTab
 
-
-
 SettingsTab:CreateButton({
 	Name = "Destroy UI",
 	Callback = function()
@@ -535,7 +535,12 @@ local function loadModule(path)
 	end
 
 	if result == nil then
-		error("[NULLSCAPE] Module " .. tostring(path) .. " returned nil! This indicates a file reading or download failure (such as an empty file or network block).", 2)
+		error(
+			"[NULLSCAPE] Module "
+				.. tostring(path)
+				.. " returned nil! This indicates a file reading or download failure (such as an empty file or network block).",
+			2
+		)
 	end
 
 	moduleCache[path] = result

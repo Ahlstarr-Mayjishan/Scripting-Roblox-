@@ -222,9 +222,8 @@ return function(Client, Controller)
 	Tab:CreateDropdown({
 		Name = "Charger Tripmine Mode",
 		Info = "Auto se chi kich khi dang lao vao/cua so gan; PassBatch gom mine tren duong charge roi kich hoat mot luot.",
-		Options = { "Auto", "PassBatch", "Passthrough", "PreDetonate" },
-		CurrentOption = (Controller.ChargerTripmineMode == "Passthrough" and "Passthrough")
-			or (Controller.ChargerTripmineMode == "PreDetonate" and "PreDetonate")
+		Options = { "Auto", "PassBatch", "PreDetonate" },
+		CurrentOption = (Controller.ChargerTripmineMode == "PreDetonate" and "PreDetonate")
 			or (Controller.ChargerTripmineMode == "PassBatch" and "PassBatch")
 			or "Auto",
 		MultipleOptions = false,
@@ -240,7 +239,7 @@ return function(Client, Controller)
 
 	Tab:CreateSlider({
 		Name = "Detonation Distance",
-		Info = "Charger Passthrough/PreDetonate distance.",
+		Info = "Charger Auto/PreDetonate distance.",
 		Range = { 5, 50 },
 		CurrentValue = Controller.ChargerTripmineDistance or 15,
 		Increment = 1,
