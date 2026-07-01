@@ -13,6 +13,8 @@ local EnemyMemory = {
 
 local REFRESH_INTERVAL = 0.08
 local DEFAULT_RADIUS = 48
+local enemyIds = setmetatable({}, { __mode = "k" })
+local nextEnemyId = 0
 local PREFERRED_PARTS = {
 	"HumanoidRootPart",
 	"RootPart",
@@ -67,7 +69,19 @@ local function getPartVelocity(part, previous, now)
 end
 
 local function getEnemyId(enemy)
-	return enemy:GetDebugId(0)
+	if not enemy then
+		return nil
+	end
+
+	local existing = enemyIds[enemy]
+	if existing then
+		return existing
+	end
+
+	nextEnemyId += 1
+	local id = "enemy:" .. tostring(nextEnemyId)
+	enemyIds[enemy] = id
+	return id
 end
 
 local function rememberEnemy(enemy, now)

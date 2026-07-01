@@ -11,6 +11,8 @@ local SpatialIndex = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assi
 local BUCKET_SIZE = 128
 local DEFAULT_QUERY_RADIUS = 96
 local RESCAN_COOLDOWN = 2
+local partIds = setmetatable({}, { __mode = "k" })
+local nextPartId = 0
 
 local TerrainMemory = {
 	Index = SpatialIndex.new(BUCKET_SIZE),
@@ -79,7 +81,19 @@ local function makeRootSignature(roots)
 end
 
 local function getPartId(part)
-	return part:GetDebugId(0)
+	if not part then
+		return nil
+	end
+
+	local existing = partIds[part]
+	if existing then
+		return existing
+	end
+
+	nextPartId += 1
+	local id = "terrain:" .. tostring(nextPartId)
+	partIds[part] = id
+	return id
 end
 
 local function rememberPart(part)

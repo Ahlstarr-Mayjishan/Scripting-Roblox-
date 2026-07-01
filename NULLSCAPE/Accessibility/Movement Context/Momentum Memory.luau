@@ -13,6 +13,8 @@ local MomentumMemory = {
 
 local SAMPLE_TTL = 1.25
 local IMPULSE_TTL = 1.5
+local partIds = setmetatable({}, { __mode = "k" })
+local nextPartId = 0
 
 local function now()
 	return time()
@@ -23,7 +25,19 @@ local function isAlive(instance)
 end
 
 local function getPartId(part)
-	return part and part:GetDebugId(0)
+	if not part then
+		return nil
+	end
+
+	local existing = partIds[part]
+	if existing then
+		return existing
+	end
+
+	nextPartId += 1
+	local id = "part:" .. tostring(nextPartId)
+	partIds[part] = id
+	return id
 end
 
 local function flatten(vector)

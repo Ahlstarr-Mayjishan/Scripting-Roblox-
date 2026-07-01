@@ -11,20 +11,27 @@ local BadAnchorMemory = {}
 local DEFAULT_TTL = 7
 local MAX_PENALTY = 60
 local STORE = {}
+local partIds = setmetatable({}, { __mode = "k" })
+local nextPartId = 0
 
 local function isAlive(part)
 	return part and part.Parent ~= nil and part:IsDescendantOf(Workspace)
 end
 
 local function getKey(part)
-	if not (part and typeof(part.GetDebugId) == "function") then
+	if not part then
 		return nil
 	end
 
-	local success, id = pcall(function()
-		return part:GetDebugId(0)
-	end)
-	return success and id or nil
+	local existing = partIds[part]
+	if existing then
+		return existing
+	end
+
+	nextPartId += 1
+	local id = "bad-anchor:" .. tostring(nextPartId)
+	partIds[part] = id
+	return id
 end
 
 local function prune(now)

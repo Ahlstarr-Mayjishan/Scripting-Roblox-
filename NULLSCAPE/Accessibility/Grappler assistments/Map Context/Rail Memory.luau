@@ -12,6 +12,8 @@ local BUCKET_SIZE = 128
 local DEFAULT_SCAN_BUDGET = 450
 local DEFAULT_QUERY_RADIUS = 110
 local RESCAN_COOLDOWN = 0.75
+local railIds = setmetatable({}, { __mode = "k" })
+local nextRailId = 0
 
 local RailMemory = {
 	Index = SpatialIndex.new(BUCKET_SIZE),
@@ -28,7 +30,19 @@ local function isRailPart(part)
 end
 
 local function getRailId(part)
-	return part:GetDebugId(0)
+	if not part then
+		return nil
+	end
+
+	local existing = railIds[part]
+	if existing then
+		return existing
+	end
+
+	nextRailId += 1
+	local id = "rail:" .. tostring(nextRailId)
+	railIds[part] = id
+	return id
 end
 
 local function addRoot(roots, instance)
