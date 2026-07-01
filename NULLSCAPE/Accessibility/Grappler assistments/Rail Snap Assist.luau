@@ -4,7 +4,8 @@
 --  Gives rails near the user's aim a small targeting bias without forcing rail capture.
 -- ]]
 
-local RailMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory.luau")
+local RailMemory =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau")
 
 local RailSnap = {}
 

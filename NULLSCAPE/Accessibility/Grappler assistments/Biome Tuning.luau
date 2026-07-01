@@ -6,7 +6,8 @@
 
 local Workspace = game:GetService("Workspace")
 
-local RailMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory.luau")
+local RailMemory =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau")
 
 local BiomeTuning = {
 	LastScanAt = -1000,

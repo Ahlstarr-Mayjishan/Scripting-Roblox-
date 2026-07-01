@@ -10,7 +10,8 @@ local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 local AnchorMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Anchor Memory.luau")
-local RailMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory.luau")
+local RailMemory =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau")
 local IntentResolver = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Intent Resolver.luau")
 local AnchorProfile =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Anchor Preference Profile.luau")
@@ -175,8 +176,8 @@ local function isCandidate(part)
 end
 
 local function getCandidatePart(candidate)
-	if typeof(candidate) == "table" then
-		return candidate.Part
+	if type(candidate) == "table" then
+		return rawget(candidate, "Part")
 	end
 
 	return candidate
@@ -288,9 +289,11 @@ local function getCandidateHit(origin, aimDirection, candidate, controller, minD
 
 	local anglePenalty = math.deg(math.acos(math.clamp(dot, -1, 1))) * 6
 	local distancePenalty = distance * 0.35
-	local memoryBonus = candidate and candidate.LastSuccessfulCast and time() - candidate.LastSuccessfulCast < 12 and 12
-		or 0
-	local failurePenalty = ((candidate and candidate.FailedAttempts) or 0) * 8
+	local candidateEntry = type(candidate) == "table" and candidate or nil
+	local lastSuccessfulCast = candidateEntry and tonumber(rawget(candidateEntry, "LastSuccessfulCast")) or nil
+	local failedAttempts = candidateEntry and tonumber(rawget(candidateEntry, "FailedAttempts")) or 0
+	local memoryBonus = lastSuccessfulCast and time() - lastSuccessfulCast < 12 and 12 or 0
+	local failurePenalty = failedAttempts * 8
 	local badAnchorPenalty = BadAnchorMemory
 			and typeof(BadAnchorMemory.getPenalty) == "function"
 			and BadAnchorMemory.getPenalty(part)

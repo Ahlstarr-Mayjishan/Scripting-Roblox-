@@ -185,6 +185,15 @@ return function(Client, Controller)
 			Controller:SetGrappleMaxRange(Value)
 		end,
 	})
+	Tab:CreateToggle({
+		Name = "Easier Void Cast",
+		Info = "Widens only close KillVoid casts. Normal misses still return nil.",
+		CurrentValue = Controller.GrappleEasierVoidCast or false,
+		Flag = "GrappleEasierVoidCastToggle",
+		Callback = function(Value)
+			Controller:SetGrappleEasierVoidCast(Value)
+		end,
+	})
 
 	Tab:CreateSlider({
 		Name = "SharkTail Window",

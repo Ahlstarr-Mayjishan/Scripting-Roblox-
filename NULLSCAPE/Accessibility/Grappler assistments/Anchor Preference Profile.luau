@@ -4,7 +4,8 @@
 	Small scoring layer for user preference + current intent.
 ]]
 
-local RailMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory.luau")
+local RailMemory =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau")
 
 local Profile = {}
 

@@ -48,8 +48,12 @@ local function hasTag(instance, tagName)
 	return success and result == true
 end
 
+local function isBasePart(part)
+	return typeof(part) == "Instance" and part:IsA("BasePart")
+end
+
 local function getAnchorName(part)
-	if not (part and part:IsA("BasePart")) then
+	if not isBasePart(part) then
 		return nil
 	end
 
@@ -79,7 +83,7 @@ function AnchorMemory.getPriority(anchorName, controller)
 end
 
 local function isAlive(part)
-	return part and part.Parent ~= nil and part:IsDescendantOf(Workspace)
+	return isBasePart(part) and part.Parent ~= nil and part:IsDescendantOf(Workspace)
 end
 
 local function getBucketKey(position)
@@ -140,7 +144,7 @@ function AnchorMemory.remember(part, source, controller)
 
 	local priority = AnchorMemory.getPriority(anchorName, controller)
 	local entry = anchors[part]
-	if not entry then
+	if type(entry) ~= "table" then
 		entry = {
 			Part = part,
 			Name = anchorName,
@@ -166,8 +170,12 @@ function AnchorMemory.remember(part, source, controller)
 end
 
 function AnchorMemory.noteCastResult(part, success)
+	if not isBasePart(part) then
+		return
+	end
+
 	local entry = anchors[part]
-	if not entry then
+	if type(entry) ~= "table" then
 		entry = AnchorMemory.remember(part, "cast-result")
 	end
 	if not entry then
