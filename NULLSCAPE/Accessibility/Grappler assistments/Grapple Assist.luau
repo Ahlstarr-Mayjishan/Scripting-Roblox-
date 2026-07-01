@@ -13,6 +13,8 @@ local ReelSaver = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistm
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
 local FailFeedback = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Fail Feedback Loop.luau")
 
+local HOOK_VERSION = 5
+
 local Logic = {
 	Controller = nil,
 	LastGrapple = nil,
@@ -71,8 +73,9 @@ local function clearStaleHooks(grappleModule, globals)
 		and grappleModule.Cast == globals.AccessibilityGrappleAssistWrappedCast
 	local stepHookValid = not globals.AccessibilityGrappleAssistWrappedStep
 		or grappleModule.Step == globals.AccessibilityGrappleAssistWrappedStep
+	local versionValid = globals.AccessibilityGrappleAssistHookVersion == HOOK_VERSION
 
-	if globals.AccessibilityGrappleAssistHooked and castHookValid and stepHookValid then
+	if globals.AccessibilityGrappleAssistHooked and castHookValid and stepHookValid and versionValid then
 		Logic.OriginalCast = globals.AccessibilityGrappleAssistOriginalCast
 		Logic.WrappedCast = globals.AccessibilityGrappleAssistWrappedCast
 		Logic.OriginalStep = globals.AccessibilityGrappleAssistOriginalStep
@@ -125,14 +128,22 @@ local function installCastHook(grappleModule, globals)
 		rememberGrapple(self)
 
 		if isEnabled() then
-			local assistedHit = Targeting.findBestAssistHit(self, getController())
+			local controller = getController()
+			local assistedHit = Targeting.findOptimalHit(self, controller)
 			if assistedHit then
 				if FailFeedback and typeof(FailFeedback.noteAssistCast) == "function" then
 					pcall(function()
-						FailFeedback.noteAssistCast(self, assistedHit, getController())
+						FailFeedback.noteAssistCast(self, assistedHit, controller)
 					end)
 				end
 				return assistedHit
+			end
+
+			if Targeting and typeof(Targeting.fallbackCast) == "function" then
+				local fallbackHit, fallbackDirection = Targeting.fallbackCast(self, controller)
+				if fallbackHit or fallbackDirection then
+					return fallbackHit, fallbackDirection
+				end
 			end
 		end
 
@@ -144,6 +155,7 @@ local function installCastHook(grappleModule, globals)
 	grappleModule.Cast = wrappedCast
 	globals.AccessibilityGrappleAssistOriginalCast = originalCast
 	globals.AccessibilityGrappleAssistWrappedCast = wrappedCast
+	globals.AccessibilityGrappleAssistHookVersion = HOOK_VERSION
 end
 
 local function installStepHook(grappleModule, globals)
@@ -210,6 +222,7 @@ function Logic.initialize(controller)
 	installStepHook(grappleModule, globals)
 
 	globals.AccessibilityGrappleAssistHooked = true
+	globals.AccessibilityGrappleAssistHookVersion = HOOK_VERSION
 	Logic.Enabled = true
 	return true
 end
@@ -249,6 +262,7 @@ function Logic.disable()
 	globals.AccessibilityGrappleAssistOriginalStep = nil
 	globals.AccessibilityGrappleAssistWrappedStep = nil
 	globals.AccessibilityGrappleAssistHooked = false
+	globals.AccessibilityGrappleAssistHookVersion = nil
 
 	Logic.LastGrapple = nil
 	Logic.WrappedCast = nil

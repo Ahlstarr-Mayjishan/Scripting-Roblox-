@@ -7,25 +7,7 @@
 local Workspace = game:GetService("Workspace")
 
 local AnchorMemory = {}
-
-local SPECIAL_ANCHORS = {
-	JumpPad = {
-		Priority = 1000,
-		Field = "GrappleAnchorPriorityJumpPad",
-	},
-	GrapplePoint = {
-		Priority = 900,
-		Field = "GrappleAnchorPriorityGrapplePoint",
-	},
-	Bell = {
-		Priority = 800,
-		Field = "GrappleAnchorPriorityBell",
-	},
-	TriaOrb = {
-		Priority = 850,
-		Field = "GrappleAnchorPriorityTriaOrb",
-	},
-}
+local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau")
 
 local DEFAULT_SCAN_BUDGET = 250
 local RESCAN_COOLDOWN = 0.75
@@ -36,36 +18,16 @@ local buckets = {}
 local scanCursor = 1
 local lastRefreshAt = -1000
 
-local function hasTag(instance, tagName)
-	if not (instance and typeof(instance.HasTag) == "function") then
-		return false
-	end
-
-	local success, result = pcall(function()
-		return instance:HasTag(tagName)
-	end)
-
-	return success and result == true
-end
-
 local function isBasePart(part)
 	return typeof(part) == "Instance" and part:IsA("BasePart")
 end
 
 local function getAnchorName(part)
-	if not isBasePart(part) then
+	if not (isBasePart(part) and SpecialAnchors and typeof(SpecialAnchors.getName) == "function") then
 		return nil
 	end
 
-	if SPECIAL_ANCHORS[part.Name] then
-		return part.Name
-	end
-
-	if hasTag(part, "JumpPad") then
-		return "JumpPad"
-	end
-
-	return nil
+	return SpecialAnchors.getName(part)
 end
 
 local function isSpecialAnchor(part)
@@ -73,13 +35,11 @@ local function isSpecialAnchor(part)
 end
 
 function AnchorMemory.getPriority(anchorName, controller)
-	local config = SPECIAL_ANCHORS[anchorName]
-	if not config then
-		return 0
+	if SpecialAnchors and typeof(SpecialAnchors.getPriority) == "function" then
+		return SpecialAnchors.getPriority(anchorName, controller)
 	end
 
-	local value = controller and tonumber(controller[config.Field])
-	return math.clamp(value or config.Priority, 0, 1000)
+	return 0
 end
 
 local function isAlive(part)

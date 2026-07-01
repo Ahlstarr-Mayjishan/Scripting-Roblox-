@@ -19,23 +19,25 @@ local CastSafety = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assist
 local BadAnchorMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Bad Anchor Memory.luau")
 local AnchorBias = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Anchor Bias Profile.luau")
 local ConfidenceGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Assist Confidence Gate.luau")
+local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau")
+local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
 
 local Targeting = {}
 
-local SPECIAL_TARGETS = {
-	JumpPad = true,
-	GrapplePoint = true,
-	Bell = true,
-	TriaOrb = true,
-}
-
 local MAX_SCAN_CANDIDATES = 700
+local MAX_OPTIMAL_CANDIDATES = 220
+local CANDIDATE_CACHE_TTL = 0.35
 local DEFAULT_RANGE = 500
 local DEFAULT_CAPTURE_ANGLE = 45
 local MAX_FALLBACK_TRANSPARENCY = 0.72
 local MAX_FALLBACK_AXIS = 160
 local HIT_POINT_TOLERANCE = 6
 local HIT_OVERSHOOT = 2
+
+local CandidateCache = {
+	UpdatedAt = -1000,
+	Candidates = {},
+}
 
 local BLOCKED_FALLBACK_NAME_PATTERNS = {
 	"void",
@@ -52,6 +54,13 @@ local BLOCKED_FALLBACK_NAME_PATTERNS = {
 }
 
 local function getRange(controller)
+	if GrappleRange and typeof(GrappleRange.getEffectiveRange) == "function" then
+		local classRange = tonumber(GrappleRange.getEffectiveRange())
+		if classRange then
+			return math.clamp(classRange, 30, 5000)
+		end
+	end
+
 	return math.clamp(tonumber(controller and controller.GrappleAssistRange) or DEFAULT_RANGE, 30, 500)
 end
 
@@ -105,36 +114,16 @@ local function hasBlockedFallbackName(part)
 	return false
 end
 
-local function hasTag(instance, tagName)
-	if not (instance and typeof(instance.HasTag) == "function") then
-		return false
-	end
-
-	local success, result = pcall(function()
-		return instance:HasTag(tagName)
-	end)
-
-	return success and result == true
-end
-
 local function getSpecialTargetName(part)
-	if AnchorProfile and typeof(AnchorProfile.getSpecialName) == "function" then
-		local specialName = AnchorProfile.getSpecialName(part)
+	if SpecialAnchors and typeof(SpecialAnchors.getName) == "function" then
+		local specialName = SpecialAnchors.getName(part)
 		if specialName then
 			return specialName
 		end
 	end
 
-	if not (part and part:IsA("BasePart")) then
-		return nil
-	end
-
-	if SPECIAL_TARGETS[part.Name] then
-		return part.Name
-	end
-
-	if hasTag(part, "JumpPad") then
-		return "JumpPad"
+	if AnchorProfile and typeof(AnchorProfile.getSpecialName) == "function" then
+		return AnchorProfile.getSpecialName(part)
 	end
 
 	return nil
@@ -159,6 +148,28 @@ function Targeting.getAimDirection(grapple)
 	local mouse = LocalPlayer and LocalPlayer:GetMouse()
 	local unitRay = mouse and mouse.UnitRay
 	return unitRay and unitRay.Direction.Unit or currentCamera.CFrame.LookVector
+end
+
+local function usesCameraAim(grapple)
+	local movement = grapple and grapple.Movement
+	if not movement then
+		return true
+	end
+
+	return UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter
+		or movement.preferredInput ~= Enum.PreferredInput.KeyboardAndMouse
+end
+
+local function syncGrappleFilter(grapple)
+	if
+		grapple
+		and grapple.grappleParams
+		and grapple.Movement
+		and grapple.Movement.moveCastParams
+		and grapple.Movement.moveCastParams.FilterDescendantsInstances
+	then
+		grapple.grappleParams.FilterDescendantsInstances = grapple.Movement.moveCastParams.FilterDescendantsInstances
+	end
 end
 
 local function isCandidate(part)
@@ -189,6 +200,22 @@ local function isCandidate(part)
 	end
 
 	return part.CanCollide == true and part.Transparency < 1
+end
+
+local function isOptimalCandidate(part)
+	if not isAliveBasePart(part) then
+		return false
+	end
+
+	if LocalPlayer and LocalPlayer.Character and part:IsDescendantOf(LocalPlayer.Character) then
+		return false
+	end
+
+	if getSpecialTargetName(part) or part.Name == "_RailPart" then
+		return true
+	end
+
+	return part.CanCollide == true and part.Transparency < 0.95
 end
 
 local function getCandidatePart(candidate)
@@ -235,6 +262,19 @@ local function canUseHit(hit, candidate)
 	end
 
 	return instance == candidate or instance:IsDescendantOf(candidate)
+end
+
+local function canUseOptimalHit(hit, candidate)
+	if not (hit and candidate) then
+		return false
+	end
+
+	local instance = hit.Instance
+	if not isAliveBasePart(instance) then
+		return false
+	end
+
+	return instance == candidate or instance:IsDescendantOf(candidate) or candidate:IsDescendantOf(instance)
 end
 
 local function getSurfaceTargetPoint(part, origin)
@@ -381,6 +421,174 @@ local function collectFallbackDescendants()
 	end
 
 	return descendants
+end
+
+local function compareCandidateDistance(a, b)
+	return a.Distance < b.Distance
+end
+
+local function refreshCandidateCache()
+	local now = time()
+	if now - CandidateCache.UpdatedAt < CANDIDATE_CACHE_TTL then
+		return CandidateCache.Candidates
+	end
+
+	local candidates = {}
+	for _, descendant in ipairs(collectFallbackDescendants()) do
+		if isOptimalCandidate(descendant) then
+			table.insert(candidates, descendant)
+		end
+	end
+
+	CandidateCache.UpdatedAt = now
+	CandidateCache.Candidates = candidates
+	return candidates
+end
+
+local function getOptimalCandidates(origin, maxRange)
+	local ranked = {}
+	for _, part in ipairs(refreshCandidateCache()) do
+		if isAliveBasePart(part) then
+			local distance = (part.Position - origin).Magnitude
+			if distance <= maxRange then
+				table.insert(ranked, {
+					Part = part,
+					Distance = distance,
+				})
+			end
+		end
+	end
+
+	table.sort(ranked, compareCandidateDistance)
+
+	local candidates = {}
+	for index, entry in ipairs(ranked) do
+		if index > MAX_OPTIMAL_CANDIDATES then
+			break
+		end
+		table.insert(candidates, entry.Part)
+	end
+
+	return candidates
+end
+
+local function scoreOptimalHit(hit, part, origin, distance, dot, controller)
+	local score = 0
+	local specialName = getSpecialTargetName(part)
+
+	if specialName then
+		score += SpecialAnchors and SpecialAnchors.getPriority(specialName, controller) or 900
+	elseif part.Name == "_RailPart" then
+		score += tonumber(controller and controller.GrappleAssistRailPriority) or 500
+	else
+		score += tonumber(controller and controller.GrappleAssistTerrainPriority) or 100
+		score += getTerrainScore(hit, origin)
+	end
+
+	score -= distance * 0.4
+	score -= math.deg(math.acos(math.clamp(dot, -1, 1))) * 6
+
+	return score
+end
+
+local function getOptimalMinDot(part, controller)
+	local specialName = getSpecialTargetName(part)
+	if specialName then
+		local captureAngle = SpecialAnchors and SpecialAnchors.getCaptureAngle(specialName) or 70
+		return math.cos(math.rad(captureAngle))
+	end
+
+	return math.cos(math.rad(getCaptureAngle(controller)))
+end
+
+function Targeting.findOptimalHit(grapple, controller)
+	local rootPart = grapple and grapple.RootPart
+	if not (rootPart and grapple.grappleParams) then
+		return nil
+	end
+
+	syncGrappleFilter(grapple)
+
+	local aimDirection = Targeting.getAimDirection(grapple)
+	if not aimDirection or aimDirection.Magnitude <= 0.001 then
+		return nil
+	end
+
+	local origin = rootPart.Position
+	local maxRange = getRange(controller)
+	local bestHit = nil
+	local bestScore = -math.huge
+
+	for _, part in ipairs(getOptimalCandidates(origin, maxRange)) do
+		local targetPoint = getSurfaceTargetPoint(part, origin)
+		local offset = targetPoint - origin
+		local distance = offset.Magnitude
+
+		if distance > 3 and distance <= maxRange then
+			local direction = offset.Unit
+			local dot = aimDirection:Dot(direction)
+
+			if dot >= getOptimalMinDot(part, controller) then
+				local hit = Workspace:Raycast(origin, direction * (distance + HIT_OVERSHOOT), grapple.grappleParams)
+				if canUseOptimalHit(hit, part) then
+					local score = scoreOptimalHit(hit, part, origin, distance, dot, controller)
+					if score > bestScore then
+						bestScore = score
+						bestHit = hit
+					end
+				end
+			end
+		end
+	end
+
+	return bestHit
+end
+
+function Targeting.fallbackCast(grapple, controller)
+	local rootPart = grapple and grapple.RootPart
+	local currentCamera = Workspace.CurrentCamera
+	if not (rootPart and currentCamera and grapple.grappleParams) then
+		return nil
+	end
+
+	syncGrappleFilter(grapple)
+
+	local maxRange = getRange(controller)
+	local position = rootPart.Position
+	local aimDirection = Targeting.getAimDirection(grapple)
+	if not aimDirection then
+		return nil
+	end
+
+	if usesCameraAim(grapple) then
+		local humanoid = grapple.Humanoid
+		local cameraOffset = grapple.cameraOffset
+		if not (humanoid and cameraOffset) then
+			return Workspace:Raycast(position, aimDirection * maxRange, grapple.grappleParams)
+		end
+
+		local rayOrigin = (currentCamera.CFrame * cameraOffset).Position
+			+ currentCamera.CFrame.LookVector
+				* (currentCamera.CFrame.Position - (position + humanoid.CameraOffset)).Magnitude
+		return Workspace:Raycast(rayOrigin, aimDirection * maxRange, grapple.grappleParams)
+	end
+
+	local mouse = LocalPlayer and LocalPlayer:GetMouse()
+	local unitRay = mouse and mouse.UnitRay
+	if not unitRay then
+		return nil, aimDirection
+	end
+
+	local mouseHit = Workspace:Raycast(unitRay.Origin, aimDirection * 2048, grapple.grappleParams)
+	if not mouseHit then
+		return nil, aimDirection
+	end
+
+	return Workspace:Raycast(
+		position,
+		CFrame.lookAt(position, mouseHit.Position).LookVector * maxRange,
+		grapple.grappleParams
+	)
 end
 
 function Targeting.findBestAssistHit(grapple, controller)

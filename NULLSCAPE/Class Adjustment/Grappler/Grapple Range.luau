@@ -14,6 +14,17 @@ local Range = {}
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 local VoidCastAssist = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Void Cast Assist.luau")
 
+function Range.getEffectiveRange()
+	local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+	local rangeSetting = Control and tonumber(Control.GrappleMaxRange) or 90
+	return rangeSetting <= 0 and 5000 or rangeSetting
+end
+
+function Range.isEasierVoidCastEnabled()
+	local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+	return Control and Control.GrappleEasierVoidCast == true
+end
+
 local function recordRangeCast(grapple)
 	if MomentumMemory and typeof(MomentumMemory.record) == "function" then
 		pcall(MomentumMemory.record, grapple and grapple.RootPart, "GrappleRangeCast")
@@ -21,10 +32,8 @@ local function recordRangeCast(grapple)
 end
 
 function Range.cast(grapple, forceRefresh, originalCast, ...)
-	local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
-	local rangeSetting = Control and tonumber(Control.GrappleMaxRange) or 90
-	local maxRange = rangeSetting <= 0 and 5000 or rangeSetting
-	local easierVoidCast = Control and Control.GrappleEasierVoidCast == true
+	local maxRange = Range.getEffectiveRange()
+	local easierVoidCast = Range.isEasierVoidCastEnabled()
 
 	-- If all range/cast assists are at native values, call the original cast function.
 	if maxRange <= 90 and not easierVoidCast then

@@ -6,6 +6,7 @@
 
 local RailMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau")
+local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau")
 
 local Profile = {}
 
@@ -19,39 +20,13 @@ local DEFAULTS = {
 	MomentumRailBoost = 20,
 }
 
-local SPECIAL_FIELDS = {
-	GrapplePoint = "GrappleAnchorPriorityGrapplePoint",
-	JumpPad = "GrappleAnchorPriorityJumpPad",
-	TriaOrb = "GrappleAnchorPriorityTriaOrb",
-	Bell = "GrappleAnchorPriorityBell",
-}
-
 local function getNumber(value, fallback, minimum, maximum)
 	return math.clamp(tonumber(value) or fallback, minimum, maximum)
 end
 
-local function hasTag(instance, tagName)
-	if not (instance and typeof(instance.HasTag) == "function") then
-		return false
-	end
-
-	local success, result = pcall(function()
-		return instance:HasTag(tagName)
-	end)
-	return success and result == true
-end
-
 function Profile.getSpecialName(part)
-	if not (part and part:IsA("BasePart")) then
-		return nil
-	end
-
-	if SPECIAL_FIELDS[part.Name] then
-		return part.Name
-	end
-
-	if hasTag(part, "JumpPad") then
-		return "JumpPad"
+	if SpecialAnchors and typeof(SpecialAnchors.getName) == "function" then
+		return SpecialAnchors.getName(part)
 	end
 
 	return nil
@@ -75,8 +50,11 @@ local function getSpecialPriority(part, controller)
 		return DEFAULTS.SpecialPriority
 	end
 
-	local field = SPECIAL_FIELDS[specialName]
-	return getNumber(controller and controller[field], DEFAULTS.SpecialPriority, 0, 1000)
+	if SpecialAnchors and typeof(SpecialAnchors.getPriority) == "function" then
+		return SpecialAnchors.getPriority(specialName, controller)
+	end
+
+	return getNumber(nil, DEFAULTS.SpecialPriority, 0, 1000)
 end
 
 function Profile.getBasePriority(part, controller)

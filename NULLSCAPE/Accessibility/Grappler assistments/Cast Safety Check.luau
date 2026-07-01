@@ -10,18 +10,12 @@ local TerrainMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
 local RailMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau")
+local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau")
 
 local Safety = {}
 
-local SPECIAL_NAMES = {
-	Bell = true,
-	GrapplePoint = true,
-	JumpPad = true,
-	TriaOrb = true,
-}
-
 local function isSpecial(part)
-	return part and SPECIAL_NAMES[part.Name] == true
+	return SpecialAnchors and typeof(SpecialAnchors.isSpecial) == "function" and SpecialAnchors.isSpecial(part)
 end
 
 local function isRail(part)
