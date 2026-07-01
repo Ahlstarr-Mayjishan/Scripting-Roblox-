@@ -8,6 +8,7 @@ local Barrier = {}
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 
 local LocalPlayer = Players.LocalPlayer
 local ChargerEvent = ReplicatedStorage:WaitForChild("Movement"):WaitForChild("Events"):WaitForChild("ChargerEvent")
@@ -18,14 +19,16 @@ local IMMUNITY_MODE = "Immunity"
 local ACTIVE_WATCH_INTERVAL = 0.12
 local IDLE_WATCH_INTERVAL = 0.35
 local IMMUNITY_SERVER_PULSE_INTERVAL = 0.8
-local IMMUNITY_RESET_TO_ARM_DELAY = 0.06
 local IMMUNITY_REARM_DELAY = 0.12
-local IMMUNITY_REARM_RETRY_DELAY = 0.45
+local IMMUNITY_ARM_DISTANCE = 4.5
+local IMMUNITY_ARM_WINDOW = 2.0
+local IMMUNITY_RESET_COOLDOWN = 0.08
 
 local activeController = nil
 local watcherRunning = false
 local watcherToken = {}
 local iframeObject = nil
+local cachedGCH = nil
 local lastChargerState = nil
 local lastRefreshAt = 0
 local lastServerPulseAt = 0
@@ -33,6 +36,8 @@ local lastMode = OFF_MODE
 local playerChildConnection = nil
 local rearmToken = 0
 local pulseChargerImmunity = nil
+local immunityArmed = false
+local lastImmunityResetAt = 0
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
@@ -159,6 +164,70 @@ local function removeIframes(force)
 	end
 end
 
+local function getGiftClientHandler()
+	if cachedGCH then
+		return cachedGCH
+	end
+
+	local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+		or ReplicatedStorage:FindFirstChild("ClientModules")
+	local giftClient = clientModules and clientModules:FindFirstChild("GiftClient")
+	local handlerModule = giftClient and giftClient:FindFirstChild("GiftClientHandler")
+	if not handlerModule then
+		return nil
+	end
+
+	local ok, result = pcall(function()
+		return require(handlerModule)
+	end)
+	if ok and result then
+		cachedGCH = result
+		return result
+	end
+
+	return nil
+end
+
+local function getGiftPosition(gift)
+	local giftPos = gift and gift.Position
+	if typeof(giftPos) == "Vector3" then
+		return giftPos
+	end
+
+	local model = gift and gift.Model
+	if typeof(model) == "Instance" then
+		if model:IsA("BasePart") then
+			return model.Position
+		end
+
+		local part = model:FindFirstChildWhichIsA("BasePart", true)
+		if part then
+			return part.Position
+		end
+	end
+
+	return nil
+end
+
+local function getNearestTripmineDistance(hrp)
+	local GCH = getGiftClientHandler()
+	if not (GCH and GCH.Gifts and hrp) then
+		return math.huge
+	end
+
+	local nearest = math.huge
+	for _, gift in pairs(GCH.Gifts) do
+		if gift.Tripmine and not gift.Collected and not gift.Destroyed and not gift.ClientCollected then
+			local giftPos = getGiftPosition(gift)
+			if giftPos then
+				nearest = math.min(nearest, (hrp.Position - giftPos).Magnitude)
+			end
+		end
+	end
+
+	return nearest
+end
+
 local function getBarrierMode()
 	if not activeController or not activeController.TripmineBarrierEnabled then
 		return OFF_MODE
@@ -232,23 +301,64 @@ pulseChargerImmunity = function(force)
 	end
 
 	lastServerPulseAt = now
-	if force then
-		pcall(function()
-			ChargerEvent:FireServer(false)
-		end)
-		task.delay(IMMUNITY_RESET_TO_ARM_DELAY, function()
-			if isImmunityModeActive() then
-				pcall(function()
-					ChargerEvent:FireServer(true)
-				end)
-			end
-		end)
-		return
-	end
-
 	pcall(function()
 		ChargerEvent:FireServer(true)
 	end)
+end
+
+local function resetChargerImmunity(force)
+	if not force and not immunityArmed then
+		return
+	end
+
+	immunityArmed = false
+	lastImmunityResetAt = os.clock()
+	lastServerPulseAt = 0
+	pcall(function()
+		ChargerEvent:FireServer(false)
+	end)
+end
+
+local function armChargerImmunityWindow()
+	if immunityArmed then
+		return
+	end
+
+	local now = os.clock()
+	if now - lastImmunityResetAt < IMMUNITY_RESET_COOLDOWN then
+		return
+	end
+
+	immunityArmed = true
+	pulseChargerImmunity(true)
+
+	local token = rearmToken
+	task.delay(IMMUNITY_ARM_WINDOW, function()
+		if token == rearmToken and isImmunityModeActive() then
+			resetChargerImmunity()
+		end
+	end)
+end
+
+local function updateImmunityTripmineWindow()
+	if not isImmunityModeActive() then
+		resetChargerImmunity()
+		return
+	end
+
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then
+		resetChargerImmunity()
+		return
+	end
+
+	local nearestTripmine = getNearestTripmineDistance(hrp)
+	if nearestTripmine <= IMMUNITY_ARM_DISTANCE then
+		armChargerImmunityWindow()
+	elseif immunityArmed then
+		resetChargerImmunity()
+	end
 end
 
 local function scheduleImmunityRearm(delaySeconds)
@@ -263,12 +373,7 @@ local function scheduleImmunityRearm(delaySeconds)
 			return
 		end
 
-		pulseChargerImmunity(true)
-		task.delay(IMMUNITY_REARM_RETRY_DELAY, function()
-			if token == rearmToken and isImmunityModeActive() then
-				pulseChargerImmunity(true)
-			end
-		end)
+		resetChargerImmunity()
 	end)
 end
 
@@ -303,6 +408,7 @@ local function startWatcher()
 				rearmToken += 1
 				lastMode = mode
 				if mode == OFF_MODE or mode == IMMUNITY_MODE then
+					resetChargerImmunity(true)
 					removeIframes(true)
 				end
 			end
@@ -319,8 +425,7 @@ local function startWatcher()
 			if mode == IFRAMES_MODE then
 				addIframes()
 			elseif mode == IMMUNITY_MODE then
-				-- Gửi tín hiệu giả lập lướt lên Server định kỳ (mỗi 0.8 giây) để tránh kích hoạt bộ chặn spam (Rate Limit) của Server
-				pulseChargerImmunity(false)
+				updateImmunityTripmineWindow()
 
 				-- Cô lập tính năng liên kết: Hỗ trợ tạo I-Frames tạm thời khi kết thúc Charge thực tế (chỉ cho Charger Class)
 				local movementInstance = getActiveMovementInstance()
@@ -346,12 +451,14 @@ function Barrier.update(controller)
 	end
 
 	if mode == OFF_MODE then
+		resetChargerImmunity(true)
 		removeIframes(true)
 	elseif mode == IMMUNITY_MODE then
 		if previousMode ~= IMMUNITY_MODE then
+			resetChargerImmunity(true)
 			removeIframes(true)
 		end
-		pulseChargerImmunity(true)
+		updateImmunityTripmineWindow()
 	end
 end
 
