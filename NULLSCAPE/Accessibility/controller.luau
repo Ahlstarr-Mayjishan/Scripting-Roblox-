@@ -571,7 +571,9 @@ function Controller:SetStaminaMode(mode)
 	end
 	selectedMode = tostring(selectedMode or "Off")
 
-	if selectedMode ~= "Infinite Stamina" then
+	if selectedMode == "Infinite" then
+		selectedMode = "Infinite Stamina"
+	elseif selectedMode ~= "Infinite Stamina" and selectedMode ~= "Manual" then
 		selectedMode = "Off"
 	end
 
