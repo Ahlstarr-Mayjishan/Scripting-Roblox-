@@ -90,9 +90,9 @@ local function addIframes()
 	iframeObject = obj
 end
 
-local function removeIframes()
+local function removeIframes(force)
 	getIframeOwners()[IFRAME_OWNER] = nil
-	if hasIframeOwner() then
+	if hasIframeOwner() and not force then
 		return
 	end
 
@@ -103,11 +103,13 @@ local function removeIframes()
 		iframeObject = nil
 	end
 
-	local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
-	if existing then
-		pcall(function()
-			existing:Destroy()
-		end)
+	if force then
+		local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
+		if existing then
+			pcall(function()
+				existing:Destroy()
+			end)
+		end
 	end
 end
 
@@ -339,7 +341,7 @@ local function updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
 		resetPassBatch()
 		passBatchLocked = false
 		previousHrpPos = nil
-		removeIframes()
+		removeIframes(true)
 		return
 	end
 
@@ -425,7 +427,7 @@ local function startWatcher()
 			clearState()
 			cachedGCH = nil
 			if activeController and activeController.ChargerTripmineMode == PASS_BATCH_MODE then
-				removeIframes()
+				removeIframes(true)
 			end
 		end)
 	end
@@ -443,7 +445,7 @@ local function startWatcher()
 			active = activeController and activeController.ChargerTripmineAssistEnabled and isChargerAssistMode(mode)
 			if not active then
 				if not cleanedIdle then
-					removeIframes()
+					removeIframes(true)
 					clearState()
 					cleanedIdle = true
 				end
@@ -455,7 +457,7 @@ local function startWatcher()
 			local hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if not hrp then
 				if mode == PASS_BATCH_MODE then
-					removeIframes()
+					removeIframes(true)
 					clearState()
 				end
 				continue
@@ -547,7 +549,7 @@ local function startWatcher()
 				end
 			end
 		end
-		removeIframes()
+		removeIframes(true)
 		clearState()
 		watcherRunning = false
 	end)
@@ -560,7 +562,7 @@ function ChargerAssist.update(controller)
 	end
 
 	if not (controller.ChargerTripmineAssistEnabled and isChargerAssistMode(controller.ChargerTripmineMode)) then
-		removeIframes()
+		removeIframes(true)
 		clearState()
 	end
 end
