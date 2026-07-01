@@ -9,11 +9,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Targeting = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Targeting.luau")
 local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Secondary Cast.luau")
 local VoidRescue = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/SharkVoid.luau")
+local BellContact =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/Bell Contact Assist.luau")
 local ReelSaver = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/Reel Saver/init.luau")
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
 local FailFeedback = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Fail Feedback Loop.luau")
 
-local HOOK_VERSION = 6
+local HOOK_VERSION = 7
 
 local Logic = {
 	Controller = nil,
@@ -168,7 +170,20 @@ local function installStepHook(grappleModule, globals)
 
 	wrappedStep = function(self, dt, ...)
 		rememberGrapple(self)
+
+		if BellContact and typeof(BellContact.beforeStep) == "function" then
+			pcall(function()
+				BellContact.beforeStep(self)
+			end)
+		end
+
 		local results = packValues(originalStep(self, dt, ...))
+
+		if BellContact and typeof(BellContact.afterStep) == "function" then
+			pcall(function()
+				BellContact.afterStep(self)
+			end)
+		end
 
 		if VoidRescue and typeof(VoidRescue.step) == "function" then
 			pcall(function()
@@ -280,6 +295,12 @@ function Logic.disable()
 	if ReelSaver and typeof(ReelSaver.reset) == "function" then
 		pcall(function()
 			ReelSaver.reset()
+		end)
+	end
+
+	if BellContact and typeof(BellContact.reset) == "function" then
+		pcall(function()
+			BellContact.reset()
 		end)
 	end
 

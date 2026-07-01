@@ -14,6 +14,9 @@ local GC = {
 	SavedPartsData = setmetatable({}, { __mode = "k" }),
 }
 
+getgenv()._NULLSCAPE_Globals = getgenv()._NULLSCAPE_Globals or {}
+getgenv()._NULLSCAPE_Globals.NullscapeEntitiesGC = GC
+
 -- Hàm phụ trợ ngắt kết nối/dọn dẹp đa dạng đối tượng
 local function cleanupItem(item)
 	if not item then
