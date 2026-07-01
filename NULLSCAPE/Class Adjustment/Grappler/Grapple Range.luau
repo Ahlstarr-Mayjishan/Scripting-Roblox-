@@ -22,7 +22,8 @@ end
 
 function Range.cast(grapple, forceRefresh, originalCast, ...)
 	local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
-	local maxRange = Control and Control.GrappleMaxRange or 90
+	local rangeSetting = Control and tonumber(Control.GrappleMaxRange) or 90
+	local maxRange = rangeSetting <= 0 and 5000 or rangeSetting
 	local easierVoidCast = Control and Control.GrappleEasierVoidCast == true
 
 	-- If all range/cast assists are at native values, call the original cast function.
@@ -79,7 +80,8 @@ function Range.cast(grapple, forceRefresh, originalCast, ...)
 	else
 		-- Unlocked Mouse pointer path
 		local unitRay = LocalPlayer:GetMouse().UnitRay
-		local mouseHit = Workspace:Raycast(unitRay.Origin, unitRay.Direction.Unit * math.max(2048, maxRange), grapple.grappleParams)
+		local mouseHit =
+			Workspace:Raycast(unitRay.Origin, unitRay.Direction.Unit * math.max(2048, maxRange), grapple.grappleParams)
 
 		if mouseHit == nil then
 			aimDirection = unitRay.Direction.Unit

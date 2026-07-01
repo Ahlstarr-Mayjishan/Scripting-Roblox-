@@ -28,6 +28,9 @@ local DEFAULTS = {
 	GrappleAnchorPriorityJumpPad = 85,
 	GrappleAnchorPriorityTriaOrb = 75,
 	GrappleAnchorPriorityBell = 70,
+	GrappleAssistRailTargetingEnabled = false,
+	GrappleAssistRailPriority = 42,
+	GrappleAssistTerrainPriority = 0,
 	GrappleVoidRescueEnabled = false,
 	GrappleVoidRescueAutoCast = false,
 	GrappleVoidRescueAutoReel = true,
@@ -424,6 +427,29 @@ return function(Client, Controller)
 		Flag = "GrappleAnchorPriorityBellSlider",
 		Callback = function(Value)
 			Controller:SetGrappleAnchorPriorityBell(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Rail Targeting",
+		Info = "Allows Grapple Assist to consider visible rail helper parts. Keep this off if hooks appear to anchor in the air.",
+		CurrentValue = Controller.GrappleAssistRailTargetingEnabled == true,
+		Flag = "GrappleAssistRailTargetingToggle",
+		Callback = function(Value)
+			Controller:SetGrappleAssistRailTargeting(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Rail Priority",
+		Info = "Higher values make visible rail targets win assisted targeting more often.",
+		Range = { 0, 150 },
+		Increment = 5,
+		Suffix = " pts",
+		CurrentValue = Controller.GrappleAssistRailPriority or 42,
+		Flag = "GrappleAssistRailPrioritySlider",
+		Callback = function(Value)
+			Controller:SetGrappleAssistRailPriority(Value)
 		end,
 	})
 

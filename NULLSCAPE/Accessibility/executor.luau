@@ -19,11 +19,14 @@ local Modules = {}
 local ModuleFailures = {}
 local LoadingModules = {}
 local PendingCalls = {}
+local PendingAttempts = {}
 local Executor = {}
 local callModule
 
 local LOAD_RETRY_COOLDOWN = 1.5
 local CALL_RETRY_COOLDOWN = 0.75
+local PENDING_RETRY_DELAY = 0.12
+local PENDING_RETRY_LIMIT = 6
 
 local function getNow()
 	return time()
@@ -96,14 +99,20 @@ local function loadAccessibilityModule(name)
 	return module, "ready"
 end
 
-local function schedulePendingCall(name, methodName, args)
+local function schedulePendingCall(name, methodName, args, attempt)
 	local key = tostring(name) .. ":" .. tostring(methodName)
 	if PendingCalls[key] then
 		return
 	end
+	attempt = tonumber(attempt) or ((PendingAttempts[key] or 0) + 1)
+	if attempt > PENDING_RETRY_LIMIT then
+		PendingAttempts[key] = nil
+		return
+	end
 
 	PendingCalls[key] = true
-	task.defer(function()
+	PendingAttempts[key] = attempt
+	task.delay(PENDING_RETRY_DELAY, function()
 		PendingCalls[key] = nil
 		callModule(name, methodName, table.unpack(args, 1, args.n))
 	end)
@@ -126,6 +135,8 @@ function callModule(name, methodName, ...)
 	if not module or typeof(module[methodName]) ~= "function" then
 		return false
 	end
+
+	PendingAttempts[tostring(name) .. ":" .. tostring(methodName)] = nil
 
 	local success, result = pcall(function(...)
 		return module[methodName](...)

@@ -69,7 +69,7 @@ local Controller = {
 	GrappleAnchorPriorityJumpPad = 85,
 	GrappleAnchorPriorityTriaOrb = 75,
 	GrappleAnchorPriorityBell = 70,
-	GrappleAssistRailTargetingEnabled = true,
+	GrappleAssistRailTargetingEnabled = false,
 	GrappleAssistRailPriority = 42,
 	GrappleAssistTerrainPriority = 0,
 	GrappleIntentHighSpeed = 120,
@@ -453,6 +453,10 @@ end
 
 function Controller:SetGrappleAnchorPriorityBell(value)
 	self.GrappleAnchorPriorityBell = math.clamp(tonumber(value) or 70, 0, 150)
+end
+
+function Controller:SetGrappleAssistRailTargeting(value)
+	self.GrappleAssistRailTargetingEnabled = value == true
 end
 
 function Controller:SetGrappleAssistRailPriority(value)

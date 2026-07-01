@@ -175,8 +175,8 @@ return function(Client, Controller)
 
 	Tab:CreateSlider({
 		Name = "Grapple Max Range",
-		Info = "Adjusts the maximum grapple cast lock-on range limit client-side.",
-		Range = { 90, 5000 },
+		Info = "Adjusts the maximum grapple cast lock-on range limit client-side. 0 uses the extreme 5000 studs range.",
+		Range = { 0, 500 },
 		Increment = 1,
 		Suffix = " studs",
 		CurrentValue = Controller.GrappleMaxRange or 90,

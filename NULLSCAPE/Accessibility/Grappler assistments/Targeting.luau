@@ -35,6 +35,20 @@ local MAX_FALLBACK_AXIS = 160
 local HIT_POINT_TOLERANCE = 6
 local HIT_OVERSHOOT = 2
 
+local BLOCKED_FALLBACK_NAME_PATTERNS = {
+	"void",
+	"kill",
+	"clip",
+	"trigger",
+	"hitbox",
+	"hurtbox",
+	"barrier",
+	"boundary",
+	"bounds",
+	"zone",
+	"volume",
+}
+
 local function getRange(controller)
 	return math.clamp(tonumber(controller and controller.GrappleAssistRange) or DEFAULT_RANGE, 30, 140)
 end
@@ -57,6 +71,21 @@ end
 
 local function isAliveBasePart(part)
 	return part and part:IsA("BasePart") and part.Parent ~= nil and part:IsDescendantOf(Workspace)
+end
+
+local function hasBlockedFallbackName(part)
+	local cursor = part
+	while cursor and cursor ~= Workspace do
+		local lowerName = string.lower(cursor.Name or "")
+		for _, pattern in ipairs(BLOCKED_FALLBACK_NAME_PATTERNS) do
+			if string.find(lowerName, pattern, 1, true) then
+				return true
+			end
+		end
+		cursor = cursor.Parent
+	end
+
+	return false
 end
 
 local function hasTag(instance, tagName)
@@ -124,8 +153,12 @@ local function isCandidate(part)
 		return true
 	end
 
+	if hasBlockedFallbackName(part) then
+		return false
+	end
+
 	if RailMemory and typeof(RailMemory.isRailPart) == "function" and RailMemory.isRailPart(part) then
-		return true
+		return part.Transparency <= MAX_FALLBACK_TRANSPARENCY and part.CanCollide == true
 	end
 
 	local size = part.Size
@@ -184,7 +217,7 @@ local function canUseHit(hit, candidate)
 		return false
 	end
 
-	return instance == candidate or instance:IsDescendantOf(candidate) or candidate:IsDescendantOf(instance)
+	return instance == candidate or instance:IsDescendantOf(candidate)
 end
 
 local function getSurfaceTargetPoint(part, origin)

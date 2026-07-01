@@ -60,7 +60,7 @@ local function readSettings()
 			or Control.GrappleSharkTailPullMultiplier
 		Control.GrappleHookCastSpeedMultiplier = tonumber(decoded.GrappleHookCastSpeedMultiplierSlider)
 			or Control.GrappleHookCastSpeedMultiplier
-		Control.GrappleMaxRange = tonumber(decoded.GrappleMaxRangeSlider) or Control.GrappleMaxRange
+		Control.GrappleMaxRange = math.clamp(tonumber(decoded.GrappleMaxRangeSlider) or Control.GrappleMaxRange, 0, 500)
 		Control.GrappleSharkTailWindow = tonumber(decoded.GrappleSharkTailWindowSlider)
 			or Control.GrappleSharkTailWindow
 
@@ -215,7 +215,7 @@ function Control:SetGrappleHookCastSpeedMultiplier(value)
 end
 
 function Control:SetGrappleMaxRange(value)
-	self.GrappleMaxRange = math.clamp(tonumber(value) or 90, 90, 5000)
+	self.GrappleMaxRange = math.clamp(tonumber(value) or 90, 0, 500)
 	saveSettings()
 end
 

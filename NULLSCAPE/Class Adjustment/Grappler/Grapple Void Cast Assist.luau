@@ -10,6 +10,7 @@ local VoidCastAssist = {}
 
 local ASSIST_EASE_STUDS = 32
 local MIN_DOWNWARD_DOT = -0.02
+local MAX_VOID_CAST_DISTANCE = 48
 
 local function getControl()
 	return getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
@@ -75,7 +76,7 @@ function VoidCastAssist.find(grapple, direction, maxRange)
 
 	local topY = killVoid.Size.Y * 0.5
 	local travel = (topY - localOrigin.Y) / localDirection.Y
-	local distanceLimit = (tonumber(maxRange) or 90) + ease
+	local distanceLimit = math.min(tonumber(maxRange) or 90, MAX_VOID_CAST_DISTANCE)
 	if travel <= 0 or travel > distanceLimit then
 		return nil
 	end
