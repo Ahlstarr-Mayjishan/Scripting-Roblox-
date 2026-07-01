@@ -260,10 +260,14 @@ local function startWatcher()
 			if mode == IFRAMES_MODE then
 				addIframes()
 			elseif mode == IMMUNITY_MODE then
-				-- Gửi tín hiệu giả lập lướt lên Server vô điều kiện để đảm bảo bất tử mìn luôn được giữ vững
-				pcall(function()
-					ChargerEvent:FireServer(true)
-				end)
+				-- Gửi tín hiệu giả lập lướt lên Server định kỳ (mỗi 0.8 giây) để tránh kích hoạt bộ chặn spam (Rate Limit) của Server
+				local now = os.clock()
+				if now - lastRefreshAt >= 0.8 then
+					lastRefreshAt = now
+					pcall(function()
+						ChargerEvent:FireServer(true)
+					end)
+				end
 
 				-- Cô lập tính năng liên kết: Hỗ trợ tạo I-Frames tạm thời khi kết thúc Charge thực tế (chỉ cho Charger Class)
 				local movementInstance = getActiveMovementInstance()
