@@ -124,22 +124,19 @@ local function installCastHook(grappleModule, globals)
 	wrappedCast = function(self, forceRefresh, ...)
 		rememberGrapple(self)
 
-		local result, fallbackDirection = originalCast(self, forceRefresh, ...)
-		if result ~= nil or not isEnabled() then
-			return result, fallbackDirection
-		end
-
-		local assistedHit = Targeting.findBestAssistHit(self, getController())
-		if assistedHit then
-			if FailFeedback and typeof(FailFeedback.noteAssistCast) == "function" then
-				pcall(function()
-					FailFeedback.noteAssistCast(self, assistedHit, getController())
-				end)
+		if isEnabled() then
+			local assistedHit = Targeting.findBestAssistHit(self, getController())
+			if assistedHit then
+				if FailFeedback and typeof(FailFeedback.noteAssistCast) == "function" then
+					pcall(function()
+						FailFeedback.noteAssistCast(self, assistedHit, getController())
+					end)
+				end
+				return assistedHit
 			end
-			return assistedHit
 		end
 
-		return result, fallbackDirection
+		return originalCast(self, forceRefresh, ...)
 	end
 
 	Logic.OriginalCast = originalCast

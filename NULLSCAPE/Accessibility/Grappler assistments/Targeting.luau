@@ -29,8 +29,9 @@ local SPECIAL_TARGETS = {
 	TriaOrb = true,
 }
 
-local MAX_SCAN_CANDIDATES = 350
-local DEFAULT_RANGE = 90
+local MAX_SCAN_CANDIDATES = 700
+local DEFAULT_RANGE = 500
+local DEFAULT_CAPTURE_ANGLE = 45
 local MAX_FALLBACK_TRANSPARENCY = 0.72
 local MAX_FALLBACK_AXIS = 160
 local HIT_POINT_TOLERANCE = 6
@@ -51,11 +52,11 @@ local BLOCKED_FALLBACK_NAME_PATTERNS = {
 }
 
 local function getRange(controller)
-	return math.clamp(tonumber(controller and controller.GrappleAssistRange) or DEFAULT_RANGE, 30, 140)
+	return math.clamp(tonumber(controller and controller.GrappleAssistRange) or DEFAULT_RANGE, 30, 500)
 end
 
 local function getCaptureAngle(controller)
-	return math.clamp(tonumber(controller and controller.GrappleAssistCaptureAngle) or 9, 1, 30)
+	return math.clamp(tonumber(controller and controller.GrappleAssistCaptureAngle) or DEFAULT_CAPTURE_ANGLE, 1, 45)
 end
 
 local function getStrength(controller)
@@ -68,6 +69,21 @@ end
 
 local function shouldTargetRails(controller)
 	return not (controller and controller.GrappleAssistRailTargetingEnabled == false)
+end
+
+local function getTerrainScore(hit, origin)
+	local score = 0
+	local heightDiff = hit.Position.Y - origin.Y
+
+	if heightDiff > 0 then
+		score += heightDiff * 8
+	end
+
+	if hit.Normal and hit.Normal.Y < -0.5 then
+		score += 150
+	end
+
+	return score
 end
 
 local function isAliveBasePart(part)
@@ -189,7 +205,7 @@ local function getCandidateBonus(part, controller, intent)
 	end
 
 	if RailMemory and typeof(RailMemory.isRailPart) == "function" and RailMemory.isRailPart(part) then
-		return tonumber(controller and controller.GrappleAssistRailPriority) or 42
+		return tonumber(controller and controller.GrappleAssistRailPriority) or 500
 	end
 
 	local specialName = getSpecialTargetName(part)
@@ -308,6 +324,10 @@ local function getCandidateHit(origin, aimDirection, candidate, controller, minD
 		- failurePenalty
 		- safetyPenalty
 		- badAnchorPenalty
+	local isRail = RailMemory and typeof(RailMemory.isRailPart) == "function" and RailMemory.isRailPart(part)
+	if not getSpecialTargetName(part) and not isRail then
+		score += getTerrainScore(hit, origin)
+	end
 
 	return hit, score
 end
@@ -344,10 +364,7 @@ local function collectFallbackDescendants()
 		table.insert(roots, currentRooms)
 	end
 	if enemies then
-		local bell = enemies:FindFirstChild("Bell")
-		if bell then
-			table.insert(roots, bell)
-		end
+		table.insert(roots, enemies)
 	end
 	if #roots == 0 then
 		table.insert(roots, Workspace)
@@ -385,7 +402,7 @@ function Targeting.findBestAssistHit(grapple, controller)
 			})
 		or nil
 	local maxRange = getRange(controller)
-	local maxAngle = math.rad(getCaptureAngle(controller) * getStrength(controller))
+	local maxAngle = math.rad(math.clamp(getCaptureAngle(controller) * getStrength(controller), 1, 75))
 	local minDot = math.cos(maxAngle)
 	local scanned = 0
 

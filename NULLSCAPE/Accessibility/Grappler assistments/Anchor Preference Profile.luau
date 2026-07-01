@@ -10,9 +10,9 @@ local RailMemory =
 local Profile = {}
 
 local DEFAULTS = {
-	TerrainPriority = 0,
-	RailPriority = 42,
-	SpecialPriority = 55,
+	TerrainPriority = 100,
+	RailPriority = 500,
+	SpecialPriority = 900,
 	VoidRescueSpecialBoost = 18,
 	ReelSaverTerrainBoost = 22,
 	RailCaptureBoost = 38,
@@ -76,13 +76,13 @@ local function getSpecialPriority(part, controller)
 	end
 
 	local field = SPECIAL_FIELDS[specialName]
-	return getNumber(controller and controller[field], DEFAULTS.SpecialPriority, 0, 150)
+	return getNumber(controller and controller[field], DEFAULTS.SpecialPriority, 0, 1000)
 end
 
 function Profile.getBasePriority(part, controller)
 	local kind = Profile.getKind(part)
 	if kind == "Rail" then
-		return getNumber(controller and controller.GrappleAssistRailPriority, DEFAULTS.RailPriority, 0, 150)
+		return getNumber(controller and controller.GrappleAssistRailPriority, DEFAULTS.RailPriority, 0, 1000)
 	end
 
 	if kind == "Special" then
@@ -92,7 +92,7 @@ function Profile.getBasePriority(part, controller)
 		return getSpecialPriority(part, controller)
 	end
 
-	return getNumber(controller and controller.GrappleAssistTerrainPriority, DEFAULTS.TerrainPriority, -50, 80)
+	return getNumber(controller and controller.GrappleAssistTerrainPriority, DEFAULTS.TerrainPriority, -50, 300)
 end
 
 function Profile.getIntentBonus(part, intent, controller)

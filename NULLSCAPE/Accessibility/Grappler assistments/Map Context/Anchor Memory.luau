@@ -10,19 +10,19 @@ local AnchorMemory = {}
 
 local SPECIAL_ANCHORS = {
 	JumpPad = {
-		Priority = 85,
+		Priority = 1000,
 		Field = "GrappleAnchorPriorityJumpPad",
 	},
 	GrapplePoint = {
-		Priority = 100,
+		Priority = 900,
 		Field = "GrappleAnchorPriorityGrapplePoint",
 	},
 	Bell = {
-		Priority = 70,
+		Priority = 800,
 		Field = "GrappleAnchorPriorityBell",
 	},
 	TriaOrb = {
-		Priority = 75,
+		Priority = 850,
 		Field = "GrappleAnchorPriorityTriaOrb",
 	},
 }
@@ -79,7 +79,7 @@ function AnchorMemory.getPriority(anchorName, controller)
 	end
 
 	local value = controller and tonumber(controller[config.Field])
-	return math.clamp(value or config.Priority, 0, 150)
+	return math.clamp(value or config.Priority, 0, 1000)
 end
 
 local function isAlive(part)
@@ -209,10 +209,7 @@ function AnchorMemory.refreshBudgeted(scanBudget, controller)
 		table.insert(roots, currentRooms)
 	end
 	if enemies then
-		local bell = enemies:FindFirstChild("Bell")
-		if bell then
-			table.insert(roots, bell)
-		end
+		table.insert(roots, enemies)
 	end
 	if #roots == 0 then
 		table.insert(roots, Workspace)

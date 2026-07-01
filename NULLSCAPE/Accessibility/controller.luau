@@ -55,8 +55,8 @@ local Controller = {
 	MomentumSoftReduction = 0.35,
 	GrappleAssistEnabled = false,
 	GrappleAssistStrength = 1,
-	GrappleAssistCaptureAngle = 9,
-	GrappleAssistRange = 90,
+	GrappleAssistCaptureAngle = 45,
+	GrappleAssistRange = 500,
 	GrappleAssistConfidenceGateEnabled = true,
 	GrappleAssistMinConfidenceScore = -35,
 	GrappleAssistConfidenceMargin = 5,
@@ -65,13 +65,13 @@ local Controller = {
 	GrappleAssistSpecialPointPriority = true,
 	GrappleAssistSecondaryCastEnabled = false,
 	GrappleAssistSecondaryCastKeybind = "Q",
-	GrappleAnchorPriorityGrapplePoint = 100,
-	GrappleAnchorPriorityJumpPad = 85,
-	GrappleAnchorPriorityTriaOrb = 75,
-	GrappleAnchorPriorityBell = 70,
+	GrappleAnchorPriorityGrapplePoint = 900,
+	GrappleAnchorPriorityJumpPad = 1000,
+	GrappleAnchorPriorityTriaOrb = 850,
+	GrappleAnchorPriorityBell = 800,
 	GrappleAssistRailTargetingEnabled = false,
-	GrappleAssistRailPriority = 42,
-	GrappleAssistTerrainPriority = 0,
+	GrappleAssistRailPriority = 500,
+	GrappleAssistTerrainPriority = 100,
 	GrappleIntentHighSpeed = 120,
 	GrappleIntentRailRange = 14,
 	GrappleVoidRescueEnabled = false,
@@ -408,11 +408,11 @@ function Controller:SetGrappleAssistStrength(value)
 end
 
 function Controller:SetGrappleAssistCaptureAngle(value)
-	self.GrappleAssistCaptureAngle = math.clamp(tonumber(value) or 9, 1, 30)
+	self.GrappleAssistCaptureAngle = math.clamp(tonumber(value) or 45, 1, 45)
 end
 
 function Controller:SetGrappleAssistRange(value)
-	self.GrappleAssistRange = math.clamp(tonumber(value) or 90, 30, 140)
+	self.GrappleAssistRange = math.clamp(tonumber(value) or 500, 30, 500)
 end
 
 function Controller:SetGrappleAssistConfidenceGate(value)
@@ -440,19 +440,19 @@ function Controller:SetGrappleAssistSpecialPointPriority(value)
 end
 
 function Controller:SetGrappleAnchorPriorityGrapplePoint(value)
-	self.GrappleAnchorPriorityGrapplePoint = math.clamp(tonumber(value) or 100, 0, 150)
+	self.GrappleAnchorPriorityGrapplePoint = math.clamp(tonumber(value) or 900, 0, 1000)
 end
 
 function Controller:SetGrappleAnchorPriorityJumpPad(value)
-	self.GrappleAnchorPriorityJumpPad = math.clamp(tonumber(value) or 85, 0, 150)
+	self.GrappleAnchorPriorityJumpPad = math.clamp(tonumber(value) or 1000, 0, 1000)
 end
 
 function Controller:SetGrappleAnchorPriorityTriaOrb(value)
-	self.GrappleAnchorPriorityTriaOrb = math.clamp(tonumber(value) or 75, 0, 150)
+	self.GrappleAnchorPriorityTriaOrb = math.clamp(tonumber(value) or 850, 0, 1000)
 end
 
 function Controller:SetGrappleAnchorPriorityBell(value)
-	self.GrappleAnchorPriorityBell = math.clamp(tonumber(value) or 70, 0, 150)
+	self.GrappleAnchorPriorityBell = math.clamp(tonumber(value) or 800, 0, 1000)
 end
 
 function Controller:SetGrappleAssistRailTargeting(value)
@@ -460,11 +460,11 @@ function Controller:SetGrappleAssistRailTargeting(value)
 end
 
 function Controller:SetGrappleAssistRailPriority(value)
-	self.GrappleAssistRailPriority = math.clamp(tonumber(value) or 42, 0, 150)
+	self.GrappleAssistRailPriority = math.clamp(tonumber(value) or 500, 0, 1000)
 end
 
 function Controller:SetGrappleAssistTerrainPriority(value)
-	self.GrappleAssistTerrainPriority = math.clamp(tonumber(value) or 0, -50, 80)
+	self.GrappleAssistTerrainPriority = math.clamp(tonumber(value) or 100, -50, 300)
 end
 
 function Controller:SetGrappleIntentHighSpeed(value)

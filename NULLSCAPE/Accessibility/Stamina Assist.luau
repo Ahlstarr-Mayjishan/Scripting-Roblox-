@@ -129,6 +129,39 @@ function Logic.refill(special)
     return true
 end
 
+local function getActiveMovementInstance()
+    local movementCore = getMovementCore()
+    if not movementCore then
+        return nil
+    end
+
+    local Players = game:GetService("Players")
+
+    -- Scan garbage collector for the active MovementCore instance
+    if typeof(getgc) == "function" then
+        for _, obj in ipairs(getgc(true)) do
+            if type(obj) == "table" and getmetatable(obj) == movementCore then
+                if obj.Player == Players.LocalPlayer then
+                    return obj
+                end
+            end
+        end
+    end
+
+    -- Fallback: scan registry
+    if typeof(debug.getregistry) == "function" then
+        for _, obj in pairs(debug.getregistry()) do
+            if type(obj) == "table" and getmetatable(obj) == movementCore then
+                if obj.Player == Players.LocalPlayer then
+                    return obj
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
 function Logic.step()
     if not Logic.isEnabled() then
         return
@@ -140,8 +173,8 @@ function Logic.step()
     end
     Logic.LastRefillAt = now
 
-    local movementCore = getMovementCore()
-    local activeSpecial = movementCore and movementCore.ActiveSpecial
+    local movementInstance = getActiveMovementInstance()
+    local activeSpecial = movementInstance and movementInstance.ActiveSpecial
     if activeSpecial then
         Logic.LastSpecial = activeSpecial
         Logic.refill(activeSpecial)
