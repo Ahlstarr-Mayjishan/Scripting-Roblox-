@@ -55,12 +55,10 @@ local Controller = {
 	MiniatureHourglassEnabled = false,
 
 	TripmineBarrierEnabled = false,
-	TripmineMode = "Barrier", -- "Barrier" (local iframe only) | "Blocker" (chan/day khoi min)
+	TripmineBarrierMode = "Off",
 	TripmineDetonationDistance = 15,
 	TripmineDetonationJitter = 2,
 	TripmineBlastSafeRadius = 8, -- Legacy: active tripmine detonation is disabled by Defuse Kits
-	SimulateDefuseKit = false,
-	DefuseKitStack = 3,
 
 	PermanentConnections = {},
 	RespawnRefreshToken = 0,
@@ -676,14 +674,29 @@ function Controller:SetAutoCollectMode(value)
 end
 
 -- Bật/tắt rào cản vật lý mìn (Tripmine Barrier)
+local function normalizeTripmineBarrierMode(value)
+	if value == "I-Frames" or value == "Immunity" then
+		return value
+	end
+
+	return "Off"
+end
+
 function Controller:SetTripmineBarrier(value)
 	self.TripmineBarrierEnabled = value
+	if value == true and (self.TripmineBarrierMode == nil or self.TripmineBarrierMode == "Off") then
+		self.TripmineBarrierMode = "I-Frames"
+	elseif value ~= true then
+		self.TripmineBarrierMode = "Off"
+	end
 	startUtilityLoop()
 end
 
--- Thiết lập chế độ chống mìn (Passthrough / PreDetonate / Barrier)
-function Controller:SetTripmineMode(value)
-	self.TripmineMode = value or "Barrier"
+function Controller:SetTripmineBarrierMode(value)
+	local mode = normalizeTripmineBarrierMode(value)
+	self.TripmineBarrierMode = mode
+	self.TripmineBarrierEnabled = mode ~= "Off"
+	startUtilityLoop()
 end
 
 -- Thiết lập khoảng cách kích nổ mìn cơ sở
@@ -739,16 +752,6 @@ end
 
 function Controller:SetTripmineBlastSafeRadius(value)
 	self.TripmineBlastSafeRadius = value or 8
-end
-
--- Bật/tắt mô phỏng Defuse Kit
-function Controller:SetSimulateDefuseKit(value)
-	self.SimulateDefuseKit = value
-end
-
--- Điều chỉnh số stack Defuse Kit mô phỏng
-function Controller:SetDefuseKitStack(value)
-	self.DefuseKitStack = value
 end
 
 function Controller:ReapplyRespawnFeatures()
@@ -968,7 +971,6 @@ getgenv()._NULLSCAPE_Globals.onGiftDestroyed = function(_id) end
 
 getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local args = { ... }
-	local isDefuse = false
 	local isTetrahedron = false
 	local isGraceWings = false
 	local isAdvancedGravityCoil = false
@@ -976,9 +978,7 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local isHelmet = false
 	local isMiniatureHourglass = false
 	for _, v in ipairs(args) do
-		if v == "DefuseKit" or v == "Defuse Kit" then
-			isDefuse = true
-		elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
+		if v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
 			isTetrahedron = true
 		elseif v == "GraceWings" or v == "Grace Wings" then
 			isGraceWings = true
@@ -996,9 +996,6 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 				return true, result
 			end
 		end
-	end
-	if isDefuse and Controller.SimulateDefuseKit then
-		return true, true
 	end
 	if isTetrahedron and Controller.MatrixTetrahedronEnabled and (Controller.MomentumReduction or 0) >= 0.6 then
 		return true, true
@@ -1023,7 +1020,6 @@ end
 
 getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	local args = { ... }
-	local isDefuse = false
 	local isTetrahedron = false
 	local isGraceWings = false
 	local isAdvancedGravityCoil = false
@@ -1031,9 +1027,7 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	local isHelmet = false
 	local isMiniatureHourglass = false
 	for _, v in ipairs(args) do
-		if v == "DefuseKit" or v == "Defuse Kit" then
-			isDefuse = true
-		elseif v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
+		if v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
 			isTetrahedron = true
 		elseif v == "GraceWings" or v == "Grace Wings" then
 			isGraceWings = true
@@ -1051,9 +1045,6 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 				return true, stack
 			end
 		end
-	end
-	if isDefuse and Controller.SimulateDefuseKit then
-		return true, Controller.DefuseKitStack or 3
 	end
 	if isTetrahedron and Controller.MatrixTetrahedronEnabled and (Controller.MomentumReduction or 0) >= 0.6 then
 		return true, 1

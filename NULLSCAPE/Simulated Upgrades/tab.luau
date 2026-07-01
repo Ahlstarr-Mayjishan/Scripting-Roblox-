@@ -131,49 +131,18 @@ return function(Client, Controller)
 
 	Tab:CreateSection("Defuse Kits")
 
-	Tab:CreateToggle({
-		Name = "Tripmine Immunity (Bypass)",
-		CurrentValue = Controller.TripmineBarrierEnabled,
-		Flag = "TripmineBarrierToggle",
-		Callback = function(Value)
-			Controller:SetTripmineBarrier(Value)
-		end,
-	})
-
 	Tab:CreateDropdown({
-		Name = "Tripmine Bypass Mode",
-		Info = "Blocker: tao vat can local de chan/repel truoc tripmine. Barrier: chi giu local iframes.",
-		Options = { "Blocker", "Barrier" },
-		CurrentOption = (Controller.TripmineMode == "Blocker" and "Blocker") or "Barrier",
+		Name = "Tripmine Immunity (Bypass)",
+		Options = { "Off", "I-Frames", "Immunity" },
+		CurrentOption = Controller.TripmineBarrierEnabled and (Controller.TripmineBarrierMode or "I-Frames") or "Off",
 		MultipleOptions = false,
-		Flag = "TripmineModeDropdown",
+		Flag = "TripmineBarrierModeDropdown",
 		Callback = function(Option)
 			local selected = Option
 			if typeof(Option) == "table" then
 				selected = Option[1]
 			end
-			Controller:SetTripmineMode(selected)
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "Simulate Defuse Kit",
-		CurrentValue = Controller.SimulateDefuseKit or false,
-		Flag = "SimulateDefuseKitToggle",
-		Callback = function(Value)
-			Controller:SetSimulateDefuseKit(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Defuse Kit Stacks",
-		Range = { 1, 5 },
-		CurrentValue = Controller.DefuseKitStack or 3,
-		Increment = 1,
-		ValueName = "Stacks",
-		Flag = "DefuseKitStackSlider",
-		Callback = function(Value)
-			Controller:SetDefuseKitStack(Value)
+			Controller:SetTripmineBarrierMode(selected)
 		end,
 	})
 
