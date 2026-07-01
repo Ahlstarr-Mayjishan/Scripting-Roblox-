@@ -48,6 +48,47 @@ local Controller = {
 	RailSpeedMultiplier = 1.1,
 	RailAutoDelay = 1.5,
 	RailAutoCaptureRange = 4,
+	MomentumMode = "Off",
+	MomentumMaxHorizontalSpeed = 500,
+	MomentumMaxVerticalSpeed = 500,
+	MomentumDecay = 4,
+	MomentumSoftReduction = 0.35,
+	GrappleAssistEnabled = false,
+	GrappleAssistStrength = 1,
+	GrappleAssistCaptureAngle = 9,
+	GrappleAssistRange = 90,
+	GrappleAssistConfidenceGateEnabled = true,
+	GrappleAssistMinConfidenceScore = -35,
+	GrappleAssistConfidenceMargin = 5,
+	GrappleAssistBiomeTuningEnabled = true,
+	GrappleAssistFailFeedbackEnabled = true,
+	GrappleAssistSpecialPointPriority = true,
+	GrappleAssistSecondaryCastEnabled = false,
+	GrappleAssistSecondaryCastKeybind = "Q",
+	GrappleAnchorPriorityGrapplePoint = 100,
+	GrappleAnchorPriorityJumpPad = 85,
+	GrappleAnchorPriorityTriaOrb = 75,
+	GrappleAnchorPriorityBell = 70,
+	GrappleAssistRailTargetingEnabled = true,
+	GrappleAssistRailPriority = 42,
+	GrappleAssistTerrainPriority = 0,
+	GrappleIntentHighSpeed = 120,
+	GrappleIntentRailRange = 14,
+	GrappleVoidRescueEnabled = false,
+	GrappleVoidRescueAutoCast = false,
+	GrappleVoidRescueAutoReel = true,
+	GrappleVoidRescueAutoSharkTail = true,
+	GrappleVoidRescueHeight = 45,
+	GrappleVoidRescueFallSpeed = 65,
+	GrappleVoidRescueReelHoldTime = 0.12,
+	GrappleReelSaverEnabled = false,
+	GrappleReelSaverAutoCast = true,
+	GrappleReelSaverSideRange = 26,
+	GrappleReelSaverMinHeight = 5,
+	GrappleReelSaverMaxHeight = 14,
+	GrappleReelSaverClearance = 5,
+	GrappleReelSaverLandingRadius = 2.75,
+	GrappleReelSaverReelHoldTime = 0.16,
 	GrapplerStaminaMode = "Off",
 	StaminaMode = "Off",
 	AntiBonkEnabled = false,
@@ -117,7 +158,8 @@ end
 function Controller:CleanUp()
 	disconnectFolderObservations()
 	local globals = getGlobals()
-	local finalCleanup = self.Destroyed or (globals.activeAccessibilityController ~= nil and globals.activeAccessibilityController ~= self)
+	local finalCleanup = self.Destroyed
+		or (globals.activeAccessibilityController ~= nil and globals.activeAccessibilityController ~= self)
 	if finalCleanup then
 		self.AntiBonkEnabled = false
 		self.GrapplerStaminaMode = "Off"
@@ -125,6 +167,8 @@ function Controller:CleanUp()
 		callExecutor("disableStaminaAssist")
 		callExecutor("disableRailAssist")
 		callExecutor("disableAntiBonk")
+		callExecutor("disableMomentumGuard")
+		callExecutor("disableGrappleAssist")
 	end
 	GC.cleanAll()
 	self.EnemiesFolder = nil
@@ -141,7 +185,14 @@ function Controller:CleanUp()
 	end
 
 	-- Don dep ket noi nhay vo han neu huy hoan toan
-	if self.Destroyed and (not globals or globals.activeAccessibilityController == self or globals.activeAccessibilityController == nil) then
+	if
+		self.Destroyed
+		and (
+			not globals
+			or globals.activeAccessibilityController == self
+			or globals.activeAccessibilityController == nil
+		)
+	then
 		callExecutor("disableInfiniteAirJump")
 	end
 
@@ -231,6 +282,14 @@ function Controller:ReapplyRespawnFeatures()
 		callExecutor("initializeAntiBonk")
 	end
 
+	if self.MomentumMode ~= "Off" then
+		callExecutor("initializeMomentumGuard")
+	end
+
+	if self.GrappleAssistEnabled then
+		callExecutor("initializeGrappleAssist", self)
+	end
+
 	self:RefreshRailAssistHook()
 	self:updateSpringerAutoJumpState()
 end
@@ -276,11 +335,229 @@ function Controller:SetRailSpeedMultiplier(value)
 end
 
 function Controller:SetRailAutoDelay(value)
-	self.RailAutoDelay = math.clamp(tonumber(value) or 1.5, 1.5, 3)
+	self.RailAutoDelay = math.clamp(tonumber(value) or 1.5, 0.15, 3)
 end
 
 function Controller:SetRailAutoCaptureRange(value)
 	self.RailAutoCaptureRange = math.clamp(tonumber(value) or 4, 1, 64)
+end
+
+function Controller:SetMomentumMode(mode)
+	local selected = mode
+	if typeof(selected) == "table" then
+		selected = selected[1]
+	end
+	selected = tostring(selected or "Off")
+	if selected ~= "Decay" and selected ~= "Soft Cap" then
+		selected = "Off"
+	end
+
+	self.MomentumMode = selected
+	if selected == "Off" then
+		callExecutor("disableMomentumGuard")
+	elseif not callExecutor("initializeMomentumGuard") then
+		self.MomentumMode = "Off"
+		if getgenv().Rayfield then
+			getgenv().Rayfield:Notify({
+				Title = "Accessibility Config",
+				Content = "Momentum Guard module is not available yet",
+				Duration = 3,
+			})
+		end
+	end
+end
+
+function Controller:SetMomentumDecay(value)
+	self.MomentumDecay = math.clamp(tonumber(value) or 4, 0.5, 12)
+end
+
+function Controller:SetMomentumSoftReduction(value)
+	self.MomentumSoftReduction = math.clamp(tonumber(value) or 0.35, 0.05, 1)
+end
+
+function Controller:SetMomentumMaxHorizontalSpeed(value)
+	self.MomentumMaxHorizontalSpeed = math.clamp(tonumber(value) or 500, 100, 500)
+end
+
+function Controller:SetMomentumMaxVerticalSpeed(value)
+	self.MomentumMaxVerticalSpeed = math.clamp(tonumber(value) or 500, 100, 500)
+end
+
+function Controller:SetGrappleAssist(value)
+	self.GrappleAssistEnabled = value == true
+
+	if self.GrappleAssistEnabled and not callExecutor("initializeGrappleAssist", self) then
+		self.GrappleAssistEnabled = false
+		if getgenv().Rayfield then
+			getgenv().Rayfield:Notify({
+				Title = "Accessibility Config",
+				Content = "Grapple module is not available yet",
+				Duration = 3,
+			})
+		end
+		return
+	end
+
+	if not self.GrappleAssistEnabled then
+		callExecutor("disableGrappleAssist")
+	end
+end
+
+function Controller:SetGrappleAssistStrength(value)
+	self.GrappleAssistStrength = math.clamp(tonumber(value) or 1, 0.1, 3)
+end
+
+function Controller:SetGrappleAssistCaptureAngle(value)
+	self.GrappleAssistCaptureAngle = math.clamp(tonumber(value) or 9, 1, 30)
+end
+
+function Controller:SetGrappleAssistRange(value)
+	self.GrappleAssistRange = math.clamp(tonumber(value) or 90, 30, 140)
+end
+
+function Controller:SetGrappleAssistConfidenceGate(value)
+	self.GrappleAssistConfidenceGateEnabled = value == true
+end
+
+function Controller:SetGrappleAssistMinConfidenceScore(value)
+	self.GrappleAssistMinConfidenceScore = math.clamp(tonumber(value) or -35, -100, 80)
+end
+
+function Controller:SetGrappleAssistConfidenceMargin(value)
+	self.GrappleAssistConfidenceMargin = math.clamp(tonumber(value) or 5, 0, 50)
+end
+
+function Controller:SetGrappleAssistBiomeTuning(value)
+	self.GrappleAssistBiomeTuningEnabled = value == true
+end
+
+function Controller:SetGrappleAssistFailFeedback(value)
+	self.GrappleAssistFailFeedbackEnabled = value == true
+end
+
+function Controller:SetGrappleAssistSpecialPointPriority(value)
+	self.GrappleAssistSpecialPointPriority = value == true
+end
+
+function Controller:SetGrappleAnchorPriorityGrapplePoint(value)
+	self.GrappleAnchorPriorityGrapplePoint = math.clamp(tonumber(value) or 100, 0, 150)
+end
+
+function Controller:SetGrappleAnchorPriorityJumpPad(value)
+	self.GrappleAnchorPriorityJumpPad = math.clamp(tonumber(value) or 85, 0, 150)
+end
+
+function Controller:SetGrappleAnchorPriorityTriaOrb(value)
+	self.GrappleAnchorPriorityTriaOrb = math.clamp(tonumber(value) or 75, 0, 150)
+end
+
+function Controller:SetGrappleAnchorPriorityBell(value)
+	self.GrappleAnchorPriorityBell = math.clamp(tonumber(value) or 70, 0, 150)
+end
+
+function Controller:SetGrappleAssistRailPriority(value)
+	self.GrappleAssistRailPriority = math.clamp(tonumber(value) or 42, 0, 150)
+end
+
+function Controller:SetGrappleAssistTerrainPriority(value)
+	self.GrappleAssistTerrainPriority = math.clamp(tonumber(value) or 0, -50, 80)
+end
+
+function Controller:SetGrappleIntentHighSpeed(value)
+	self.GrappleIntentHighSpeed = math.clamp(tonumber(value) or 120, 40, 300)
+end
+
+function Controller:SetGrappleIntentRailRange(value)
+	self.GrappleIntentRailRange = math.clamp(tonumber(value) or 14, 4, 48)
+end
+
+function Controller:SetGrappleAssistSecondaryCast(value)
+	self.GrappleAssistSecondaryCastEnabled = value == true
+
+	if self.GrappleAssistSecondaryCastEnabled then
+		self:SetGrappleAssist(true)
+	end
+end
+
+function Controller:SetGrappleAssistSecondaryCastKeybind(value)
+	self.GrappleAssistSecondaryCastKeybind = tostring(value or "Q")
+end
+
+function Controller:SetGrappleVoidRescue(value)
+	self.GrappleVoidRescueEnabled = value == true
+
+	if self.GrappleVoidRescueEnabled then
+		self:SetGrappleAssist(true)
+	end
+end
+
+function Controller:SetGrappleVoidRescueAutoReel(value)
+	self.GrappleVoidRescueAutoReel = value == true
+end
+
+function Controller:SetGrappleVoidRescueAutoCast(value)
+	self.GrappleVoidRescueAutoCast = value == true
+end
+
+function Controller:SetGrappleVoidRescueAutoSharkTail(value)
+	self.GrappleVoidRescueAutoSharkTail = value == true
+end
+
+function Controller:SetGrappleVoidRescueHeight(value)
+	self.GrappleVoidRescueHeight = math.clamp(tonumber(value) or 45, 10, 160)
+end
+
+function Controller:SetGrappleVoidRescueFallSpeed(value)
+	self.GrappleVoidRescueFallSpeed = math.clamp(tonumber(value) or 65, 20, 180)
+end
+
+function Controller:SetGrappleVoidRescueReelHoldTime(value)
+	self.GrappleVoidRescueReelHoldTime = math.clamp(tonumber(value) or 0.12, 0.05, 0.25)
+end
+
+function Controller:SetGrappleReelSaver(value)
+	self.GrappleReelSaverEnabled = value == true
+
+	if self.GrappleReelSaverEnabled then
+		self:SetGrappleAssist(true)
+	end
+end
+
+function Controller:SetGrappleReelSaverAutoCast(value)
+	self.GrappleReelSaverAutoCast = value == true
+end
+
+function Controller:SetGrappleReelSaverSideRange(value)
+	self.GrappleReelSaverSideRange = math.clamp(tonumber(value) or 26, 8, 60)
+end
+
+function Controller:SetGrappleReelSaverMinHeight(value)
+	self.GrappleReelSaverMinHeight = math.clamp(tonumber(value) or 5, 3, 18)
+end
+
+function Controller:SetGrappleReelSaverMaxHeight(value)
+	local minHeight = tonumber(self.GrappleReelSaverMinHeight) or 5
+	self.GrappleReelSaverMaxHeight = math.clamp(tonumber(value) or 14, minHeight + 1, 28)
+end
+
+function Controller:SetGrappleReelSaverClearance(value)
+	self.GrappleReelSaverClearance = math.clamp(tonumber(value) or 5, 3, 12)
+end
+
+function Controller:SetGrappleReelSaverReelHoldTime(value)
+	self.GrappleReelSaverReelHoldTime = math.clamp(tonumber(value) or 0.16, 0.06, 0.35)
+end
+
+function Controller:TriggerGrappleAssistSecondaryCast()
+	if not self.GrappleAssistSecondaryCastEnabled then
+		return false
+	end
+
+	if not self.GrappleAssistEnabled then
+		self:SetGrappleAssist(true)
+	end
+
+	return callExecutor("triggerGrappleAssistSecondaryCast", self)
 end
 
 function Controller:SetStaminaMode(mode)

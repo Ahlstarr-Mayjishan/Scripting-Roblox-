@@ -7,7 +7,9 @@
 local function makeLabelAutoResize(labelText)
 	local LocalPlayer = game.Players.LocalPlayer
 	local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
-	if not PlayerGui then return end
+	if not PlayerGui then
+		return
+	end
 
 	task.spawn(function()
 		task.wait(0.2)
@@ -87,7 +89,8 @@ return function(Client, Controller)
 	})
 
 	if Tab.CreateLabel then
-		local text = "Note: 0 range represents Infinite (Map-wide) pick up.\n - Gifts have a server-side limit of 30 studs.\n - Instrument has no limit (0 = infinite range)."
+		local text =
+			"Note: 0 range represents Infinite (Map-wide) pick up.\n - Gifts have a server-side limit of 30 studs.\n - Instrument has no limit (0 = infinite range)."
 		Tab:CreateLabel(text)
 		makeLabelAutoResize("Note: 0 range represents Infinite")
 	end
@@ -141,8 +144,7 @@ return function(Client, Controller)
 		Name = "Tripmine Bypass Mode",
 		Info = "Blocker: tao vat can local de chan/repel truoc tripmine. Barrier: chi giu local iframes.",
 		Options = { "Blocker", "Barrier" },
-		CurrentOption = (Controller.TripmineMode == "Blocker" and "Blocker")
-			or "Barrier",
+		CurrentOption = (Controller.TripmineMode == "Blocker" and "Blocker") or "Barrier",
 		MultipleOptions = false,
 		Flag = "TripmineModeDropdown",
 		Callback = function(Option)
@@ -316,6 +318,30 @@ return function(Client, Controller)
 				end)
 				isSettingSpeedBuffs = false
 			end
+		end,
+	})
+
+	Tab:CreateSection("Helmet")
+
+	Tab:CreateToggle({
+		Name = "Enable Helmet",
+		Info = "Spoofs Helmet so native bonk recovery keeps movement control and upward boost.",
+		CurrentValue = Controller.HelmetEnabled or false,
+		Flag = "HelmetToggle",
+		Callback = function(Value)
+			Controller:SetHelmet(Value)
+		end,
+	})
+
+	Tab:CreateSection("Miniature Hourglass")
+
+	Tab:CreateToggle({
+		Name = "Enable Miniature Hourglass",
+		Info = "Spoofs MiniatureHourglass so native class logic applies its cooldown and recharge effects.",
+		CurrentValue = Controller.MiniatureHourglassEnabled or false,
+		Flag = "MiniatureHourglassToggle",
+		Callback = function(Value)
+			Controller:SetMiniatureHourglass(Value)
 		end,
 	})
 end

@@ -10,19 +10,24 @@ local Executor = {}
 local HooksActive = false
 local HookedStep = nil
 local HookedSharkTail = nil
+local HookedStart = nil
 local AirControl = nil
 local ReelPull = nil
 local SharkTailPull = nil
+local SharkTailCooldown = nil
 local GrappleRecovery = nil
 local GrappleRange = nil
+local HookCastSpeed = nil
 local ChargerTripmineAssist = nil
 
 local MODULE_PATHS = {
 	AirControl = "NULLSCAPE/Class Adjustment/Grappler/Grapple Air Control.luau",
 	ReelPull = "NULLSCAPE/Class Adjustment/Grappler/Grapple Reel Pull.luau",
 	SharkTailPull = "NULLSCAPE/Class Adjustment/Grappler/SharkTail Pull.luau",
+	SharkTailCooldown = "NULLSCAPE/Class Adjustment/Grappler/SharkTail Cooldown.luau",
 	GrappleRecovery = "NULLSCAPE/Class Adjustment/Grappler/Grapple Recovery.luau",
 	GrappleRange = "NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau",
+	HookCastSpeed = "NULLSCAPE/Class Adjustment/Grappler/Grapple Hook Cast Speed.luau",
 	ChargerTripmineAssist = "NULLSCAPE/Class Adjustment/Charger/Tripmine Assist.luau",
 }
 
@@ -54,8 +59,10 @@ local function loadAdjustmentModules()
 	AirControl = AirControl or getgenv().loadModule(MODULE_PATHS.AirControl)
 	ReelPull = ReelPull or getgenv().loadModule(MODULE_PATHS.ReelPull)
 	SharkTailPull = SharkTailPull or getgenv().loadModule(MODULE_PATHS.SharkTailPull)
+	SharkTailCooldown = SharkTailCooldown or getgenv().loadModule(MODULE_PATHS.SharkTailCooldown)
 	GrappleRecovery = GrappleRecovery or getgenv().loadModule(MODULE_PATHS.GrappleRecovery)
 	GrappleRange = GrappleRange or getgenv().loadModule(MODULE_PATHS.GrappleRange)
+	HookCastSpeed = HookCastSpeed or getgenv().loadModule(MODULE_PATHS.HookCastSpeed)
 	ChargerTripmineAssist = ChargerTripmineAssist or getgenv().loadModule(MODULE_PATHS.ChargerTripmineAssist)
 end
 
@@ -68,6 +75,9 @@ local function applyStepAdjustments(self, dt)
 	end
 	if ReelPull and typeof(ReelPull.apply) == "function" then
 		pcall(ReelPull.apply, self)
+	end
+	if SharkTailCooldown and typeof(SharkTailCooldown.apply) == "function" then
+		pcall(SharkTailCooldown.apply, self)
 	end
 end
 
@@ -101,7 +111,14 @@ function Executor.enable()
 			local originalFilter
 			local altered = false
 
-			if Control and Control.GrappleDisableGroundRelease and self and self.Movement and self.Movement.grappling and self.grappleParams then
+			if
+				Control
+				and Control.GrappleDisableGroundRelease
+				and self
+				and self.Movement
+				and self.Movement.grappling
+				and self.grappleParams
+			then
 				originalFilter = self.grappleParams.FilterDescendantsInstances
 				self.grappleParams.FilterDescendantsInstances = { workspace }
 				altered = true
@@ -128,7 +145,16 @@ function Executor.enable()
 				self.reelCooldown = false
 			end
 
-			if Control and Control.GrappleSharkTailWindow and self and self.Movement and self.Movement:HasUpgrade("SharkTail") and not self.sharkTailDisable and self.lastGrappleRelease and self.lastGrappleRelease > 0 then
+			if
+				Control
+				and Control.GrappleSharkTailWindow
+				and self
+				and self.Movement
+				and self.Movement:HasUpgrade("SharkTail")
+				and not self.sharkTailDisable
+				and self.lastGrappleRelease
+				and self.lastGrappleRelease > 0
+			then
 				local elapsed = time() - self.lastGrappleRelease
 				if elapsed <= Control.GrappleSharkTailWindow then
 					self.allowSharkTail = true
@@ -162,6 +188,74 @@ function Executor.enable()
 		globals.ClassAdjustmentOriginalSharkTail = originalSharkTail
 		HookedSharkTail = wrappedSharkTail
 		grappleModule.SharkTail = wrappedSharkTail
+	end
+
+	if typeof(grappleModule.Start) == "function" and not globals.ClassAdjustmentOriginalStart then
+		local originalStart = grappleModule.Start
+		local wrappedStart
+		wrappedStart = function(self, p2, ...)
+			if not HooksActive then
+				return originalStart(self, p2, ...)
+			end
+
+			local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+			
+			-- Capture JumpPad state before original Start runs
+			local jumpPad = p2 and p2.Instance
+			local isJumpPad = jumpPad and jumpPad.Name == "JumpPad"
+			local origUses = isJumpPad and jumpPad:GetAttribute("Uses")
+			local origCanQuery = isJumpPad and jumpPad.CanQuery
+			local origColor = isJumpPad and jumpPad.Color
+
+			local multiplier = Control and Control.GrappleHookCastSpeedMultiplier or 1
+			local results
+			if multiplier ~= 1 then
+				local originalCreate = game.TweenService.Create
+				local originalDelay = task.delay
+				
+				-- Hook TweenService:Create temporarily for the duration of Start call
+				game.TweenService.Create = function(ts, instance, tweenInfo, propertyTable)
+					if instance == self.hook or (self.hook and instance and (instance == self.hook or instance.Parent == self.hook or instance:IsDescendantOf(self.hook))) then
+						local speedMultiplier = multiplier == 0 and 999999 or multiplier
+						local newTime = tweenInfo.Time / speedMultiplier
+						tweenInfo = TweenInfo.new(newTime, tweenInfo.EasingStyle, tweenInfo.EasingDirection, tweenInfo.RepeatCount, tweenInfo.Reverses, tweenInfo.DelayTime)
+					end
+					return originalCreate(ts, instance, tweenInfo, propertyTable)
+				end
+				
+				-- Hook task.delay temporarily for the duration of Start call
+				task.delay = function(delayTime, callback)
+					local speedMultiplier = multiplier == 0 and 999999 or multiplier
+					local newDelay = delayTime / speedMultiplier
+					return originalDelay(newDelay, callback)
+				end
+				
+				results = packValues(pcall(originalStart, self, p2, ...))
+				
+				game.TweenService.Create = originalCreate
+				task.delay = originalDelay
+			else
+				results = packValues(pcall(originalStart, self, p2, ...))
+			end
+
+			-- Restore JumpPad state if bypass is enabled
+			if isJumpPad and Control and Control.GrappleJumpPadUsesBypassEnabled then
+				pcall(function()
+					jumpPad:SetAttribute("Uses", origUses)
+					jumpPad.CanQuery = origCanQuery
+					jumpPad.Color = origColor
+				end)
+			end
+
+			if not results[1] then
+				error(results[2], 0)
+			end
+			return table.unpack(results, 2, results.n)
+		end
+
+		globals.ClassAdjustmentOriginalStart = originalStart
+		HookedStart = wrappedStart
+		grappleModule.Start = wrappedStart
 	end
 
 	if typeof(grappleModule.Cast) == "function" and not globals.ClassAdjustmentOriginalCast then
@@ -215,10 +309,22 @@ function Executor.restore()
 		globals.ClassAdjustmentOriginalSharkTail = nil
 		HookedSharkTail = nil
 	end
-	if grappleModule and globals.ClassAdjustmentHookedCast and grappleModule.Cast == globals.ClassAdjustmentHookedCast then
+	if grappleModule and HookedStart and grappleModule.Start == HookedStart then
+		grappleModule.Start = globals.ClassAdjustmentOriginalStart
+		globals.ClassAdjustmentOriginalStart = nil
+		HookedStart = nil
+	end
+	if
+		grappleModule
+		and globals.ClassAdjustmentHookedCast
+		and grappleModule.Cast == globals.ClassAdjustmentHookedCast
+	then
 		grappleModule.Cast = globals.ClassAdjustmentOriginalCast
 		globals.ClassAdjustmentOriginalCast = nil
 		globals.ClassAdjustmentHookedCast = nil
+	end
+	if HookCastSpeed and typeof(HookCastSpeed.restore) == "function" then
+		pcall(HookCastSpeed.restore)
 	end
 end
 

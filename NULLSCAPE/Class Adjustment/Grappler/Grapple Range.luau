@@ -11,12 +11,22 @@ local LocalPlayer = Players.LocalPlayer
 
 local Range = {}
 
+local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
+local VoidCastAssist = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Void Cast Assist.luau")
+
+local function recordRangeCast(grapple)
+	if MomentumMemory and typeof(MomentumMemory.record) == "function" then
+		pcall(MomentumMemory.record, grapple and grapple.RootPart, "GrappleRangeCast")
+	end
+end
+
 function Range.cast(grapple, forceRefresh, originalCast, ...)
 	local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
 	local maxRange = Control and Control.GrappleMaxRange or 90
+	local easierVoidCast = Control and Control.GrappleEasierVoidCast == true
 
-	-- If range is set to default (90), call the original cast function
-	if maxRange <= 90 then
+	-- If all range/cast assists are at native values, call the original cast function.
+	if maxRange <= 90 and not easierVoidCast then
 		return originalCast(grapple, forceRefresh, ...)
 	end
 
@@ -25,10 +35,24 @@ function Range.cast(grapple, forceRefresh, originalCast, ...)
 	-- Memory hit check
 	if not (time() - grapple.memoryUpdate > 0.25 or forceRefresh) then
 		local Position = grapple.RootPart.Position
-		return Workspace:Raycast(Position, CFrame.lookAt(Position, grapple.memoryPosition).LookVector * maxRange, grapple.grappleParams)
+		local direction = CFrame.lookAt(Position, grapple.memoryPosition).LookVector
+		local hit = Workspace:Raycast(Position, direction * maxRange, grapple.grappleParams)
+		if hit then
+			recordRangeCast(grapple)
+			return hit
+		end
+		if VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
+			local voidHit = VoidCastAssist.find(grapple, direction, maxRange)
+			if voidHit then
+				recordRangeCast(grapple)
+				return voidHit
+			end
+		end
+		return nil
 	end
 
 	local targetPos
+	local aimDirection
 	local preferredInput = grapple.Movement.preferredInput
 	local CurrentCamera = Workspace.CurrentCamera
 
@@ -38,26 +62,56 @@ function Range.cast(grapple, forceRefresh, originalCast, ...)
 	if isLockCenter then
 		-- Shift-Lock, Mobile, or Controller path
 		local rayOrigin = (CurrentCamera.CFrame * grapple.cameraOffset).Position
-			+ CurrentCamera.CFrame.LookVector * (CurrentCamera.CFrame.Position - (grapple.RootPart.Position + grapple.Humanoid.CameraOffset)).Magnitude
-		
-		local cameraHit = Workspace:Raycast(rayOrigin, CurrentCamera.CFrame.LookVector * maxRange, grapple.grappleParams)
+			+ CurrentCamera.CFrame.LookVector
+				* (CurrentCamera.CFrame.Position - (grapple.RootPart.Position + grapple.Humanoid.CameraOffset)).Magnitude
+
+		local cameraHit =
+			Workspace:Raycast(rayOrigin, CurrentCamera.CFrame.LookVector * maxRange, grapple.grappleParams)
 		if cameraHit == nil then
-			return nil
+			aimDirection = CurrentCamera.CFrame.LookVector
+			if VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
+				return VoidCastAssist.find(grapple, aimDirection, maxRange)
+			end
+			return nil, aimDirection
 		end
 		targetPos = cameraHit.Position
+		aimDirection = CurrentCamera.CFrame.LookVector
 	else
 		-- Unlocked Mouse pointer path
 		local unitRay = LocalPlayer:GetMouse().UnitRay
-		local mouseHit = Workspace:Raycast(unitRay.Origin, unitRay.Direction.Unit * 2048, grapple.grappleParams)
-		
+		local mouseHit = Workspace:Raycast(unitRay.Origin, unitRay.Direction.Unit * math.max(2048, maxRange), grapple.grappleParams)
+
 		if mouseHit == nil then
-			return nil, unitRay.Direction.Unit
+			aimDirection = unitRay.Direction.Unit
+			if VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
+				local voidHit = VoidCastAssist.find(grapple, aimDirection, maxRange)
+				if voidHit then
+					recordRangeCast(grapple)
+					return voidHit
+				end
+			end
+			return nil, aimDirection
 		end
 		targetPos = mouseHit.Position
+		aimDirection = unitRay.Direction.Unit
 	end
 
 	local Position = grapple.RootPart.Position
-	return Workspace:Raycast(Position, CFrame.lookAt(Position, targetPos).LookVector * maxRange, grapple.grappleParams)
+	local castDirection = CFrame.lookAt(Position, targetPos).LookVector
+	local hit = Workspace:Raycast(Position, castDirection * maxRange, grapple.grappleParams)
+	if hit then
+		recordRangeCast(grapple)
+		return hit
+	end
+
+	if VoidCastAssist and typeof(VoidCastAssist.find) == "function" then
+		local voidHit = VoidCastAssist.find(grapple, aimDirection or castDirection, maxRange)
+		if voidHit then
+			recordRangeCast(grapple)
+			return voidHit
+		end
+	end
+	return nil
 end
 
 return Range

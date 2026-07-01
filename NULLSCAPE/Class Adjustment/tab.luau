@@ -37,9 +37,12 @@ local createControllerProxy = function(Client, Controller)
 		GrappleAirControlMultiplier = 0,
 		GrappleReelPullMultiplier = 1,
 		GrappleSharkTailPullMultiplier = 1,
+		GrappleHookCastSpeedMultiplier = 1,
 		GrappleMaxRange = 90,
+		GrappleEasierVoidCast = false,
 		GrappleDisableGroundRelease = false,
 		GrappleNoReelCooldown = false,
+		GrappleSharkTailNoCooldown = false,
 		GrappleSharkTailWindow = 0.25,
 		GrappleJumpPadUsesBypassEnabled = false,
 		ChargerTripmineAssistEnabled = false,
@@ -76,7 +79,46 @@ return function(Client, Controller)
 	Controller = createControllerProxy(Client, Controller)
 	local Tab = Client.Window:CreateTab("Class Adjustment", 4483362458)
 
+	Tab:CreateToggle({
+		Name = "Disable Ground Auto-Release",
+		Info = "Prevents the grapple hook from automatically releasing when you are close to or running on the ground.",
+		CurrentValue = Controller.GrappleDisableGroundRelease or false,
+		Flag = "GrappleDisableGroundReleaseToggle",
+		Callback = function(Value)
+			Controller:SetGrappleDisableGroundRelease(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "No Reel Cooldown",
+		Info = "Removes the 3-second cooldown between grapple hooks, allowing you to fire hooks instantly.",
+		CurrentValue = Controller.GrappleNoReelCooldown or false,
+		Flag = "GrappleNoReelCooldownToggle",
+		Callback = function(Value)
+			Controller:SetGrappleNoReelCooldown(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "No SharkTail Cooldown",
+		Info = "Removes the ground-touch requirement to reuse SharkTail boost on the air.",
+		CurrentValue = Controller.GrappleSharkTailNoCooldown or false,
+		Flag = "GrappleSharkTailNoCooldownToggle",
+		Callback = function(Value)
+			Controller:SetGrappleSharkTailNoCooldown(Value)
+		end,
+	})
+
 	Tab:CreateSection("Grappler")
+	Tab:CreateToggle({
+		Name = "JumpPad Uses Bypass",
+		Info = "Keeps Grapple JumpPads reusable/queryable for repeated pulls. Useful for testing repeated JumpPad grapples.",
+		CurrentValue = Controller.GrappleJumpPadUsesBypassEnabled or false,
+		Flag = "GrappleJumpPadUsesBypassToggle",
+		Callback = function(Value)
+			Controller:SetGrappleJumpPadUsesBypass(Value)
+		end,
+	})
 
 	Tab:CreateSlider({
 		Name = "Grapple Air Control",
@@ -118,9 +160,22 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateSlider({
+		Name = "Hook Cast Speed",
+		Info = "0 makes the hook arrive instantly. 1 is native speed. Higher values multiply hook travel speed and shorten the matching weld delay.",
+		Range = { 0, 10 },
+		Increment = 0.1,
+		Suffix = "x",
+		CurrentValue = Controller.GrappleHookCastSpeedMultiplier or 1,
+		Flag = "GrappleHookCastSpeedMultiplierSlider",
+		Callback = function(Value)
+			Controller:SetGrappleHookCastSpeedMultiplier(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
 		Name = "Grapple Max Range",
 		Info = "Adjusts the maximum grapple cast lock-on range limit client-side.",
-		Range = { 90, 120 },
+		Range = { 90, 5000 },
 		Increment = 1,
 		Suffix = " studs",
 		CurrentValue = Controller.GrappleMaxRange or 90,
@@ -131,45 +186,25 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateToggle({
-		Name = "Disable Ground Auto-Release",
-		Info = "Prevents the grapple hook from automatically releasing when you are close to or running on the ground.",
-		CurrentValue = Controller.GrappleDisableGroundRelease or false,
-		Flag = "GrappleDisableGroundReleaseToggle",
+		Name = "Easier Void Cast",
+		Info = "Widens KillVoid acquisition when the native grapple ray misses or is barely off target.",
+		CurrentValue = Controller.GrappleEasierVoidCast or false,
+		Flag = "GrappleEasierVoidCastToggle",
 		Callback = function(Value)
-			Controller:SetGrappleDisableGroundRelease(Value)
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "No Reel Cooldown",
-		Info = "Removes the 3-second cooldown between grapple hooks, allowing you to fire hooks instantly.",
-		CurrentValue = Controller.GrappleNoReelCooldown or false,
-		Flag = "GrappleNoReelCooldownToggle",
-		Callback = function(Value)
-			Controller:SetGrappleNoReelCooldown(Value)
+			Controller:SetGrappleEasierVoidCast(Value)
 		end,
 	})
 
 	Tab:CreateSlider({
 		Name = "SharkTail Window",
 		Info = "Adjusts the timing window (in seconds) allowed to trigger SharkTail after releasing a reel.",
-		Range = { 0.25, 1 },
+		Range = { 0.25, 10 },
 		Increment = 0.05,
 		Suffix = "s",
 		CurrentValue = Controller.GrappleSharkTailWindow or 0.25,
 		Flag = "GrappleSharkTailWindowSlider",
 		Callback = function(Value)
 			Controller:SetGrappleSharkTailWindow(Value)
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "JumpPad Uses Bypass",
-		Info = "Keeps Grapple JumpPads reusable/queryable for repeated pulls. Useful for testing repeated JumpPad grapples.",
-		CurrentValue = Controller.GrappleJumpPadUsesBypassEnabled or false,
-		Flag = "GrappleJumpPadUsesBypassToggle",
-		Callback = function(Value)
-			Controller:SetGrappleJumpPadUsesBypass(Value)
 		end,
 	})
 

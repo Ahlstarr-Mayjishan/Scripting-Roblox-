@@ -13,9 +13,12 @@ local Control = {
 	GrappleAirControlMultiplier = 0,
 	GrappleReelPullMultiplier = 1.1,
 	GrappleSharkTailPullMultiplier = 1.1,
+	GrappleHookCastSpeedMultiplier = 1,
 	GrappleMaxRange = 90,
+	GrappleEasierVoidCast = false,
 	GrappleDisableGroundRelease = false,
 	GrappleNoReelCooldown = false,
+	GrappleSharkTailNoCooldown = false,
 	GrappleSharkTailWindow = 0.25,
 	GrappleJumpPadUsesBypassEnabled = false,
 	ChargerTripmineAssistEnabled = false,
@@ -49,17 +52,31 @@ local function readSettings()
 		return HttpService:JSONDecode(readfile(SETTINGS_FILE))
 	end)
 	if success and type(decoded) == "table" then
-		Control.GrappleAirControlMultiplier = tonumber(decoded.GrappleAirControlMultiplierSlider) or Control.GrappleAirControlMultiplier
-		Control.GrappleReelPullMultiplier = tonumber(decoded.GrappleReelPullMultiplierSlider) or Control.GrappleReelPullMultiplier
-		Control.GrappleSharkTailPullMultiplier = tonumber(decoded.GrappleSharkTailPullMultiplierSlider) or Control.GrappleSharkTailPullMultiplier
+		Control.GrappleAirControlMultiplier = tonumber(decoded.GrappleAirControlMultiplierSlider)
+			or Control.GrappleAirControlMultiplier
+		Control.GrappleReelPullMultiplier = tonumber(decoded.GrappleReelPullMultiplierSlider)
+			or Control.GrappleReelPullMultiplier
+		Control.GrappleSharkTailPullMultiplier = tonumber(decoded.GrappleSharkTailPullMultiplierSlider)
+			or Control.GrappleSharkTailPullMultiplier
+		Control.GrappleHookCastSpeedMultiplier = tonumber(decoded.GrappleHookCastSpeedMultiplierSlider)
+			or Control.GrappleHookCastSpeedMultiplier
 		Control.GrappleMaxRange = tonumber(decoded.GrappleMaxRangeSlider) or Control.GrappleMaxRange
-		Control.GrappleSharkTailWindow = tonumber(decoded.GrappleSharkTailWindowSlider) or Control.GrappleSharkTailWindow
-		
+		Control.GrappleSharkTailWindow = tonumber(decoded.GrappleSharkTailWindowSlider)
+			or Control.GrappleSharkTailWindow
+
+		if decoded.GrappleEasierVoidCast ~= nil then
+			Control.GrappleEasierVoidCast = not not decoded.GrappleEasierVoidCast
+		elseif decoded.GrappleVoidCastAssistSlider ~= nil then
+			Control.GrappleEasierVoidCast = (tonumber(decoded.GrappleVoidCastAssistSlider) or 0) > 0
+		end
 		if decoded.GrappleDisableGroundRelease ~= nil then
 			Control.GrappleDisableGroundRelease = not not decoded.GrappleDisableGroundRelease
 		end
 		if decoded.GrappleNoReelCooldown ~= nil then
 			Control.GrappleNoReelCooldown = not not decoded.GrappleNoReelCooldown
+		end
+		if decoded.GrappleSharkTailNoCooldown ~= nil then
+			Control.GrappleSharkTailNoCooldown = not not decoded.GrappleSharkTailNoCooldown
 		end
 		if decoded.GrappleJumpPadUsesBypassEnabled ~= nil then
 			Control.GrappleJumpPadUsesBypassEnabled = not not decoded.GrappleJumpPadUsesBypassEnabled
@@ -70,7 +87,8 @@ local function readSettings()
 		if decoded.ChargerTripmineModeDropdown ~= nil then
 			Control.ChargerTripmineMode = tostring(decoded.ChargerTripmineModeDropdown)
 		end
-		Control.ChargerTripmineDistance = tonumber(decoded.ChargerTripmineDistanceSlider) or Control.ChargerTripmineDistance
+		Control.ChargerTripmineDistance = tonumber(decoded.ChargerTripmineDistanceSlider)
+			or Control.ChargerTripmineDistance
 		Control.ChargerTripmineJitter = tonumber(decoded.ChargerTripmineJitterSlider) or Control.ChargerTripmineJitter
 	end
 end
@@ -93,9 +111,12 @@ local function saveSettings()
 	data.GrappleAirControlMultiplierSlider = Control.GrappleAirControlMultiplier
 	data.GrappleReelPullMultiplierSlider = Control.GrappleReelPullMultiplier
 	data.GrappleSharkTailPullMultiplierSlider = Control.GrappleSharkTailPullMultiplier
+	data.GrappleHookCastSpeedMultiplierSlider = Control.GrappleHookCastSpeedMultiplier
 	data.GrappleMaxRangeSlider = Control.GrappleMaxRange
+	data.GrappleEasierVoidCast = Control.GrappleEasierVoidCast
 	data.GrappleDisableGroundRelease = Control.GrappleDisableGroundRelease
 	data.GrappleNoReelCooldown = Control.GrappleNoReelCooldown
+	data.GrappleSharkTailNoCooldown = Control.GrappleSharkTailNoCooldown
 	data.GrappleSharkTailWindowSlider = Control.GrappleSharkTailWindow
 	data.GrappleJumpPadUsesBypassEnabled = Control.GrappleJumpPadUsesBypassEnabled
 	data.ChargerTripmineAssistToggle = Control.ChargerTripmineAssistEnabled
@@ -134,7 +155,8 @@ end
 
 function Control:CleanUp()
 	local globals = getGlobals()
-	local finalCleanup = self.Destroyed or (globals.activeClassAdjustmentController ~= nil and globals.activeClassAdjustmentController ~= self)
+	local finalCleanup = self.Destroyed
+		or (globals.activeClassAdjustmentController ~= nil and globals.activeClassAdjustmentController ~= self)
 
 	if finalCleanup then
 		local Executor = getgenv().loadModule("NULLSCAPE/Class Adjustment/Executor.luau")
@@ -183,8 +205,22 @@ function Control:SetGrappleSharkTailPullMultiplier(value)
 	saveSettings()
 end
 
+function Control:SetGrappleHookCastSpeedMultiplier(value)
+	local numeric = tonumber(value)
+	if numeric == nil then
+		numeric = 1
+	end
+	self.GrappleHookCastSpeedMultiplier = math.clamp(numeric, 0, 10)
+	saveSettings()
+end
+
 function Control:SetGrappleMaxRange(value)
-	self.GrappleMaxRange = math.clamp(tonumber(value) or 90, 90, 120)
+	self.GrappleMaxRange = math.clamp(tonumber(value) or 90, 90, 5000)
+	saveSettings()
+end
+
+function Control:SetGrappleEasierVoidCast(value)
+	self.GrappleEasierVoidCast = value == true
 	saveSettings()
 end
 
@@ -195,6 +231,11 @@ end
 
 function Control:SetGrappleNoReelCooldown(value)
 	self.GrappleNoReelCooldown = not not value
+	saveSettings()
+end
+
+function Control:SetGrappleSharkTailNoCooldown(value)
+	self.GrappleSharkTailNoCooldown = not not value
 	saveSettings()
 end
 

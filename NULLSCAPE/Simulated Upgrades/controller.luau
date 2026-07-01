@@ -22,6 +22,8 @@ local GraceWings = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Grace Wing
 local AdvancedGravityCoil = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Advanced Gravity Coil.luau")
 local BetterJumpPad = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Better Jump Pad.luau")
 local SpeedBuffs = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Speed Buffs.luau")
+local Helmet = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Helmet.luau")
+local MiniatureHourglass = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Miniature Hourglass.luau")
 
 local Controller = {
 	RadarEnabled = false,
@@ -49,6 +51,8 @@ local Controller = {
 	BetterJumpPadPower = 100,
 	SpeedBuffsEnabled = false,
 	SpeedBuffSelections = {},
+	HelmetEnabled = false,
+	MiniatureHourglassEnabled = false,
 
 	TripmineBarrierEnabled = false,
 	TripmineMode = "Barrier", -- "Barrier" (local iframe only) | "Blocker" (chan/day khoi min)
@@ -154,11 +158,12 @@ local function hasUtilityWork()
 		or Controller.AdvancedGravityCoilEnabled
 		or Controller.BetterJumpPadEnabled
 		or Controller.SpeedBuffsEnabled
+		or Controller.HelmetEnabled
+		or Controller.MiniatureHourglassEnabled
 end
 
 -- RenderStepped connection management
-stopRenderStepped = function()
-end
+stopRenderStepped = function() end
 
 -- Vòng lặp cập nhật styles hiển thị (Dot <-> Highlight) cực nhanh mỗi 0.15 giây
 startMatchLoops = function()
@@ -189,9 +194,7 @@ startMatchLoops = function()
 			Executor.clearVisuals(GC, false)
 		end)
 	end)
-
 end
-
 
 updateRunningState = function()
 	if checkActiveState() then
@@ -264,6 +267,16 @@ local function startUtilityLoop()
 						SpeedBuffs.start(Controller, GC)
 					end)
 				end
+				if Controller.HelmetEnabled and Helmet and not Helmet.Hooked then
+					pcall(function()
+						Helmet.start(Controller, GC)
+					end)
+				end
+				if Controller.MiniatureHourglassEnabled and MiniatureHourglass and not MiniatureHourglass.Hooked then
+					pcall(function()
+						MiniatureHourglass.start(Controller, GC)
+					end)
+				end
 			end
 			task.wait(hasUtilityWork() and 0.12 or 0.6)
 		end
@@ -329,8 +342,6 @@ function Controller:SetRadarFeatures(value)
 	end
 	Logic.syncSimulatedUpgradeHud(self)
 end
-
-
 
 function Controller:SetAutoCollectEnabled(value)
 	self.AutoCollectEnabled = value
@@ -417,8 +428,14 @@ function Controller:SetAdvancedGravityCoil(value)
 end
 
 function Controller:SetAdvancedGravityCoilJumpPower(value)
-	local minJumpPower = AdvancedGravityCoil and AdvancedGravityCoil.getMinJumpPower and AdvancedGravityCoil.getMinJumpPower() or 28
-	local maxJumpPower = AdvancedGravityCoil and AdvancedGravityCoil.getMaxJumpPower and AdvancedGravityCoil.getMaxJumpPower() or 100
+	local minJumpPower = AdvancedGravityCoil
+			and AdvancedGravityCoil.getMinJumpPower
+			and AdvancedGravityCoil.getMinJumpPower()
+		or 28
+	local maxJumpPower = AdvancedGravityCoil
+			and AdvancedGravityCoil.getMaxJumpPower
+			and AdvancedGravityCoil.getMaxJumpPower()
+		or 100
 	local val = math.clamp(tonumber(value) or minJumpPower, minJumpPower, maxJumpPower)
 	self.AdvancedGravityCoilJumpPower = val
 	if AdvancedGravityCoil then
@@ -443,8 +460,10 @@ function Controller:SetBetterJumpPad(value)
 end
 
 function Controller:SetBetterJumpPadPower(value)
-	local minJumpPadPower = BetterJumpPad and BetterJumpPad.getMinJumpPadPower and BetterJumpPad.getMinJumpPadPower() or 100
-	local maxJumpPadPower = BetterJumpPad and BetterJumpPad.getMaxJumpPadPower and BetterJumpPad.getMaxJumpPadPower() or 200
+	local minJumpPadPower = BetterJumpPad and BetterJumpPad.getMinJumpPadPower and BetterJumpPad.getMinJumpPadPower()
+		or 100
+	local maxJumpPadPower = BetterJumpPad and BetterJumpPad.getMaxJumpPadPower and BetterJumpPad.getMaxJumpPadPower()
+		or 200
 	local val = math.clamp(tonumber(value) or minJumpPadPower, minJumpPadPower, maxJumpPadPower)
 	self.BetterJumpPadPower = val
 	if BetterJumpPad then
@@ -480,6 +499,30 @@ function Controller:SetSpeedBuffSelections(selectedOptions)
 		end
 	end
 
+	refreshUpgradeServerState()
+end
+
+function Controller:SetHelmet(value)
+	self.HelmetEnabled = value == true
+	if Helmet then
+		if self.HelmetEnabled then
+			Helmet.start(self, GC)
+		else
+			Helmet.stop()
+		end
+	end
+	refreshUpgradeServerState()
+end
+
+function Controller:SetMiniatureHourglass(value)
+	self.MiniatureHourglassEnabled = value == true
+	if MiniatureHourglass then
+		if self.MiniatureHourglassEnabled then
+			MiniatureHourglass.start(self, GC)
+		else
+			MiniatureHourglass.stop()
+		end
+	end
 	refreshUpgradeServerState()
 end
 
@@ -541,7 +584,9 @@ function Controller:TriggerMedalAction()
 				if getgenv().Rayfield then
 					getgenv().Rayfield:Notify({
 						Title = "Medal Action",
-						Content = "Too far from Beacon! (Distance: " .. string.format("%.1f", distToBeacon) .. " studs, limit: 30)",
+						Content = "Too far from Beacon! (Distance: "
+							.. string.format("%.1f", distToBeacon)
+							.. " studs, limit: 30)",
 						Duration = 3,
 					})
 				end
@@ -589,14 +634,14 @@ function Controller:TriggerMedalAction()
 			pcall(function()
 				local oldCFrame = hrp.CFrame
 				local oldAnchored = hrp.Anchored
-				
+
 				-- Safe blink pick: Anchors root and teleports right on top of the Medal handle for 0.05s
 				hrp.Anchored = true
 				hrp.CFrame = medal.CFrame * CFrame.new(0, 1.5, 0)
 				task.wait(0.05)
 				hrp.CFrame = oldCFrame
 				hrp.Anchored = oldAnchored
-				
+
 				if getgenv().Rayfield then
 					getgenv().Rayfield:Notify({
 						Title = "Medal Action",
@@ -756,12 +801,24 @@ function Controller:ReapplyRespawnFeatures()
 				SpeedBuffs.start(self, GC)
 			end)
 		end
+		if self.HelmetEnabled and Helmet then
+			pcall(function()
+				Helmet.start(self, GC)
+			end)
+		end
+		if self.MiniatureHourglassEnabled and MiniatureHourglass then
+			pcall(function()
+				MiniatureHourglass.start(self, GC)
+			end)
+		end
 	end
 end
 
 local function restoreHooks()
 	local globals = getgenv()._NULLSCAPE_Globals
-	if not globals then return end
+	if not globals then
+		return
+	end
 
 	-- Restore GiftClientHandler hooks
 	pcall(function()
@@ -811,7 +868,11 @@ local function restoreHooks()
 				end
 				if globals.GetUpgradeChangedSignalHooked and globals.OriginalGetUpgradeChangedSignal then
 					if typeof(hookfunction) == "function" then
-						pcall(hookfunction, UpgradeHandler.GetUpgradeChangedSignal, globals.OriginalGetUpgradeChangedSignal)
+						pcall(
+							hookfunction,
+							UpgradeHandler.GetUpgradeChangedSignal,
+							globals.OriginalGetUpgradeChangedSignal
+						)
 					else
 						UpgradeHandler.GetUpgradeChangedSignal = globals.OriginalGetUpgradeChangedSignal
 					end
@@ -826,7 +887,8 @@ end
 -- Hàm dọn dẹp tài nguyên (GC) khi tắt hoặc hủy UI
 function Controller:CleanUp()
 	local globals = getGlobals()
-	local finalCleanup = self.Destroyed or (globals.activeUpgradeController ~= nil and globals.activeUpgradeController ~= self)
+	local finalCleanup = self.Destroyed
+		or (globals.activeUpgradeController ~= nil and globals.activeUpgradeController ~= self)
 	disconnectFolderObservations()
 	stopRenderStepped()
 
@@ -835,6 +897,8 @@ function Controller:CleanUp()
 		self.AdvancedGravityCoilEnabled = false
 		self.BetterJumpPadEnabled = false
 		self.SpeedBuffsEnabled = false
+		self.HelmetEnabled = false
+		self.MiniatureHourglassEnabled = false
 	end
 
 	if finalCleanup and MatrixTetrahedron then
@@ -860,6 +924,16 @@ function Controller:CleanUp()
 	if finalCleanup and SpeedBuffs then
 		pcall(function()
 			SpeedBuffs.stop()
+		end)
+	end
+	if finalCleanup and Helmet then
+		pcall(function()
+			Helmet.stop()
+		end)
+	end
+	if finalCleanup and MiniatureHourglass then
+		pcall(function()
+			MiniatureHourglass.stop()
 		end)
 	end
 	if finalCleanup then
@@ -899,6 +973,8 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local isGraceWings = false
 	local isAdvancedGravityCoil = false
 	local isBetterJumpPad = false
+	local isHelmet = false
+	local isMiniatureHourglass = false
 	for _, v in ipairs(args) do
 		if v == "DefuseKit" or v == "Defuse Kit" then
 			isDefuse = true
@@ -910,6 +986,10 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 			isAdvancedGravityCoil = true
 		elseif v == "BetterJumpPad" or v == "Better Jump Pad" then
 			isBetterJumpPad = true
+		elseif v == "Helmet" then
+			isHelmet = true
+		elseif v == "MiniatureHourglass" or v == "Miniature Hourglass" then
+			isMiniatureHourglass = true
 		else
 			local shouldSpoof, result = Logic.shouldSpoofUpgradeEnabled(Controller, v)
 			if shouldSpoof then
@@ -932,6 +1012,12 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	if isBetterJumpPad and Controller.BetterJumpPadEnabled then
 		return true, true
 	end
+	if isHelmet and Controller.HelmetEnabled then
+		return true, true
+	end
+	if isMiniatureHourglass and Controller.MiniatureHourglassEnabled then
+		return true, true
+	end
 	return false
 end
 
@@ -942,6 +1028,8 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	local isGraceWings = false
 	local isAdvancedGravityCoil = false
 	local isBetterJumpPad = false
+	local isHelmet = false
+	local isMiniatureHourglass = false
 	for _, v in ipairs(args) do
 		if v == "DefuseKit" or v == "Defuse Kit" then
 			isDefuse = true
@@ -953,6 +1041,10 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 			isAdvancedGravityCoil = true
 		elseif v == "BetterJumpPad" or v == "Better Jump Pad" then
 			isBetterJumpPad = true
+		elseif v == "Helmet" then
+			isHelmet = true
+		elseif v == "MiniatureHourglass" or v == "Miniature Hourglass" then
+			isMiniatureHourglass = true
 		else
 			local shouldSpoof, stack = Logic.shouldSpoofUpgradeStack(Controller, v)
 			if shouldSpoof then
@@ -973,6 +1065,12 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 		return true, 1
 	end
 	if isBetterJumpPad and Controller.BetterJumpPadEnabled then
+		return true, 1
+	end
+	if isHelmet and Controller.HelmetEnabled then
+		return true, 1
+	end
+	if isMiniatureHourglass and Controller.MiniatureHourglassEnabled then
 		return true, 1
 	end
 	return false
@@ -1022,10 +1120,14 @@ table.insert(Controller.PermanentConnections, characterRefreshConnection)
 
 -- Lắng nghe và xử lý phần đầu cho các thực thể 3D như Springer (thêm proxy "head" để nhận ESP)
 local function handleEnemyAdded(enemy)
-	if not enemy or not enemy:IsA("Model") then return end
+	if not enemy or not enemy:IsA("Model") then
+		return
+	end
 	if enemy.Name == "Springer" or enemy.Name == "BigSpringer" then
 		task.spawn(function()
-			if enemy:FindFirstChild("head") then return end
+			if enemy:FindFirstChild("head") then
+				return
+			end
 			local Head = enemy:WaitForChild("Head", 5)
 			if Head and Head:IsA("BasePart") and not enemy:FindFirstChild("head") then
 				local proxyHead = Instance.new("Part")
@@ -1034,12 +1136,12 @@ local function handleEnemyAdded(enemy)
 				proxyHead.Transparency = 1
 				proxyHead.CanCollide = false
 				proxyHead.Massless = true
-				
+
 				local weld = Instance.new("WeldConstraint")
 				weld.Part0 = Head
 				weld.Part1 = proxyHead
 				weld.Parent = proxyHead
-				
+
 				proxyHead.CFrame = Head.CFrame
 				proxyHead.Parent = enemy
 
@@ -1186,21 +1288,24 @@ local function hookUpgradeHandler()
 					if typeof(hookfunction) == "function" then
 						if not getgenv()._NULLSCAPE_Globals.GetUpgradeChangedSignalHooked then
 							local oldGetUpgradeChangedSignal
-							oldGetUpgradeChangedSignal = hookfunction(UpgradeHandler.GetUpgradeChangedSignal, function(upgradeName)
-								local originalEvent = oldGetUpgradeChangedSignal(upgradeName)
-								local customUpgradeEvents = getgenv()._NULLSCAPE_Globals.customUpgradeEvents
-								local customEvent = customUpgradeEvents[upgradeName]
-								if not customEvent then
-									customEvent = Instance.new("BindableEvent")
-									customUpgradeEvents[upgradeName] = customEvent
-									if originalEvent then
-										originalEvent:Connect(function(...)
-											customEvent:Fire(...)
-										end)
+							oldGetUpgradeChangedSignal = hookfunction(
+								UpgradeHandler.GetUpgradeChangedSignal,
+								function(upgradeName)
+									local originalEvent = oldGetUpgradeChangedSignal(upgradeName)
+									local customUpgradeEvents = getgenv()._NULLSCAPE_Globals.customUpgradeEvents
+									local customEvent = customUpgradeEvents[upgradeName]
+									if not customEvent then
+										customEvent = Instance.new("BindableEvent")
+										customUpgradeEvents[upgradeName] = customEvent
+										if originalEvent then
+											originalEvent:Connect(function(...)
+												customEvent:Fire(...)
+											end)
+										end
 									end
+									return customEvent.Event
 								end
-								return customEvent.Event
-							end)
+							)
 							getgenv()._NULLSCAPE_Globals.OriginalGetUpgradeChangedSignal = oldGetUpgradeChangedSignal
 							getgenv()._NULLSCAPE_Globals.GetUpgradeChangedSignalHooked = true
 						end
@@ -1209,7 +1314,8 @@ local function hookUpgradeHandler()
 							local oldGetUpgradeChangedSignal = UpgradeHandler.GetUpgradeChangedSignal
 							getgenv()._NULLSCAPE_Globals.OriginalGetUpgradeChangedSignal = oldGetUpgradeChangedSignal
 							UpgradeHandler.GetUpgradeChangedSignal = function(upgradeName)
-								local originalEvent = getgenv()._NULLSCAPE_Globals.OriginalGetUpgradeChangedSignal(upgradeName)
+								local originalEvent =
+									getgenv()._NULLSCAPE_Globals.OriginalGetUpgradeChangedSignal(upgradeName)
 								local customUpgradeEvents = getgenv()._NULLSCAPE_Globals.customUpgradeEvents
 								local customEvent = customUpgradeEvents[upgradeName]
 								if not customEvent then

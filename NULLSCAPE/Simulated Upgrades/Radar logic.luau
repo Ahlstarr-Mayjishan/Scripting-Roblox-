@@ -48,9 +48,15 @@ local function isNativelyOwned(upgradeName)
 	local upgradesFolder = getUpgradesFolder()
 	if upgradesFolder then
 		local val = upgradesFolder:FindFirstChild(upgradeName)
-		if val and not val:GetAttribute(SIM_ATTR) and (val:IsA("ValueObject") or val:IsA("Attribute") or val:IsA("IntValue") or val:IsA("BoolValue")) then
+		if
+			val
+			and not val:GetAttribute(SIM_ATTR)
+			and (val:IsA("ValueObject") or val:IsA("Attribute") or val:IsA("IntValue") or val:IsA("BoolValue"))
+		then
 			local value = 0
-			pcall(function() value = val.Value or 0 end)
+			pcall(function()
+				value = val.Value or 0
+			end)
 			if value > 0 or value == true then
 				return true
 			end
@@ -73,6 +79,7 @@ local function collectDesiredSimulatedUpgrades(controller)
 		Gift = "HighlightGifts",
 		Tripmine = "HighlightTripmines",
 		Cadance = "RadarInstruments",
+		Cadence = "RadarInstruments",
 		Altar = "RadarAltars",
 		Player = "RadarPlayer",
 		Enemy = "EnemyOnTop",

@@ -7,11 +7,8 @@
 
 local Magnet = {}
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
-
-local LocalPlayer = Players.LocalPlayer
 
 local COLLECT_DELAY = 0.35
 
@@ -21,7 +18,7 @@ local lastCollectTick = 0
 local cachedGCH = nil
 
 -- Non-blocking spawn time tracker for Gift replication settle check
-local seenGifts = {}
+local seenGifts = setmetatable({}, { __mode = "k" })
 
 local function getGiftClientHandler()
 	if cachedGCH then

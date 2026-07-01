@@ -10,6 +10,8 @@ local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 
+local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
+
 local Logic = {}
 
 local BAR_REFRESH_INTERVAL = 0.45
@@ -126,7 +128,11 @@ local function findNamedAnimation(root)
 		end
 		if descendant:IsA("Animation") then
 			local name = string.lower(descendant.Name)
-			if string.find(name, "double") and string.find(name, "jump") and tostring(descendant.AnimationId or "") ~= "" then
+			if
+				string.find(name, "double")
+				and string.find(name, "jump")
+				and tostring(descendant.AnimationId or "") ~= ""
+			then
 				return descendant
 			end
 		end
@@ -222,7 +228,8 @@ local function resolveDoubleJumpAnimationId()
 	local globals = getGlobals()
 	local equippedRoot, equippedPackId = getEquippedAnimationPackRoot()
 	local cacheKey = equippedPackId ~= "" and equippedPackId or "Default"
-	if globals.InfiniteAirJumpAnimationKey == cacheKey
+	if
+		globals.InfiniteAirJumpAnimationKey == cacheKey
 		and type(globals.InfiniteAirJumpAnimationId) == "string"
 		and globals.InfiniteAirJumpAnimationId ~= ""
 	then
@@ -375,6 +382,9 @@ local function tryFallbackAirJump()
 	pcall(function()
 		rootPart.Velocity = boostedVelocity
 	end)
+	MomentumMemory.noteImpulse(rootPart, "InfiniteAirJump", velocity, boostedVelocity, boostedVelocity - velocity, {
+		Power = FALLBACK_JUMP_POWER,
+	})
 	pcall(function()
 		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 	end)

@@ -7,6 +7,7 @@ local Workspace = game:GetService("Workspace")
 
 local AirControl = {}
 
+local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 
 local CachedControl = nil
 
@@ -75,7 +76,15 @@ local function applyVelocityDelta(rootPart, delta, maxDelta)
 		return false
 	end
 
+	local beforeVelocity = rootPart.Velocity
 	rootPart.Velocity += delta
+	if MomentumMemory and typeof(MomentumMemory.noteImpulse) == "function" then
+		pcall(function()
+			MomentumMemory.noteImpulse(rootPart, "GrappleAirControl", beforeVelocity, rootPart.Velocity, delta, {
+				MaxDelta = maxDelta,
+			})
+		end)
+	end
 	return true
 end
 
