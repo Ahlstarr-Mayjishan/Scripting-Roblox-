@@ -1,3 +1,4 @@
+--!nocheck
 -- [[
 --  NULLSCAPE - Accessibility Executor
 --  Dispatches accessibility modules with fail-soft loading so one broken helper
@@ -16,7 +17,10 @@ local MODULE_PATHS = {
 
 local Modules = {}
 local ModuleFailures = {}
+local LoadingModules = {}
+local PendingCalls = {}
 local Executor = {}
+local callModule
 
 local LOAD_RETRY_COOLDOWN = 1.5
 local CALL_RETRY_COOLDOWN = 0.75
@@ -58,39 +62,67 @@ end
 
 local function loadAccessibilityModule(name)
 	if typeof(Modules[name]) == "table" then
-		return Modules[name]
+		return Modules[name], "ready"
+	end
+
+	if LoadingModules[name] then
+		return nil, "loading"
 	end
 
 	if isQuarantined(name, "load") then
-		return nil
+		return nil, "quarantined"
 	end
 
 	local path = MODULE_PATHS[name]
 	if not path then
-		return nil
+		return nil, "missing"
 	end
 
+	LoadingModules[name] = true
 	local success, module = pcall(function()
 		return getgenv().loadModule(path)
 	end)
+	LoadingModules[name] = nil
+
 	if not success or typeof(module) ~= "table" then
 		warn("[NULLSCAPE] Accessibility module failed: " .. tostring(path) .. " -> " .. tostring(module))
 		Modules[name] = nil
 		markFailure(name, "load", module)
-		return nil
+		return nil, "failed"
 	end
 
 	Modules[name] = module
 	clearFailure(name)
-	return module
+	return module, "ready"
 end
 
-local function callModule(name, methodName, ...)
+local function schedulePendingCall(name, methodName, args)
+	local key = tostring(name) .. ":" .. tostring(methodName)
+	if PendingCalls[key] then
+		return
+	end
+
+	PendingCalls[key] = true
+	task.defer(function()
+		PendingCalls[key] = nil
+		callModule(name, methodName, table.unpack(args, 1, args.n))
+	end)
+end
+
+function callModule(name, methodName, ...)
 	if isQuarantined(name, "call") then
 		return false
 	end
 
-	local module = loadAccessibilityModule(name)
+	local args = {
+		n = select("#", ...),
+		...,
+	}
+	local module, state = loadAccessibilityModule(name)
+	if state == "loading" then
+		schedulePendingCall(name, methodName, args)
+		return true
+	end
 	if not module or typeof(module[methodName]) ~= "function" then
 		return false
 	end

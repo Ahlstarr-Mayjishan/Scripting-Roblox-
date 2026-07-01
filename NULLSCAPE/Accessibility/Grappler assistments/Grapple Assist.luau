@@ -52,7 +52,56 @@ local function getGrappleModule()
 	end
 
 	local success, grappleModule = pcall(require, grappleScript)
-	return success and grappleModule or nil
+	if
+		not success
+		or typeof(grappleModule) ~= "table"
+		or typeof(grappleModule.new) ~= "function"
+		or typeof(grappleModule.Cast) ~= "function"
+		or typeof(grappleModule.Start) ~= "function"
+		or typeof(grappleModule.Step) ~= "function"
+	then
+		return nil
+	end
+
+	return grappleModule
+end
+
+local function clearStaleHooks(grappleModule, globals)
+	local castHookValid = globals.AccessibilityGrappleAssistWrappedCast
+		and grappleModule.Cast == globals.AccessibilityGrappleAssistWrappedCast
+	local stepHookValid = not globals.AccessibilityGrappleAssistWrappedStep
+		or grappleModule.Step == globals.AccessibilityGrappleAssistWrappedStep
+
+	if globals.AccessibilityGrappleAssistHooked and castHookValid and stepHookValid then
+		Logic.OriginalCast = globals.AccessibilityGrappleAssistOriginalCast
+		Logic.WrappedCast = globals.AccessibilityGrappleAssistWrappedCast
+		Logic.OriginalStep = globals.AccessibilityGrappleAssistOriginalStep
+		Logic.WrappedStep = globals.AccessibilityGrappleAssistWrappedStep
+		return true
+	end
+
+	if globals.AccessibilityGrappleAssistOriginalCast then
+		if grappleModule.Cast ~= globals.AccessibilityGrappleAssistOriginalCast then
+			grappleModule.Cast = globals.AccessibilityGrappleAssistOriginalCast
+		end
+		globals.AccessibilityGrappleAssistOriginalCast = nil
+		globals.AccessibilityGrappleAssistWrappedCast = nil
+	end
+
+	if globals.AccessibilityGrappleAssistOriginalStep then
+		if grappleModule.Step ~= globals.AccessibilityGrappleAssistOriginalStep then
+			grappleModule.Step = globals.AccessibilityGrappleAssistOriginalStep
+		end
+		globals.AccessibilityGrappleAssistOriginalStep = nil
+		globals.AccessibilityGrappleAssistWrappedStep = nil
+	end
+
+	globals.AccessibilityGrappleAssistHooked = false
+	Logic.WrappedCast = nil
+	Logic.WrappedStep = nil
+	Logic.OriginalCast = nil
+	Logic.OriginalStep = nil
+	return false
 end
 
 local function rememberGrapple(grapple)
@@ -155,7 +204,7 @@ function Logic.initialize(controller)
 	end
 
 	local globals = getGlobals()
-	if globals.AccessibilityGrappleAssistHooked then
+	if clearStaleHooks(grappleModule, globals) then
 		Logic.Enabled = true
 		return true
 	end

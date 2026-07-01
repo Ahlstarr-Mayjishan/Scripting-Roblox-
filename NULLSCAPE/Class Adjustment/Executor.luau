@@ -46,7 +46,18 @@ local function getGrappleModule()
 	end
 
 	local success, grappleModule = pcall(require, grappleScript)
-	return success and grappleModule or nil
+	if
+		not success
+		or typeof(grappleModule) ~= "table"
+		or typeof(grappleModule.new) ~= "function"
+		or typeof(grappleModule.Cast) ~= "function"
+		or typeof(grappleModule.Start) ~= "function"
+		or typeof(grappleModule.Step) ~= "function"
+	then
+		return nil
+	end
+
+	return grappleModule
 end
 
 local function packValues(...)
