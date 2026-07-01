@@ -27,6 +27,8 @@ local IMMUNITY_HOLD_AFTER_NEARBY = 0.75
 local IMMUNITY_CLUSTER_DISTANCE = 5.5
 local IMMUNITY_CLUSTER_COUNT = 2
 local IMMUNITY_EMERGENCY_IFRAMES = 0.75
+local IMMUNITY_DEBUG = true
+local IMMUNITY_DEBUG_INTERVAL = 0.5
 
 local activeController = nil
 local watcherRunning = false
@@ -44,6 +46,8 @@ local immunityArmed = false
 local lastImmunityResetAt = 0
 local immunityHoldUntil = 0
 local emergencyIframeUntil = 0
+local lastDebugAt = 0
+local lastDebugKey = ""
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
@@ -256,6 +260,56 @@ local function isImmunityModeActive()
 	return getBarrierMode() == IMMUNITY_MODE
 end
 
+local function getImmunityDebugState()
+	local char = LocalPlayer.Character
+	local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+
+	return {
+		charging = char and char:GetAttribute("ChargingCheck") == true,
+		usingAbility = humanoid and humanoid:GetAttribute("UsingAbility") == true,
+		cancelCharge = LocalPlayer:FindFirstChild("CANCELCHARGE") ~= nil,
+		tripIframes = LocalPlayer:FindFirstChild("TRIP_IFRAMES") ~= nil,
+		health = humanoid and math.floor(humanoid.Health) or -1,
+	}
+end
+
+local function debugImmunity(label, details, force)
+	if not IMMUNITY_DEBUG then
+		return
+	end
+
+	local now = os.clock()
+	local state = getImmunityDebugState()
+	local key = table.concat({
+		label,
+		tostring(state.charging),
+		tostring(state.usingAbility),
+		tostring(state.cancelCharge),
+		tostring(state.tripIframes),
+		tostring(state.health),
+		tostring(details or ""),
+	}, "|")
+
+	if not force and key == lastDebugKey and now - lastDebugAt < IMMUNITY_DEBUG_INTERVAL then
+		return
+	end
+
+	lastDebugAt = now
+	lastDebugKey = key
+	print(
+		string.format(
+			"[Defuse Immunity] %s | charge=%s using=%s cancel=%s trip_iframes=%s hp=%s%s",
+			label,
+			tostring(state.charging),
+			tostring(state.usingAbility),
+			tostring(state.cancelCharge),
+			tostring(state.tripIframes),
+			tostring(state.health),
+			details and (" | " .. details) or ""
+		)
+	)
+end
+
 local function refreshImmunity()
 	if not isImmunityModeActive() then
 		return
@@ -312,6 +366,7 @@ pulseChargerImmunity = function(force)
 	end
 
 	lastServerPulseAt = now
+	debugImmunity("FireServer(true)", nil, true)
 	pcall(function()
 		ChargerEvent:FireServer(true)
 	end)
@@ -326,6 +381,7 @@ local function resetChargerImmunity(force)
 	immunityHoldUntil = 0
 	lastImmunityResetAt = os.clock()
 	lastServerPulseAt = 0
+	debugImmunity("FireServer(false)", force and "force=true" or nil, true)
 	pcall(function()
 		ChargerEvent:FireServer(false)
 	end)
@@ -334,10 +390,12 @@ end
 local function holdEmergencyIframes(duration)
 	emergencyIframeUntil = math.max(emergencyIframeUntil, os.clock() + duration)
 	addIframes()
+	debugImmunity("EmergencyIFrames", string.format("until=%.2f", emergencyIframeUntil), false)
 
 	local token = rearmToken
 	task.delay(duration, function()
 		if token == rearmToken and isImmunityModeActive() and os.clock() >= emergencyIframeUntil then
+			debugImmunity("EmergencyIFramesEnd", nil, true)
 			removeIframes()
 		end
 	end)
@@ -396,10 +454,24 @@ local function updateImmunityTripmineWindow()
 	local now = os.clock()
 	local nearestTripmine, clusteredTripmines = getTripmineThreatInfo(hrp)
 	local rearmCoolingDown = now - lastImmunityResetAt < IMMUNITY_REARM_DELAY
+	debugImmunity(
+		"ThreatScan",
+		string.format(
+			"nearest=%.2f cluster=%d armed=%s cooldown=%s hold=%.2f emergency=%.2f",
+			nearestTripmine,
+			clusteredTripmines,
+			tostring(immunityArmed),
+			tostring(rearmCoolingDown),
+			math.max(0, immunityHoldUntil - now),
+			math.max(0, emergencyIframeUntil - now)
+		),
+		false
+	)
 
 	if clusteredTripmines >= IMMUNITY_CLUSTER_COUNT or (rearmCoolingDown and nearestTripmine <= IMMUNITY_ARM_DISTANCE) then
 		holdEmergencyIframes(IMMUNITY_EMERGENCY_IFRAMES)
 	elseif emergencyIframeUntil > 0 and now >= emergencyIframeUntil then
+		debugImmunity("EmergencyIFramesClear", nil, true)
 		removeIframes()
 	end
 
@@ -438,6 +510,7 @@ local function bindImmunityRearmWatcher()
 
 	playerChildConnection = LocalPlayer.ChildAdded:Connect(function(child)
 		if child.Name == "CANCELCHARGE" or child.Name == "TRIP_IFRAMES" then
+			debugImmunity("PlayerChildAdded", child.Name, true)
 			scheduleImmunityRearm(IMMUNITY_REARM_DELAY)
 		end
 	end)
