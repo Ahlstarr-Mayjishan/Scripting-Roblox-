@@ -1776,6 +1776,9 @@ local function initializeBellBlindnessHook()
 			task.wait(0.5)
 		end
 		local originalRingBell = _G.RingBell
+		if typeof(originalRingBell) ~= "function" then
+			return
+		end
 		_G.RingBell = function(p1)
 			local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
 			if activeCtrl and activeCtrl.BellBlindnessImmune then
