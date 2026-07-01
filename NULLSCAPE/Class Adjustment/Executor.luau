@@ -66,6 +66,40 @@ local function loadAdjustmentModules()
 	ChargerTripmineAssist = ChargerTripmineAssist or getgenv().loadModule(MODULE_PATHS.ChargerTripmineAssist)
 end
 
+local function clearStaleHooks(grappleModule, globals)
+	if globals.ClassAdjustmentOriginalStep then
+		if grappleModule.Step ~= globals.ClassAdjustmentOriginalStep then
+			grappleModule.Step = globals.ClassAdjustmentOriginalStep
+		end
+		globals.ClassAdjustmentOriginalStep = nil
+		HookedStep = nil
+	end
+
+	if globals.ClassAdjustmentOriginalSharkTail then
+		if grappleModule.SharkTail ~= globals.ClassAdjustmentOriginalSharkTail then
+			grappleModule.SharkTail = globals.ClassAdjustmentOriginalSharkTail
+		end
+		globals.ClassAdjustmentOriginalSharkTail = nil
+		HookedSharkTail = nil
+	end
+
+	if globals.ClassAdjustmentOriginalStart then
+		if grappleModule.Start ~= globals.ClassAdjustmentOriginalStart then
+			grappleModule.Start = globals.ClassAdjustmentOriginalStart
+		end
+		globals.ClassAdjustmentOriginalStart = nil
+		HookedStart = nil
+	end
+
+	if globals.ClassAdjustmentOriginalCast then
+		if grappleModule.Cast ~= globals.ClassAdjustmentOriginalCast then
+			grappleModule.Cast = globals.ClassAdjustmentOriginalCast
+		end
+		globals.ClassAdjustmentOriginalCast = nil
+		globals.ClassAdjustmentHookedCast = nil
+	end
+end
+
 local function applyStepAdjustments(self, dt)
 	if not HooksActive then
 		return
@@ -102,6 +136,7 @@ function Executor.enable()
 
 	loadAdjustmentModules()
 	local globals = getGlobals()
+	clearStaleHooks(grappleModule, globals)
 
 	if typeof(grappleModule.Step) == "function" and not globals.ClassAdjustmentOriginalStep then
 		local originalStep = grappleModule.Step
@@ -199,7 +234,7 @@ function Executor.enable()
 			end
 
 			local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
-			
+
 			-- Capture JumpPad state before original Start runs
 			local jumpPad = p2 and p2.Instance
 			local isJumpPad = jumpPad and jumpPad.Name == "JumpPad"
@@ -207,38 +242,19 @@ function Executor.enable()
 			local origCanQuery = isJumpPad and jumpPad.CanQuery
 			local origColor = isJumpPad and jumpPad.Color
 
-			local multiplier = Control and Control.GrappleHookCastSpeedMultiplier or 1
-			local results
-			if multiplier ~= 1 then
-				local originalCreate = game.TweenService.Create
-				local originalDelay = task.delay
-				
-				-- Hook TweenService:Create temporarily for the duration of Start call
-				game.TweenService.Create = function(ts, instance, tweenInfo, propertyTable)
-					if instance == self.hook or (self.hook and instance and (instance == self.hook or instance.Parent == self.hook or instance:IsDescendantOf(self.hook))) then
-						local speedMultiplier = multiplier == 0 and 999999 or multiplier
-						local newTime = tweenInfo.Time / speedMultiplier
-						tweenInfo = TweenInfo.new(newTime, tweenInfo.EasingStyle, tweenInfo.EasingDirection, tweenInfo.RepeatCount, tweenInfo.Reverses, tweenInfo.DelayTime)
-					end
-					return originalCreate(ts, instance, tweenInfo, propertyTable)
-				end
-				
-				-- Hook task.delay temporarily for the duration of Start call
-				task.delay = function(delayTime, callback)
-					local speedMultiplier = multiplier == 0 and 999999 or multiplier
-					local newDelay = delayTime / speedMultiplier
-					return originalDelay(newDelay, callback)
-				end
-				
-				results = packValues(pcall(originalStart, self, p2, ...))
-				
-				game.TweenService.Create = originalCreate
-				task.delay = originalDelay
-			else
-				results = packValues(pcall(originalStart, self, p2, ...))
+			local speedWindow = false
+			if HookCastSpeed and typeof(HookCastSpeed.beforeStart) == "function" then
+				local ok, enabled = pcall(HookCastSpeed.beforeStart, self, p2)
+				speedWindow = ok and enabled == true
 			end
 
-			-- Restore JumpPad state if bypass is enabled
+			local results = packValues(pcall(originalStart, self, p2, ...))
+
+			if speedWindow and HookCastSpeed and typeof(HookCastSpeed.afterStart) == "function" then
+				pcall(HookCastSpeed.afterStart, self)
+			end
+
+			-- Restore JumpPad state if bypass is enabled, even when native Start throws.
 			if isJumpPad and Control and Control.GrappleJumpPadUsesBypassEnabled then
 				pcall(function()
 					jumpPad:SetAttribute("Uses", origUses)

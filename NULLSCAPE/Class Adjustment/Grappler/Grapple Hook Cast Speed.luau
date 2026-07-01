@@ -3,12 +3,9 @@
 --  NULLSCAPE - Grapple Hook Cast Speed Adjustment
 -- ]]
 
-local TweenService = game:GetService("TweenService")
-
 local HookCastSpeed = {}
 
 local HooksInstalled = false
-local OriginalCreate = nil
 local OriginalDelay = nil
 local ActiveCast = nil
 
@@ -36,17 +33,6 @@ local function scaleDuration(duration)
 	return duration / multiplier
 end
 
-local function isHookTween(instance, tweenInfo, goals)
-	local active = ActiveCast
-	if not (active and active.Grapple and instance == active.Grapple.hook) then
-		return false
-	end
-	if typeof(tweenInfo) ~= "TweenInfo" or type(goals) ~= "table" then
-		return false
-	end
-	return goals.CFrame ~= nil
-end
-
 local function installHooks()
 	if HooksInstalled then
 		return true
@@ -54,32 +40,6 @@ local function installHooks()
 	if typeof(hookfunction) ~= "function" then
 		return false
 	end
-
-	local createOk, oldCreate = pcall(function()
-		return hookfunction(TweenService.Create, function(self, instance, tweenInfo, goals, ...)
-			if self == TweenService and isHookTween(instance, tweenInfo, goals) then
-				local newDuration = scaleDuration(tweenInfo.Time)
-				ActiveCast.OriginalDuration = tweenInfo.Time
-				ActiveCast.AdjustedDuration = newDuration
-				tweenInfo = TweenInfo.new(
-					newDuration,
-					tweenInfo.EasingStyle,
-					tweenInfo.EasingDirection,
-					tweenInfo.RepeatCount,
-					tweenInfo.Reverses,
-					tweenInfo.DelayTime
-				)
-			end
-
-			return OriginalCreate(self, instance, tweenInfo, goals, ...)
-		end)
-	end)
-
-	if not createOk or typeof(oldCreate) ~= "function" then
-		return false
-	end
-
-	OriginalCreate = oldCreate
 
 	local delayOk, oldDelay = pcall(function()
 		return hookfunction(task.delay, function(delayTime, callback, ...)
@@ -96,8 +56,6 @@ local function installHooks()
 	end)
 
 	if not delayOk or typeof(oldDelay) ~= "function" then
-		pcall(hookfunction, TweenService.Create, oldCreate)
-		OriginalCreate = nil
 		return false
 	end
 
@@ -106,12 +64,26 @@ local function installHooks()
 	return true
 end
 
-function HookCastSpeed.beforeStart(grapple)
+local function getNativeDuration(grapple, hit)
+	local rootPart = grapple and grapple.RootPart
+	local hitPosition = hit and hit.Position
+	if not (rootPart and typeof(hitPosition) == "Vector3") then
+		return nil
+	end
+
+	return (rootPart.Position - hitPosition).Magnitude / 90 * 0.2
+end
+
+function HookCastSpeed.beforeStart(grapple, hit)
 	local multiplier = getMultiplier()
 	if multiplier == 1 then
 		return false
 	end
 	if not (grapple and grapple.hook) then
+		return false
+	end
+	local nativeDuration = getNativeDuration(grapple, hit)
+	if not nativeDuration then
 		return false
 	end
 	if not installHooks() then
@@ -120,6 +92,8 @@ function HookCastSpeed.beforeStart(grapple)
 
 	ActiveCast = {
 		Grapple = grapple,
+		OriginalDuration = nativeDuration,
+		AdjustedDuration = scaleDuration(nativeDuration),
 		StartedAt = time(),
 	}
 	return true
@@ -133,13 +107,9 @@ end
 
 function HookCastSpeed.restore()
 	ActiveCast = nil
-	if OriginalCreate and typeof(hookfunction) == "function" then
-		pcall(hookfunction, TweenService.Create, OriginalCreate)
-	end
 	if OriginalDelay and typeof(hookfunction) == "function" then
 		pcall(hookfunction, task.delay, OriginalDelay)
 	end
-	OriginalCreate = nil
 	OriginalDelay = nil
 	HooksInstalled = false
 end

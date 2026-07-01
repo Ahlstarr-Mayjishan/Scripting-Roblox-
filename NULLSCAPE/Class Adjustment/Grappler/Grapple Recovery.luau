@@ -5,19 +5,26 @@
 
 local Recovery = {}
 
+local function getAccessibilityController()
+	local globals = getgenv()._NULLSCAPE_Globals
+	return globals and globals.activeAccessibilityController or nil
+end
+
+local function isInfiniteStaminaEnabled(controller)
+	local mode = controller and (controller.StaminaMode or controller.GrapplerStaminaMode)
+	return tostring(mode or "Off") == "Infinite Stamina"
+end
+
 function Recovery.apply(grapple, _dt, beforeTime)
 	if not grapple or not beforeTime then
 		return
 	end
 
-	-- Check if Infinite Stamina is active
-	local StaminaAssist = getgenv().loadModule("NULLSCAPE/Accessibility/Stamina Assist.luau")
-	if StaminaAssist and typeof(StaminaAssist.isEnabled) == "function" and StaminaAssist.isEnabled() then
-		-- Infinite Stamina is running, let it take control
+	local accessController = getAccessibilityController()
+	if isInfiniteStaminaEnabled(accessController) then
 		return
 	end
 
-	local accessController = getgenv().loadModule("NULLSCAPE/Accessibility/controller.luau")
 	local speedMultiplier = accessController and accessController.GrapplerStaminaRecoverySpeed or 1
 
 	-- If multiplier is 1x, return control completely to the game's original logic

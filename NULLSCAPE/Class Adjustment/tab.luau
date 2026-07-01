@@ -79,6 +79,8 @@ return function(Client, Controller)
 	Controller = createControllerProxy(Client, Controller)
 	local Tab = Client.Window:CreateTab("Class Adjustment", 4483362458)
 
+	Tab:CreateSection("Grappler")
+
 	Tab:CreateToggle({
 		Name = "Disable Ground Auto-Release",
 		Info = "Prevents the grapple hook from automatically releasing when you are close to or running on the ground.",
@@ -109,7 +111,6 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateSection("Grappler")
 	Tab:CreateToggle({
 		Name = "JumpPad Uses Bypass",
 		Info = "Keeps Grapple JumpPads reusable/queryable for repeated pulls. Useful for testing repeated JumpPad grapples.",
