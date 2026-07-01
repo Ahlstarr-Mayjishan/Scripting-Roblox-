@@ -26,6 +26,7 @@ local iframeObject = nil
 local lastChargerState = nil
 local lastRefreshAt = 0
 local immunityPulseUntil = 0
+local lastMode = OFF_MODE
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
@@ -73,9 +74,9 @@ local function addIframes()
 	iframeObject = obj
 end
 
-local function removeIframes()
+local function removeIframes(force)
 	getIframeOwners()[IFRAME_OWNER] = nil
-	if hasIframeOwner() then
+	if hasIframeOwner() and not force then
 		return
 	end
 
@@ -86,11 +87,13 @@ local function removeIframes()
 		iframeObject = nil
 	end
 
-	local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
-	if existing then
-		pcall(function()
-			existing:Destroy()
-		end)
+	if force then
+		local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
+		if existing then
+			pcall(function()
+				existing:Destroy()
+			end)
+		end
 	end
 end
 
@@ -219,10 +222,17 @@ local function startWatcher()
 			)
 
 			local mode = getBarrierMode()
+			if mode ~= lastMode then
+				local oldMode = lastMode
+				lastMode = mode
+				if mode == IMMUNITY_MODE or mode == OFF_MODE then
+					removeIframes(true)
+				end
+			end
+
 			if mode == OFF_MODE then
 				if not cleanedIdle then
-					removeIframes()
-					lastChargerState = nil
+					removeIframes(true)
 					cleanedIdle = true
 				end
 				continue
@@ -231,22 +241,20 @@ local function startWatcher()
 
 			if mode == IFRAMES_MODE then
 				addIframes()
-				lastChargerState = nil
 			elseif mode == IMMUNITY_MODE then
 				-- Gửi tín hiệu giả lập lướt lên Server vô điều kiện để đảm bảo bất tử mìn luôn được giữ vững
 				pcall(function()
 					ChargerEvent:FireServer(true)
 				end)
 
+				-- Cô lập tính năng liên kết: Hỗ trợ tạo I-Frames tạm thời khi kết thúc Charge thực tế cho Charger Class
 				if hasIframes() and os.clock() >= immunityPulseUntil then
 					removeIframes()
 				end
 				watchNativeChargerState()
-			else
-				lastChargerState = nil
 			end
 		end
-		removeIframes()
+		removeIframes(true)
 		watcherRunning = false
 	end)
 end
@@ -255,12 +263,19 @@ function Barrier.update(controller)
 	activeController = controller
 
 	if getBarrierMode() == OFF_MODE then
-		removeIframes()
+		removeIframes(true)
 	end
 end
 
 function Barrier.Init()
 	startWatcher()
+	-- Dọn dẹp TRIP_IFRAMES cũ nếu có khi load/reload script
+	local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
+	if existing then
+		pcall(function()
+			existing:Destroy()
+		end)
+	end
 	print("[NULLSCAPE Defuse] Module ready. Modes: I-Frames | Immunity")
 end
 
