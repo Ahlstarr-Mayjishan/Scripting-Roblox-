@@ -18,6 +18,7 @@ local IMMUNITY_MODE = "Immunity"
 local ACTIVE_WATCH_INTERVAL = 0.12
 local IDLE_WATCH_INTERVAL = 0.35
 local IMMUNITY_SERVER_PULSE_INTERVAL = 0.8
+local IMMUNITY_RESET_TO_ARM_DELAY = 0.06
 local IMMUNITY_REARM_DELAY = 0.12
 local IMMUNITY_REARM_RETRY_DELAY = 0.45
 
@@ -231,6 +232,20 @@ pulseChargerImmunity = function(force)
 	end
 
 	lastServerPulseAt = now
+	if force then
+		pcall(function()
+			ChargerEvent:FireServer(false)
+		end)
+		task.delay(IMMUNITY_RESET_TO_ARM_DELAY, function()
+			if isImmunityModeActive() then
+				pcall(function()
+					ChargerEvent:FireServer(true)
+				end)
+			end
+		end)
+		return
+	end
+
 	pcall(function()
 		ChargerEvent:FireServer(true)
 	end)
