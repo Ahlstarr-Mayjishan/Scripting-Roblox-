@@ -32,7 +32,6 @@ local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
 globals.TripmineBarrierWatcherToken = watcherToken
 globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
-globals.DefuseKitsChargerEventHooked = globals.DefuseKitsChargerEventHooked or false
 
 local IFRAME_OWNER = "DefuseKits"
 
@@ -226,49 +225,11 @@ local function watchNativeChargerState()
 	lastChargerState = charging
 end
 
-local function installChargerEventWatcher()
-	-- Luôn cập nhật hàm callback mới nhất vào bảng toàn cục khi reload script
-	globals.DefuseKitsOnFireServer = function()
-		refreshImmunity()
-	end
-
-	if globals.DefuseKitsChargerEventHooked then
-		return
-	end
-
-	if not (typeof(hookmetamethod) == "function" and typeof(getnamecallmethod) == "function") then
-		return
-	end
-
-	local oldNamecall
-	local ok = pcall(function()
-		oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-			local method = getnamecallmethod()
-			local args = { ... }
-
-			if self == ChargerEvent and method == "FireServer" and args[1] == false then
-				task.defer(function()
-					if globals.DefuseKitsOnFireServer then
-						globals.DefuseKitsOnFireServer()
-					end
-				end)
-			end
-
-			return oldNamecall(self, ...)
-		end)
-	end)
-
-	if ok then
-		globals.DefuseKitsChargerEventHooked = true
-	end
-end
-
 local function startWatcher()
 	if watcherRunning then
 		return
 	end
 	watcherRunning = true
-	installChargerEventWatcher()
 
 	task.spawn(function()
 		local cleanedIdle = false
