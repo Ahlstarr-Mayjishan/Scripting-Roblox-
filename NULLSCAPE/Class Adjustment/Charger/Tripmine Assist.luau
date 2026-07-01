@@ -24,8 +24,6 @@ local ACTIVE_WATCH_INTERVAL = 0.08
 local IDLE_WATCH_INTERVAL = 0.35
 local PASS_BATCH_DISTANCE = 60
 local PASS_BATCH_CORRIDOR = 9
-local PASS_BATCH_MAX_TIME = 0.22
-local PASS_BATCH_IDLE_FLUSH = 0.1
 local PASS_BATCH_MAX_COUNT = 5
 local PASS_BATCH_MIN_SPEED = 22
 
@@ -261,8 +259,6 @@ local function startPassBatch(giftId, gift, giftPos, hrpPos)
 	passBatch = {
 		anchorId = giftId,
 		anchorPos = giftPos,
-		startTime = os.clock(),
-		lastAddTime = os.clock(),
 		items = {},
 		itemSet = {},
 		startPos = hrpPos,
@@ -285,13 +281,16 @@ local function addToPassBatch(giftId, gift, giftPos, batchDistance)
 		return false
 	end
 
+	if #passBatch.items >= PASS_BATCH_MAX_COUNT then
+		return false
+	end
+
 	table.insert(passBatch.items, {
 		id = giftId,
 		gift = gift,
 		pos = giftPos,
 	})
 	passBatch.itemSet[giftId] = true
-	passBatch.lastAddTime = os.clock()
 	return true
 end
 
@@ -379,14 +378,8 @@ local function updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
 	end
 
 	if passBatch then
-		local now = os.clock()
 		local anchorDistance = (hrpPos - passBatch.anchorPos).Magnitude
-		if
-			anchorDistance >= batchDistance
-			or now - passBatch.startTime >= PASS_BATCH_MAX_TIME
-			or now - passBatch.lastAddTime >= PASS_BATCH_IDLE_FLUSH
-			or #passBatch.items >= PASS_BATCH_MAX_COUNT
-		then
+		if anchorDistance >= batchDistance then
 			flushPassBatch("PassBatchFlush", hrpPos, true)
 		end
 	end
