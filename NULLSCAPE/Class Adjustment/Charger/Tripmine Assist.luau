@@ -463,14 +463,19 @@ local function startWatcher()
 				PASS_BATCH_DISTANCE
 			)
 
+			local staleMineIds = {}
 			for id in pairs(processedMines) do
 				local idText = tostring(id)
 				if idText:sub(1, 7) ~= "__dist_" then
 					local giftId = tonumber(id)
-					if giftId and not GCH.Gifts[giftId] then
-						clearMineState(giftId)
+					if not GCH.Gifts[id] and (not giftId or not GCH.Gifts[giftId]) then
+						table.insert(staleMineIds, id)
 					end
 				end
+			end
+
+			for _, id in ipairs(staleMineIds) do
+				clearMineState(id)
 			end
 
 			if mode == PASS_BATCH_MODE then
