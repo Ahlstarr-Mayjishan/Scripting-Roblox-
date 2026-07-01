@@ -31,6 +31,9 @@ local DEFAULTS = {
 	GrappleAssistRailTargetingEnabled = false,
 	GrappleAssistRailPriority = 500,
 	GrappleAssistTerrainPriority = 100,
+	GrappleVoidProtectionEnabled = false,
+	GrappleVoidProtectionHeight = 24,
+	GrappleVoidProtectionFallSpeed = 85,
 	GrappleVoidRescueEnabled = false,
 	GrappleVoidRescueAutoCast = false,
 	GrappleVoidRescueAutoReel = true,
@@ -484,6 +487,42 @@ return function(Client, Controller)
 		Callback = function(Keybind)
 			Controller:SetGrappleAssistSecondaryCastKeybind(Keybind)
 			Controller:TriggerGrappleAssistSecondaryCast()
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Void Protection",
+		Info = "Prevents Grapple Assist from selecting ordinary anchors that would pull you into KillVoid during dangerous falls.",
+		CurrentValue = Controller.GrappleVoidProtectionEnabled or false,
+		Flag = "GrappleVoidProtectionToggle",
+		Callback = function(Value)
+			Controller:SetGrappleVoidProtection(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Void Protection Height",
+		Info = "Ordinary assisted targets this close to KillVoid are treated as unsafe.",
+		Range = { 5, 120 },
+		Increment = 5,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleVoidProtectionHeight or 24,
+		Flag = "GrappleVoidProtectionHeightSlider",
+		Callback = function(Value)
+			Controller:SetGrappleVoidProtectionHeight(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Void Protection Fall Speed",
+		Info = "When falling faster than this, assisted targeting avoids ordinary anchors below you.",
+		Range = { 20, 240 },
+		Increment = 5,
+		Suffix = " studs/s",
+		CurrentValue = Controller.GrappleVoidProtectionFallSpeed or 85,
+		Flag = "GrappleVoidProtectionFallSpeedSlider",
+		Callback = function(Value)
+			Controller:SetGrappleVoidProtectionFallSpeed(Value)
 		end,
 	})
 

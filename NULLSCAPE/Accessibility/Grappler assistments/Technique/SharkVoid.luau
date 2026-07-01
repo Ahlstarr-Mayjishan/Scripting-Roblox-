@@ -10,12 +10,14 @@ local DEFAULT_HEIGHT = 45
 local DEFAULT_FALL_SPEED = 65
 local DEFAULT_REEL_HOLD = 0.12
 local RESCUE_COOLDOWN = 0.55
+local VOID_ANCHOR_TOLERANCE = 10
 
 local Logic = {
 	PendingEndAt = nil,
 	LastAutoCastAt = 0,
 	LastAutoReelAt = 0,
 	LastSharkTailAt = 0,
+	LastVoidAnchorAt = 0,
 }
 
 local function getNumber(value, fallback, minimum, maximum)
@@ -43,6 +45,17 @@ local function getKillVoidY()
 	end
 
 	return nil
+end
+
+local function isKillVoidPart(part)
+	return typeof(part) == "Instance" and part:IsA("BasePart") and part.Name == "KillVoid"
+end
+
+local function isVoidPoint(position)
+	local killVoidY = getKillVoidY()
+	return typeof(position) == "Vector3"
+		and killVoidY ~= nil
+		and math.abs(position.Y - killVoidY) <= VOID_ANCHOR_TOLERANCE
 end
 
 local function hasUpgrade(movement, upgradeName)
@@ -93,12 +106,28 @@ local function isDangerousFall(grapple, controller)
 		end
 	end
 	local killVoidY = getKillVoidY()
+	if not killVoidY then
+		return false
+	end
 
-	if killVoidY and rootPart.Position.Y - killVoidY <= heightThreshold then
-		return true
+	local distanceToVoid = rootPart.Position.Y - killVoidY
+	if distanceToVoid < 0 or distanceToVoid > heightThreshold then
+		return false
 	end
 
 	return velocityY <= -fallSpeed
+end
+
+local function isVoidHit(hitResult)
+	if typeof(hitResult) ~= "table" then
+		return false
+	end
+
+	if isKillVoidPart(hitResult.Instance) then
+		return true
+	end
+
+	return isVoidPoint(hitResult.Position)
 end
 
 local function playReelSound(grapple)
@@ -162,7 +191,7 @@ local function autoCast(grapple, controller, targeting, now)
 		end
 	end
 
-	if not hitResult then
+	if not isVoidHit(hitResult) then
 		return false
 	end
 
@@ -173,12 +202,23 @@ local function autoCast(grapple, controller, targeting, now)
 	if success then
 		recordMomentum(grapple, "SharkVoidAutoCast")
 		Logic.LastAutoCastAt = now
+		Logic.LastVoidAnchorAt = now
 	end
 
 	return success
 end
 
-local function canAutoReel(grapple, controller)
+local function hasVoidAnchor(grapple, now)
+	local movement = grapple and grapple.Movement
+	if movement and isVoidPoint(movement.grapplePoint) then
+		Logic.LastVoidAnchorAt = now
+		return true
+	end
+
+	return now - (Logic.LastVoidAnchorAt or 0) <= 0.25
+end
+
+local function canAutoReel(grapple, controller, now)
 	if controller.GrappleVoidRescueAutoReel == false then
 		return false
 	end
@@ -196,11 +236,15 @@ local function canAutoReel(grapple, controller)
 		return false
 	end
 
+	if not hasVoidAnchor(grapple, now) then
+		return false
+	end
+
 	return hasUpgrade(movement, "NinjaBelt")
 end
 
 local function autoReel(grapple, controller, now)
-	if not canAutoReel(grapple, controller) then
+	if not canAutoReel(grapple, controller, now) then
 		return false
 	end
 
@@ -288,6 +332,7 @@ function Logic.step(grapple, _dt, controller, targeting)
 	end
 
 	if not isDangerousFall(grapple, controller) then
+		Logic.PendingEndAt = nil
 		return false
 	end
 
@@ -304,6 +349,7 @@ function Logic.reset()
 	Logic.LastAutoCastAt = 0
 	Logic.LastAutoReelAt = 0
 	Logic.LastSharkTailAt = 0
+	Logic.LastVoidAnchorAt = 0
 	if ReleaseTiming and typeof(ReleaseTiming.cancel) == "function" then
 		ReleaseTiming.cancel()
 	end

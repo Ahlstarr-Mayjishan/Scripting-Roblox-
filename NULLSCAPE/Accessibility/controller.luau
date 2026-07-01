@@ -74,6 +74,9 @@ local Controller = {
 	GrappleAssistTerrainPriority = 100,
 	GrappleIntentHighSpeed = 120,
 	GrappleIntentRailRange = 14,
+	GrappleVoidProtectionEnabled = false,
+	GrappleVoidProtectionHeight = 24,
+	GrappleVoidProtectionFallSpeed = 85,
 	GrappleVoidRescueEnabled = false,
 	GrappleVoidRescueAutoCast = false,
 	GrappleVoidRescueAutoReel = true,
@@ -473,6 +476,22 @@ end
 
 function Controller:SetGrappleIntentRailRange(value)
 	self.GrappleIntentRailRange = math.clamp(tonumber(value) or 14, 4, 48)
+end
+
+function Controller:SetGrappleVoidProtection(value)
+	self.GrappleVoidProtectionEnabled = value == true
+
+	if self.GrappleVoidProtectionEnabled then
+		self:SetGrappleAssist(true)
+	end
+end
+
+function Controller:SetGrappleVoidProtectionHeight(value)
+	self.GrappleVoidProtectionHeight = math.clamp(tonumber(value) or 24, 5, 120)
+end
+
+function Controller:SetGrappleVoidProtectionFallSpeed(value)
+	self.GrappleVoidProtectionFallSpeed = math.clamp(tonumber(value) or 85, 20, 240)
 end
 
 function Controller:SetGrappleAssistSecondaryCast(value)

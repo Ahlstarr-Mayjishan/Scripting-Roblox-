@@ -11,6 +11,8 @@ local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau")
 local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
+local TerrainMemory =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
 
 local Targeting = {}
 
@@ -19,12 +21,19 @@ local MAX_CACHED_TERRAIN_CANDIDATES = 260
 local CANDIDATE_CACHE_TTL = 3
 local DEFAULT_RANGE = 500
 local DEFAULT_CAPTURE_ANGLE = 45
+local DEFAULT_VOID_PROTECTION_HEIGHT = 24
+local DEFAULT_VOID_PROTECTION_FALL_SPEED = 85
 local MAX_FALLBACK_AXIS = 160
 local HIT_OVERSHOOT = 2
 
 local CandidateCache = {
 	UpdatedAt = -1000,
 	Candidates = {},
+}
+
+local VoidCache = {
+	UpdatedAt = -1000,
+	Y = nil,
 }
 
 local BLOCKED_FALLBACK_NAME_PATTERNS = {
@@ -54,6 +63,30 @@ end
 
 local function getCaptureAngle(controller)
 	return math.clamp(tonumber(controller and controller.GrappleAssistCaptureAngle) or DEFAULT_CAPTURE_ANGLE, 1, 45)
+end
+
+local function getVoidY()
+	local now = time()
+	if now - VoidCache.UpdatedAt < 1 then
+		return VoidCache.Y
+	end
+	VoidCache.UpdatedAt = now
+	VoidCache.Y = nil
+
+	if TerrainMemory and typeof(TerrainMemory.getVoidInfo) == "function" then
+		local success, info = pcall(TerrainMemory.getVoidInfo)
+		if success and info and tonumber(info.Y) then
+			VoidCache.Y = info.Y
+			return VoidCache.Y
+		end
+	end
+
+	local killVoid = Workspace:FindFirstChild("KillVoid")
+	if killVoid and killVoid:IsA("BasePart") then
+		VoidCache.Y = killVoid.Position.Y
+	end
+
+	return VoidCache.Y
 end
 
 local function getTerrainScore(hit, origin)
@@ -181,6 +214,52 @@ local function canUseOptimalHit(hit, candidate)
 	end
 
 	return instance == candidate or instance:IsDescendantOf(candidate) or candidate:IsDescendantOf(instance)
+end
+
+local function isProtectedAnchor(part)
+	return getSpecialTargetName(part) ~= nil or part.Name == "_RailPart"
+end
+
+local function getVelocityY(rootPart)
+	local velocity = rootPart and (rootPart.AssemblyLinearVelocity or rootPart.Velocity)
+	return typeof(velocity) == "Vector3" and velocity.Y or 0
+end
+
+local function isVoidProtectedHit(grapple, hit, part, origin, controller)
+	if not (controller and controller.GrappleVoidProtectionEnabled == true) then
+		return false
+	end
+
+	if isProtectedAnchor(part) then
+		return false
+	end
+
+	local voidY = getVoidY()
+	local height =
+		math.clamp(tonumber(controller.GrappleVoidProtectionHeight) or DEFAULT_VOID_PROTECTION_HEIGHT, 5, 120)
+	local fallSpeed =
+		math.clamp(tonumber(controller.GrappleVoidProtectionFallSpeed) or DEFAULT_VOID_PROTECTION_FALL_SPEED, 20, 240)
+	local target = hit and hit.Position
+	if not target then
+		return false
+	end
+
+	if voidY and target.Y - voidY <= height then
+		return true
+	end
+
+	local rootPart = grapple and grapple.RootPart
+	local fallingFast = getVelocityY(rootPart) <= -fallSpeed
+	local pullsDown = target.Y < origin.Y - 6
+	if fallingFast and pullsDown then
+		return true
+	end
+
+	if voidY and origin.Y - voidY <= height and pullsDown then
+		return true
+	end
+
+	return false
 end
 
 local function getSurfaceTargetPoint(part, origin)
@@ -357,7 +436,7 @@ function Targeting.findOptimalHit(grapple, controller)
 
 			if dot >= getOptimalMinDot(part, controller) then
 				local hit = Workspace:Raycast(origin, direction * (distance + HIT_OVERSHOOT), grapple.grappleParams)
-				if canUseOptimalHit(hit, part) then
+				if canUseOptimalHit(hit, part) and not isVoidProtectedHit(grapple, hit, part, origin, controller) then
 					local score = scoreOptimalHit(hit, part, origin, distance, dot, controller)
 					if score > bestScore then
 						bestScore = score
