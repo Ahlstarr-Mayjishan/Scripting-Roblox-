@@ -24,6 +24,9 @@ local IMMUNITY_ARM_DISTANCE = 4.5
 local IMMUNITY_ARM_WINDOW = 2.0
 local IMMUNITY_RESET_COOLDOWN = 0.08
 local IMMUNITY_HOLD_AFTER_NEARBY = 0.75
+local IMMUNITY_CLUSTER_DISTANCE = 5.5
+local IMMUNITY_CLUSTER_COUNT = 2
+local IMMUNITY_EMERGENCY_IFRAMES = 0.75
 
 local activeController = nil
 local watcherRunning = false
@@ -40,6 +43,7 @@ local pulseChargerImmunity = nil
 local immunityArmed = false
 local lastImmunityResetAt = 0
 local immunityHoldUntil = 0
+local emergencyIframeUntil = 0
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
@@ -211,23 +215,28 @@ local function getGiftPosition(gift)
 	return nil
 end
 
-local function getNearestTripmineDistance(hrp)
+local function getTripmineThreatInfo(hrp)
 	local GCH = getGiftClientHandler()
 	if not (GCH and GCH.Gifts and hrp) then
-		return math.huge
+		return math.huge, 0
 	end
 
 	local nearest = math.huge
+	local clustered = 0
 	for _, gift in pairs(GCH.Gifts) do
 		if gift.Tripmine and not gift.Collected and not gift.Destroyed and not gift.ClientCollected then
 			local giftPos = getGiftPosition(gift)
 			if giftPos then
-				nearest = math.min(nearest, (hrp.Position - giftPos).Magnitude)
+				local distance = (hrp.Position - giftPos).Magnitude
+				nearest = math.min(nearest, distance)
+				if distance <= IMMUNITY_CLUSTER_DISTANCE then
+					clustered += 1
+				end
 			end
 		end
 	end
 
-	return nearest
+	return nearest, clustered
 end
 
 local function getBarrierMode()
@@ -322,6 +331,18 @@ local function resetChargerImmunity(force)
 	end)
 end
 
+local function holdEmergencyIframes(duration)
+	emergencyIframeUntil = math.max(emergencyIframeUntil, os.clock() + duration)
+	addIframes()
+
+	local token = rearmToken
+	task.delay(duration, function()
+		if token == rearmToken and isImmunityModeActive() and os.clock() >= emergencyIframeUntil then
+			removeIframes()
+		end
+	end)
+end
+
 local function armChargerImmunityWindow()
 	immunityHoldUntil = math.max(immunityHoldUntil, os.clock() + IMMUNITY_HOLD_AFTER_NEARBY)
 
@@ -357,6 +378,8 @@ end
 
 local function updateImmunityTripmineWindow()
 	if not isImmunityModeActive() then
+		emergencyIframeUntil = 0
+		removeIframes()
 		resetChargerImmunity()
 		return
 	end
@@ -364,14 +387,25 @@ local function updateImmunityTripmineWindow()
 	local char = LocalPlayer.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	if not hrp then
+		emergencyIframeUntil = 0
+		removeIframes()
 		resetChargerImmunity()
 		return
 	end
 
-	local nearestTripmine = getNearestTripmineDistance(hrp)
+	local now = os.clock()
+	local nearestTripmine, clusteredTripmines = getTripmineThreatInfo(hrp)
+	local rearmCoolingDown = now - lastImmunityResetAt < IMMUNITY_REARM_DELAY
+
+	if clusteredTripmines >= IMMUNITY_CLUSTER_COUNT or (rearmCoolingDown and nearestTripmine <= IMMUNITY_ARM_DISTANCE) then
+		holdEmergencyIframes(IMMUNITY_EMERGENCY_IFRAMES)
+	elseif emergencyIframeUntil > 0 and now >= emergencyIframeUntil then
+		removeIframes()
+	end
+
 	if nearestTripmine <= IMMUNITY_ARM_DISTANCE then
 		armChargerImmunityWindow()
-	elseif immunityArmed and os.clock() >= immunityHoldUntil then
+	elseif immunityArmed and now >= immunityHoldUntil then
 		resetChargerImmunity()
 	end
 end
