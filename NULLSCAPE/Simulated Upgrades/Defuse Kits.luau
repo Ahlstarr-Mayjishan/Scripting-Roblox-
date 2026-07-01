@@ -19,10 +19,11 @@ local IMMUNITY_MODE = "Immunity"
 local ACTIVE_WATCH_INTERVAL = 0.12
 local IDLE_WATCH_INTERVAL = 0.35
 local IMMUNITY_SERVER_PULSE_INTERVAL = 0.8
-local IMMUNITY_REARM_DELAY = 0.12
+local IMMUNITY_REARM_DELAY = 0.6
 local IMMUNITY_ARM_DISTANCE = 4.5
 local IMMUNITY_ARM_WINDOW = 2.0
 local IMMUNITY_RESET_COOLDOWN = 0.08
+local IMMUNITY_HOLD_AFTER_NEARBY = 0.75
 
 local activeController = nil
 local watcherRunning = false
@@ -38,6 +39,7 @@ local rearmToken = 0
 local pulseChargerImmunity = nil
 local immunityArmed = false
 local lastImmunityResetAt = 0
+local immunityHoldUntil = 0
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
@@ -312,6 +314,7 @@ local function resetChargerImmunity(force)
 	end
 
 	immunityArmed = false
+	immunityHoldUntil = 0
 	lastImmunityResetAt = os.clock()
 	lastServerPulseAt = 0
 	pcall(function()
@@ -320,6 +323,8 @@ local function resetChargerImmunity(force)
 end
 
 local function armChargerImmunityWindow()
+	immunityHoldUntil = math.max(immunityHoldUntil, os.clock() + IMMUNITY_HOLD_AFTER_NEARBY)
+
 	if immunityArmed then
 		return
 	end
@@ -335,7 +340,17 @@ local function armChargerImmunityWindow()
 	local token = rearmToken
 	task.delay(IMMUNITY_ARM_WINDOW, function()
 		if token == rearmToken and isImmunityModeActive() then
-			resetChargerImmunity()
+			local deadlineNow = os.clock()
+			if deadlineNow >= immunityHoldUntil then
+				resetChargerImmunity()
+				return
+			end
+
+			task.delay(immunityHoldUntil - deadlineNow, function()
+				if token == rearmToken and isImmunityModeActive() and os.clock() >= immunityHoldUntil then
+					resetChargerImmunity()
+				end
+			end)
 		end
 	end)
 end
@@ -356,7 +371,7 @@ local function updateImmunityTripmineWindow()
 	local nearestTripmine = getNearestTripmineDistance(hrp)
 	if nearestTripmine <= IMMUNITY_ARM_DISTANCE then
 		armChargerImmunityWindow()
-	elseif immunityArmed then
+	elseif immunityArmed and os.clock() >= immunityHoldUntil then
 		resetChargerImmunity()
 	end
 end
@@ -373,7 +388,12 @@ local function scheduleImmunityRearm(delaySeconds)
 			return
 		end
 
-		resetChargerImmunity()
+		resetChargerImmunity(true)
+		task.delay(IMMUNITY_RESET_COOLDOWN + 0.02, function()
+			if token == rearmToken and isImmunityModeActive() then
+				updateImmunityTripmineWindow()
+			end
+		end)
 	end)
 end
 
