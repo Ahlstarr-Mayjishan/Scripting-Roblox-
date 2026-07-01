@@ -17,6 +17,7 @@ local IFRAMES_MODE = "I-Frames"
 local IMMUNITY_MODE = "Immunity"
 local ACTIVE_WATCH_INTERVAL = 0.12
 local IDLE_WATCH_INTERVAL = 0.35
+local IMMUNITY_REFRESH_TIME = 0.5
 
 local activeController = nil
 local watcherRunning = false
@@ -24,6 +25,7 @@ local watcherToken = {}
 local iframeObject = nil
 local lastChargerState = nil
 local lastRefreshAt = 0
+local immunityPulseUntil = 0
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
@@ -119,11 +121,18 @@ local function refreshImmunity()
 		return
 	end
 	lastRefreshAt = now
+	immunityPulseUntil = now + IMMUNITY_REFRESH_TIME
 
 	removeIframes()
 	task.defer(function()
 		if isImmunityModeActive() then
 			addIframes()
+			task.delay(IMMUNITY_REFRESH_TIME, function()
+				if isImmunityModeActive() then
+					immunityPulseUntil = 0
+					removeIframes()
+				end
+			end)
 		end
 	end)
 end
@@ -211,8 +220,13 @@ local function startWatcher()
 			end
 			cleanedIdle = false
 
-			addIframes()
-			if mode == IMMUNITY_MODE then
+			if mode == IFRAMES_MODE then
+				addIframes()
+				lastChargerState = nil
+			elseif mode == IMMUNITY_MODE then
+				if hasIframes() and os.clock() >= immunityPulseUntil then
+					removeIframes()
+				end
 				watchNativeChargerState()
 			else
 				lastChargerState = nil
