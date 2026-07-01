@@ -689,6 +689,9 @@ function Controller:SetTripmineBarrier(value)
 	elseif value ~= true then
 		self.TripmineBarrierMode = "Off"
 	end
+	pcall(function()
+		Executor.updateBarriers(self, GC)
+	end)
 	startUtilityLoop()
 end
 
@@ -696,6 +699,9 @@ function Controller:SetTripmineBarrierMode(value)
 	local mode = normalizeTripmineBarrierMode(value)
 	self.TripmineBarrierMode = mode
 	self.TripmineBarrierEnabled = mode ~= "Off"
+	pcall(function()
+		Executor.updateBarriers(self, GC)
+	end)
 	startUtilityLoop()
 end
 

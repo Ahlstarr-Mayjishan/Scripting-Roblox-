@@ -18,6 +18,7 @@ local IMMUNITY_MODE = "Immunity"
 local ACTIVE_WATCH_INTERVAL = 0.12
 local IDLE_WATCH_INTERVAL = 0.35
 local IMMUNITY_REFRESH_TIME = 0.5
+local IMMUNITY_SERVER_PULSE_INTERVAL = 0.8
 
 local activeController = nil
 local watcherRunning = false
@@ -25,6 +26,7 @@ local watcherToken = {}
 local iframeObject = nil
 local lastChargerState = nil
 local lastRefreshAt = 0
+local lastServerPulseAt = 0
 local immunityPulseUntil = 0
 local lastMode = OFF_MODE
 
@@ -225,6 +227,22 @@ local function watchNativeChargerState()
 	lastChargerState = charging
 end
 
+local function pulseChargerImmunity(force)
+	if not isImmunityModeActive() then
+		return
+	end
+
+	local now = os.clock()
+	if not force and now - lastServerPulseAt < IMMUNITY_SERVER_PULSE_INTERVAL then
+		return
+	end
+
+	lastServerPulseAt = now
+	pcall(function()
+		ChargerEvent:FireServer(true)
+	end)
+end
+
 local function startWatcher()
 	if watcherRunning then
 		return
@@ -261,18 +279,12 @@ local function startWatcher()
 				addIframes()
 			elseif mode == IMMUNITY_MODE then
 				-- Gửi tín hiệu giả lập lướt lên Server định kỳ (mỗi 0.8 giây) để tránh kích hoạt bộ chặn spam (Rate Limit) của Server
-				local now = os.clock()
-				if now - lastRefreshAt >= 0.8 then
-					lastRefreshAt = now
-					pcall(function()
-						ChargerEvent:FireServer(true)
-					end)
-				end
+				pulseChargerImmunity(false)
 
 				-- Cô lập tính năng liên kết: Hỗ trợ tạo I-Frames tạm thời khi kết thúc Charge thực tế (chỉ cho Charger Class)
 				local movementInstance = getActiveMovementInstance()
 				local isNativeCharger = movementInstance and (movementInstance.ClassID == "class/Charger")
-				
+
 				if isNativeCharger then
 					if hasIframes() and os.clock() >= immunityPulseUntil then
 						removeIframes()
@@ -291,6 +303,8 @@ function Barrier.update(controller)
 
 	if getBarrierMode() == OFF_MODE then
 		removeIframes(true)
+	elseif getBarrierMode() == IMMUNITY_MODE then
+		pulseChargerImmunity(true)
 	end
 end
 
