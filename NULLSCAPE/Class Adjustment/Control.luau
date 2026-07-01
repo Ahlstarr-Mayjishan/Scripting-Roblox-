@@ -24,6 +24,7 @@ local Control = {
 	ChargerTripmineAssistEnabled = false,
 	ChargerTripmineMode = "Auto",
 	ChargerTripmineDistance = 15,
+	ChargerTripmineBatchDistance = 60,
 	ChargerTripmineJitter = 2,
 	Destroyed = false,
 	PermanentConnections = {},
@@ -89,6 +90,8 @@ local function readSettings()
 		end
 		Control.ChargerTripmineDistance = tonumber(decoded.ChargerTripmineDistanceSlider)
 			or Control.ChargerTripmineDistance
+		Control.ChargerTripmineBatchDistance = tonumber(decoded.ChargerTripmineBatchDistanceSlider)
+			or Control.ChargerTripmineBatchDistance
 		Control.ChargerTripmineJitter = tonumber(decoded.ChargerTripmineJitterSlider) or Control.ChargerTripmineJitter
 	end
 end
@@ -122,6 +125,7 @@ local function saveSettings()
 	data.ChargerTripmineAssistToggle = Control.ChargerTripmineAssistEnabled
 	data.ChargerTripmineModeDropdown = Control.ChargerTripmineMode
 	data.ChargerTripmineDistanceSlider = Control.ChargerTripmineDistance
+	data.ChargerTripmineBatchDistanceSlider = Control.ChargerTripmineBatchDistance
 	data.ChargerTripmineJitterSlider = Control.ChargerTripmineJitter
 
 	pcall(function()
@@ -271,6 +275,11 @@ end
 
 function Control:SetChargerTripmineDistance(value)
 	self.ChargerTripmineDistance = math.clamp(tonumber(value) or 15, 5, 50)
+	saveSettings()
+end
+
+function Control:SetChargerTripmineBatchDistance(value)
+	self.ChargerTripmineBatchDistance = math.clamp(tonumber(value) or 60, 20, 60)
 	saveSettings()
 end
 

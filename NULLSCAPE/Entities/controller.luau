@@ -36,6 +36,11 @@ local Executor = {
 			SpecialImmunity.disable()
 		end
 	end,
+	reconcile = function(gc)
+		if TouchInterest and typeof(TouchInterest.reconcile) == "function" then
+			TouchInterest.reconcile(gc)
+		end
+	end,
 	enableSpecialImmunity = function()
 		if SpecialImmunity then
 			return SpecialImmunity.enable()
@@ -210,12 +215,58 @@ local function getAccessibilityController()
 end
 
 local inLobby = not isInMatch() -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
+local function getStatusImmunity()
+	local globals = getgenv()._NULLSCAPE_Globals
+	return globals and globals.NullscapeStatusImmunity or nil
+end
+
 Controller.inLobby = inLobby
 local hasInRoundValue = false
 local folderConnections = {} -- key: folder -> value: list of connections
 local workspaceConnections = {} -- list of workspace-level connections
 local processedEntities = setmetatable({}, { __mode = "k" })
 local originalTouchStates = setmetatable({}, { __mode = "k" })
+local disabledShockwaves = {}
+local restoreShockwave
+local isAnySpecialImmunityEnabled
+
+local function restoreCharacterTouchStates()
+	for part, state in pairs(originalTouchStates) do
+		if part and part.Parent then
+			pcall(function()
+				part.CanTouch = state
+			end)
+		end
+		originalTouchStates[part] = nil
+	end
+end
+
+local function getBeaconPart()
+	local beacon = workspace:FindFirstChild("Beacon")
+	if not beacon then
+		return nil
+	end
+
+	if beacon:IsA("BasePart") then
+		return beacon
+	end
+
+	if beacon:IsA("Model") then
+		return beacon.PrimaryPart or beacon:FindFirstChildWhichIsA("BasePart", true)
+	end
+
+	return beacon:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function isNearBeacon(rootPart)
+	local beaconPart = getBeaconPart()
+	if not (rootPart and beaconPart) then
+		return false
+	end
+
+	local flatDistance = ((rootPart.Position - beaconPart.Position) * Vector3.new(1, 0, 1)).Magnitude
+	return flatDistance <= 32
+end
 
 -- Ngắt các kết nối quan sát thư mục và workspace
 local function disconnectFolderObservations()
@@ -338,11 +389,34 @@ function Controller:SetICBMBurnImmune(value)
 end
 
 function Controller:SetBellCurseImmune(value)
-	self.BellCurseImmune = value
+	self.BellCurseImmune = value == true
+	Executor.reconcile(GC)
 end
 
 function Controller:SetBellBlindnessImmune(value)
-	self.BellBlindnessImmune = value
+	self.BellBlindnessImmune = value == true
+end
+
+function Controller:ReconcileImmunityState()
+	Executor.reconcile(GC)
+
+	if not self.BellImmune and not self.SpringerImmune then
+		restoreCharacterTouchStates()
+	end
+
+	local StatusImmunity = getStatusImmunity()
+	local springerKnockback = StatusImmunity and StatusImmunity.ActiveImmunities["Springer Knockback"] == true
+	if not self.SpringerImmune and not springerKnockback then
+		for part in pairs(disabledShockwaves) do
+			restoreShockwave(part)
+		end
+	end
+
+	if isAnySpecialImmunityEnabled() then
+		Executor.enableSpecialImmunity()
+	else
+		Executor.disableSpecialImmunity()
+	end
 end
 
 function Controller:UpdateTelefraggerConnection()
@@ -453,7 +527,7 @@ function Controller:UpdateTelefraggerConnection()
 			-- Thực hiện di chuyển né tránh (Auto-Dodge) bằng cách tịnh tiến mượt mà CFrame sang ngang
 			local speed = 32 -- studs/giây (rất mượt mà như cú trượt chân nhẹ, không bị giật hoặc tele)
 			local nextPos = rootPart.Position + slideDir * (dt * speed)
-			
+
 			if isFloorSafe(nextPos) then
 				rootPart.CFrame = rootPart.CFrame + slideDir * (dt * speed)
 			else
@@ -473,7 +547,9 @@ function Controller:UpdateTelefraggerConnection()
 end
 
 function Controller:TriggerSilentBackTrick(enemy)
-	if not enemy then return end
+	if not enemy then
+		return
+	end
 
 	-- Hủy luồng chờ cũ của Telefragger này nếu có
 	if self.TelefraggerActiveThreads[enemy] then
@@ -483,11 +559,11 @@ function Controller:TriggerSilentBackTrick(enemy)
 
 	self.TelefraggerActiveThreads[enemy] = task.delay(self.TelefraggerDesyncDelay or 0.44, function()
 		self.TelefraggerActiveThreads[enemy] = nil
-		
+
 		-- Thêm vào danh sách đang desync active
 		local wasEmpty = (next(self.TelefraggerActiveDesyncs) == nil)
 		self.TelefraggerActiveDesyncs[enemy] = true
-		
+
 		if wasEmpty then
 			BackTrick.trigger(self)
 		end
@@ -495,7 +571,9 @@ function Controller:TriggerSilentBackTrick(enemy)
 end
 
 function Controller:CancelSilentBackTrick(enemy)
-	if not enemy then return end
+	if not enemy then
+		return
+	end
 
 	-- Hủy luồng chờ nếu chưa kích hoạt desync
 	if self.TelefraggerActiveThreads[enemy] then
@@ -506,11 +584,16 @@ function Controller:CancelSilentBackTrick(enemy)
 	-- Xóa khỏi danh sách active
 	if self.TelefraggerActiveDesyncs[enemy] then
 		self.TelefraggerActiveDesyncs[enemy] = nil
-		
+
 		-- Nếu không còn thực thể nào đang desync thì khôi phục nhân vật
 		if next(self.TelefraggerActiveDesyncs) == nil then
 			BackTrick.revert(self)
 		end
+	end
+
+	Executor.reconcile(GC)
+	if not self.BellImmune and not self.SpringerImmune then
+		restoreCharacterTouchStates()
 	end
 end
 
@@ -528,9 +611,11 @@ function Controller:CleanUp()
 	end)
 
 	for part, state in pairs(originalTouchStates) do
-		pcall(function()
-			part.CanTouch = state
-		end)
+		if part and part.Parent then
+			pcall(function()
+				part.CanTouch = state
+			end)
+		end
 	end
 	table.clear(originalTouchStates)
 
@@ -590,8 +675,6 @@ function Controller:CleanUp()
 	end
 end
 
-local disabledShockwaves = {}
-
 local SPECIAL_IMMUNITY_FLAGS = {
 	Kolona = "KolonaImmune",
 	Oblivion = "OblivionImmune",
@@ -608,7 +691,7 @@ local function isSpecialImmunityEntity(entityName)
 	return SPECIAL_IMMUNITY_FLAGS[entityName] ~= nil
 end
 
-local function isAnySpecialImmunityEnabled()
+function isAnySpecialImmunityEnabled()
 	for _, flag in pairs(SPECIAL_IMMUNITY_FLAGS) do
 		if Controller[flag] == true then
 			return true
@@ -617,7 +700,7 @@ local function isAnySpecialImmunityEnabled()
 	return false
 end
 
-local function restoreShockwave(part)
+function restoreShockwave(part)
 	local data = disabledShockwaves[part]
 	if data then
 		if data.conn1 then
@@ -818,6 +901,11 @@ function Controller:SetImmunity(entityName, value)
 			end
 		end
 	end
+
+	Executor.reconcile(GC)
+	if not self.BellImmune and not self.SpringerImmune then
+		restoreCharacterTouchStates()
+	end
 end
 
 -- Cấu hình chế độ bảo vệ Springer (Blatant: tắt hẳn sóng, Legit: giữ lại lực đẩy sóng)
@@ -833,7 +921,7 @@ function Controller:SetSpringerImmunityMode(mode)
 	end
 
 	if mode == "Blatant" then
-		local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+		local StatusImmunity = getStatusImmunity()
 		if StatusImmunity then
 			StatusImmunity.removeAllStatuses()
 		end
@@ -860,6 +948,8 @@ function Controller:SetSpringerImmunityMode(mode)
 			end
 		end
 	end
+
+	Executor.reconcile(GC)
 end
 
 function Controller:SetSpringerKnockbackImmune(enabled)
@@ -882,6 +972,7 @@ function Controller:SetSpringerKnockbackImmune(enabled)
 			end
 		end
 	end
+	Executor.reconcile(GC)
 end
 
 function Controller:SetBellKnockbackImmune(enabled)
@@ -898,6 +989,7 @@ function Controller:SetBellKnockbackImmune(enabled)
 			TouchInterest.disableImmunityForType(GC, "Bell")
 		end
 	end
+	Executor.reconcile(GC)
 end
 
 function Controller:DisableShockwave(enemy, part)
@@ -1325,7 +1417,7 @@ local function processEntity(enemy)
 	if string.find(enemy.Name, "Springer") then
 		local childAddedConn = enemy.ChildAdded:Connect(function(child)
 			if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
-				local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+				local StatusImmunity = getStatusImmunity()
 				local hasKnockbackImmune = StatusImmunity and StatusImmunity.isImmune("Springer Knockback")
 				local hasSpringerImmune = Controller.SpringerImmune
 				local isBlatant = Controller.SpringerImmunityMode == "Blatant"
@@ -1339,7 +1431,7 @@ local function processEntity(enemy)
 
 		for _, child in ipairs(enemy:GetChildren()) do
 			if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
-				local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+				local StatusImmunity = getStatusImmunity()
 				local hasKnockbackImmune = StatusImmunity and StatusImmunity.isImmune("Springer Knockback")
 				local hasSpringerImmune = Controller.SpringerImmune
 				local isBlatant = Controller.SpringerImmunityMode == "Blatant"
@@ -1356,7 +1448,7 @@ end
 local function removeEntity(enemy)
 	processedEntities[enemy] = nil
 	GC.removeEntityConnections(enemy)
-	
+
 	if string.find(string.lower(enemy.Name), "telefragger") then
 		Controller:CancelSilentBackTrick(enemy)
 	end
@@ -1453,13 +1545,27 @@ end
 
 function Controller:UpdateTouchImmunityState()
 	local localPlayer = Players.LocalPlayer
-	if not localPlayer then return end
+	if not localPlayer then
+		return
+	end
 
 	local char = localPlayer.Character
-	if not char then return end
+	if not char then
+		restoreCharacterTouchStates()
+		return
+	end
 
 	local rootPart = char:FindFirstChild("HumanoidRootPart")
-	if not rootPart then return end
+	if not rootPart then
+		restoreCharacterTouchStates()
+		return
+	end
+
+	local beaconValue = localPlayer:FindFirstChild("Beacon")
+	if (beaconValue and beaconValue.Value == true) or isNearBeacon(rootPart) then
+		restoreCharacterTouchStates()
+		return
+	end
 
 	local nearBell = false
 	local nearSpringer = false
@@ -1561,7 +1667,7 @@ end
 -- Hook hệ thống trạng thái (Status Effects) để miễn nhiễm debuff ở chế độ Blatant
 local function initializeStatusEffectHook()
 	local globals = getgenv()._NULLSCAPE_Globals
-	local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+	local StatusImmunity = getStatusImmunity() or getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
 	if StatusImmunity then
 		StatusImmunity.initialize()
 	end
@@ -1688,7 +1794,9 @@ local function initializeBellBlindnessHook()
 				local function hookBellConnections()
 					for _, connection in ipairs(getconnections(bellEvent.OnClientEvent)) do
 						local originalFunction = connection.Function
-						if typeof(originalFunction) == "function" and not globals.BellHookedFunctions[originalFunction] then
+						if
+							typeof(originalFunction) == "function" and not globals.BellHookedFunctions[originalFunction]
+						then
 							local oldFunc
 							oldFunc = hookfunction(originalFunction, function(...)
 								local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
@@ -1779,16 +1887,16 @@ local function initializeICBMHook()
 		["GrappleReplicator"] = true,
 		["UnreliableRemoteEvent"] = true,
 	}
- 
- 	local function handleRemoteCall(self, ...)
+
+	local function handleRemoteCall(self, ...)
 		local firstArg = ...
- 
+
 		-- Lấy activeController hiện tại từ globals
 		local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
 		if not activeCtrl then
 			return false
 		end
- 
+
 		-- ── HOOK GỬI CAMERA GIẢ LẬP CHO NGƯỜI XEM (SPECTATOR FLICK) ──
 		if self.Name == "UnreliableRemoteEvent" and firstArg == 0 then
 			if activeCtrl.FlickFakeSpectatorEnabled and activeCtrl.CurrentFlickAngle then
@@ -1807,7 +1915,7 @@ local function initializeICBMHook()
 		if not TargetRemoteNames[self.Name] then
 			return false
 		end
- 
+
 		-- Trì hoãn cuộc gọi CreateHook để đồng bộ hóa trạng thái vật lý lên server (tránh bị từ chối do độ trễ ping)
 		local namecallArgs = { ... }
 		if self.Name == "GrappleReplicator" and firstArg == "CreateHook" and namecallArgs[3] ~= "DelayedBypass" then
@@ -1830,24 +1938,24 @@ local function initializeICBMHook()
 		if self.Name == "Died" and firstArg == "VoidImplosion" and activeCtrl.VoidImplosionImmune == true then
 			return true
 		end
- 
+
 		local args = { ... }
- 
+
 		if activeCtrl.GuardianImmune == true and self.Name == "Died" and args[1] == "Guardian" then
 			return true
 		end
 		if activeCtrl.KolonaImmune == true and self.Name == "DiedFunc" and args[1] == "Kolona" then
 			return true
 		end
- 
+
 		local block = RemoteBlocking.shouldBlockRemoteCall(self, args, activeCtrl)
 		if block then
 			return true
 		end
- 
+
 		return false
 	end
- 
+
 	-- Đăng ký dispatcher toàn cục
 	getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall = handleRemoteCall
 

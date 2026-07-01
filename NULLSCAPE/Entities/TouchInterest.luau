@@ -77,9 +77,44 @@ local function partMatchesEntity(part, entityName)
 	return false
 end
 
+local function nameMatchesEntity(name, entityName)
+	return string.find(string.lower(tostring(name or "")), string.lower(tostring(entityName or ""))) ~= nil
+end
+
+local function disconnectConnections(connections)
+	for _, conn in ipairs(connections or {}) do
+		if conn then
+			pcall(function()
+				conn:Disconnect()
+			end)
+		end
+	end
+end
+
+local function restoreSavedPart(gc, part)
+	local data = gc and gc.SavedPartsData and gc.SavedPartsData[part]
+	if not data then
+		return
+	end
+
+	if part and part.Parent then
+		disconnectConnections(data.connections)
+		pcall(function()
+			part.CanTouch = data.originalCanTouch
+		end)
+	end
+
+	gc.SavedPartsData[part] = nil
+end
+
 local function getEntitiesGC()
 	local globals = getgenv()._NULLSCAPE_Globals
 	return globals and globals.NullscapeEntitiesGC or nil
+end
+
+local function getStatusImmunity()
+	local globals = getgenv()._NULLSCAPE_Globals
+	return globals and globals.NullscapeStatusImmunity or nil
 end
 
 local function clearTable(t)
@@ -128,7 +163,7 @@ function Logic.getImmunityCheck(name, controller)
 
 				local isImmune = controller[immuneKey] == true
 				if not isImmune and string.lower(configName) == "bell" then
-					local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+					local StatusImmunity = getStatusImmunity()
 					if StatusImmunity and StatusImmunity.isImmune("Bell Knockback") then
 						return true
 					end
@@ -211,30 +246,50 @@ function Logic.enableImmunity(gc, enemy)
 end
 
 function Logic.disableImmunityForType(gc, entityName)
+	temporaryAllowUntil[entityName] = nil
 	for part, data in pairs(gc.SavedPartsData) do
-		if data and data.enemyName and string.find(string.lower(data.enemyName), string.lower(entityName)) then
-			if part and part.Parent then
-				if data.connections then
-					for _, conn in ipairs(data.connections) do
-						if conn then
-							conn:Disconnect()
-						end
-					end
-				end
+		if data and data.enemyName and nameMatchesEntity(data.enemyName, entityName) then
+			restoreSavedPart(gc, part)
+		end
+	end
 
+	for enemy in pairs(processedEntities) do
+		if enemy and nameMatchesEntity(enemy.Name, entityName) then
+			processedEntities[enemy] = nil
+		end
+	end
+
+	for enemy, conn in pairs(descendantConnections) do
+		if enemy and nameMatchesEntity(enemy.Name, entityName) then
+			if conn then
 				pcall(function()
-					part.CanTouch = data.originalCanTouch
+					conn:Disconnect()
 				end)
-
-				local enemy = part
-				if part.Parent and part.Parent.Name ~= "Enemies" and part.Parent.Name ~= "Skinwalkers" then
-					enemy = part.Parent
-				end
-				if enemy then
-					processedEntities[enemy] = nil
-				end
 			end
-			gc.SavedPartsData[part] = nil
+			descendantConnections[enemy] = nil
+		end
+	end
+end
+
+function Logic.reconcile(gc)
+	if not (gc and gc.SavedPartsData) then
+		return
+	end
+
+	local controller = gc.Controller
+		or (getgenv().Client and getgenv().Client.Modules and getgenv().Client.Modules.EntitiesController)
+
+	for part, data in pairs(gc.SavedPartsData) do
+		local checkFunc = data and Logic.getImmunityCheck(data.enemyName, controller)
+		if not (checkFunc and checkFunc()) then
+			restoreSavedPart(gc, part)
+		end
+	end
+
+	for enemy in pairs(processedEntities) do
+		local checkFunc = enemy and Logic.getImmunityCheck(enemy.Name, controller)
+		if not (checkFunc and checkFunc()) then
+			processedEntities[enemy] = nil
 		end
 	end
 end
@@ -296,11 +351,7 @@ function Logic.restoreAll(gc)
 	for part, data in pairs(gc.SavedPartsData) do
 		if data and data.originalCanTouch ~= nil and data.connections then
 			if part and part.Parent then
-				for _, conn in ipairs(data.connections) do
-					if conn then
-						conn:Disconnect()
-					end
-				end
+				disconnectConnections(data.connections)
 				pcall(function()
 					part.CanTouch = data.originalCanTouch
 				end)

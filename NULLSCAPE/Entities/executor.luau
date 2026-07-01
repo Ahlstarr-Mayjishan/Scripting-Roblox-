@@ -21,6 +21,12 @@ function Executor.restoreAll(gc)
 	SpecialImmunity.disable()
 end
 
+function Executor.reconcile(gc)
+	if TouchInterest and typeof(TouchInterest.reconcile) == "function" then
+		TouchInterest.reconcile(gc)
+	end
+end
+
 function Executor.enableSpecialImmunity()
 	return SpecialImmunity.enable()
 end
