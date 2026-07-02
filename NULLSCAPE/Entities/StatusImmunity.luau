@@ -42,7 +42,7 @@ end
 function StatusImmunity.GetActiveImmunities()
 	local list = {}
 	for name, active in pairs(StatusImmunity.ActiveImmunities) do
-		if active then
+		if active and name ~= "Springer Knockback" then
 			table.insert(list, name)
 		end
 	end
@@ -58,7 +58,9 @@ function StatusImmunity.SetActiveImmunities(options)
 
 	table.clear(StatusImmunity.ActiveImmunities)
 	for _, opt in ipairs(options) do
-		StatusImmunity.ActiveImmunities[opt] = true
+		if opt ~= "Springer Knockback" then
+			StatusImmunity.ActiveImmunities[opt] = true
+		end
 	end
 
 	local controller = getController()
@@ -72,13 +74,6 @@ function StatusImmunity.SetActiveImmunities(options)
 			for _, callback in ipairs(StatusImmunity.ActiveCallbacks) do
 				pcall(callback, debuffName, false)
 			end
-		end
-	end
-
-	-- Update Springer Shockwaves
-	if StatusImmunity.ActiveImmunities["Springer Knockback"] ~= previous["Springer Knockback"] then
-		if typeof(controller.SetSpringerKnockbackImmune) == "function" then
-			controller:SetSpringerKnockbackImmune(StatusImmunity.ActiveImmunities["Springer Knockback"] == true)
 		end
 	end
 

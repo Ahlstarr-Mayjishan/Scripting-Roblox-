@@ -13,6 +13,9 @@ local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler as
 local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
 local TerrainMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
+local IntentResolver = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Intent Resolver.luau")
+local IntentTargetGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Intent Target Gate.luau")
+local ConfidenceGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Assist Confidence Gate.luau")
 
 local Targeting = {}
 
@@ -385,7 +388,7 @@ local function scoreOptimalHit(hit, part, origin, distance, dot, controller)
 	if specialName then
 		score += SpecialAnchors and SpecialAnchors.getPriority(specialName, controller) or 900
 	elseif part.Name == "_RailPart" then
-		score += tonumber(controller and controller.GrappleAssistRailPriority) or 500
+		score += 500
 	else
 		score += tonumber(controller and controller.GrappleAssistTerrainPriority) or 100
 		score += getTerrainScore(hit, origin)
@@ -395,6 +398,25 @@ local function scoreOptimalHit(hit, part, origin, distance, dot, controller)
 	score -= math.deg(math.acos(math.clamp(dot, -1, 1))) * 6
 
 	return score
+end
+
+local function getIntent(grapple, controller, aimDirection)
+	if IntentResolver and typeof(IntentResolver.resolve) == "function" then
+		local success, intent = pcall(function()
+			return IntentResolver.resolve(grapple, controller, {
+				AimDirection = aimDirection,
+			})
+		end)
+		if success and intent then
+			return intent
+		end
+	end
+
+	return {
+		Name = "AnchorAssist",
+		Confidence = 0.5,
+		AimDirection = aimDirection,
+	}
 end
 
 local function getOptimalMinDot(part, controller)
@@ -422,8 +444,10 @@ function Targeting.findOptimalHit(grapple, controller)
 
 	local origin = rootPart.Position
 	local maxRange = getRange(controller)
+	local intent = getIntent(grapple, controller, aimDirection)
 	local bestHit = nil
 	local bestScore = -math.huge
+	local secondScore = -math.huge
 
 	for _, part in ipairs(getOptimalCandidates(origin, maxRange)) do
 		local targetPoint = getSurfaceTargetPoint(part, origin)
@@ -436,15 +460,29 @@ function Targeting.findOptimalHit(grapple, controller)
 
 			if dot >= getOptimalMinDot(part, controller) then
 				local hit = Workspace:Raycast(origin, direction * (distance + HIT_OVERSHOOT), grapple.grappleParams)
-				if canUseOptimalHit(hit, part) and not isVoidProtectedHit(grapple, hit, part, origin, controller) then
+				local specialName = getSpecialTargetName(part)
+				local acceptedByIntent = not IntentTargetGate
+					or IntentTargetGate.accept(grapple, hit, part, origin, direction, intent, specialName)
+				if
+					acceptedByIntent
+					and canUseOptimalHit(hit, part)
+					and not isVoidProtectedHit(grapple, hit, part, origin, controller)
+				then
 					local score = scoreOptimalHit(hit, part, origin, distance, dot, controller)
 					if score > bestScore then
+						secondScore = bestScore
 						bestScore = score
 						bestHit = hit
+					elseif score > secondScore then
+						secondScore = score
 					end
 				end
 			end
 		end
+	end
+
+	if ConfidenceGate and not ConfidenceGate.accept(bestHit, bestScore, secondScore, controller, intent) then
+		return nil
 	end
 
 	return bestHit

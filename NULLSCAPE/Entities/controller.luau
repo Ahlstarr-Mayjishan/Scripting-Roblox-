@@ -78,6 +78,7 @@ local Controller = {
 	GuardianImmune = false,
 	OperatorImmune = false,
 	SpringerImmune = false,
+	SpringerKnockbackImmune = false,
 	SkinwalkerImmune = false,
 	KolonaImmune = false,
 	OblivionImmune = false,
@@ -315,6 +316,12 @@ local function restoreHooks()
 		globals.OriginalFireServer = nil
 		globals.OriginalInvokeServer = nil
 	end
+	globals.handleEntitiesRemoteCall = nil
+
+	if globals.OriginalRingBell and typeof(_G.RingBell) == "function" then
+		_G.RingBell = globals.OriginalRingBell
+		globals.OriginalRingBell = nil
+	end
 
 	-- Restore StatusEffect connection hook
 	-- WARNING: DO NOT call hookfunction on OnClientEvent.Connect prototype.
@@ -404,8 +411,7 @@ function Controller:ReconcileImmunityState()
 		restoreCharacterTouchStates()
 	end
 
-	local StatusImmunity = getStatusImmunity()
-	local springerKnockback = StatusImmunity and StatusImmunity.ActiveImmunities["Springer Knockback"] == true
+	local springerKnockback = self.SpringerKnockbackImmune == true
 	if not self.SpringerImmune and not springerKnockback then
 		for part in pairs(disabledShockwaves) do
 			restoreShockwave(part)
@@ -888,8 +894,10 @@ function Controller:SetImmunity(entityName, value)
 			HuskEvasion.disableHuskImmunity(GC)
 		end
 		if entityName == "Springer" then
-			for part in pairs(disabledShockwaves) do
-				restoreShockwave(part)
+			if not self.SpringerKnockbackImmune then
+				for part in pairs(disabledShockwaves) do
+					restoreShockwave(part)
+				end
 			end
 		end
 		if isSpecialImmunityEntity(entityName) then
@@ -953,6 +961,7 @@ function Controller:SetSpringerImmunityMode(mode)
 end
 
 function Controller:SetSpringerKnockbackImmune(enabled)
+	self.SpringerKnockbackImmune = enabled == true
 	if enabled then
 		if self.EnemiesFolder then
 			for _, enemy in ipairs(self.EnemiesFolder:GetChildren()) do
@@ -1417,8 +1426,7 @@ local function processEntity(enemy)
 	if string.find(enemy.Name, "Springer") then
 		local childAddedConn = enemy.ChildAdded:Connect(function(child)
 			if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
-				local StatusImmunity = getStatusImmunity()
-				local hasKnockbackImmune = StatusImmunity and StatusImmunity.isImmune("Springer Knockback")
+				local hasKnockbackImmune = Controller.SpringerKnockbackImmune == true
 				local hasSpringerImmune = Controller.SpringerImmune
 				local isBlatant = Controller.SpringerImmunityMode == "Blatant"
 
@@ -1431,8 +1439,7 @@ local function processEntity(enemy)
 
 		for _, child in ipairs(enemy:GetChildren()) do
 			if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
-				local StatusImmunity = getStatusImmunity()
-				local hasKnockbackImmune = StatusImmunity and StatusImmunity.isImmune("Springer Knockback")
+				local hasKnockbackImmune = Controller.SpringerKnockbackImmune == true
 				local hasSpringerImmune = Controller.SpringerImmune
 				local isBlatant = Controller.SpringerImmunityMode == "Blatant"
 
@@ -1770,6 +1777,20 @@ local function initializeBellBlindnessHook()
 	local globals = getgenv()._NULLSCAPE_Globals
 	globals.BellHookedFunctions = globals.BellHookedFunctions or {}
 
+	local function shouldBlockRingBell()
+		local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
+		return activeCtrl and activeCtrl.BellBlindnessImmune == true
+	end
+
+	local function makeRingBellWrapper(callback)
+		return function(...)
+			if shouldBlockRingBell() then
+				return
+			end
+			return callback(...)
+		end
+	end
+
 	-- Hook _G.RingBell để tránh nhấp nháy/mù cục bộ khi ta tự gõ hoặc chạm chuông
 	task.spawn(function()
 		while not _G.RingBell do
@@ -1779,13 +1800,10 @@ local function initializeBellBlindnessHook()
 		if typeof(originalRingBell) ~= "function" then
 			return
 		end
-		_G.RingBell = function(p1)
-			local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-			if activeCtrl and activeCtrl.BellBlindnessImmune then
-				return
-			end
-			return originalRingBell(p1)
+		if not globals.OriginalRingBell then
+			globals.OriginalRingBell = originalRingBell
 		end
+		_G.RingBell = makeRingBellWrapper(globals.OriginalRingBell)
 	end)
 
 	-- Hook OnClientEvent của Bell để tránh mù khi người chơi khác gõ chuông trong phòng
@@ -1798,17 +1816,19 @@ local function initializeBellBlindnessHook()
 					for _, connection in ipairs(getconnections(bellEvent.OnClientEvent)) do
 						local originalFunction = connection.Function
 						if
-							typeof(originalFunction) == "function" and not globals.BellHookedFunctions[originalFunction]
+							typeof(originalFunction) == "function"
+							and globals.OriginalRingBell
+							and originalFunction == globals.OriginalRingBell
+							and not globals.BellHookedFunctions[originalFunction]
 						then
 							local oldFunc
 							oldFunc = hookfunction(originalFunction, function(...)
-								local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-								if activeCtrl and activeCtrl.BellBlindnessImmune then
+								if shouldBlockRingBell() then
 									return
 								end
 								return oldFunc(...)
 							end)
-							globals.BellHookedFunctions[originalFunction] = true
+							globals.BellHookedFunctions[originalFunction] = oldFunc
 						end
 					end
 				end
@@ -1819,15 +1839,8 @@ local function initializeBellBlindnessHook()
 				-- Hook hàm Connect để tự động bọc các kết nối mới trong tương lai
 				local oldConnect
 				oldConnect = hookfunction(bellEvent.OnClientEvent.Connect, function(self, callback)
-					if typeof(callback) == "function" then
-						local newCallback = function(...)
-							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-							if activeCtrl and activeCtrl.BellBlindnessImmune then
-								return
-							end
-							return callback(...)
-						end
-						return oldConnect(self, newCallback)
+					if typeof(callback) == "function" and globals.OriginalRingBell and callback == globals.OriginalRingBell then
+						return oldConnect(self, makeRingBellWrapper(callback))
 					end
 					return oldConnect(self, callback)
 				end)

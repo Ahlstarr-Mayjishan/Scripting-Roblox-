@@ -252,6 +252,20 @@ function Logic.triggerSecondaryCast(controller)
 	return SecondaryCast.cast(Logic.LastGrapple, getController(), Targeting)
 end
 
+function Logic.triggerReelSaver(controller)
+	Logic.Controller = controller or Logic.Controller
+
+	if not Logic.Enabled and not Logic.initialize(Logic.Controller) then
+		return false
+	end
+
+	if not (ReelSaver and typeof(ReelSaver.trigger) == "function") then
+		return false
+	end
+
+	return ReelSaver.trigger(Logic.LastGrapple, getController())
+end
+
 function Logic.disable()
 	local globals = getGlobals()
 	local grappleModule = getGrappleModule()

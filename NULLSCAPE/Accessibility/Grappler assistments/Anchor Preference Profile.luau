@@ -60,7 +60,7 @@ end
 function Profile.getBasePriority(part, controller)
 	local kind = Profile.getKind(part)
 	if kind == "Rail" then
-		return getNumber(controller and controller.GrappleAssistRailPriority, DEFAULTS.RailPriority, 0, 1000)
+		return DEFAULTS.RailPriority
 	end
 
 	if kind == "Special" then

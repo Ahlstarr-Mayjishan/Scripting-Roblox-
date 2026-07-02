@@ -15,7 +15,6 @@ local RailMemory =
 local Resolver = {}
 
 local DEFAULT_VOID_HEIGHT = 45
-local DEFAULT_FALL_SPEED = 65
 local DEFAULT_RAIL_RANGE = 14
 local DEFAULT_HIGH_SPEED = 120
 
@@ -48,7 +47,7 @@ local function getKillVoidY()
 		end
 	end
 
-	local killVoid = Workspace:FindFirstChild("KillVoid")
+	local killVoid = Workspace:FindFirstChild("KillVoid", true)
 	if killVoid and killVoid:IsA("BasePart") then
 		return killVoid.Position.Y
 	end
@@ -98,15 +97,14 @@ function Resolver.resolve(grapple, controller, context)
 	local airborne = isAirborne(grapple)
 	local killVoidY = getKillVoidY()
 	local heightAboveVoid = killVoidY and rootPart.Position.Y - killVoidY or math.huge
-	local fallSpeed = getNumber(controller and controller.GrappleVoidRescueFallSpeed, DEFAULT_FALL_SPEED, 20, 180)
 	local voidHeight = getNumber(controller and controller.GrappleVoidRescueHeight, DEFAULT_VOID_HEIGHT, 10, 160)
 	local railScore = getNearbyRailScore(rootPart, controller)
 	local highSpeed = getNumber(controller and controller.GrappleIntentHighSpeed, DEFAULT_HIGH_SPEED, 40, 300)
 
-	if airborne and (heightAboveVoid <= voidHeight or velocity.Y <= -fallSpeed) then
+	if airborne and heightAboveVoid >= 0 and heightAboveVoid <= voidHeight then
 		return {
 			Name = "VoidRescue",
-			Confidence = heightAboveVoid <= voidHeight and 0.95 or 0.82,
+			Confidence = 0.95,
 			Velocity = velocity,
 			MomentumState = state,
 			Airborne = airborne,
@@ -115,7 +113,13 @@ function Resolver.resolve(grapple, controller, context)
 		}
 	end
 
-	if airborne and controller and controller.GrappleReelSaverEnabled == true and velocity.Y <= 8 then
+	if
+		context
+		and context.Technique == "ReelSaver"
+		and airborne
+		and controller
+		and controller.GrappleReelSaverEnabled == true
+	then
 		return {
 			Name = "ReelSaver",
 			Confidence = 0.68,

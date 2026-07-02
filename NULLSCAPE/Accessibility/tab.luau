@@ -28,8 +28,6 @@ local DEFAULTS = {
 	GrappleAnchorPriorityJumpPad = 1000,
 	GrappleAnchorPriorityTriaOrb = 850,
 	GrappleAnchorPriorityBell = 800,
-	GrappleAssistRailTargetingEnabled = false,
-	GrappleAssistRailPriority = 500,
 	GrappleAssistTerrainPriority = 100,
 	GrappleVoidProtectionEnabled = false,
 	GrappleVoidProtectionHeight = 24,
@@ -39,8 +37,15 @@ local DEFAULTS = {
 	GrappleVoidRescueAutoReel = true,
 	GrappleVoidRescueAutoSharkTail = true,
 	GrappleVoidRescueHeight = 45,
-	GrappleVoidRescueFallSpeed = 65,
 	GrappleVoidRescueReelHoldTime = 0.12,
+	GrappleReelSaverEnabled = false,
+	GrappleReelSaverKeybind = "E",
+	GrappleReelSaverSideRange = 26,
+	GrappleReelSaverMinHeight = 5,
+	GrappleReelSaverMaxHeight = 14,
+	GrappleReelSaverClearance = 5,
+	GrappleReelSaverLandingRadius = 2.75,
+	GrappleReelSaverReelHoldTime = 0.16,
 	GrapplerStaminaMode = "Off",
 	StaminaMode = "Off",
 	GrapplerStaminaRecoverySpeed = 1,
@@ -112,6 +117,20 @@ local function createControllerProxy(Client, Controller)
 			return DEFAULTS[key]
 		end,
 	})
+end
+
+local function getSelectedGrapplerTechniques(Controller)
+	local selected = {}
+
+	if Controller.GrappleVoidRescueEnabled == true then
+		table.insert(selected, "SharkVoid")
+	end
+
+	if Controller.GrappleReelSaverEnabled == true then
+		table.insert(selected, "Reel Saver")
+	end
+
+	return selected
 end
 
 return function(Client, Controller)
@@ -433,29 +452,6 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
-		Name = "Rail Targeting",
-		Info = "Allows Grapple Assist to consider visible rail helper parts. Keep this off if hooks appear to anchor in the air.",
-		CurrentValue = Controller.GrappleAssistRailTargetingEnabled == true,
-		Flag = "GrappleAssistRailTargetingToggle",
-		Callback = function(Value)
-			Controller:SetGrappleAssistRailTargeting(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Rail Priority",
-		Info = "Higher values make visible rail targets win assisted targeting more often.",
-		Range = { 0, 1000 },
-		Increment = 25,
-		Suffix = " pts",
-		CurrentValue = Controller.GrappleAssistRailPriority or 500,
-		Flag = "GrappleAssistRailPrioritySlider",
-		Callback = function(Value)
-			Controller:SetGrappleAssistRailPriority(Value)
-		end,
-	})
-
 	Tab:CreateSlider({
 		Name = "Terrain Priority",
 		Info = "Base score for ordinary solid surfaces before height, ceiling, distance, and aim-angle scoring are applied.",
@@ -526,13 +522,91 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
-		Name = "SharkVoid Assist",
-		Info = "Eases the NinjaBelt release into SharkTail rescue timing when falling close to KillVoid or at high downward speed.",
-		CurrentValue = Controller.GrappleVoidRescueEnabled or false,
-		Flag = "GrappleVoidRescueToggle",
+	Tab:CreateDropdown({
+		Name = "Grappler Techniques",
+		Info = "Choose which grappler techniques are enabled. SharkVoid auto-runs near void; Reel Saver runs from its keybind.",
+		Options = { "SharkVoid", "Reel Saver" },
+		CurrentOption = getSelectedGrapplerTechniques(Controller),
+		MultipleOptions = true,
+		Flag = "GrappleTechniqueDropdown",
+		Callback = function(Options)
+			Controller:SetGrapplerTechniqueSelection(Options)
+		end,
+	})
+
+	Tab:CreateKeybind({
+		Name = "Reel Saver Keybind",
+		CurrentKeybind = Controller.GrappleReelSaverKeybind or "E",
+		HoldToTrigger = false,
+		Flag = "GrappleReelSaverKeybind",
+		Callback = function(Keybind)
+			Controller:SetGrappleReelSaverKeybind(Keybind)
+			Controller:TriggerGrappleReelSaver()
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Reel Saver Search Range",
+		Info = "Maximum horizontal distance the keybind scans for a wall face beside or ahead of you.",
+		Range = { 8, 60 },
+		Increment = 1,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleReelSaverSideRange or 26,
+		Flag = "GrappleReelSaverSideRangeSlider",
 		Callback = function(Value)
-			Controller:SetGrappleVoidRescue(Value)
+			Controller:SetGrappleReelSaverSideRange(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Reel Saver Min Ledge Height",
+		Info = "Minimum ledge height above your root before Reel Saver accepts it as a recovery target.",
+		Range = { 3, 18 },
+		Increment = 1,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleReelSaverMinHeight or 5,
+		Flag = "GrappleReelSaverMinHeightSlider",
+		Callback = function(Value)
+			Controller:SetGrappleReelSaverMinHeight(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Reel Saver Max Height",
+		Info = "Maximum upper ledge height Reel Saver will try to pull toward.",
+		Range = { 4, 28 },
+		Increment = 1,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleReelSaverMaxHeight or 14,
+		Flag = "GrappleReelSaverMaxHeightSlider",
+		Callback = function(Value)
+			Controller:SetGrappleReelSaverMaxHeight(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Reel Saver Clearance",
+		Info = "Required open space above the landing plane before Reel Saver accepts it.",
+		Range = { 3, 12 },
+		Increment = 1,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleReelSaverClearance or 5,
+		Flag = "GrappleReelSaverClearanceSlider",
+		Callback = function(Value)
+			Controller:SetGrappleReelSaverClearance(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Reel Saver Reel Hold",
+		Info = "How long the keybind-triggered reel holds before releasing.",
+		Range = { 0.06, 0.35 },
+		Increment = 0.01,
+		Suffix = "s",
+		CurrentValue = Controller.GrappleReelSaverReelHoldTime or 0.16,
+		Flag = "GrappleReelSaverReelHoldSlider",
+		Callback = function(Value)
+			Controller:SetGrappleReelSaverReelHoldTime(Value)
 		end,
 	})
 
@@ -543,16 +617,6 @@ return function(Client, Controller)
 		Flag = "GrappleVoidRescueAutoReelToggle",
 		Callback = function(Value)
 			Controller:SetGrappleVoidRescueAutoReel(Value)
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "SharkVoid Auto Cast",
-		Info = "When falling in danger and not grappling, tries the native cast first, then the assisted fallback target.",
-		CurrentValue = Controller.GrappleVoidRescueAutoCast or false,
-		Flag = "GrappleVoidRescueAutoCastToggle",
-		Callback = function(Value)
-			Controller:SetGrappleVoidRescueAutoCast(Value)
 		end,
 	})
 
@@ -576,19 +640,6 @@ return function(Client, Controller)
 		Flag = "GrappleVoidRescueHeightSlider",
 		Callback = function(Value)
 			Controller:SetGrappleVoidRescueHeight(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "SharkVoid Fall Speed",
-		Info = "Fallback trigger when KillVoid is unavailable; lower values trigger earlier while falling.",
-		Range = { 20, 180 },
-		Increment = 5,
-		Suffix = " studs/s",
-		CurrentValue = Controller.GrappleVoidRescueFallSpeed or 65,
-		Flag = "GrappleVoidRescueFallSpeedSlider",
-		Callback = function(Value)
-			Controller:SetGrappleVoidRescueFallSpeed(Value)
 		end,
 	})
 

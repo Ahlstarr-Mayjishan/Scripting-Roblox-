@@ -5,9 +5,9 @@ local TerrainMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
+local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
 
 local DEFAULT_HEIGHT = 45
-local DEFAULT_FALL_SPEED = 65
 local DEFAULT_REEL_HOLD = 0.12
 local RESCUE_COOLDOWN = 0.55
 local VOID_ANCHOR_TOLERANCE = 10
@@ -39,7 +39,7 @@ local function getKillVoidY()
 		end
 	end
 
-	local killVoid = Workspace:FindFirstChild("KillVoid")
+	local killVoid = Workspace:FindFirstChild("KillVoid", true)
 	if killVoid and killVoid:IsA("BasePart") then
 		return killVoid.Position.Y
 	end
@@ -56,18 +56,6 @@ local function isVoidPoint(position)
 	return typeof(position) == "Vector3"
 		and killVoidY ~= nil
 		and math.abs(position.Y - killVoidY) <= VOID_ANCHOR_TOLERANCE
-end
-
-local function hasUpgrade(movement, upgradeName)
-	if not (movement and typeof(movement.HasUpgrade) == "function") then
-		return false
-	end
-
-	local success, result = pcall(function()
-		return movement:HasUpgrade(upgradeName)
-	end)
-
-	return success and result == true
 end
 
 local function isAirborne(grapple)
@@ -95,16 +83,6 @@ local function isDangerousFall(grapple, controller)
 	end
 
 	local heightThreshold = getNumber(controller.GrappleVoidRescueHeight, DEFAULT_HEIGHT, 10, 160)
-	local fallSpeed = getNumber(controller.GrappleVoidRescueFallSpeed, DEFAULT_FALL_SPEED, 20, 180)
-	local velocityY = rootPart.Velocity.Y
-	if MomentumMemory and typeof(MomentumMemory.getState) == "function" then
-		local success, state = pcall(function()
-			return MomentumMemory.getState(rootPart, 0.25)
-		end)
-		if success and state and state.Velocity then
-			velocityY = state.Velocity.Y
-		end
-	end
 	local killVoidY = getKillVoidY()
 	if not killVoidY then
 		return false
@@ -115,7 +93,7 @@ local function isDangerousFall(grapple, controller)
 		return false
 	end
 
-	return velocityY <= -fallSpeed
+	return true
 end
 
 local function isVoidHit(hitResult)
@@ -141,11 +119,7 @@ local function playReelSound(grapple)
 	end
 end
 
-local function canAutoCast(grapple, controller, now)
-	if controller.GrappleVoidRescueAutoCast ~= true then
-		return false
-	end
-
+local function canAutoCast(grapple, now)
 	if now - (Logic.LastAutoCastAt or 0) < 0.35 then
 		return false
 	end
@@ -167,8 +141,13 @@ local function canAutoCast(grapple, controller, now)
 	return typeof(grapple.Start) == "function"
 end
 
-local function autoCast(grapple, controller, targeting, now)
-	if not canAutoCast(grapple, controller, now) then
+local function hasRequiredUpgrades(grapple)
+	local movement = grapple and grapple.Movement
+	return UpgradeGate and UpgradeGate.hasAll(movement, { "NinjaBelt", "SharkBelt" })
+end
+
+local function autoCast(grapple, targeting, now)
+	if not canAutoCast(grapple, now) then
 		return false
 	end
 
@@ -184,7 +163,7 @@ local function autoCast(grapple, controller, targeting, now)
 
 	if not hitResult and targeting and typeof(targeting.findBestAssistHit) == "function" then
 		local success, result = pcall(function()
-			return targeting.findBestAssistHit(grapple, controller)
+			return targeting.findBestAssistHit(grapple, nil)
 		end)
 		if success then
 			hitResult = result
@@ -240,7 +219,7 @@ local function canAutoReel(grapple, controller, now)
 		return false
 	end
 
-	return hasUpgrade(movement, "NinjaBelt")
+	return UpgradeGate and UpgradeGate.has(movement, "NinjaBelt")
 end
 
 local function autoReel(grapple, controller, now)
@@ -309,6 +288,10 @@ local function autoSharkTail(grapple, controller, now)
 		return false
 	end
 
+	if not (UpgradeGate and UpgradeGate.has(grapple.Movement, "SharkBelt")) then
+		return false
+	end
+
 	if typeof(grapple.SharkTail) ~= "function" then
 		return false
 	end
@@ -336,8 +319,13 @@ function Logic.step(grapple, _dt, controller, targeting)
 		return false
 	end
 
+	if not hasRequiredUpgrades(grapple) then
+		Logic.PendingEndAt = nil
+		return false
+	end
+
 	local now = time()
-	autoCast(grapple, controller, targeting, now)
+	autoCast(grapple, targeting, now)
 	autoSharkTail(grapple, controller, now)
 	autoEnd(grapple, now)
 	autoReel(grapple, controller, now)

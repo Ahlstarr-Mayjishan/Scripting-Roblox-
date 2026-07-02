@@ -8,6 +8,7 @@ local Probe =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/Reel Saver/Terrain Query.luau")
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
+local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
 
 local DEFAULT_REEL_HOLD = 0.16
 local START_COOLDOWN = 0.7
@@ -22,18 +23,6 @@ local Logic = {
 local function getNumber(value, fallback, minimum, maximum)
 	local numberValue = tonumber(value) or fallback
 	return math.clamp(numberValue, minimum, maximum)
-end
-
-local function hasUpgrade(movement, upgradeName)
-	if not (movement and typeof(movement.HasUpgrade) == "function") then
-		return false
-	end
-
-	local success, result = pcall(function()
-		return movement:HasUpgrade(upgradeName)
-	end)
-
-	return success and result == true
 end
 
 local function isAirborne(grapple)
@@ -55,10 +44,6 @@ local function canStart(grapple, controller, now)
 		return false
 	end
 
-	if controller.GrappleReelSaverAutoCast == false then
-		return false
-	end
-
 	if now - (Logic.LastCastAt or -1000) < START_COOLDOWN then
 		return false
 	end
@@ -77,7 +62,31 @@ local function canStart(grapple, controller, now)
 		return false
 	end
 
-	return hasUpgrade(movement, "NinjaBelt") and isAirborne(grapple) and typeof(grapple.Start) == "function"
+	return UpgradeGate
+		and UpgradeGate.has(movement, "NinjaBelt")
+		and isAirborne(grapple)
+		and typeof(grapple.Start) == "function"
+end
+
+local function castToTarget(grapple, controller, target, now)
+	if not (target and target.Hit) then
+		return false
+	end
+
+	local success = pcall(function()
+		grapple:Start(target.Hit)
+	end)
+
+	if success then
+		if MomentumMemory and typeof(MomentumMemory.record) == "function" then
+			pcall(MomentumMemory.record, grapple.RootPart, "ReelSaverCast")
+		end
+		target.StartedAt = now
+		Logic.ActiveTarget = target
+		Logic.LastCastAt = now
+	end
+
+	return success
 end
 
 local function playReelSound(grapple)
@@ -101,7 +110,7 @@ local function startReel(grapple, controller, now)
 		return false
 	end
 
-	if not hasUpgrade(movement, "NinjaBelt") then
+	if not (UpgradeGate and UpgradeGate.has(movement, "NinjaBelt")) then
 		return false
 	end
 
@@ -180,29 +189,17 @@ function Logic.step(grapple, _dt, controller)
 		return true
 	end
 
+	return false
+end
+
+function Logic.trigger(grapple, controller)
+	local now = time()
 	if not canStart(grapple, controller, now) then
 		return false
 	end
 
 	local target = Probe.find(grapple, controller)
-	if not (target and target.Hit) then
-		return false
-	end
-
-	local success = pcall(function()
-		grapple:Start(target.Hit)
-	end)
-
-	if success then
-		if MomentumMemory and typeof(MomentumMemory.record) == "function" then
-			pcall(MomentumMemory.record, grapple.RootPart, "ReelSaverCast")
-		end
-		target.StartedAt = now
-		Logic.ActiveTarget = target
-		Logic.LastCastAt = now
-	end
-
-	return success
+	return castToTarget(grapple, controller, target, now)
 end
 
 function Logic.reset()

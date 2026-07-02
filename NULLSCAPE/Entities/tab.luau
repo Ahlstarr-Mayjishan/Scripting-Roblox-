@@ -231,12 +231,42 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
-		Name = "Springer",
-		CurrentValue = getFlag(Controller, "SpringerImmune"),
-		Flag = "ImmunitySpringerToggle",
-		Callback = function(Value)
-			setImmunity(Controller, "Springer", Value)
+	local currentSpringerOptions = {}
+	if getFlag(Controller, "SpringerImmune") then
+		table.insert(currentSpringerOptions, "Immunity")
+	end
+	if getFlag(Controller, "SpringerKnockbackImmune") then
+		table.insert(currentSpringerOptions, "Springer Knockback")
+	end
+
+	Tab:CreateDropdown({
+		Name = "Springer Hack Mode",
+		Options = { "Immunity", "Springer Knockback" },
+		CurrentOption = currentSpringerOptions,
+		MultipleOptions = true,
+		Flag = "SpringerHackDropdown",
+		Callback = function(Options)
+			local hasImmunity = false
+			local hasKnockbackImmune = false
+			for _, opt in ipairs(Options) do
+				if opt == "Immunity" then
+					hasImmunity = true
+				elseif opt == "Springer Knockback" then
+					hasKnockbackImmune = true
+				end
+			end
+
+			local activeController = resolveController(nil, Controller)
+			if activeController then
+				if typeof(activeController.SetImmunity) == "function" then
+					activeController:SetImmunity("Springer", hasImmunity)
+				end
+				if typeof(activeController.SetSpringerKnockbackImmune) == "function" then
+					activeController:SetSpringerKnockbackImmune(hasKnockbackImmune)
+				end
+			else
+				warn("[NULLSCAPE] Entities controller is not ready; ignored Springer Hack Mode change")
+			end
 		end,
 	})
 
@@ -394,7 +424,7 @@ return function(Client, Controller)
 
 	Tab:CreateDropdown({
 		Name = "Immunity Effect",
-		Options = { "Flesh", "Concussion", "Fire", "Panic", "Insanity", "Overtuned", "Springer Knockback", "Bell Knockback" },
+		Options = { "Flesh", "Concussion", "Fire", "Panic", "Insanity", "Overtuned", "Bell Knockback" },
 		CurrentOption = (StatusImmunity and StatusImmunity.GetActiveImmunities()) or {},
 		MultipleOptions = true,
 		Flag = "StatusImmunityDropdown",

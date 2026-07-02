@@ -237,4 +237,8 @@ function Executor.triggerGrappleAssistSecondaryCast(controller)
 	return callModule("GrappleAssist", "triggerSecondaryCast", controller)
 end
 
+function Executor.triggerGrappleReelSaver(controller)
+	return callModule("GrappleAssist", "triggerReelSaver", controller)
+end
+
 return Executor

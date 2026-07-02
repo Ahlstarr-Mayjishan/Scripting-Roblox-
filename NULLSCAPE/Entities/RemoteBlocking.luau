@@ -153,7 +153,7 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         and remote.Name == "ClientEvent"
         and args[1] == "Combust" then
         local parent = remote.Parent
-        if parent and string.find(parent.Name, "ICBM") then
+        if parent and string.find(parent.Name, "ICBM", 1, true) then
             return controller.ICBMBurnImmune == true
         end
     end
@@ -198,7 +198,7 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
             local nameSuccess, name = pcall(function()
                 return current.Name
             end)
-            if nameSuccess and name and string.find(string.lower(name), string.lower(targetSubName)) then
+            if nameSuccess and name and string.find(string.lower(name), string.lower(targetSubName), 1, true) then
                 return current
             end
             local parentSuccess, parent = pcall(function()
@@ -262,7 +262,7 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
                         if typeof(arg) == "string" then
                             local lowerArg = string.lower(arg)
                             for _, kw in ipairs(keywordsList) do
-                                if string.lower(kw) == lowerArg or string.find(lowerArg, string.lower(kw)) then
+                                if string.lower(kw) == lowerArg or string.find(lowerArg, string.lower(kw), 1, true) then
                                     hasKeyword = true
                                     break
                                 end
@@ -278,28 +278,12 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
                         isRelated = true
                     else
                         for _, arg in ipairs(args) do
-                            if (typeof(arg) == "Instance" and string.find(arg.Name, entityName))
-                                or (typeof(arg) == "string" and string.find(arg, entityName)) then
+                            if (typeof(arg) == "Instance" and string.find(string.lower(arg.Name), string.lower(entityName), 1, true))
+                                or (typeof(arg) == "string" and string.find(string.lower(arg), string.lower(entityName), 1, true)) then
                                 isRelated = true
                                 break
                             end
                         end
-                    end
-
-                    if not isRelated then
-                        local enemies = workspace:FindFirstChild("Enemies")
-                        if enemies then
-                            for _, enemy in ipairs(enemies:GetChildren()) do
-                                if string.find(enemy.Name, entityName) then
-                                    isRelated = true
-                                    break
-                                end
-                            end
-                        end
-                    end
-
-                    if not isRelated then
-                        isRelated = true
                     end
 
                     if isRelated and not isTargetsSomeoneElse() then

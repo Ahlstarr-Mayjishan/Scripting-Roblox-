@@ -69,8 +69,6 @@ local Controller = {
 	GrappleAnchorPriorityJumpPad = 1000,
 	GrappleAnchorPriorityTriaOrb = 850,
 	GrappleAnchorPriorityBell = 800,
-	GrappleAssistRailTargetingEnabled = false,
-	GrappleAssistRailPriority = 500,
 	GrappleAssistTerrainPriority = 100,
 	GrappleIntentHighSpeed = 120,
 	GrappleIntentRailRange = 14,
@@ -82,10 +80,9 @@ local Controller = {
 	GrappleVoidRescueAutoReel = true,
 	GrappleVoidRescueAutoSharkTail = true,
 	GrappleVoidRescueHeight = 45,
-	GrappleVoidRescueFallSpeed = 65,
 	GrappleVoidRescueReelHoldTime = 0.12,
 	GrappleReelSaverEnabled = false,
-	GrappleReelSaverAutoCast = true,
+	GrappleReelSaverKeybind = "E",
 	GrappleReelSaverSideRange = 26,
 	GrappleReelSaverMinHeight = 5,
 	GrappleReelSaverMaxHeight = 14,
@@ -458,14 +455,6 @@ function Controller:SetGrappleAnchorPriorityBell(value)
 	self.GrappleAnchorPriorityBell = math.clamp(tonumber(value) or 800, 0, 1000)
 end
 
-function Controller:SetGrappleAssistRailTargeting(value)
-	self.GrappleAssistRailTargetingEnabled = value == true
-end
-
-function Controller:SetGrappleAssistRailPriority(value)
-	self.GrappleAssistRailPriority = math.clamp(tonumber(value) or 500, 0, 1000)
-end
-
 function Controller:SetGrappleAssistTerrainPriority(value)
 	self.GrappleAssistTerrainPriority = math.clamp(tonumber(value) or 100, -50, 300)
 end
@@ -510,6 +499,38 @@ function Controller:SetGrappleVoidRescue(value)
 	self.GrappleVoidRescueEnabled = value == true
 
 	if self.GrappleVoidRescueEnabled then
+		self.GrappleVoidRescueAutoCast = true
+		self:SetGrappleAssist(true)
+	end
+end
+
+function Controller:SetGrapplerTechniqueSelection(options)
+	local sharkVoid = false
+	local reelSaver = false
+
+	if typeof(options) == "table" then
+		if options.SharkVoid ~= nil or options.ReelSaver ~= nil then
+			sharkVoid = options.SharkVoid == true
+			reelSaver = options.ReelSaver == true
+		else
+			for _, option in ipairs(options) do
+				if option == "SharkVoid" then
+					sharkVoid = true
+				elseif option == "Reel Saver" or option == "ReelSaver" then
+					reelSaver = true
+				end
+			end
+		end
+	end
+
+	self.GrappleVoidRescueEnabled = sharkVoid
+	self.GrappleReelSaverEnabled = reelSaver
+
+	if sharkVoid then
+		self.GrappleVoidRescueAutoCast = true
+	end
+
+	if sharkVoid or reelSaver then
 		self:SetGrappleAssist(true)
 	end
 end
@@ -530,10 +551,6 @@ function Controller:SetGrappleVoidRescueHeight(value)
 	self.GrappleVoidRescueHeight = math.clamp(tonumber(value) or 45, 10, 160)
 end
 
-function Controller:SetGrappleVoidRescueFallSpeed(value)
-	self.GrappleVoidRescueFallSpeed = math.clamp(tonumber(value) or 65, 20, 180)
-end
-
 function Controller:SetGrappleVoidRescueReelHoldTime(value)
 	self.GrappleVoidRescueReelHoldTime = math.clamp(tonumber(value) or 0.12, 0.05, 0.25)
 end
@@ -546,8 +563,8 @@ function Controller:SetGrappleReelSaver(value)
 	end
 end
 
-function Controller:SetGrappleReelSaverAutoCast(value)
-	self.GrappleReelSaverAutoCast = value == true
+function Controller:SetGrappleReelSaverKeybind(value)
+	self.GrappleReelSaverKeybind = tostring(value or "E")
 end
 
 function Controller:SetGrappleReelSaverSideRange(value)
@@ -569,6 +586,18 @@ end
 
 function Controller:SetGrappleReelSaverReelHoldTime(value)
 	self.GrappleReelSaverReelHoldTime = math.clamp(tonumber(value) or 0.16, 0.06, 0.35)
+end
+
+function Controller:TriggerGrappleReelSaver()
+	if not self.GrappleReelSaverEnabled then
+		return false
+	end
+
+	if not self.GrappleAssistEnabled then
+		self:SetGrappleAssist(true)
+	end
+
+	return callExecutor("triggerGrappleReelSaver", self)
 end
 
 function Controller:TriggerGrappleAssistSecondaryCast()

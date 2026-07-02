@@ -4,6 +4,7 @@
 -- ]]
 
 local Logic = {}
+local CollectionService = game:GetService("CollectionService")
 
 -- ============================================================
 --  CẤU HÌNH THỰC THỂ TOUCHINTEREST
@@ -79,6 +80,27 @@ end
 
 local function nameMatchesEntity(name, entityName)
 	return string.find(string.lower(tostring(name or "")), string.lower(tostring(entityName or ""))) ~= nil
+end
+
+local function isNativeCollectiblePath(instance)
+	local current = instance
+	while current do
+		local lowerName = string.lower(tostring(current.Name or ""))
+		local hasCadenceTag = false
+		pcall(function()
+			hasCadenceTag = CollectionService:HasTag(current, "CadenceOrb")
+		end)
+		if
+			hasCadenceTag
+			or string.find(lowerName, "cadenceorb", 1, true)
+			or string.find(lowerName, "cadence orb", 1, true)
+			or string.find(lowerName, "instrument", 1, true)
+		then
+			return true
+		end
+		current = current.Parent
+	end
+	return false
 end
 
 local function disconnectConnections(connections)
@@ -180,6 +202,9 @@ local function removeTouchFromPart(gc, enemy, part)
 		return
 	end
 	local parentPart = part.Parent
+	if isNativeCollectiblePath(parentPart) then
+		return
+	end
 
 	if parentPart and parentPart:IsA("BasePart") then
 		if not gc.SavedPartsData[parentPart] then
