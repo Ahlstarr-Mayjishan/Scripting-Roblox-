@@ -146,6 +146,19 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateSlider({
+		Name = "Delay Collect",
+		Info = "Delay before collecting tripmines after arming immunity. Higher values simulate lag and give the server more time.",
+		Range = { 0.03, 1 },
+		CurrentValue = Controller.TripmineBarrierCollectDelay or 0.08,
+		Increment = 0.01,
+		ValueName = "s",
+		Flag = "TripmineBarrierCollectDelaySlider",
+		Callback = function(Value)
+			Controller:SetTripmineBarrierCollectDelay(Value)
+		end,
+	})
+
 	Tab:CreateSection("Matrix Tetrahedron")
 
 	Tab:CreateToggle({

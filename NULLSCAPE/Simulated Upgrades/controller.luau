@@ -56,6 +56,7 @@ local Controller = {
 
 	TripmineBarrierEnabled = false,
 	TripmineBarrierMode = "Off",
+	TripmineBarrierCollectDelay = 0.08,
 	TripmineDetonationDistance = 15,
 	TripmineDetonationJitter = 2,
 	TripmineBlastSafeRadius = 8, -- Legacy: active tripmine detonation is disabled by Defuse Kits
@@ -693,6 +694,13 @@ function Controller:SetTripmineBarrier(value)
 		Executor.updateBarriers(self, GC)
 	end)
 	startUtilityLoop()
+end
+
+function Controller:SetTripmineBarrierCollectDelay(value)
+	self.TripmineBarrierCollectDelay = math.clamp(tonumber(value) or 0.08, 0.03, 1)
+	pcall(function()
+		Executor.updateBarriers(self, GC)
+	end)
 end
 
 function Controller:SetTripmineBarrierMode(value)

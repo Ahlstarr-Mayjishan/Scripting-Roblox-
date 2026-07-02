@@ -144,6 +144,7 @@ pcall(function()
 			CollectMedalKeybind = "V",
 			CollectMedalKeybindKeybind = "V",
 			TripmineBarrierModeDropdown = "Off",
+			TripmineBarrierCollectDelaySlider = 0.08,
 			AutoCollectModeDropdown = "Legit",
 			ChargerTripmineAssistToggle = false,
 			ChargerTripmineModeDropdown = "Auto",

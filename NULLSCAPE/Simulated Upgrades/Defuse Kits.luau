@@ -27,6 +27,7 @@ local IMMUNITY_HOLD_AFTER_NEARBY = 0.75
 local IMMUNITY_CLUSTER_DISTANCE = 8.5
 local IMMUNITY_CLUSTER_COUNT = 2
 local IMMUNITY_EMERGENCY_IFRAMES = 0.75
+local IMMUNITY_PRECOLLECT_DELAY = 0.08
 local IMMUNITY_DEBUG = true
 local IMMUNITY_DEBUG_INTERVAL = 0.5
 
@@ -48,6 +49,9 @@ local immunityHoldUntil = 0
 local emergencyIframeUntil = 0
 local lastDebugAt = 0
 local lastDebugKey = ""
+local hookTripmineCollect = nil
+local hookedTripmineCollects = setmetatable({}, { __mode = "k" })
+local hookedReplicationClients = setmetatable({}, { __mode = "k" })
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
@@ -219,6 +223,19 @@ local function getGiftPosition(gift)
 	return nil
 end
 
+local function isTripmineGift(gift)
+	if not gift then
+		return false
+	end
+
+	if gift.Tripmine == true then
+		return true
+	end
+
+	local giftType = gift.Type or gift.GiftType
+	return giftType == "Tripmine" or giftType == "GoldTripmine"
+end
+
 local function getTripmineThreatInfo(hrp)
 	local GCH = getGiftClientHandler()
 	if not (GCH and GCH.Gifts and hrp) then
@@ -228,7 +245,11 @@ local function getTripmineThreatInfo(hrp)
 	local nearest = math.huge
 	local clustered = 0
 	for _, gift in pairs(GCH.Gifts) do
-		if gift.Tripmine and not gift.Collected and not gift.Destroyed and not gift.ClientCollected then
+		if isTripmineGift(gift) and not gift.Collected and not gift.Destroyed and not gift.ClientCollected then
+			if hookTripmineCollect then
+				hookTripmineCollect(gift)
+			end
+
 			local giftPos = getGiftPosition(gift)
 			if giftPos then
 				local distance = (hrp.Position - giftPos).Magnitude
@@ -434,6 +455,98 @@ local function armChargerImmunityWindow()
 	end)
 end
 
+local function runAfterPrecollectDelay(callback)
+	local delaySeconds = math.clamp(
+		tonumber(activeController and activeController.TripmineBarrierCollectDelay) or IMMUNITY_PRECOLLECT_DELAY,
+		0.03,
+		1
+	)
+
+	if delaySeconds <= 0 then
+		task.defer(callback)
+		return
+	end
+
+	task.delay(delaySeconds, callback)
+end
+
+local function getPrecollectDelay()
+	return math.clamp(
+		tonumber(activeController and activeController.TripmineBarrierCollectDelay) or IMMUNITY_PRECOLLECT_DELAY,
+		0.03,
+		1
+	)
+end
+
+hookTripmineCollect = function(gift)
+	if not gift or hookedTripmineCollects[gift] or type(gift.Collect) ~= "function" then
+		return
+	end
+
+	hookedTripmineCollects[gift] = true
+	local originalCollect = gift.Collect
+	gift.Collect = function(self, ...)
+		if isTripmineGift(self) and isImmunityModeActive() then
+			debugImmunity(
+				"PreCollectHook",
+				string.format("%s delay=%.2f", tostring(self.Id or self.Type or "Tripmine"), getPrecollectDelay()),
+				true
+			)
+			armChargerImmunityWindow()
+
+			local args = table.pack(...)
+			runAfterPrecollectDelay(function()
+				originalCollect(self, table.unpack(args, 1, args.n))
+			end)
+			return
+		end
+
+		return originalCollect(self, ...)
+	end
+end
+
+local function hookTripmineSendCollect()
+	local GCH = getGiftClientHandler()
+	local replicationClient = GCH and GCH.ReplicationClient
+	if not replicationClient or hookedReplicationClients[replicationClient] or type(replicationClient.SendCollect) ~= "function" then
+		return
+	end
+
+	hookedReplicationClients[replicationClient] = true
+	local originalSendCollect = replicationClient.SendCollect
+	replicationClient.SendCollect = function(first, ...)
+		local giftId = first
+		local args = table.pack(...)
+		local colonCall = first == replicationClient
+		if colonCall then
+			giftId = args[1]
+			table.remove(args, 1)
+			args.n -= 1
+		end
+
+		local gift = GCH.Gifts and GCH.Gifts[giftId]
+		if isTripmineGift(gift) and isImmunityModeActive() then
+			debugImmunity("PreSendCollectHook", string.format("%s delay=%.2f", tostring(giftId), getPrecollectDelay()), true)
+			armChargerImmunityWindow()
+
+			runAfterPrecollectDelay(function()
+				if colonCall then
+					originalSendCollect(giftId, table.unpack(args, 1, args.n))
+				else
+					originalSendCollect(first, table.unpack(args, 1, args.n))
+				end
+			end)
+			return
+		end
+
+		if colonCall then
+			return originalSendCollect(giftId, table.unpack(args, 1, args.n))
+		end
+
+		return originalSendCollect(first, ...)
+	end
+end
+
 local function updateImmunityTripmineWindow()
 	if not isImmunityModeActive() then
 		emergencyIframeUntil = 0
@@ -452,6 +565,7 @@ local function updateImmunityTripmineWindow()
 	end
 
 	local now = os.clock()
+	hookTripmineSendCollect()
 	local nearestTripmine, clusteredTripmines = getTripmineThreatInfo(hrp)
 	local rearmCoolingDown = now - lastImmunityResetAt < IMMUNITY_REARM_DELAY
 	debugImmunity(
