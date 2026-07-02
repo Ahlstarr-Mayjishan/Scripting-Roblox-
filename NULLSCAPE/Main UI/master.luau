@@ -124,6 +124,8 @@ pcall(function()
 			SpringerAutoJumpToggle = false,
 			InfiniteAirJumpToggle = false,
 			AntiBonkToggle = false,
+			IgnoreFakeCountToggle = false,
+			BeaconMirageIdentifierToggle = false,
 			GrapplerStaminaModeDropdown = "Off",
 			RailAssistSuiteToggle = false,
 			RailAutoToggle = false,

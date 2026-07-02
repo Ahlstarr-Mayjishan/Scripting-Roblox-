@@ -92,6 +92,8 @@ local Controller = {
 	GrapplerStaminaMode = "Off",
 	StaminaMode = "Off",
 	AntiBonkEnabled = false,
+	IgnoreFakeCountEnabled = false,
+	BeaconMirageIdentifierEnabled = false,
 	GrapplerStaminaRecoverySpeed = 1,
 	Destroyed = false,
 
@@ -167,6 +169,7 @@ function Controller:CleanUp()
 		callExecutor("disableStaminaAssist")
 		callExecutor("disableRailAssist")
 		callExecutor("disableAntiBonk")
+		callExecutor("disableCurseVisualAssist")
 		callExecutor("disableMomentumGuard")
 		callExecutor("disableGrappleAssist")
 	end
@@ -282,6 +285,14 @@ function Controller:ReapplyRespawnFeatures()
 		callExecutor("initializeAntiBonk")
 	end
 
+	if self.IgnoreFakeCountEnabled then
+		callExecutor("setIgnoreFakeCount", true)
+	end
+
+	if self.BeaconMirageIdentifierEnabled then
+		callExecutor("setBeaconMirageIdentifier", true)
+	end
+
 	if self.MomentumMode ~= "Off" then
 		callExecutor("initializeMomentumGuard")
 	end
@@ -292,6 +303,29 @@ function Controller:ReapplyRespawnFeatures()
 
 	self:RefreshRailAssistHook()
 	self:updateSpringerAutoJumpState()
+end
+
+function Controller:SetIgnoreFakeCount(value)
+	local enabled = value == true
+	self.IgnoreFakeCountEnabled = enabled
+	if not callExecutor("setIgnoreFakeCount", enabled) then
+		self.IgnoreFakeCountEnabled = false
+		if getgenv().Rayfield then
+			getgenv().Rayfield:Notify({
+				Title = "Accessibility Config",
+				Content = "CurseHandler is not available yet",
+				Duration = 3,
+			})
+		end
+	end
+end
+
+function Controller:SetBeaconMirageIdentifier(value)
+	local enabled = value == true
+	self.BeaconMirageIdentifierEnabled = enabled
+	if not callExecutor("setBeaconMirageIdentifier", enabled) then
+		self.BeaconMirageIdentifierEnabled = false
+	end
 end
 
 function Controller:RefreshRailAssistHook()

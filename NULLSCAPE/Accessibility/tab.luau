@@ -2,6 +2,8 @@ local DEFAULTS = {
 	SpringerAutoJumpEnabled = false,
 	InfiniteAirJumpEnabled = false,
 	AntiBonkEnabled = false,
+	IgnoreFakeCountEnabled = false,
+	BeaconMirageIdentifierEnabled = false,
 	RailAssistSuiteEnabled = false,
 	RailAutoEnabled = false,
 	RailSpeedMultiplier = 1.1,
@@ -185,6 +187,26 @@ return function(Client, Controller)
 		Flag = "AntiBonkToggle",
 		Callback = function(Value)
 			Controller:SetAntiBonk(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Ignore Fake Count",
+		Info = "Shows the real gift/pylon count when the Fake Count curse tries to randomize the counter.",
+		CurrentValue = Controller.IgnoreFakeCountEnabled or false,
+		Flag = "IgnoreFakeCountToggle",
+		Callback = function(Value)
+			Controller:SetIgnoreFakeCount(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Beacon Mirage Identifier",
+		Info = "Marks the real workspace Beacon and fades/blocks Beacon Mirage or Beacon Feint decoys.",
+		CurrentValue = Controller.BeaconMirageIdentifierEnabled or false,
+		Flag = "BeaconMirageIdentifierToggle",
+		Callback = function(Value)
+			Controller:SetBeaconMirageIdentifier(Value)
 		end,
 	})
 

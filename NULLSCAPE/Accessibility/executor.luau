@@ -13,6 +13,7 @@ local MODULE_PATHS = {
 	StaminaAssist = "NULLSCAPE/Accessibility/Stamina Assist.luau",
 	RailAssist = "NULLSCAPE/Accessibility/Rail Assist.luau",
 	GrappleAssist = "NULLSCAPE/Accessibility/Grappler assistments/Grapple Assist.luau",
+	CurseVisualAssist = "NULLSCAPE/Accessibility/Curse Visual Assist.luau",
 }
 
 local Modules = {}
@@ -211,6 +212,18 @@ end
 
 function Executor.disableStaminaAssist()
 	callModule("StaminaAssist", "disable")
+end
+
+function Executor.setIgnoreFakeCount(enabled)
+	return callModule("CurseVisualAssist", "setIgnoreFakeCount", enabled)
+end
+
+function Executor.setBeaconMirageIdentifier(enabled)
+	return callModule("CurseVisualAssist", "setBeaconMirageIdentifier", enabled)
+end
+
+function Executor.disableCurseVisualAssist()
+	callModule("CurseVisualAssist", "disable")
 end
 
 function Executor.initializeGrapplerInfiniteStamina()
