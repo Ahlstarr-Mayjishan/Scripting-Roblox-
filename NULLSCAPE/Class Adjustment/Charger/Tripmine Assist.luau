@@ -24,8 +24,6 @@ local ACTIVE_WATCH_INTERVAL = 0.08
 local IDLE_WATCH_INTERVAL = 0.35
 local PASS_BATCH_DISTANCE = 60
 local PASS_BATCH_CORRIDOR = 9
-local PASS_BATCH_MAX_COUNT = 5
-local PASS_BATCH_COLLECT_LIMIT = 1
 local PASS_BATCH_MIN_SPEED = 22
 
 local activeController = nil
@@ -36,7 +34,6 @@ local iframeObject = nil
 local processedMines = {}
 local logs = {}
 local lastCollectAt = {}
-local passBatch = nil
 local passBatchLocked = false
 local previousHrpPos = nil
 local characterConnection = nil
@@ -148,7 +145,6 @@ local function clearState()
 	table.clear(processedMines)
 	table.clear(logs)
 	table.clear(lastCollectAt)
-	passBatch = nil
 	passBatchLocked = false
 	previousHrpPos = nil
 end
@@ -258,87 +254,9 @@ local function getSegmentInfo(fromPos, toPos, point)
 	}
 end
 
-local function resetPassBatch()
-	passBatch = nil
-end
-
-local function startPassBatch(giftId, gift, giftPos, hrpPos)
-	passBatch = {
-		anchorId = giftId,
-		anchorPos = giftPos,
-		items = {},
-		itemSet = {},
-		startPos = hrpPos,
-	}
-
-	passBatch.items[1] = {
-		id = giftId,
-		gift = gift,
-		pos = giftPos,
-	}
-	passBatch.itemSet[giftId] = true
-end
-
-local function addToPassBatch(giftId, gift, giftPos, batchDistance)
-	if not passBatch or passBatch.itemSet[giftId] then
-		return false
-	end
-
-	if (giftPos - passBatch.anchorPos).Magnitude > batchDistance then
-		return false
-	end
-
-	if #passBatch.items >= PASS_BATCH_MAX_COUNT then
-		return false
-	end
-
-	table.insert(passBatch.items, {
-		id = giftId,
-		gift = gift,
-		pos = giftPos,
-	})
-	passBatch.itemSet[giftId] = true
-	return true
-end
-
-local function flushPassBatch(reason, hrpPos, lockUntilChargeEnd)
-	if not passBatch then
-		return 0
-	end
-
-	local batch = passBatch
-	local activated = 0
-
-	for _, item in ipairs(batch.items) do
-		if activated >= PASS_BATCH_COLLECT_LIMIT then
-			break
-		end
-
-		local gift = item.gift
-		local dist = hrpPos and (hrpPos - item.pos).Magnitude or 0
-		if gift and not gift.Collected then
-			local ok = tryCollectTripmine(item.id, gift, reason or "PassBatchFlush", dist)
-			if ok then
-				processedMines[item.id] = true
-				activated += 1
-			end
-		end
-	end
-
-	if activated > 0 then
-		resetPassBatch()
-		if lockUntilChargeEnd then
-			passBatchLocked = true
-		end
-	end
-
-	return activated
-end
-
 local function updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
 	local charging = isCharging(char, hrp)
 	if not charging then
-		resetPassBatch()
 		passBatchLocked = false
 		previousHrpPos = nil
 		removeIframes(true)
@@ -369,7 +287,7 @@ local function updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
 				and segmentInfo.distance <= PASS_BATCH_CORRIDOR
 			local isOverlapping = dist <= NEAR_PASS_DISTANCE
 
-			if wasPassed or isOverlapping then
+			if (wasPassed or isOverlapping) and dist <= batchDistance then
 				table.insert(candidates, {
 					id = giftId,
 					gift = gift,
@@ -384,19 +302,14 @@ local function updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
 		return a.alpha < b.alpha
 	end)
 
-	for _, candidate in ipairs(candidates) do
-		if not passBatch then
-			startPassBatch(candidate.id, candidate.gift, candidate.pos, hrpPos)
-			logOnce(candidate.id, "PassBatchAnchor", (hrpPos - candidate.pos).Magnitude)
-		elseif addToPassBatch(candidate.id, candidate.gift, candidate.pos, batchDistance) then
-			logOnce(candidate.id, "PassBatchQueued", (hrpPos - candidate.pos).Magnitude)
-		end
-	end
-
-	if passBatch then
-		local anchorDistance = (hrpPos - passBatch.anchorPos).Magnitude
-		if anchorDistance >= batchDistance then
-			flushPassBatch("PassBatchFlush", hrpPos, true)
+	local candidate = candidates[1]
+	if candidate then
+		local dist = (hrpPos - candidate.pos).Magnitude
+		local ok = tryCollectTripmine(candidate.id, candidate.gift, "PassBatchSingle", dist)
+		if ok then
+			processedMines[candidate.id] = true
+			passBatchLocked = true
+			logOnce(candidate.id, "PassBatchSingle", dist)
 		end
 	end
 
@@ -499,10 +412,6 @@ local function startWatcher()
 				continue
 			else
 				addIframes()
-				if passBatch then
-					flushPassBatch("PassBatchModeChanged", hrpPos, false)
-					resetPassBatch()
-				end
 				passBatchLocked = false
 				previousHrpPos = nil
 			end

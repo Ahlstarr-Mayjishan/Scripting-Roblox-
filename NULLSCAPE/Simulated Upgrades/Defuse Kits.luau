@@ -27,6 +27,8 @@ local IMMUNITY_HOLD_AFTER_NEARBY = 0.75
 local IMMUNITY_CLUSTER_DISTANCE = 8.5
 local IMMUNITY_CLUSTER_COUNT = 2
 local IMMUNITY_EMERGENCY_IFRAMES = 0.75
+local IMMUNITY_PASS_NEAR_DISTANCE = 6
+local IMMUNITY_PASS_CORRIDOR = 9
 local IMMUNITY_PRECOLLECT_DELAY = 0.08
 local IMMUNITY_DEBUG = true
 local IMMUNITY_DEBUG_INTERVAL = 0.5
@@ -49,6 +51,7 @@ local immunityHoldUntil = 0
 local emergencyIframeUntil = 0
 local lastDebugAt = 0
 local lastDebugKey = ""
+local previousHrpPos = nil
 local hookTripmineCollect = nil
 local hookedTripmineCollects = setmetatable({}, { __mode = "k" })
 local hookedReplicationClients = setmetatable({}, { __mode = "k" })
@@ -236,14 +239,39 @@ local function isTripmineGift(gift)
 	return giftType == "Tripmine" or giftType == "GoldTripmine"
 end
 
+local function getSegmentInfo(fromPos, toPos, point)
+	if not (fromPos and toPos and point) then
+		return nil
+	end
+
+	local segment = toPos - fromPos
+	local length = segment.Magnitude
+	if length < 0.05 then
+		return nil
+	end
+
+	local alpha = math.clamp((point - fromPos):Dot(segment) / (length * length), 0, 1)
+	local closest = fromPos + segment * alpha
+	local distance = (point - closest).Magnitude
+	return {
+		alpha = alpha,
+		distance = distance,
+		closest = closest,
+		length = length,
+	}
+end
+
 local function getTripmineThreatInfo(hrp)
 	local GCH = getGiftClientHandler()
 	if not (GCH and GCH.Gifts and hrp) then
-		return math.huge, 0
+		previousHrpPos = hrp and hrp.Position or nil
+		return math.huge, 0, false
 	end
 
 	local nearest = math.huge
 	local clustered = 0
+	local passThreat = false
+	local hrpPos = hrp.Position
 	for _, gift in pairs(GCH.Gifts) do
 		if isTripmineGift(gift) and not gift.Collected and not gift.Destroyed and not gift.ClientCollected then
 			if hookTripmineCollect then
@@ -252,16 +280,27 @@ local function getTripmineThreatInfo(hrp)
 
 			local giftPos = getGiftPosition(gift)
 			if giftPos then
-				local distance = (hrp.Position - giftPos).Magnitude
+				local distance = (hrpPos - giftPos).Magnitude
 				nearest = math.min(nearest, distance)
 				if distance <= IMMUNITY_CLUSTER_DISTANCE then
 					clustered += 1
+				end
+
+				local segmentInfo = previousHrpPos and getSegmentInfo(previousHrpPos, hrpPos, giftPos)
+				local wasPassed = segmentInfo
+					and segmentInfo.alpha > 0
+					and segmentInfo.alpha < 1
+					and segmentInfo.distance <= IMMUNITY_PASS_CORRIDOR
+				local isOverlapping = distance <= IMMUNITY_PASS_NEAR_DISTANCE
+				if wasPassed or isOverlapping then
+					passThreat = true
 				end
 			end
 		end
 	end
 
-	return nearest, clustered
+	previousHrpPos = hrpPos
+	return nearest, clustered, passThreat
 end
 
 local function getBarrierMode()
@@ -550,6 +589,7 @@ end
 local function updateImmunityTripmineWindow()
 	if not isImmunityModeActive() then
 		emergencyIframeUntil = 0
+		previousHrpPos = nil
 		removeIframes()
 		resetChargerImmunity()
 		return
@@ -559,6 +599,7 @@ local function updateImmunityTripmineWindow()
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	if not hrp then
 		emergencyIframeUntil = 0
+		previousHrpPos = nil
 		removeIframes()
 		resetChargerImmunity()
 		return
@@ -566,14 +607,15 @@ local function updateImmunityTripmineWindow()
 
 	local now = os.clock()
 	hookTripmineSendCollect()
-	local nearestTripmine, clusteredTripmines = getTripmineThreatInfo(hrp)
+	local nearestTripmine, clusteredTripmines, passThreat = getTripmineThreatInfo(hrp)
 	local rearmCoolingDown = now - lastImmunityResetAt < IMMUNITY_REARM_DELAY
 	debugImmunity(
 		"ThreatScan",
 		string.format(
-			"nearest=%.2f cluster=%d armed=%s cooldown=%s hold=%.2f emergency=%.2f",
+			"nearest=%.2f cluster=%d pass=%s armed=%s cooldown=%s hold=%.2f emergency=%.2f",
 			nearestTripmine,
 			clusteredTripmines,
+			tostring(passThreat),
 			tostring(immunityArmed),
 			tostring(rearmCoolingDown),
 			math.max(0, immunityHoldUntil - now),
@@ -589,7 +631,10 @@ local function updateImmunityTripmineWindow()
 		removeIframes()
 	end
 
-	if nearestTripmine <= IMMUNITY_ARM_DISTANCE then
+	if passThreat then
+		debugImmunity("PassBatchDetect", string.format("nearest=%.2f", nearestTripmine), true)
+		armChargerImmunityWindow()
+	elseif nearestTripmine <= IMMUNITY_ARM_DISTANCE then
 		armChargerImmunityWindow()
 	elseif immunityArmed and now >= immunityHoldUntil then
 		resetChargerImmunity()
