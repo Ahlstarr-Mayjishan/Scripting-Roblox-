@@ -224,6 +224,13 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         return true
     end
 
+    if remoteName == "Died"
+        and (args[1] == "RealityBreak" or args[1] == "RealityBreaker")
+        and (controller.nilEnemyImmune == true or controller.nilMirageImmune == true)
+    then
+        return true
+    end
+
     if not Logic.TargetRemotes[remoteName] then
         return false
     end
