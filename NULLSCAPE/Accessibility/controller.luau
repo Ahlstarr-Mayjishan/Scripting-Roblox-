@@ -76,7 +76,6 @@ local Controller = {
 	GrappleVoidProtectionHeight = 24,
 	GrappleVoidProtectionFallSpeed = 85,
 	GrappleVoidRescueEnabled = false,
-	GrappleVoidRescueAutoCast = false,
 	GrappleVoidRescueAutoReel = true,
 	GrappleVoidRescueAutoSharkTail = true,
 	GrappleVoidRescueHeight = 45,
@@ -533,7 +532,6 @@ function Controller:SetGrappleVoidRescue(value)
 	self.GrappleVoidRescueEnabled = value == true
 
 	if self.GrappleVoidRescueEnabled then
-		self.GrappleVoidRescueAutoCast = true
 		self:SetGrappleAssist(true)
 	end
 end
@@ -560,10 +558,6 @@ function Controller:SetGrapplerTechniqueSelection(options)
 	self.GrappleVoidRescueEnabled = sharkVoid
 	self.GrappleReelSaverEnabled = reelSaver
 
-	if sharkVoid then
-		self.GrappleVoidRescueAutoCast = true
-	end
-
 	if sharkVoid or reelSaver then
 		self:SetGrappleAssist(true)
 	end
@@ -571,10 +565,6 @@ end
 
 function Controller:SetGrappleVoidRescueAutoReel(value)
 	self.GrappleVoidRescueAutoReel = value == true
-end
-
-function Controller:SetGrappleVoidRescueAutoCast(value)
-	self.GrappleVoidRescueAutoCast = value == true
 end
 
 function Controller:SetGrappleVoidRescueAutoSharkTail(value)

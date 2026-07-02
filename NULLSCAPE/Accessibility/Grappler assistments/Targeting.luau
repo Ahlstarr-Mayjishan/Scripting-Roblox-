@@ -10,6 +10,8 @@ local Workspace = game:GetService("Workspace")
 
 local LocalPlayer = Players.LocalPlayer
 local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau")
+local AnchorProfile =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Anchor Preference Profile.luau")
 local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
 local TerrainMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
@@ -224,6 +226,10 @@ local function isProtectedAnchor(part)
 	return getSpecialTargetName(part) ~= nil or part.Name == "_RailPart"
 end
 
+local function isPriorityCandidate(part)
+	return getSpecialTargetName(part) ~= nil or part.Name == "_RailPart"
+end
+
 local function getVelocityY(rootPart)
 	local velocity = rootPart and (rootPart.AssemblyLinearVelocity or rootPart.Velocity)
 	return typeof(velocity) == "Vector3" and velocity.Y or 0
@@ -361,40 +367,55 @@ local function insertNearest(ranked, entry)
 end
 
 local function getOptimalCandidates(origin, maxRange)
-	local ranked = {}
+	local priorityCandidates = {}
+	local rankedTerrain = {}
+
 	for _, part in ipairs(refreshCandidateCache()) do
 		if isAliveBasePart(part) then
 			local distance = (part.Position - origin).Magnitude
 			if distance <= maxRange then
-				insertNearest(ranked, {
-					Part = part,
-					Distance = distance,
-				})
+				if isPriorityCandidate(part) then
+					table.insert(priorityCandidates, part)
+				else
+					insertNearest(rankedTerrain, {
+						Part = part,
+						Distance = distance,
+					})
+				end
 			end
 		end
 	end
 
 	local candidates = {}
-	for _, entry in ipairs(ranked) do
+	for _, part in ipairs(priorityCandidates) do
+		table.insert(candidates, part)
+	end
+	for _, entry in ipairs(rankedTerrain) do
 		table.insert(candidates, entry.Part)
 	end
 
 	return candidates
 end
 
-local function scoreOptimalHit(hit, part, origin, distance, dot, controller)
+local function scoreOptimalHit(hit, part, origin, distance, dot, controller, intent)
 	local score = 0
 	local specialName = getSpecialTargetName(part)
 
-	if specialName then
-		score += SpecialAnchors and SpecialAnchors.getPriority(specialName, controller) or 900
-	elseif part.Name == "_RailPart" then
-		score += 500
+	if AnchorProfile and typeof(AnchorProfile.score) == "function" then
+		score += AnchorProfile.score(part, controller, intent)
 	else
-		score += tonumber(controller and controller.GrappleAssistTerrainPriority) or 100
-		score += getTerrainScore(hit, origin)
+		if specialName then
+			score += SpecialAnchors and SpecialAnchors.getPriority(specialName, controller) or 900
+		elseif part.Name == "_RailPart" then
+			score += 500
+		else
+			score += tonumber(controller and controller.GrappleAssistTerrainPriority) or 100
+		end
 	end
 
+	if not specialName and part.Name ~= "_RailPart" then
+		score += getTerrainScore(hit, origin)
+	end
 	score -= distance * 0.4
 	score -= math.deg(math.acos(math.clamp(dot, -1, 1))) * 6
 
@@ -478,7 +499,7 @@ function Targeting.findOptimalHit(grapple, controller, context)
 					and canUseOptimalHit(hit, part)
 					and not isVoidProtectedHit(grapple, hit, part, origin, controller)
 				then
-					local score = scoreOptimalHit(hit, part, origin, distance, dot, controller)
+					local score = scoreOptimalHit(hit, part, origin, distance, dot, controller, intent)
 					if score > bestScore then
 						secondScore = bestScore
 						bestScore = score

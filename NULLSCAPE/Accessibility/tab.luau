@@ -35,7 +35,6 @@ local DEFAULTS = {
 	GrappleVoidProtectionHeight = 24,
 	GrappleVoidProtectionFallSpeed = 85,
 	GrappleVoidRescueEnabled = false,
-	GrappleVoidRescueAutoCast = false,
 	GrappleVoidRescueAutoReel = true,
 	GrappleVoidRescueAutoSharkTail = true,
 	GrappleVoidRescueHeight = 45,
