@@ -12,6 +12,7 @@ local Logic = {
 	IgnoreFakeCount = false,
 	BeaconMirageIdentifier = false,
 	HookedCurseHandler = false,
+	CallingOriginal = false,
 	Connections = {},
 	LastBeaconScanAt = 0,
 	OriginalProperties = setmetatable({}, { __mode = "k" }),
@@ -38,41 +39,57 @@ local function getCurseHandler()
 end
 
 local function installCurseHandlerHook()
-	if Logic.HookedCurseHandler then
-		return true
-	end
-
 	local CurseHandler = getCurseHandler()
 	if not (CurseHandler and typeof(CurseHandler.IsCurseEnabled) == "function") then
 		return false
 	end
 
 	local globals = getGlobals()
-	if not globals.AccessibilityOriginalIsCurseEnabled then
-		globals.AccessibilityOriginalIsCurseEnabled = CurseHandler.IsCurseEnabled
+	local current = CurseHandler.IsCurseEnabled
+	if globals.AccessibilityCurseEnabledWrapper and current == globals.AccessibilityCurseEnabledWrapper then
+		Logic.HookedCurseHandler = true
+		return true
+	end
+
+	if
+		not globals.AccessibilityOriginalIsCurseEnabled
+		or globals.AccessibilityOriginalIsCurseEnabled == globals.AccessibilityCurseEnabledWrapper
+	then
+		globals.AccessibilityOriginalIsCurseEnabled = current
 	end
 
 	local original = globals.AccessibilityOriginalIsCurseEnabled
-	local wrapper = function(curseName, ...)
+	local wrapper
+	wrapper = function(curseName, ...)
 		local firstArg = ...
 		local targetCurse = if type(curseName) == "string" then curseName else firstArg
 		if Logic.IgnoreFakeCount and tostring(targetCurse) == "FakeCount" then
 			return false
 		end
-		return original(curseName, ...)
-	end
 
-	if typeof(hookfunction) == "function" then
-		local success = pcall(function()
-			hookfunction(CurseHandler.IsCurseEnabled, wrapper)
-		end)
-		if not success then
+		if Logic.CallingOriginal or original == wrapper then
 			return false
 		end
-	else
-		CurseHandler.IsCurseEnabled = wrapper
+
+		Logic.CallingOriginal = true
+		local results = table.pack(pcall(original, curseName, ...))
+		Logic.CallingOriginal = false
+
+		if not results[1] then
+			return false
+		end
+
+		return table.unpack(results, 2, results.n)
 	end
 
+	local success = pcall(function()
+		CurseHandler.IsCurseEnabled = wrapper
+	end)
+	if not success then
+		return false
+	end
+
+	globals.AccessibilityCurseEnabledWrapper = wrapper
 	Logic.HookedCurseHandler = true
 	return true
 end
@@ -217,24 +234,30 @@ local function startBeaconMirageIdentifier()
 	end
 
 	scanBeaconMirages()
-	table.insert(Logic.Connections, Workspace.DescendantAdded:Connect(function(instance)
-		task.defer(function()
-			if Logic.BeaconMirageIdentifier and instance and instance.Parent then
-				if isBeaconMirage(instance) then
-					applyMirageVisual(instance)
-				elseif instance.Name == "BeaconModel" then
-					applyMirageVisual(instance.Parent)
+	table.insert(
+		Logic.Connections,
+		Workspace.DescendantAdded:Connect(function(instance)
+			task.defer(function()
+				if Logic.BeaconMirageIdentifier and instance and instance.Parent then
+					if isBeaconMirage(instance) then
+						applyMirageVisual(instance)
+					elseif instance.Name == "BeaconModel" then
+						applyMirageVisual(instance.Parent)
+					end
+					ensureRealBeaconMarker()
 				end
-				ensureRealBeaconMarker()
+			end)
+		end)
+	)
+	table.insert(
+		Logic.Connections,
+		RunService.Heartbeat:Connect(function()
+			if Logic.BeaconMirageIdentifier and time() - (Logic.LastBeaconScanAt or 0) >= 0.5 then
+				Logic.LastBeaconScanAt = time()
+				scanBeaconMirages()
 			end
 		end)
-	end))
-	table.insert(Logic.Connections, RunService.Heartbeat:Connect(function()
-		if Logic.BeaconMirageIdentifier and time() - (Logic.LastBeaconScanAt or 0) >= 0.5 then
-			Logic.LastBeaconScanAt = time()
-			scanBeaconMirages()
-		end
-	end))
+	)
 end
 
 local function stopBeaconMirageIdentifier()
@@ -270,6 +293,24 @@ end
 function Logic.disable()
 	Logic.IgnoreFakeCount = false
 	Logic.BeaconMirageIdentifier = false
+	Logic.CallingOriginal = false
+
+	local CurseHandler = getCurseHandler()
+	local globals = getGlobals()
+	if
+		CurseHandler
+		and globals.AccessibilityCurseEnabledWrapper
+		and CurseHandler.IsCurseEnabled == globals.AccessibilityCurseEnabledWrapper
+		and globals.AccessibilityOriginalIsCurseEnabled
+	then
+		pcall(function()
+			CurseHandler.IsCurseEnabled = globals.AccessibilityOriginalIsCurseEnabled
+		end)
+	end
+	globals.AccessibilityCurseEnabledWrapper = nil
+	globals.AccessibilityOriginalIsCurseEnabled = nil
+	Logic.HookedCurseHandler = false
+
 	stopBeaconMirageIdentifier()
 end
 
