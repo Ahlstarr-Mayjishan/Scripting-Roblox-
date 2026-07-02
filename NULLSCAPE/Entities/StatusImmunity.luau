@@ -30,10 +30,8 @@ function StatusImmunity.isImmune(statusName)
 	end
 
 	local controller = getController()
-	if controller and controller.SpringerImmune == true and controller.SpringerImmunityMode == "Blatant" then
-		if statusName ~= "Medal" and statusName ~= "Overtuned" then
-			return true
-		end
+	if controller and statusName == "Concussion" and controller.FleshConcussionImmune == true then
+		return true
 	end
 
 	return false
@@ -42,12 +40,27 @@ end
 function StatusImmunity.GetActiveImmunities()
 	local list = {}
 	for name, active in pairs(StatusImmunity.ActiveImmunities) do
-		if active and name ~= "Springer Knockback" then
+		if active and name ~= "Springer Knockback" and name ~= "Flesh" and name ~= "Concussion" then
 			table.insert(list, name)
 		end
 	end
 	table.sort(list)
 	return list
+end
+
+function StatusImmunity.RefreshActiveEffects()
+	for _, debuffName in ipairs({ "Flesh", "Panic", "Concussion", "Fire", "Insanity", "Overtuned" }) do
+		if StatusImmunity.isImmune(debuffName) then
+			for _, callback in ipairs(StatusImmunity.ActiveCallbacks) do
+				pcall(callback, debuffName, false)
+			end
+		end
+	end
+
+	local controller = getController()
+	if controller and typeof(controller.ReconcileImmunityState) == "function" then
+		controller:ReconcileImmunityState()
+	end
 end
 
 function StatusImmunity.SetActiveImmunities(options)
@@ -58,7 +71,7 @@ function StatusImmunity.SetActiveImmunities(options)
 
 	table.clear(StatusImmunity.ActiveImmunities)
 	for _, opt in ipairs(options) do
-		if opt ~= "Springer Knockback" then
+		if opt ~= "Springer Knockback" and opt ~= "Flesh" and opt ~= "Concussion" then
 			StatusImmunity.ActiveImmunities[opt] = true
 		end
 	end

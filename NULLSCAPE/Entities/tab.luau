@@ -71,10 +71,13 @@ return function(Client, Controller)
 	if getFlag(Controller, "BellBlindnessImmune") then
 		table.insert(currentBellOptions, "Ring screen blindness")
 	end
+	if getFlag(Controller, "BellOvertunedKillImmune") then
+		table.insert(currentBellOptions, "Overtuned kill")
+	end
 
 	Tab:CreateDropdown({
 		Name = "Bell Hack Mode",
-		Options = { "Immunity", "Knockback (Curse)", "Ring screen blindness" },
+		Options = { "Immunity", "Mighty Gong", "Ring screen blindness", "Overtuned" },
 		CurrentOption = currentBellOptions,
 		MultipleOptions = true,
 		Flag = "BellHackDropdown",
@@ -82,6 +85,7 @@ return function(Client, Controller)
 			local hasImmunity = false
 			local hasCurseImmune = false
 			local hasBlindnessImmune = false
+			local hasOvertunedKillImmune = false
 			for _, opt in ipairs(Options) do
 				if opt == "Immunity" then
 					hasImmunity = true
@@ -89,6 +93,8 @@ return function(Client, Controller)
 					hasCurseImmune = true
 				elseif opt == "Ring screen blindness" then
 					hasBlindnessImmune = true
+				elseif opt == "Overtuned kill" then
+					hasOvertunedKillImmune = true
 				end
 			end
 			local activeController = resolveController(nil, Controller)
@@ -102,18 +108,59 @@ return function(Client, Controller)
 				if typeof(activeController.SetBellBlindnessImmune) == "function" then
 					activeController:SetBellBlindnessImmune(hasBlindnessImmune)
 				end
+				if typeof(activeController.SetBellOvertunedKillImmune) == "function" then
+					activeController:SetBellOvertunedKillImmune(hasOvertunedKillImmune)
+				end
 			else
 				warn("[NULLSCAPE] Entities controller is not ready; ignored Bell Hack Mode change")
 			end
 		end,
 	})
 
-	Tab:CreateToggle({
-		Name = "Flesh",
-		CurrentValue = getFlag(Controller, "FleshImmune"),
-		Flag = "ImmunityFleshToggle",
-		Callback = function(Value)
-			setImmunity(Controller, "Flesh", Value)
+	local currentFleshOptions = {}
+	if getFlag(Controller, "FleshImmune") then
+		table.insert(currentFleshOptions, "Immunity")
+	end
+	if getFlag(Controller, "FleshConcussionImmune") then
+		table.insert(currentFleshOptions, "Concussion")
+	end
+	if getFlag(Controller, "FleshScreenEffectImmune") then
+		table.insert(currentFleshOptions, "Screen effects")
+	end
+
+	Tab:CreateDropdown({
+		Name = "Flesh Hack Mode",
+		Options = { "Immunity", "Concussion", "Screen effects" },
+		CurrentOption = currentFleshOptions,
+		MultipleOptions = true,
+		Flag = "FleshHackDropdown",
+		Callback = function(Options)
+			local hasImmunity = false
+			local hasConcussionImmune = false
+			local hasScreenEffectImmune = false
+			for _, opt in ipairs(Options) do
+				if opt == "Immunity" then
+					hasImmunity = true
+				elseif opt == "Concussion" then
+					hasConcussionImmune = true
+				elseif opt == "Screen effects" then
+					hasScreenEffectImmune = true
+				end
+			end
+			local activeController = resolveController(nil, Controller)
+			if activeController then
+				if typeof(activeController.SetImmunity) == "function" then
+					activeController:SetImmunity("Flesh", hasImmunity)
+				end
+				if typeof(activeController.SetFleshConcussionImmune) == "function" then
+					activeController:SetFleshConcussionImmune(hasConcussionImmune)
+				end
+				if typeof(activeController.SetFleshScreenEffectImmune) == "function" then
+					activeController:SetFleshScreenEffectImmune(hasScreenEffectImmune)
+				end
+			else
+				warn("[NULLSCAPE] Entities controller is not ready; ignored Flesh Hack Mode change")
+			end
 		end,
 	})
 
@@ -424,7 +471,7 @@ return function(Client, Controller)
 
 	Tab:CreateDropdown({
 		Name = "Immunity Effect",
-		Options = { "Flesh", "Concussion", "Fire", "Panic", "Insanity", "Overtuned", "Bell Knockback" },
+		Options = { "Fire", "Panic", "Insanity", "Overtuned", "Bell Knockback" },
 		CurrentOption = (StatusImmunity and StatusImmunity.GetActiveImmunities()) or {},
 		MultipleOptions = true,
 		Flag = "StatusImmunityDropdown",

@@ -14,8 +14,9 @@ local BellContact =
 local ReelSaver = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/Reel Saver/init.luau")
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
 local FailFeedback = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Fail Feedback Loop.luau")
+local DeferredAim = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Deferred Aim Cast.luau")
 
-local HOOK_VERSION = 7
+local HOOK_VERSION = 8
 
 local Logic = {
 	Controller = nil,
@@ -147,9 +148,22 @@ local function installCastHook(grappleModule, globals)
 					return fallbackHit, fallbackDirection
 				end
 			end
+
+			if DeferredAim and typeof(DeferredAim.note) == "function" then
+				pcall(function()
+					DeferredAim.note(self, controller)
+				end)
+			end
 		end
 
-		return originalCast(self, forceRefresh, ...)
+		local originalResults = packValues(originalCast(self, forceRefresh, ...))
+		if originalResults[1] and DeferredAim and typeof(DeferredAim.reset) == "function" then
+			pcall(function()
+				DeferredAim.reset()
+			end)
+		end
+
+		return table.unpack(originalResults, 1, originalResults.n)
 	end
 
 	Logic.OriginalCast = originalCast
@@ -194,6 +208,12 @@ local function installStepHook(grappleModule, globals)
 		if ReelSaver and typeof(ReelSaver.step) == "function" then
 			pcall(function()
 				ReelSaver.step(self, dt, getController())
+			end)
+		end
+
+		if DeferredAim and typeof(DeferredAim.step) == "function" then
+			pcall(function()
+				DeferredAim.step(self, getController())
 			end)
 		end
 
@@ -309,6 +329,12 @@ function Logic.disable()
 	if ReelSaver and typeof(ReelSaver.reset) == "function" then
 		pcall(function()
 			ReelSaver.reset()
+		end)
+	end
+
+	if DeferredAim and typeof(DeferredAim.reset) == "function" then
+		pcall(function()
+			DeferredAim.reset()
 		end)
 	end
 

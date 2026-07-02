@@ -70,7 +70,11 @@ local Controller = {
 	BellImmune = false,
 	BellCurseImmune = false,
 	BellBlindnessImmune = false,
+	BellKnockbackImmune = false,
+	BellOvertunedKillImmune = false,
 	FleshImmune = false,
+	FleshConcussionImmune = false,
+	FleshScreenEffectImmune = false,
 	MartImmune = false,
 	TelefraggerImmune = false,
 	ICBMImmune = false,
@@ -106,7 +110,8 @@ local Controller = {
 	WasRedirectingTelefragger = false,
 	RedirectRootJoint = nil,
 	RedirectOriginalC0 = nil,
-	SpringerImmunityMode = "Blatant",
+	BellGongKnockbackConnection = nil,
+	LastBellDebuffAt = 0,
 	Destroyed = false,
 
 	EnemiesFolder = nil,
@@ -230,6 +235,12 @@ local originalTouchStates = setmetatable({}, { __mode = "k" })
 local disabledShockwaves = {}
 local restoreShockwave
 local isAnySpecialImmunityEnabled
+
+local function getCharacterRoot()
+	local localPlayer = Players.LocalPlayer
+	local character = localPlayer and localPlayer.Character
+	return character and character:FindFirstChild("HumanoidRootPart") or nil
+end
 
 local function restoreCharacterTouchStates()
 	for part, state in pairs(originalTouchStates) do
@@ -402,6 +413,22 @@ end
 
 function Controller:SetBellBlindnessImmune(value)
 	self.BellBlindnessImmune = value == true
+end
+
+function Controller:SetBellOvertunedKillImmune(value)
+	self.BellOvertunedKillImmune = value == true
+end
+
+function Controller:SetFleshConcussionImmune(value)
+	self.FleshConcussionImmune = value == true
+	local StatusImmunity = getStatusImmunity()
+	if StatusImmunity and typeof(StatusImmunity.RefreshActiveEffects) == "function" then
+		StatusImmunity.RefreshActiveEffects()
+	end
+end
+
+function Controller:SetFleshScreenEffectImmune(value)
+	self.FleshScreenEffectImmune = value == true
 end
 
 function Controller:ReconcileImmunityState()
@@ -642,6 +669,12 @@ function Controller:CleanUp()
 		end)
 		self.TelefraggerConnection = nil
 	end
+	if self.BellGongKnockbackConnection then
+		pcall(function()
+			self.BellGongKnockbackConnection:Disconnect()
+		end)
+		self.BellGongKnockbackConnection = nil
+	end
 	if self.WasRedirectingTelefragger then
 		BackTrick.revert(self)
 	end
@@ -843,11 +876,7 @@ function Controller:SetImmunity(entityName, value)
 				Executor.enableImmunity(GC, child)
 			end
 
-			if
-				entityName == "Springer"
-				and string.find(child.Name, "Springer")
-				and self.SpringerImmunityMode == "Blatant"
-			then
+			if entityName == "Springer" and string.find(child.Name, "Springer") and self.SpringerKnockbackImmune then
 				for _, subChild in ipairs(child:GetChildren()) do
 					if subChild.Name == "SpringerShockwave" or subChild.Name == "DemonShockwave" then
 						disableShockwave(child, subChild)
@@ -916,50 +945,7 @@ function Controller:SetImmunity(entityName, value)
 	end
 end
 
--- Cấu hình chế độ bảo vệ Springer (Blatant: tắt hẳn sóng, Legit: giữ lại lực đẩy sóng)
-function Controller:SetSpringerImmunityMode(mode)
-	self.SpringerImmunityMode = mode
-
-	-- Thông báo cho Accessibility controller cập nhật lại trạng thái Auto Jump
-	local accessibilityController = getAccessibilityController()
-	if accessibilityController and accessibilityController.updateSpringerAutoJumpState then
-		pcall(function()
-			accessibilityController:updateSpringerAutoJumpState()
-		end)
-	end
-
-	if mode == "Blatant" then
-		local StatusImmunity = getStatusImmunity()
-		if StatusImmunity then
-			StatusImmunity.removeAllStatuses()
-		end
-	end
-
-	if self.SpringerImmune then
-		if mode == "Blatant" then
-			-- Tắt toàn bộ sóng đang tồn tại
-			if self.EnemiesFolder then
-				for _, enemy in ipairs(self.EnemiesFolder:GetChildren()) do
-					if string.find(enemy.Name, "Springer") then
-						for _, child in ipairs(enemy:GetChildren()) do
-							if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
-								disableShockwave(enemy, child)
-							end
-						end
-					end
-				end
-			end
-		else
-			-- Legit: Khôi phục lại toàn bộ sóng để có lực đẩy
-			for part in pairs(disabledShockwaves) do
-				restoreShockwave(part)
-			end
-		end
-	end
-
-	Executor.reconcile(GC)
-end
-
+-- Cấu hình miễn nhiễm knockback của Springer
 function Controller:SetSpringerKnockbackImmune(enabled)
 	self.SpringerKnockbackImmune = enabled == true
 	if enabled then
@@ -975,16 +961,97 @@ function Controller:SetSpringerKnockbackImmune(enabled)
 			end
 		end
 	else
-		if not (self.SpringerImmune and self.SpringerImmunityMode == "Blatant") then
-			for part in pairs(disabledShockwaves) do
-				restoreShockwave(part)
-			end
+		for part in pairs(disabledShockwaves) do
+			restoreShockwave(part)
 		end
 	end
 	Executor.reconcile(GC)
 end
 
+local function getNearestBellPosition(controller, rootPart)
+	if not (controller and controller.EnemiesFolder and rootPart) then
+		return nil
+	end
+
+	local nearestPosition = nil
+	local nearestDistance = math.huge
+	for _, enemy in ipairs(controller.EnemiesFolder:GetChildren()) do
+		if string.find(enemy.Name, "Bell") then
+			local bellPart = enemy:IsA("BasePart") and enemy or enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
+			if bellPart then
+				local distance = (rootPart.Position - bellPart.Position).Magnitude
+				if distance < nearestDistance then
+					nearestDistance = distance
+					nearestPosition = bellPart.Position
+				end
+			end
+		end
+	end
+
+	if nearestDistance <= 60 then
+		return nearestPosition
+	end
+	return nil
+end
+
+local function stopBellGongKnockbackGuard(controller)
+	if controller.BellGongKnockbackConnection then
+		pcall(function()
+			controller.BellGongKnockbackConnection:Disconnect()
+		end)
+		controller.BellGongKnockbackConnection = nil
+	end
+end
+
+local function startBellGongKnockbackGuard(controller)
+	if controller.BellGongKnockbackConnection then
+		return
+	end
+
+	controller.BellGongKnockbackConnection = RunService.Heartbeat:Connect(function()
+		if controller.Destroyed or not controller.BellKnockbackImmune then
+			stopBellGongKnockbackGuard(controller)
+			return
+		end
+
+		if time() - (controller.LastBellDebuffAt or 0) > 1.25 then
+			return
+		end
+
+		local rootPart = getCharacterRoot()
+		if not (rootPart and rootPart.Parent) then
+			return
+		end
+
+		local bellPosition = getNearestBellPosition(controller, rootPart)
+		if not bellPosition then
+			return
+		end
+
+		local offset = rootPart.Position - bellPosition
+		if offset.Magnitude <= 0.001 then
+			return
+		end
+
+		local away = offset.Unit
+		local velocity = rootPart.AssemblyLinearVelocity or rootPart.Velocity
+		local outwardSpeed = velocity:Dot(away)
+		if outwardSpeed <= 24 then
+			return
+		end
+
+		local corrected = velocity - away * outwardSpeed
+		pcall(function()
+			rootPart.AssemblyLinearVelocity = corrected
+		end)
+		pcall(function()
+			rootPart.Velocity = corrected
+		end)
+	end)
+end
+
 function Controller:SetBellKnockbackImmune(enabled)
+	self.BellKnockbackImmune = enabled == true
 	if enabled then
 		if self.EnemiesFolder then
 			for _, enemy in ipairs(self.EnemiesFolder:GetChildren()) do
@@ -993,7 +1060,9 @@ function Controller:SetBellKnockbackImmune(enabled)
 				end
 			end
 		end
+		startBellGongKnockbackGuard(self)
 	else
+		stopBellGongKnockbackGuard(self)
 		if not self.BellImmune then
 			TouchInterest.disableImmunityForType(GC, "Bell")
 		end
@@ -1426,11 +1495,7 @@ local function processEntity(enemy)
 	if string.find(enemy.Name, "Springer") then
 		local childAddedConn = enemy.ChildAdded:Connect(function(child)
 			if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
-				local hasKnockbackImmune = Controller.SpringerKnockbackImmune == true
-				local hasSpringerImmune = Controller.SpringerImmune
-				local isBlatant = Controller.SpringerImmunityMode == "Blatant"
-
-				if hasKnockbackImmune or (hasSpringerImmune and isBlatant) then
+				if Controller.SpringerKnockbackImmune == true then
 					disableShockwave(enemy, child)
 				end
 			end
@@ -1439,11 +1504,7 @@ local function processEntity(enemy)
 
 		for _, child in ipairs(enemy:GetChildren()) do
 			if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
-				local hasKnockbackImmune = Controller.SpringerKnockbackImmune == true
-				local hasSpringerImmune = Controller.SpringerImmune
-				local isBlatant = Controller.SpringerImmunityMode == "Blatant"
-
-				if hasKnockbackImmune or (hasSpringerImmune and isBlatant) then
+				if Controller.SpringerKnockbackImmune == true then
 					disableShockwave(enemy, child)
 				end
 			end
@@ -1671,7 +1732,7 @@ local function setInLobby(val)
 	end
 end
 
--- Hook hệ thống trạng thái (Status Effects) để miễn nhiễm debuff ở chế độ Blatant
+-- Hook hệ thống trạng thái (Status Effects) để miễn nhiễm debuff và screen effect được chọn
 local function initializeStatusEffectHook()
 	local globals = getgenv()._NULLSCAPE_Globals
 	local StatusImmunity = getStatusImmunity() or getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
@@ -1694,7 +1755,7 @@ local function initializeStatusEffectHook()
 					globals.OriginalSettingsGet = oldGet
 					SettingsHandler.Get = function(keys, ...)
 						local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-						if activeCtrl and activeCtrl.SpringerImmunityMode == "Blatant" then
+						if activeCtrl and activeCtrl.FleshScreenEffectImmune == true then
 							if typeof(keys) == "table" then
 								if
 									keys[1] == "Graphics"
@@ -1717,7 +1778,7 @@ local function initializeStatusEffectHook()
 						SettingsHandler.GetSettings = function(...)
 							local settingsTable = oldGetSettings(...)
 							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-							if activeCtrl and activeCtrl.SpringerImmunityMode == "Blatant" then
+							if activeCtrl and activeCtrl.FleshScreenEffectImmune == true then
 								if typeof(settingsTable) == "table" then
 									settingsTable.Graphics = settingsTable.Graphics or {}
 									settingsTable.Graphics.NoBlur = true
@@ -1748,7 +1809,8 @@ local function initializeStatusEffectHook()
 			if activeCtrl and activeCtrl.Destroyed then
 				break
 			end
-			if activeCtrl and activeCtrl.SpringerImmunityMode == "Blatant" then
+			local suppressFleshScreenEffects = activeCtrl and activeCtrl.FleshScreenEffectImmune == true
+			if suppressFleshScreenEffects then
 				pcall(function()
 					local lighting = game:GetService("Lighting")
 					local blur = lighting:FindFirstChild("Blur")
@@ -1756,7 +1818,7 @@ local function initializeStatusEffectHook()
 						blur.Size = 0
 					end
 
-					for _, name in ipairs({ "Flesh", "Fire", "Oblivion", "IceExampleEffect" }) do
+					for _, name in ipairs({ "Flesh" }) do
 						local cc = lighting:FindFirstChild(name)
 						if cc and cc:IsA("ColorCorrectionEffect") then
 							cc.Brightness = 0
@@ -1767,7 +1829,7 @@ local function initializeStatusEffectHook()
 					end
 				end)
 			end
-			task.wait(activeCtrl and activeCtrl.SpringerImmunityMode == "Blatant" and 0.2 or 1.0)
+			task.wait(suppressFleshScreenEffects and 0.2 or 1.0)
 		end
 	end)
 end

@@ -41,6 +41,11 @@ local function isBehindMomentum(direction, intent)
 	return velocity:Dot(targetDirection) < -0.15
 end
 
+local function isPilotMode(intent)
+	local mode = intent and intent.PilotMode
+	return mode == "Pilot" or mode == "Emergency" or mode == "Technique"
+end
+
 function Gate.accept(grapple, hit, part, origin, direction, intent, specialName)
 	if not (hit and part and intent) then
 		return false
@@ -53,25 +58,26 @@ function Gate.accept(grapple, hit, part, origin, direction, intent, specialName)
 
 	local kind = getKind(part, specialName)
 	local target = hit.Position
+	local pilotMode = isPilotMode(intent)
 
 	if intentName == "VoidRescue" then
-		return target.Y >= origin.Y - 4 or kind ~= "Terrain"
+		return target.Y >= origin.Y - 8 or kind ~= "Terrain"
 	end
 
 	if intentName == "RailCapture" then
-		return kind == "Rail" or kind == "Special"
+		return pilotMode or kind == "Rail" or kind == "Special"
 	end
 
 	if intentName == "ReelSaver" then
 		return kind == "Terrain"
 	end
 
-	if intentName == "MomentumControl" and isBehindMomentum(direction, intent) then
+	if intentName == "MomentumControl" and not pilotMode and isBehindMomentum(direction, intent) then
 		return false
 	end
 
 	local rootPart = grapple and grapple.RootPart
-	if rootPart and rootPart.Parent and target.Y < rootPart.Position.Y - 18 and kind == "Terrain" then
+	if not pilotMode and rootPart and rootPart.Parent and target.Y < rootPart.Position.Y - 18 and kind == "Terrain" then
 		return false
 	end
 

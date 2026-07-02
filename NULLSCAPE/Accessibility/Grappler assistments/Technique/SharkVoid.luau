@@ -163,7 +163,10 @@ local function autoCast(grapple, targeting, now)
 
 	if not hitResult and targeting and typeof(targeting.findBestAssistHit) == "function" then
 		local success, result = pcall(function()
-			return targeting.findBestAssistHit(grapple, nil)
+			return targeting.findBestAssistHit(grapple, nil, {
+				Technique = "SharkVoid",
+				PilotMode = "Emergency",
+			})
 		end)
 		if success then
 			hitResult = result

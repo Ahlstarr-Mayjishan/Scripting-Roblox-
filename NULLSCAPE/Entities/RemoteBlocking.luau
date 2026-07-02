@@ -6,6 +6,7 @@
 local Logic = {}
 
 local Players = game:GetService("Players")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 
 -- ============================================================
 --  CẤU HÌNH CHẶN REMOTE EVENT
@@ -139,6 +140,28 @@ for _, data in pairs(Logic.Config) do
     end
 end
 
+local function localPlayerHasStatus(statusName)
+    local LocalPlayer = Players.LocalPlayer
+    local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+    local handlerModule = clientModules and clientModules:FindFirstChild("StatusEffectHandler")
+    if not (LocalPlayer and handlerModule and handlerModule:IsA("ModuleScript")) then
+        return false
+    end
+
+    local success, StatusEffectHandler = pcall(require, handlerModule)
+    if not (success and typeof(StatusEffectHandler) == "table" and typeof(StatusEffectHandler.HasStatus) == "function") then
+        return false
+    end
+
+    local okWithPlayer, hasWithPlayer = pcall(StatusEffectHandler.HasStatus, LocalPlayer, statusName)
+    if okWithPlayer and hasWithPlayer == true then
+        return true
+    end
+
+    local okStatusOnly, hasStatusOnly = pcall(StatusEffectHandler.HasStatus, statusName)
+    return okStatusOnly and hasStatusOnly == true
+end
+
 function Logic.shouldBlockRemoteCall(remote, args, controller)
     if not controller or controller.inLobby then
         return false
@@ -146,6 +169,25 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 
     if typeof(remote) ~= "Instance" then
         return false
+    end
+
+    if remote.ClassName == "RemoteEvent"
+        and remote.Name == "ClientEvent"
+        and args[1] == "Debuff" then
+        local parent = remote.Parent
+        if parent and string.find(parent.Name, "Bell", 1, true) then
+            controller.LastBellDebuffAt = time()
+        end
+    end
+
+    if controller.BellOvertunedKillImmune == true
+        and remote.ClassName == "RemoteEvent"
+        and remote.Name == "ClientEvent"
+        and args[1] == "Debuff" then
+        local parent = remote.Parent
+        if parent and string.find(parent.Name, "Bell", 1, true) and localPlayerHasStatus("Overtuned") then
+            return true
+        end
     end
 
     -- Chặn riêng biệt hiệu ứng cháy (Burn curse) của ICBM nếu tùy chọn được bật
@@ -252,8 +294,7 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 
             if isMatchingRemote then
                 local hasKeyword = false
-                local isBlatant = (controller.SpringerImmunityMode == "Blatant")
-                local keywordsList = isBlatant and config.Keywords or config.LegitKeywords
+                local keywordsList = config.Keywords or {}
 
                 if config.BlockEmptyCalls and #args == 0 then
                     hasKeyword = true

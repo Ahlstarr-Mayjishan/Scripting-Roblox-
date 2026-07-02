@@ -783,15 +783,15 @@ end
 function Controller:updateSpringerAutoJumpState()
 	local globals = getGlobals()
 	local entitiesController = globals.activeEntitiesController
-	local isBlatant = entitiesController and entitiesController.SpringerImmunityMode == "Blatant"
+	local isKnockbackSuppressed = entitiesController and entitiesController.SpringerKnockbackImmune == true
 
-	if self.SpringerAutoJumpEnabled and not isBlatant then
+	if self.SpringerAutoJumpEnabled and not isKnockbackSuppressed then
 		-- Kích hoạt quan sát thư mục nếu chưa kích hoạt
 		if not next(folderConnections) then
 			startObservingFolders()
 		end
 	else
-		-- Blatant mode hoặc Auto Jump tắt -> Giải phóng hoàn toàn để CPU nghỉ ngơi
+		-- Knockback immunity hoặc Auto Jump tắt -> Giải phóng hoàn toàn để CPU nghỉ ngơi
 		disconnectFolderObservations()
 		GC.cleanAll()
 		self.EnemiesFolder = nil

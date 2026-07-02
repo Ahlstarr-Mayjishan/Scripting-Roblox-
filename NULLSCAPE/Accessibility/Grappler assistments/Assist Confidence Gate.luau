@@ -22,6 +22,13 @@ function Gate.accept(bestHit, bestScore, secondScore, controller, intent)
 	end
 
 	local minScore = getNumber(controller and controller.GrappleAssistMinConfidenceScore, DEFAULT_MIN_SCORE, -100, 80)
+	local pilotMode = intent and intent.PilotMode
+	if pilotMode == "Emergency" then
+		minScore -= 30
+	elseif pilotMode == "Pilot" or pilotMode == "Technique" then
+		minScore -= 14
+	end
+
 	if (tonumber(bestScore) or -math.huge) < minScore then
 		return false
 	end
@@ -33,6 +40,11 @@ function Gate.accept(bestHit, bestScore, secondScore, controller, intent)
 		local confidence = tonumber(intent and intent.Confidence) or 0
 		if confidence >= 0.78 then
 			requiredMargin *= 0.55
+		end
+		if pilotMode == "Emergency" then
+			requiredMargin *= 0.35
+		elseif pilotMode == "Pilot" or pilotMode == "Technique" then
+			requiredMargin *= 0.65
 		end
 		if margin < requiredMargin then
 			return false

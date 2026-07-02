@@ -16,6 +16,7 @@ local TerrainMemory =
 local IntentResolver = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Intent Resolver.luau")
 local IntentTargetGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Intent Target Gate.luau")
 local ConfidenceGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Assist Confidence Gate.luau")
+local PilotState = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Pilot State.luau")
 
 local Targeting = {}
 
@@ -400,23 +401,32 @@ local function scoreOptimalHit(hit, part, origin, distance, dot, controller)
 	return score
 end
 
-local function getIntent(grapple, controller, aimDirection)
+local function getIntent(grapple, controller, aimDirection, context)
+	context = context or {}
+	context.AimDirection = context.AimDirection or aimDirection
+
 	if IntentResolver and typeof(IntentResolver.resolve) == "function" then
 		local success, intent = pcall(function()
-			return IntentResolver.resolve(grapple, controller, {
-				AimDirection = aimDirection,
-			})
+			return IntentResolver.resolve(grapple, controller, context)
 		end)
 		if success and intent then
+			if PilotState and typeof(PilotState.resolve) == "function" then
+				intent.PilotMode = PilotState.resolve(grapple, intent, context)
+			end
 			return intent
 		end
 	end
 
-	return {
+	local fallbackIntent = {
 		Name = "AnchorAssist",
 		Confidence = 0.5,
 		AimDirection = aimDirection,
 	}
+	if PilotState and typeof(PilotState.resolve) == "function" then
+		fallbackIntent.PilotMode = PilotState.resolve(grapple, fallbackIntent, context)
+	end
+
+	return fallbackIntent
 end
 
 local function getOptimalMinDot(part, controller)
@@ -429,7 +439,7 @@ local function getOptimalMinDot(part, controller)
 	return math.cos(math.rad(getCaptureAngle(controller)))
 end
 
-function Targeting.findOptimalHit(grapple, controller)
+function Targeting.findOptimalHit(grapple, controller, context)
 	local rootPart = grapple and grapple.RootPart
 	if not (rootPart and grapple.grappleParams) then
 		return nil
@@ -444,7 +454,7 @@ function Targeting.findOptimalHit(grapple, controller)
 
 	local origin = rootPart.Position
 	local maxRange = getRange(controller)
-	local intent = getIntent(grapple, controller, aimDirection)
+	local intent = getIntent(grapple, controller, aimDirection, context)
 	local bestHit = nil
 	local bestScore = -math.huge
 	local secondScore = -math.huge
@@ -535,8 +545,8 @@ function Targeting.fallbackCast(grapple, controller)
 	)
 end
 
-function Targeting.findBestAssistHit(grapple, controller)
-	return Targeting.findOptimalHit(grapple, controller)
+function Targeting.findBestAssistHit(grapple, controller, context)
+	return Targeting.findOptimalHit(grapple, controller, context)
 end
 
 return Targeting
