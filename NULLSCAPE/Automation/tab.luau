@@ -134,6 +134,17 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateToggle({
+		Name = "Adaptive Timing",
+		CurrentValue = Controller and Controller.GiftFarmAdaptiveTiming ~= false,
+		Flag = "AutomationGiftFarmAdaptiveTimingToggle",
+		Callback = function(Value)
+			if Controller and typeof(Controller.SetGiftFarmAdaptiveTiming) == "function" then
+				Controller:SetGiftFarmAdaptiveTiming(Value)
+			end
+		end,
+	})
+
 	Tab:CreateSlider({
 		Name = "Golden Spawn Wait",
 		Range = { 0, 10 },

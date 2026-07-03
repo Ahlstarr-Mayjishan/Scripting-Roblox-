@@ -213,10 +213,19 @@ local function processOnce(controller)
 
 			local normalCollected, normalTotal, normalRatio = Progress.getNormalGiftProgress(gch)
 			local goldenText = scanInfo and (" | Golden " .. tostring(scanInfo.Golden or 0)) or ""
+			local adaptiveText = ""
+			if controller.GiftFarmAdaptiveTiming ~= false then
+				local accepted = math.floor((tonumber(controller.GiftFarmAdaptiveSuccessRate) or 1) * 100)
+				local settle = tonumber(controller.GiftFarmAdaptiveSettle) or tonumber(controller.GiftFarmCollectSettle) or 0
+				local speedScale = tonumber(controller.GiftFarmAdaptiveSpeedScale) or 1
+				adaptiveText = string.format(" | Accept %d%% %.2fs %.0f%%", accepted, settle, speedScale * 100)
+			end
 			setStatus(
 				controller,
 				"Rescanning",
-				string.format("Normal %d/%d (%.0f%%)", normalCollected, normalTotal, normalRatio * 100) .. goldenText
+				string.format("Normal %d/%d (%.0f%%)", normalCollected, normalTotal, normalRatio * 100)
+					.. goldenText
+					.. adaptiveText
 			)
 		end)
 
