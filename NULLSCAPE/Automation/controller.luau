@@ -52,6 +52,7 @@ local Controller = {
 	GiftFarmRange = 60,
 	GiftFarmBurstSize = 16,
 	GiftFarmCollectsPerFrame = 8,
+	GiftFarmGoldenSpawnWait = 4,
 	GiftFarmReturnAfterCluster = true,
 	GiftFarmReturnToBeaconAfterGolden = true,
 	GiftFarmStatus = "Idle",
@@ -175,6 +176,11 @@ end
 
 function Controller:SetGiftFarmCollectsPerFrame(value)
 	self.GiftFarmCollectsPerFrame = math.clamp(tonumber(value) or 8, 1, 60)
+	return self:update()
+end
+
+function Controller:SetGiftFarmGoldenSpawnWait(value)
+	self.GiftFarmGoldenSpawnWait = math.clamp(tonumber(value) or 4, 0, 10)
 	return self:update()
 end
 

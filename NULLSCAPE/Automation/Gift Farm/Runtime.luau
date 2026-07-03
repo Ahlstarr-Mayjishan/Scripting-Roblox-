@@ -21,6 +21,7 @@ local lastScan = 0
 local lastGiftSeenAt = 0
 local beaconReturnDone = false
 local hasSeenGoldenThisRound = false
+local goldenMissingSince = nil
 
 local function setStatus(controller, status, detail)
 	if controller then
@@ -35,6 +36,7 @@ local function resetRoundState(controller, inRound)
 	lastGiftSeenAt = 0
 	beaconReturnDone = false
 	hasSeenGoldenThisRound = false
+	goldenMissingSince = nil
 	if Scanner and typeof(Scanner.reset) == "function" then
 		Scanner.reset()
 	end
@@ -88,6 +90,39 @@ local function returnToBeacon(controller, hrp, reason)
 	return true
 end
 
+local function getGoldenSpawnWait(controller)
+	return math.clamp(tonumber(controller.GiftFarmGoldenSpawnWait) or 4, 0, 10)
+end
+
+local function waitForLateGolden(controller, scanInfo, reason)
+	if not (lastGiftSeenAt > 0 and scanInfo and scanInfo.RawGolden == 0) then
+		goldenMissingSince = nil
+		return false
+	end
+
+	if not hasSeenGoldenThisRound and (tonumber(scanInfo.RawNormal) or 0) > 0 then
+		return false
+	end
+
+	local waitTime = getGoldenSpawnWait(controller)
+	if waitTime <= 0 then
+		return false
+	end
+
+	goldenMissingSince = goldenMissingSince or os.clock()
+	local elapsed = os.clock() - goldenMissingSince
+	if elapsed < waitTime then
+		setStatus(
+			controller,
+			"WaitingForGoldenSpawn",
+			string.format("%s %.1fs/%.1fs", reason or "Golden settle", elapsed, waitTime)
+		)
+		return true
+	end
+
+	return false
+end
+
 local function processOnce(controller)
 	if not enabled or busy or not controller or controller.Destroyed then
 		return
@@ -127,6 +162,10 @@ local function processOnce(controller)
 			local candidates, scanInfo = Scanner.scan(controller, gch)
 			if scanInfo and scanInfo.RawGolden and scanInfo.RawGolden > 0 then
 				hasSeenGoldenThisRound = true
+				goldenMissingSince = nil
+			end
+			if waitForLateGolden(controller, scanInfo, hasSeenGoldenThisRound and "Golden respawn check" or "Post-clear check") then
+				return
 			end
 			if lastGiftSeenAt > 0 and hasSeenGoldenThisRound and scanInfo and scanInfo.RawGolden == 0 then
 				if returnToBeacon(controller, hrp, "Golden gifts complete") then

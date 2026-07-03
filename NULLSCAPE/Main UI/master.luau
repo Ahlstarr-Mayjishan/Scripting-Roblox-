@@ -104,7 +104,9 @@ pcall(function()
 			FleshHackDropdown = {},
 			ImmunityMartToggle = false,
 			ImmunityTelefraggerToggle = false,
+			TelefraggerHackDropdown = {},
 			ImmunityICBMToggle = false,
+			ICBMHackDropdown = {},
 			ImmunityGuardianToggle = false,
 			SpringerHackDropdown = {},
 			StatusImmunityDropdownV2 = {},
@@ -123,12 +125,51 @@ pcall(function()
 			ImmunityCelestialToggle = false,
 			ImmunityOperatorToggle = false,
 			ImmunityScrapmawToggle = false,
+			ImmunitynilEnemyToggle = false,
+			ImmunitynilMirageToggle = false,
 			SpringerAutoJumpToggle = false,
 			InfiniteAirJumpToggle = false,
 			AntiBonkToggle = false,
 			IgnoreFakeCountToggle = false,
 			BeaconMirageIdentifierToggle = false,
 			GrapplerStaminaModeDropdown = "Off",
+			GrapplerStaminaRecoverySpeedSlider = 1,
+			MomentumModeDropdown = "Off",
+			MomentumDecaySlider = 4,
+			MomentumSoftReductionSlider = 0.35,
+			MomentumMaxHorizontalSpeedSlider = 500,
+			MomentumMaxVerticalSpeedSlider = 500,
+			GrappleAssistToggle = false,
+			GrappleAssistStrengthSlider = 1,
+			GrappleAssistCaptureAngleSlider = 45,
+			GrappleAssistRangeSlider = 500,
+			GrappleAssistConfidenceGateToggle = true,
+			GrappleAssistMinConfidenceScoreSlider = -35,
+			GrappleAssistConfidenceMarginSlider = 5,
+			GrappleAssistBiomeTuningToggle = true,
+			GrappleAssistFailFeedbackToggle = true,
+			GrappleAssistSpecialPriorityToggle = true,
+			GrappleAnchorPriorityGrapplePointSlider = 900,
+			GrappleAnchorPriorityJumpPadSlider = 1000,
+			GrappleAnchorPriorityTriaOrbSlider = 850,
+			GrappleAnchorPriorityBellSlider = 800,
+			GrappleAssistTerrainPrioritySlider = 100,
+			GrappleAssistSecondaryCastToggle = false,
+			GrappleAssistSecondaryCastKeybind = "Q",
+			GrappleVoidProtectionToggle = false,
+			GrappleVoidProtectionHeightSlider = 24,
+			GrappleVoidProtectionFallSpeedSlider = 85,
+			GrappleTechniqueDropdown = {},
+			GrappleReelSaverKeybind = "E",
+			GrappleReelSaverSideRangeSlider = 26,
+			GrappleReelSaverMinHeightSlider = 5,
+			GrappleReelSaverMaxHeightSlider = 14,
+			GrappleReelSaverClearanceSlider = 5,
+			GrappleReelSaverReelHoldSlider = 0.16,
+			GrappleVoidRescueAutoReelToggle = true,
+			GrappleVoidRescueAutoSharkTailToggle = true,
+			GrappleVoidRescueHeightSlider = 45,
+			GrappleVoidRescueReelHoldSlider = 0.12,
 			RailAssistSuiteToggle = false,
 			RailAutoToggle = false,
 			RailSpeedMultiplierSlider = 1.1,
@@ -138,9 +179,18 @@ pcall(function()
 			GrappleReelPullMultiplierSlider = 1.1,
 			GrappleSharkTailPullMultiplierSlider = 1.1,
 			GrappleJumpPadUsesBypassToggle = false,
+			GrappleDisableGroundReleaseToggle = false,
+			GrappleNoReelCooldownToggle = false,
+			GrappleSharkTailNoCooldownToggle = false,
+			GrappleHookCastSpeedMultiplierSlider = 1,
+			GrappleMaxRangeSlider = 90,
+			GrappleEasierVoidCastToggle = false,
+			GrappleSharkTailWindowSlider = 0.25,
 			MatrixTetrahedronToggle = false,
 			MomentumReductionSlider = 100, -- Mặc định là 100% giảm quán tính
 			SpeedBuffSelectionsDropdown = {},
+			HelmetToggle = false,
+			MiniatureHourglassToggle = false,
 			AutoCollectGiftsToggle = false,
 			AutoCollectTargetsDropdown = { "Gift/GoldenGift", "Instrument (Cadence)" },
 			AutoCollectRangeSlider = 20,
@@ -167,6 +217,7 @@ pcall(function()
 			AutomationGiftFarmRangeSlider = 60,
 			AutomationGiftFarmBurstSlider = 16,
 			AutomationGiftFarmCollectsPerFrameSlider = 8,
+			AutomationGiftFarmGoldenWaitSlider = 4,
 			AutomationGiftFarmReturnToggle = true,
 			AutomationGiftFarmReturnBeaconToggle = true,
 			AutomationPylonActivatorToggle = false,
@@ -194,6 +245,19 @@ pcall(function()
 				currentSettings[newKey] = currentSettings[oldKey]
 				updated = true
 			end
+		end
+
+		if currentSettings.BellHackDropdownV2 == nil and currentSettings.ImmunityBellToggle == true then
+			currentSettings.BellHackDropdownV2 = { "Immunity" }
+			updated = true
+		end
+		if currentSettings.TelefraggerHackDropdown == nil and currentSettings.ImmunityTelefraggerToggle == true then
+			currentSettings.TelefraggerHackDropdown = { "Immunity" }
+			updated = true
+		end
+		if currentSettings.ICBMHackDropdown == nil and currentSettings.ImmunityICBMToggle == true then
+			currentSettings.ICBMHackDropdown = { "Immunity" }
+			updated = true
 		end
 
 		for k, v in pairs(defaultSettings) do

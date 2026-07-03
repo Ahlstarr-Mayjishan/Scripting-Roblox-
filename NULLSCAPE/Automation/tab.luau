@@ -106,6 +106,20 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateSlider({
+		Name = "Golden Spawn Wait",
+		Range = { 0, 10 },
+		CurrentValue = Controller and Controller.GiftFarmGoldenSpawnWait or 4,
+		Increment = 0.5,
+		ValueName = "s",
+		Flag = "AutomationGiftFarmGoldenWaitSlider",
+		Callback = function(Value)
+			if Controller and typeof(Controller.SetGiftFarmGoldenSpawnWait) == "function" then
+				Controller:SetGiftFarmGoldenSpawnWait(Value)
+			end
+		end,
+	})
+
 	Tab:CreateToggle({
 		Name = "Return After Cluster",
 		CurrentValue = Controller and Controller.GiftFarmReturnAfterCluster ~= false,
