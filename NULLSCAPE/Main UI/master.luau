@@ -162,6 +162,15 @@ pcall(function()
 			AdvancedGravityCoilJumpPowerSlider = 28,
 			BetterJumpPadToggle = false,
 			BetterJumpPadPowerSlider = 100,
+			AutomationGiftFarmToggle = false,
+			AutomationGiftFarmModeDropdown = "Golden Priority",
+			AutomationGiftFarmRangeSlider = 60,
+			AutomationGiftFarmBurstSlider = 16,
+			AutomationGiftFarmCollectsPerFrameSlider = 8,
+			AutomationGiftFarmReturnToggle = true,
+			AutomationGiftFarmReturnBeaconToggle = true,
+			AutomationPylonActivatorToggle = false,
+			AutomationPylonActivatorReturnToggle = true,
 		}
 
 		local currentSettings = {}
@@ -483,6 +492,9 @@ local function loadModule(path)
 		if path == "NULLSCAPE/Accessibility/controller.luau" then
 			return globals and globals.activeAccessibilityController or nil
 		end
+		if path == "NULLSCAPE/Automation/controller.luau" then
+			return globals and globals.activeAutomationController or nil
+		end
 		if path == "NULLSCAPE/Entities/controller.luau" then
 			return globals and globals.activeEntitiesController or nil
 		end
@@ -551,6 +563,18 @@ end
 getgenv().loadModule = loadModule
 
 -- Tải các module con
+local success0, err0 = pcall(function()
+	local AutomationController = loadModule("NULLSCAPE/Automation/controller.luau")
+	Client.Modules["AutomationController"] = AutomationController
+	local AutomationTab = loadModule("NULLSCAPE/Automation/tab.luau")
+
+	AutomationTab(Client, AutomationController)
+end)
+
+if not success0 then
+	warn("[NULLSCAPE] Lá»—i khi náº¡p module Automation: " .. tostring(err0))
+end
+
 local success, err = pcall(function()
 	local EntitiesController = loadModule("NULLSCAPE/Entities/controller.luau")
 	Client.Modules["EntitiesController"] = EntitiesController
