@@ -152,6 +152,27 @@ for _, data in pairs(Logic.Config) do
     end
 end
 
+local CELESTIAL_CLIENT_BLOCKLIST = {
+    Kill = true,
+}
+
+local function hasAncestorName(instance, targetSubName)
+    local current = instance and instance.Parent
+    local depth = 0
+    local lowerTarget = string.lower(tostring(targetSubName or ""))
+
+    while current and current ~= workspace and current ~= game and depth < 50 do
+        depth = depth + 1
+        local lowerName = string.lower(tostring(current.Name or ""))
+        if string.find(lowerName, lowerTarget, 1, true) then
+            return true
+        end
+        current = current.Parent
+    end
+
+    return false
+end
+
 local function localPlayerHasStatus(statusName)
     local LocalPlayer = Players.LocalPlayer
     local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
@@ -232,24 +253,20 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
     end
 
     local remoteName = remote.Name
-    if remoteName == "Died" and args[1] == "VoidImplosion" and controller.VoidImplosionImmune == true then
-        return true
-    end
+    if controller.CelestialImmune == true then
+        if remoteName == "Died" and args[1] == "Celestial" then
+            return true
+        end
 
-    if remoteName == "ClientEvent"
-        and args[1] == "Kill"
-        and controller.CelestialImmune == true
-    then
-        local current = remote.Parent
-        local depth = 0
-        while current and current ~= workspace and current ~= game and depth < 50 do
-            depth = depth + 1
-            local lowerName = string.lower(tostring(current.Name or ""))
-            if string.find(lowerName, "realitybreak", 1, true) or string.find(lowerName, "realitybreaker", 1, true) then
+        if remoteName == "ClientEvent" and CELESTIAL_CLIENT_BLOCKLIST[tostring(args[1])] then
+            if hasAncestorName(remote, "Celestial") or hasAncestorName(remote, "RealityBreak") then
                 return true
             end
-            current = current.Parent
         end
+    end
+
+    if remoteName == "Died" and args[1] == "VoidImplosion" and controller.VoidImplosionImmune == true then
+        return true
     end
 
     if not Logic.TargetRemotes[remoteName] then
