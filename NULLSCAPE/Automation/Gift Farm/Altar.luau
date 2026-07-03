@@ -1,6 +1,8 @@
 --!nocheck
 
 local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 
@@ -16,6 +18,116 @@ local currentTarget = nil
 local currentTargetStartedAt = 0
 local lastActionAt = 0
 local skippedUntil = setmetatable({}, { __mode = "k" })
+local stateCache = setmetatable({}, { __mode = "k" })
+local stateConnections = {}
+local getPrompt
+
+local function isSoloRun()
+	local solo = ReplicatedStorage:FindFirstChild("Solo")
+	return solo and solo:IsA("BoolValue") and solo.Value == true
+end
+
+local function isLocalHost()
+	local player = Players.LocalPlayer
+	return player and player:HasTag("Host") == true
+end
+
+local function disconnectState(root)
+	local connections = stateConnections[root]
+	if not connections then
+		return
+	end
+
+	for _, connection in ipairs(connections) do
+		pcall(function()
+			connection:Disconnect()
+		end)
+	end
+	stateConnections[root] = nil
+	stateCache[root] = nil
+end
+
+local function getAltarState(root, tagged)
+	if not root then
+		return {
+			Exists = false,
+			Used = true,
+			Voting = false,
+			Solo = false,
+			Host = false,
+			PromptEnabled = false,
+			Ready = false,
+		}
+	end
+
+	local prompt = getPrompt(root, tagged)
+	local used = (root:GetAttribute("AltarUsed") == true) or (tagged and tagged:GetAttribute("AltarUsed") == true)
+	local voting = root:HasTag("Voting") or (tagged and tagged:HasTag("Voting"))
+	local solo = isSoloRun()
+	local host = isLocalHost()
+	local hostOrSolo = solo or host
+	local promptEnabled = prompt and prompt.Enabled == true
+
+	return {
+		Exists = root:IsDescendantOf(workspace),
+		Used = used,
+		Voting = voting,
+		Solo = solo,
+		Host = host,
+		Prompt = prompt,
+		PromptEnabled = promptEnabled,
+		Ready = root:IsDescendantOf(workspace) and not used and (voting or promptEnabled or hostOrSolo),
+	}
+end
+
+local function refreshState(root, tagged)
+	stateCache[root] = getAltarState(root, tagged)
+	return stateCache[root]
+end
+
+local function hookState(root, tagged)
+	if not root or stateConnections[root] then
+		return refreshState(root, tagged)
+	end
+
+	stateConnections[root] = {}
+	local function bind(signal)
+		local ok, connection = pcall(function()
+			return signal:Connect(function()
+				if not root:IsDescendantOf(workspace) then
+					disconnectState(root)
+					return
+				end
+				refreshState(root, tagged)
+			end)
+		end)
+		if ok and connection then
+			table.insert(stateConnections[root], connection)
+		end
+	end
+
+	bind(root:GetAttributeChangedSignal("AltarUsed"))
+	if tagged and tagged ~= root then
+		bind(tagged:GetAttributeChangedSignal("AltarUsed"))
+	end
+	bind(root.AncestryChanged)
+	bind(CollectionService:GetInstanceAddedSignal("Voting"))
+	bind(CollectionService:GetInstanceRemovedSignal("Voting"))
+	bind(CollectionService:GetInstanceAddedSignal("Host"))
+	bind(CollectionService:GetInstanceRemovedSignal("Host"))
+	local solo = ReplicatedStorage:FindFirstChild("Solo")
+	if solo and solo:IsA("BoolValue") then
+		bind(solo.Changed)
+	end
+
+	local prompt = getPrompt(root, tagged)
+	if prompt then
+		bind(prompt:GetPropertyChangedSignal("Enabled"))
+		bind(prompt:GetPropertyChangedSignal("HoldDuration"))
+	end
+
+	return refreshState(root, tagged)
+end
 
 local function touch(part, hrp)
 	if typeof(firetouchinterest) ~= "function" then
@@ -28,7 +140,7 @@ local function touch(part, hrp)
 	end)
 end
 
-local function getPrompt(root, tagged)
+getPrompt = function(root, tagged)
 	local prompt = root and root:FindFirstChildWhichIsA("ProximityPrompt", true)
 	if prompt then
 		return prompt
@@ -102,10 +214,6 @@ local function getAltarName(root, tagged)
 		or readStringValue(root and root:FindFirstChild("RealName"))
 		or readStringValue(tagged and tagged:FindFirstChild("RealName"))
 		or readStringValue(marker and marker:FindFirstChild("RealName"))
-end
-
-local function isUsed(root, tagged)
-	return (root and root:GetAttribute("AltarUsed") == true) or (tagged and tagged:GetAttribute("AltarUsed") == true)
 end
 
 local function buildSelectionPriority(controller)
@@ -186,7 +294,27 @@ local function isValidTarget(target, selected)
 	if skippedUntil[target.Root] and os.clock() < skippedUntil[target.Root] then
 		return false
 	end
-	return not isUsed(target.Root, target.Tagged)
+	local state = hookState(target.Root, target.Tagged)
+	return state and state.Ready == true
+end
+
+local function getStateDetail(target, state)
+	if not (target and state) then
+		return ""
+	end
+
+	local stateText = "Touch"
+	if state.PromptEnabled then
+		stateText = "Prompt"
+	elseif state.Voting then
+		stateText = "Voting"
+	elseif state.Solo then
+		stateText = "Solo"
+	elseif state.Host then
+		stateText = "Host"
+	end
+
+	return target.Name .. " | " .. stateText
 end
 
 local function findBestTarget(controller, hrp)
@@ -206,9 +334,11 @@ local function findBestTarget(controller, hrp)
 	for _, root in ipairs(roots) do
 		local tagged = taggedByRoot[root]
 		local name = getAltarName(root, tagged)
+		local state = hookState(root, tagged)
 		if name
 			and selected[name]
-			and not isUsed(root, tagged)
+			and state
+			and state.Ready == true
 			and not (skippedUntil[root] and os.clock() < skippedUntil[root])
 		then
 			local hitbox = getHitbox(root) or getHitbox(tagged)
@@ -218,7 +348,8 @@ local function findBestTarget(controller, hrp)
 					Root = root,
 					Tagged = tagged,
 					Hitbox = hitbox,
-					Prompt = getPrompt(root, tagged),
+					Prompt = state.Prompt,
+					State = state,
 					Name = name,
 					Priority = priority[name] or 999,
 					Distance = distance,
@@ -258,6 +389,13 @@ function Altar.tryStep(controller, hrp)
 		return false
 	end
 
+	local state = refreshState(target.Root, target.Tagged)
+	if not (state and state.Ready == true) then
+		currentTarget = nil
+		currentTargetStartedAt = 0
+		return false
+	end
+
 	local offset = Vector3.new(0, math.clamp(target.Hitbox.Size.Y * 0.25, 1, 4), 0)
 	Context.moveCharacterTo(CFrame.new(target.Hitbox.Position + offset))
 
@@ -269,7 +407,7 @@ function Altar.tryStep(controller, hrp)
 		end
 	end
 
-	return true, "ActivatingAltar", target.Name
+	return true, "ActivatingAltar", getStateDetail(target, state)
 end
 
 function Altar.reset()
@@ -277,6 +415,10 @@ function Altar.reset()
 	currentTargetStartedAt = 0
 	lastActionAt = 0
 	skippedUntil = setmetatable({}, { __mode = "k" })
+	for root in pairs(stateConnections) do
+		disconnectState(root)
+	end
+	stateCache = setmetatable({}, { __mode = "k" })
 end
 
 return Altar
