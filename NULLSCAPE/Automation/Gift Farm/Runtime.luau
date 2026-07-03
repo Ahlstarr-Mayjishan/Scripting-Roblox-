@@ -278,22 +278,7 @@ local function processOnce(controller)
 			else
 				range = math.clamp(tonumber(controller.GiftFarmRange) or DEFAULT_RANGE, 5, DEFAULT_RANGE)
 			end
-			local route = nil
-			if ClusterPlanner and typeof(ClusterPlanner.planRoute) == "function" then
-				route = ClusterPlanner.planRoute(candidates, range, hrp.Position)
-			end
-			if not route or #route == 0 then
-				local cluster, planInfo = ClusterPlanner.pickBestCluster(candidates, range, hrp.Position)
-				route = {
-					{
-						Cluster = cluster,
-						Info = planInfo,
-					},
-				}
-			end
-
-			local firstStep = route[1] or {}
-			local cluster = firstStep.Cluster or {}
+			local route = ClusterPlanner.planRoute(candidates, range, hrp.Position)
 			local totalPlanned = 0
 			for _, step in ipairs(route) do
 				totalPlanned += #(step.Cluster or {})
@@ -308,7 +293,7 @@ local function processOnce(controller)
 
 			local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
 			for index, step in ipairs(route) do
-				cluster = step.Cluster or {}
+				local cluster = step.Cluster or {}
 				local planInfo = step.Info
 				local score = planInfo and planInfo.Score
 				local planned = score and (" | plan " .. tostring(score.Golden) .. "/" .. tostring(score.Total)) or ""
@@ -318,7 +303,6 @@ local function processOnce(controller)
 					string.format("%d/%d route | %d/%d %s", index, #route, #cluster, totalPlanned, focus) .. planned
 				)
 				Collector.collectCluster(controller, hrp, cluster, range, {
-					KeepPosition = true,
 					SafeRange = planInfo and planInfo.SafeRange,
 					TargetPosition = planInfo and planInfo.TargetPosition,
 				})
@@ -334,7 +318,14 @@ local function processOnce(controller)
 				local accepted = math.floor((tonumber(controller.GiftFarmAdaptiveSuccessRate) or 1) * 100)
 				local validationWait = tonumber(controller.GiftFarmAdaptiveValidationWait) or 0
 				local rejects = tonumber(controller.GiftFarmAdaptiveRejects) or 0
-				adaptiveText = string.format(" | Accept %d%% Reject %d Wait %.2fs", accepted, rejects, validationWait)
+				local retries = tonumber(controller.GiftFarmAdaptiveRetries) or 0
+				adaptiveText = string.format(
+					" | Accept %d%% Reject %d Retry %d Wait %.2fs",
+					accepted,
+					rejects,
+					retries,
+					validationWait
+				)
 			end
 			setStatus(
 				controller,

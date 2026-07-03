@@ -54,6 +54,7 @@ local Controller = {
 	GiftFarmAdaptiveSuccessRate = 1,
 	GiftFarmAdaptiveValidationWait = 0.08,
 	GiftFarmAdaptiveRejects = 0,
+	GiftFarmAdaptiveRetries = 0,
 	GiftFarmGoldenComplete = false,
 	GiftFarmReturnToBeaconAfterGolden = true,
 	AltarSelections = {},

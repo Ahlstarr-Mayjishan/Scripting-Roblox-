@@ -12,9 +12,10 @@ local ARRIVAL_STABLE_FRAMES = 2
 local ARRIVAL_TIMEOUT = 0.35
 local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
+local MAX_RETRY_PASSES = 2
+local RETRY_SETTLE = 0.06
 local comboCount = 0
 local lastCollectTick = 0
-local activeRestore = nil
 local foothold = nil
 local adaptiveSuccessRate = 1
 local adaptiveValidationWait = BASE_VALIDATION_WAIT
@@ -93,17 +94,17 @@ local function getValidationWait(controller)
 	return BASE_VALIDATION_WAIT
 end
 
-local function updateAdaptiveTiming(controller, attemptedGifts)
+local function updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
 	if not isAdaptiveEnabled(controller) or not attemptedGifts or #attemptedGifts == 0 then
 		return
 	end
 
 	local accepted = 0
-	local failed = 0
+	local failed = tonumber(observedRejects) or 0
 	for _, gift in ipairs(attemptedGifts) do
 		if isGiftAccepted(gift) then
 			accepted += 1
-		elseif failedAttempts[gift] ~= nil then
+		elseif failedAttempts[gift] ~= nil and failed <= 0 then
 			failed += 1
 		end
 	end
@@ -125,6 +126,7 @@ local function updateAdaptiveTiming(controller, attemptedGifts)
 		controller.GiftFarmAdaptiveSuccessRate = adaptiveSuccessRate
 		controller.GiftFarmAdaptiveValidationWait = adaptiveValidationWait
 		controller.GiftFarmAdaptiveRejects = failed
+		controller.GiftFarmAdaptiveRetries = failed
 	end
 end
 
@@ -203,7 +205,39 @@ local function waitForArrival(hrp, targetPosition)
 	return (hrp.Position - targetPosition).Magnitude <= ARRIVAL_TOLERANCE
 end
 
+local function collectItems(items, currentPos, collectRange, collectedEvent, attemptedGifts)
+	local collected = 0
+	for _, item in ipairs(items) do
+		if item.rawObj
+			and not item.rawObj.Destroyed
+			and not item.rawObj.Collected
+			and (item.pos - currentPos).Magnitude <= collectRange + 1
+		then
+			collectGift(item.rawObj, collectedEvent)
+			table.insert(attemptedGifts, item.rawObj)
+			collected += 1
+		end
+	end
+	return collected
+end
+
+local function getRejectedItems(items, currentPos, collectRange)
+	local rejected = {}
+	for _, item in ipairs(items) do
+		if item.rawObj
+			and failedAttempts[item.rawObj] ~= nil
+			and not item.rawObj.Destroyed
+			and not item.rawObj.Collected
+			and (item.pos - currentPos).Magnitude <= collectRange + 1
+		then
+			table.insert(rejected, item)
+		end
+	end
+	return rejected
+end
+
 function Collector.releaseCharacter()
+	removeFoothold()
 	local hrp = Context.getRootPart()
 	if hrp and hrp.Parent then
 		hrp.Anchored = false
@@ -212,22 +246,8 @@ function Collector.releaseCharacter()
 end
 
 function Collector.restoreMovement()
-	local restore = activeRestore
-	activeRestore = nil
-	removeFoothold()
-
-	if restore and restore.Hrp and restore.Hrp.Parent then
-		local hrp = restore.Hrp
-		if restore.ReturnAfter ~= false and restore.CFrame then
-			Context.moveCharacterTo(restore.CFrame)
-		end
-		hrp.Anchored = false
-		clearVelocity(hrp)
-		return true
-	end
-
 	Collector.releaseCharacter()
-	return false
+	return true
 end
 
 function Collector.resetAdaptive(controller)
@@ -238,6 +258,7 @@ function Collector.resetAdaptive(controller)
 		controller.GiftFarmAdaptiveSuccessRate = adaptiveSuccessRate
 		controller.GiftFarmAdaptiveValidationWait = adaptiveValidationWait
 		controller.GiftFarmAdaptiveRejects = 0
+		controller.GiftFarmAdaptiveRetries = 0
 	end
 end
 
@@ -247,18 +268,10 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 	end
 
 	options = options or {}
-	local oldCFrame = hrp.CFrame
 	local targetPosition = options.TargetPosition or cluster.TargetPosition or cluster[1].pos
 	local collectRange = options.SafeRange or cluster.SafeRange or range
 	local standingPosition = targetPosition + Vector3.new(0, 3, 0)
 	local collectedEvent = Context.getCollectedGiftEvent()
-	local returnAfter = options.KeepPosition ~= true
-
-	activeRestore = {
-		Hrp = hrp,
-		CFrame = oldCFrame,
-		ReturnAfter = returnAfter,
-	}
 
 	local ok, err = pcall(function()
 		hrp.Anchored = false
@@ -270,20 +283,27 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 
 		local currentPos = hrp.Position
 		local attemptedGifts = {}
+		local observedRejects = 0
 
-		for _, item in ipairs(cluster) do
-			if item.rawObj
-				and not item.rawObj.Destroyed
-				and not item.rawObj.Collected
-				and (item.pos - currentPos).Magnitude <= collectRange + 1
-			then
-				collectGift(item.rawObj, collectedEvent)
-				table.insert(attemptedGifts, item.rawObj)
+		collectItems(cluster, currentPos, collectRange, collectedEvent, attemptedGifts)
+		task.wait(getValidationWait(controller))
+
+		for _ = 1, MAX_RETRY_PASSES do
+			currentPos = hrp.Position
+			local rejected = getRejectedItems(cluster, currentPos, collectRange)
+			if #rejected == 0 then
+				break
 			end
+
+			observedRejects += #rejected
+			waitForArrival(hrp, standingPosition)
+			task.wait(RETRY_SETTLE)
+			currentPos = hrp.Position
+			collectItems(rejected, currentPos, collectRange, collectedEvent, attemptedGifts)
+			task.wait(getValidationWait(controller))
 		end
 
-		task.wait(getValidationWait(controller))
-		updateAdaptiveTiming(controller, attemptedGifts)
+		updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
 	end)
 
 	Collector.restoreMovement()
