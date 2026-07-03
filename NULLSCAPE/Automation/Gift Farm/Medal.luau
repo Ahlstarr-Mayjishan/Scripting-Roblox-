@@ -145,6 +145,10 @@ function Medal.tryStep(controller, hrp)
 	end
 
 	if carriesMedal() then
+		if controller.GiftFarmGoldenComplete ~= true then
+			return false
+		end
+
 		local beacon = Context.getBeaconPart()
 		if not beacon then
 			return false

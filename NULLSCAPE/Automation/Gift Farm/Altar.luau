@@ -18,6 +18,7 @@ local currentTarget = nil
 local currentTargetStartedAt = 0
 local lastActionAt = 0
 local skippedUntil = setmetatable({}, { __mode = "k" })
+local activatedThisRound = setmetatable({}, { __mode = "k" })
 local stateCache = setmetatable({}, { __mode = "k" })
 local stateConnections = {}
 local getPrompt
@@ -294,6 +295,9 @@ local function isValidTarget(target, selected)
 	if skippedUntil[target.Root] and os.clock() < skippedUntil[target.Root] then
 		return false
 	end
+	if activatedThisRound[target.Root] == true then
+		return false
+	end
 	local state = hookState(target.Root, target.Tagged)
 	return state and state.Ready == true
 end
@@ -339,6 +343,7 @@ local function findBestTarget(controller, hrp)
 			and selected[name]
 			and state
 			and state.Ready == true
+			and activatedThisRound[root] ~= true
 			and not (skippedUntil[root] and os.clock() < skippedUntil[root])
 		then
 			local hitbox = getHitbox(root) or getHitbox(tagged)
@@ -405,6 +410,9 @@ function Altar.tryStep(controller, hrp)
 		if not triggerPrompt(target.Prompt) then
 			touch(target.Hitbox, hrp)
 		end
+		activatedThisRound[target.Root] = true
+		currentTarget = nil
+		currentTargetStartedAt = 0
 	end
 
 	return true, "ActivatingAltar", getStateDetail(target, state)
@@ -415,6 +423,7 @@ function Altar.reset()
 	currentTargetStartedAt = 0
 	lastActionAt = 0
 	skippedUntil = setmetatable({}, { __mode = "k" })
+	activatedThisRound = setmetatable({}, { __mode = "k" })
 	for root in pairs(stateConnections) do
 		disconnectState(root)
 	end
