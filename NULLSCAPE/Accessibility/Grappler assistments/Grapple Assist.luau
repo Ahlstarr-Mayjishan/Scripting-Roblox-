@@ -16,7 +16,7 @@ local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler ass
 local FailFeedback = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Fail Feedback Loop.luau")
 local DeferredAim = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Deferred Aim Cast.luau")
 
-local HOOK_VERSION = 10
+local HOOK_VERSION = 11
 
 local Logic = {
 	Controller = nil,
@@ -132,7 +132,7 @@ local function installCastHook(grappleModule, globals)
 
 		if isEnabled() then
 			local controller = getController()
-			local manualCast = (self and self.specialHeld == true) or forceRefresh ~= true
+			local manualCast = true
 			local fallbackHit, fallbackDirection
 			if manualCast and Targeting and typeof(Targeting.fallbackCast) == "function" then
 				fallbackHit, fallbackDirection = Targeting.fallbackCast(self, controller)
