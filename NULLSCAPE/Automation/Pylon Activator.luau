@@ -19,6 +19,7 @@ local ROOT_OFFSET = Vector3.new(0, 2, 0)
 local enabled = false
 local running = false
 local savedCFrame = nil
+local completedThisRound = 0
 
 local function setStatus(controller, status, detail)
 	if controller then
@@ -134,6 +135,8 @@ local function run(controller)
 		while enabled and controller and not controller.Destroyed do
 			if not isInRound() then
 				controller.PylonActivatorHolding = false
+				controller.PylonActivatorComplete = false
+				completedThisRound = 0
 				restorePosition(controller)
 				setStatus(controller, "WaitingForRound")
 				task.wait(0.5)
@@ -144,6 +147,14 @@ local function run(controller)
 				controller.PylonActivatorHolding = false
 				setStatus(controller, "WaitingForLevel", "Level " .. tostring(getLevel()) .. "/" .. tostring(TARGET_LEVEL))
 				task.wait(0.75)
+				continue
+			end
+
+			if controller.GiftFarmGoldenComplete ~= true then
+				controller.PylonActivatorHolding = false
+				restorePosition(controller)
+				setStatus(controller, "WaitingForGolden", "Gift Farm must clear golden gifts first")
+				task.wait(0.5)
 				continue
 			end
 
@@ -159,6 +170,7 @@ local function run(controller)
 			if #candidates == 0 then
 				controller.PylonActivatorHolding = false
 				restorePosition(controller)
+				controller.PylonActivatorComplete = completedThisRound > 0
 				setStatus(controller, "WaitingForPylons")
 				task.wait(0.5)
 				continue
@@ -186,6 +198,7 @@ local function run(controller)
 
 			controller.PylonActivatorHolding = false
 			if isCompleted(target.Model) then
+				completedThisRound += 1
 				setStatus(controller, "Completed", "Pylon activated")
 			end
 			task.wait(0.2)
@@ -202,10 +215,12 @@ end
 function PylonActivator.update(controller)
 	enabled = controller and controller.PylonActivatorEnabled == true
 	if enabled then
+		controller.PylonActivatorComplete = false
 		run(controller)
 	else
 		if controller then
 			controller.PylonActivatorHolding = false
+			controller.PylonActivatorComplete = false
 		end
 		restorePosition(controller)
 		setStatus(controller, "Idle")
@@ -217,6 +232,7 @@ function PylonActivator.disable(controller)
 	enabled = false
 	if controller then
 		controller.PylonActivatorHolding = false
+		controller.PylonActivatorComplete = false
 	end
 	restorePosition(controller)
 	setStatus(controller, "Idle")

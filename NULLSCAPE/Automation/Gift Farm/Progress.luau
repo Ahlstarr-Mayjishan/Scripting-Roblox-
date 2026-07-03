@@ -29,25 +29,15 @@ function Progress.getNormalGiftProgress(gch)
 	return 0, 0, 0
 end
 
-function Progress.shouldCollectNormalGift(controller, normalRatio)
-	local mode = controller.GiftFarmMode or "Golden Priority"
-	if mode == "Golden Only" then
-		return false
-	end
-	if mode == "Purgatory Greed" then
-		return normalRatio <= 0.5
-	end
-	if mode == "Purgatory Revive Window" then
-		return normalRatio <= 0.9
-	end
+function Progress.shouldCollectNormalGift()
 	return true
 end
 
-function Progress.getGiftPriority(gift, normalRatio, controller)
+function Progress.getGiftPriority(gift, _normalRatio, _controller)
 	if gift.Golden then
 		return 0
 	end
-	if not Progress.shouldCollectNormalGift(controller, normalRatio) then
+	if not Progress.shouldCollectNormalGift() then
 		return nil
 	end
 	return 1

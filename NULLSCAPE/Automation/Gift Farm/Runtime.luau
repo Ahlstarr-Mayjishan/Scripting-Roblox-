@@ -7,11 +7,14 @@ local Scanner = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Scanner.lua
 local Collector = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Collector.luau")
 local ClusterPlanner = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Cluster Planner.luau")
 local Progress = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Progress.luau")
+local Altar = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Altar.luau")
+local Medal = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Medal.luau")
 
 local Runtime = {}
 local DEFAULT_RANGE = 60
 local MIN_SCAN_INTERVAL = 0.12
 local EMPTY_COMPLETE_DELAY = 2.5
+local GOLDEN_SPAWN_WAIT = 4
 
 local enabled = false
 local busy = false
@@ -22,6 +25,7 @@ local lastGiftSeenAt = 0
 local beaconReturnDone = false
 local hasSeenGoldenThisRound = false
 local goldenMissingSince = nil
+local beaconSuppressed = false
 
 local function setStatus(controller, status, detail)
 	if controller then
@@ -37,8 +41,21 @@ local function resetRoundState(controller, inRound)
 	beaconReturnDone = false
 	hasSeenGoldenThisRound = false
 	goldenMissingSince = nil
+	if controller then
+		controller.GiftFarmGoldenComplete = false
+	end
+	if not inRound and beaconSuppressed then
+		Context.restoreBeaconInteraction()
+		beaconSuppressed = false
+	end
 	if Scanner and typeof(Scanner.reset) == "function" then
 		Scanner.reset()
+	end
+	if Medal and typeof(Medal.reset) == "function" then
+		Medal.reset()
+	end
+	if Altar and typeof(Altar.reset) == "function" then
+		Altar.reset()
 	end
 	if inRound then
 		setStatus(controller, "WaitingForGifts", "Round started")
@@ -81,13 +98,35 @@ local function returnToBeacon(controller, hrp, reason)
 	end
 
 	beaconReturnDone = true
+	if beaconSuppressed then
+		Context.restoreBeaconInteraction()
+		beaconSuppressed = false
+	end
 	Context.moveCharacterTo(CFrame.new(beacon.Position + Vector3.new(0, 4, 0)))
 	setStatus(controller, "ReturningToBeacon", reason or "Golden gifts complete")
 	return true
 end
 
-local function getGoldenSpawnWait(controller)
-	return math.clamp(tonumber(controller.GiftFarmGoldenSpawnWait) or 4, 0, 10)
+local function suppressBeaconUntilReturn()
+	beaconSuppressed = Context.suppressBeaconInteraction() == true or beaconSuppressed
+end
+
+local function getGoldenSpawnWait()
+	return GOLDEN_SPAWN_WAIT
+end
+
+local function getBurstLimit(controller, range)
+	local speedScale = tonumber(controller and controller.GiftFarmAdaptiveSpeedScale) or 1
+	if controller and controller.GiftFarmAdaptiveTiming == false then
+		speedScale = 1
+	end
+	return math.clamp(math.floor((tonumber(range) or DEFAULT_RANGE) * 0.35 * speedScale), 8, 30)
+end
+
+local function markGoldenComplete(controller)
+	if controller then
+		controller.GiftFarmGoldenComplete = true
+	end
 end
 
 local function waitForLateGolden(controller, scanInfo, reason)
@@ -100,7 +139,7 @@ local function waitForLateGolden(controller, scanInfo, reason)
 		return false
 	end
 
-	local waitTime = getGoldenSpawnWait(controller)
+	local waitTime = getGoldenSpawnWait()
 	if waitTime <= 0 then
 		return false
 	end
@@ -149,6 +188,27 @@ local function processOnce(controller)
 				return
 			end
 
+			suppressBeaconUntilReturn()
+
+			if Altar and typeof(Altar.tryStep) == "function" then
+				local handledAltar, altarStatus, altarDetail = Altar.tryStep(controller, hrp)
+				if handledAltar then
+					setStatus(controller, altarStatus or "ActivatingAltar", altarDetail or "")
+					return
+				end
+			end
+
+			if Medal and typeof(Medal.tryStep) == "function" then
+				local handledMedal, medalStatus = Medal.tryStep(controller, hrp)
+				if handledMedal then
+					if medalStatus == "SubmittingMedal" then
+						beaconSuppressed = false
+					end
+					setStatus(controller, medalStatus or "MedalAction")
+					return
+				end
+			end
+
 			local gch = Context.getGiftClientHandler()
 			if not (gch and gch.Gifts) then
 				setStatus(controller, "WaitingForGiftClient")
@@ -164,6 +224,11 @@ local function processOnce(controller)
 				return
 			end
 			if lastGiftSeenAt > 0 and hasSeenGoldenThisRound and scanInfo and scanInfo.RawGolden == 0 then
+				markGoldenComplete(controller)
+				if controller.PylonActivatorEnabled == true and controller.PylonActivatorComplete ~= true then
+					setStatus(controller, "WaitingForPylons", "Golden gifts complete")
+					return
+				end
 				if returnToBeacon(controller, hrp, "Golden gifts complete") then
 					return
 				end
@@ -189,7 +254,7 @@ local function processOnce(controller)
 				range = math.clamp(tonumber(controller.GiftFarmRange) or DEFAULT_RANGE, 5, DEFAULT_RANGE)
 			end
 			local cluster, planInfo = ClusterPlanner.pickBestCluster(candidates, range, hrp.Position)
-			local burstLimit = math.clamp(tonumber(controller.GiftFarmBurstSize) or 16, 1, 60)
+			local burstLimit = getBurstLimit(controller, range)
 			while #cluster > burstLimit do
 				table.remove(cluster)
 			end
@@ -198,7 +263,7 @@ local function processOnce(controller)
 			local shouldHoldForGoldenWait = rawGolden == 0
 				and rawNormal > 0
 				and rawNormal <= #cluster
-				and getGoldenSpawnWait(controller) > 0
+				and getGoldenSpawnWait() > 0
 
 			local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
 			local score = planInfo and planInfo.Score
@@ -216,9 +281,8 @@ local function processOnce(controller)
 			local adaptiveText = ""
 			if controller.GiftFarmAdaptiveTiming ~= false then
 				local accepted = math.floor((tonumber(controller.GiftFarmAdaptiveSuccessRate) or 1) * 100)
-				local settle = tonumber(controller.GiftFarmAdaptiveSettle) or tonumber(controller.GiftFarmCollectSettle) or 0
 				local speedScale = tonumber(controller.GiftFarmAdaptiveSpeedScale) or 1
-				adaptiveText = string.format(" | Accept %d%% %.2fs %.0f%%", accepted, settle, speedScale * 100)
+				adaptiveText = string.format(" | Accept %d%% %.0f%%", accepted, speedScale * 100)
 			end
 			setStatus(
 				controller,
@@ -257,6 +321,10 @@ end
 function Runtime.disable(controller)
 	enabled = false
 	busy = false
+	if beaconSuppressed then
+		Context.restoreBeaconInteraction()
+		beaconSuppressed = false
+	end
 	if Collector and typeof(Collector.restoreMovement) == "function" then
 		Collector.restoreMovement()
 	end

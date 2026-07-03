@@ -6,10 +6,14 @@ local RunService = game:GetService("RunService")
 
 local Collector = {}
 local MAX_STEP_DISTANCE = 160
+local BASE_TRAVEL_SPEED = 750
+local MIN_TRAVEL_SPEED = 150
+local MAX_TRAVEL_SPEED = 2000
+local BASE_COLLECTS_PER_FRAME = 12
+local COLLECT_SETTLE = 0.03
 local comboCount = 0
 local lastCollectTick = 0
 local activeRestore = nil
-local adaptiveSettle = nil
 local adaptiveSpeedScale = 1
 local adaptiveSuccessRate = 1
 
@@ -52,21 +56,17 @@ local function clearVelocity(hrp)
 end
 
 local function getTravelSpeed(controller)
-	local baseSpeed = math.clamp(tonumber(controller.GiftFarmTravelSpeed) or 750, 150, 2000)
 	if isAdaptiveEnabled(controller) then
-		return math.clamp(baseSpeed * adaptiveSpeedScale, 150, 2000)
+		return math.clamp(BASE_TRAVEL_SPEED * adaptiveSpeedScale, MIN_TRAVEL_SPEED, MAX_TRAVEL_SPEED)
 	end
-	return baseSpeed
+	return BASE_TRAVEL_SPEED
 end
 
-local function getCollectSettle(controller)
-	local baseSettle = math.clamp(tonumber(controller.GiftFarmCollectSettle) or 0.18, 0.03, 0.6)
-	if not isAdaptiveEnabled(controller) then
-		return baseSettle
+local function getCollectsPerFrame(controller)
+	if isAdaptiveEnabled(controller) then
+		return math.clamp(math.floor(BASE_COLLECTS_PER_FRAME * adaptiveSpeedScale), 4, 24)
 	end
-
-	adaptiveSettle = math.clamp(adaptiveSettle or baseSettle, 0.03, 0.8)
-	return math.max(baseSettle, adaptiveSettle)
+	return BASE_COLLECTS_PER_FRAME
 end
 
 local function updateAdaptiveTiming(controller, attemptedGifts)
@@ -83,23 +83,17 @@ local function updateAdaptiveTiming(controller, attemptedGifts)
 
 	local ratio = accepted / #attemptedGifts
 	adaptiveSuccessRate = adaptiveSuccessRate * 0.7 + ratio * 0.3
-	local baseSettle = math.clamp(tonumber(controller.GiftFarmCollectSettle) or 0.18, 0.03, 0.6)
-	adaptiveSettle = adaptiveSettle or baseSettle
 
 	if ratio < 0.65 then
-		adaptiveSettle = math.clamp(adaptiveSettle + 0.06, baseSettle, 0.8)
 		adaptiveSpeedScale = math.clamp(adaptiveSpeedScale - 0.12, 0.45, 1)
 	elseif ratio < 0.9 then
-		adaptiveSettle = math.clamp(adaptiveSettle + 0.025, baseSettle, 0.8)
 		adaptiveSpeedScale = math.clamp(adaptiveSpeedScale - 0.04, 0.45, 1)
 	elseif adaptiveSuccessRate > 0.96 then
-		adaptiveSettle = math.clamp(adaptiveSettle - 0.01, baseSettle, 0.8)
 		adaptiveSpeedScale = math.clamp(adaptiveSpeedScale + 0.03, 0.45, 1)
 	end
 
 	if controller then
 		controller.GiftFarmAdaptiveSuccessRate = adaptiveSuccessRate
-		controller.GiftFarmAdaptiveSettle = adaptiveSettle
 		controller.GiftFarmAdaptiveSpeedScale = adaptiveSpeedScale
 	end
 end
@@ -174,7 +168,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 	local oldCFrame = hrp.CFrame
 	local targetCFrame = CFrame.new(cluster[1].pos + Vector3.new(0, 3, 0))
 	local collectedEvent = Context.getCollectedGiftEvent()
-	local returnAfter = controller.GiftFarmReturnAfterCluster ~= false and options.KeepPosition ~= true
+	local returnAfter = options.KeepPosition ~= true
 
 	activeRestore = {
 		Hrp = hrp,
@@ -187,10 +181,10 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 		pacedMove(controller, hrp, targetCFrame)
 		clearVelocity(hrp)
 		RunService.Heartbeat:Wait()
-		task.wait(getCollectSettle(controller))
+		task.wait(COLLECT_SETTLE)
 
 		local currentPos = hrp.Position
-		local perFrame = math.clamp(tonumber(controller.GiftFarmCollectsPerFrame) or 8, 1, 60)
+		local perFrame = getCollectsPerFrame(controller)
 		local collectedThisFrame = 0
 		local attemptedGifts = {}
 
@@ -214,7 +208,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 			end
 		end
 
-		task.wait(getCollectSettle(controller))
+		task.wait(COLLECT_SETTLE)
 		updateAdaptiveTiming(controller, attemptedGifts)
 	end)
 

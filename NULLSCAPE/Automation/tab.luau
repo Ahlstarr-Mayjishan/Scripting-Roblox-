@@ -50,15 +50,13 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateDropdown({
-		Name = "Gift Farm Mode",
-		Options = { "Golden Priority", "Golden Only", "Purgatory Greed", "Purgatory Revive Window", "Full Sweep" },
-		CurrentOption = Controller and Controller.GiftFarmMode or "Golden Priority",
-		MultipleOptions = false,
-		Flag = "AutomationGiftFarmModeDropdown",
-		Callback = function(Option)
-			if Controller and typeof(Controller.SetGiftFarmMode) == "function" then
-				Controller:SetGiftFarmMode(Option)
+	Tab:CreateToggle({
+		Name = "Collect Medal",
+		CurrentValue = Controller and Controller.CollectMedalEnabled or false,
+		Flag = "AutomationCollectMedalToggle",
+		Callback = function(Value)
+			if Controller and typeof(Controller.SetCollectMedalEnabled) == "function" then
+				Controller:SetCollectMedalEnabled(Value)
 			end
 		end,
 	})
@@ -78,62 +76,6 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateSlider({
-		Name = "Gift Farm Burst",
-		Range = { 1, 60 },
-		CurrentValue = Controller and Controller.GiftFarmBurstSize or 16,
-		Increment = 1,
-		ValueName = "Gifts",
-		Flag = "AutomationGiftFarmBurstSlider",
-		Callback = function(Value)
-			if Controller and typeof(Controller.SetGiftFarmBurstSize) == "function" then
-				Controller:SetGiftFarmBurstSize(Value)
-			end
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Collects Per Frame",
-		Range = { 1, 60 },
-		CurrentValue = Controller and Controller.GiftFarmCollectsPerFrame or 8,
-		Increment = 1,
-		ValueName = "Gifts",
-		Flag = "AutomationGiftFarmCollectsPerFrameSlider",
-		Callback = function(Value)
-			if Controller and typeof(Controller.SetGiftFarmCollectsPerFrame) == "function" then
-				Controller:SetGiftFarmCollectsPerFrame(Value)
-			end
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Travel Speed",
-		Range = { 150, 2000 },
-		CurrentValue = Controller and Controller.GiftFarmTravelSpeed or 750,
-		Increment = 50,
-		ValueName = "stud/s",
-		Flag = "AutomationGiftFarmTravelSpeedSlider",
-		Callback = function(Value)
-			if Controller and typeof(Controller.SetGiftFarmTravelSpeed) == "function" then
-				Controller:SetGiftFarmTravelSpeed(Value)
-			end
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Collect Settle",
-		Range = { 0.03, 0.6 },
-		CurrentValue = Controller and Controller.GiftFarmCollectSettle or 0.18,
-		Increment = 0.01,
-		ValueName = "s",
-		Flag = "AutomationGiftFarmCollectSettleSlider",
-		Callback = function(Value)
-			if Controller and typeof(Controller.SetGiftFarmCollectSettle) == "function" then
-				Controller:SetGiftFarmCollectSettle(Value)
-			end
-		end,
-	})
-
 	Tab:CreateToggle({
 		Name = "Adaptive Timing",
 		CurrentValue = Controller and Controller.GiftFarmAdaptiveTiming ~= false,
@@ -141,31 +83,6 @@ return function(Client, Controller)
 		Callback = function(Value)
 			if Controller and typeof(Controller.SetGiftFarmAdaptiveTiming) == "function" then
 				Controller:SetGiftFarmAdaptiveTiming(Value)
-			end
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Golden Spawn Wait",
-		Range = { 0, 10 },
-		CurrentValue = Controller and Controller.GiftFarmGoldenSpawnWait or 4,
-		Increment = 0.5,
-		ValueName = "s",
-		Flag = "AutomationGiftFarmGoldenWaitSlider",
-		Callback = function(Value)
-			if Controller and typeof(Controller.SetGiftFarmGoldenSpawnWait) == "function" then
-				Controller:SetGiftFarmGoldenSpawnWait(Value)
-			end
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "Return After Cluster",
-		CurrentValue = Controller and Controller.GiftFarmReturnAfterCluster ~= false,
-		Flag = "AutomationGiftFarmReturnToggle",
-		Callback = function(Value)
-			if Controller and typeof(Controller.SetGiftFarmReturnAfterCluster) == "function" then
-				Controller:SetGiftFarmReturnAfterCluster(Value)
 			end
 		end,
 	})

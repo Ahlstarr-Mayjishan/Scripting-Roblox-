@@ -48,18 +48,12 @@ local Controller = {
 	Destroyed = false,
 	Initialized = false,
 	GiftFarmEnabled = false,
-	GiftFarmMode = "Golden Priority",
+	CollectMedalEnabled = false,
 	GiftFarmRange = 60,
-	GiftFarmBurstSize = 16,
-	GiftFarmCollectsPerFrame = 8,
-	GiftFarmTravelSpeed = 750,
-	GiftFarmCollectSettle = 0.18,
 	GiftFarmAdaptiveTiming = true,
 	GiftFarmAdaptiveSuccessRate = 1,
-	GiftFarmAdaptiveSettle = 0.18,
 	GiftFarmAdaptiveSpeedScale = 1,
-	GiftFarmGoldenSpawnWait = 4,
-	GiftFarmReturnAfterCluster = true,
+	GiftFarmGoldenComplete = false,
 	GiftFarmReturnToBeaconAfterGolden = true,
 	AltarSelections = {},
 	GiftFarmStatus = "Idle",
@@ -67,6 +61,7 @@ local Controller = {
 	PylonActivatorEnabled = false,
 	PylonActivatorReturnAfter = true,
 	PylonActivatorHolding = false,
+	PylonActivatorComplete = false,
 	PylonActivatorStatus = "Idle",
 	PylonActivatorDetail = "",
 }
@@ -136,15 +131,6 @@ function Controller:SetGiftFarmEnabled(value)
 	return self:update()
 end
 
-function Controller:SetGiftFarmMode(value)
-	local mode = value
-	if typeof(value) == "table" then
-		mode = value[1]
-	end
-	self.GiftFarmMode = mode or "Golden Priority"
-	return self:update()
-end
-
 function Controller:SetGiftFarmRange(value)
 	local range = clampGiftRange(value)
 	self.GiftFarmRange = range
@@ -176,38 +162,8 @@ function Controller:GetGiftFarmRange()
 	return clampGiftRange(self.GiftFarmRange)
 end
 
-function Controller:SetGiftFarmBurstSize(value)
-	self.GiftFarmBurstSize = math.clamp(tonumber(value) or 16, 1, 60)
-	return self:update()
-end
-
-function Controller:SetGiftFarmCollectsPerFrame(value)
-	self.GiftFarmCollectsPerFrame = math.clamp(tonumber(value) or 8, 1, 60)
-	return self:update()
-end
-
-function Controller:SetGiftFarmTravelSpeed(value)
-	self.GiftFarmTravelSpeed = math.clamp(tonumber(value) or 750, 150, 2000)
-	return self:update()
-end
-
-function Controller:SetGiftFarmCollectSettle(value)
-	self.GiftFarmCollectSettle = math.clamp(tonumber(value) or 0.18, 0.03, 0.6)
-	return self:update()
-end
-
 function Controller:SetGiftFarmAdaptiveTiming(value)
 	self.GiftFarmAdaptiveTiming = value == true
-	return self:update()
-end
-
-function Controller:SetGiftFarmGoldenSpawnWait(value)
-	self.GiftFarmGoldenSpawnWait = math.clamp(tonumber(value) or 4, 0, 10)
-	return self:update()
-end
-
-function Controller:SetGiftFarmReturnAfterCluster(value)
-	self.GiftFarmReturnAfterCluster = value == true
 	return self:update()
 end
 
@@ -224,8 +180,18 @@ function Controller:SetAltarSelections(value)
 				table.insert(selections, altarName)
 			end
 		end
+		for altarName, enabled in pairs(value) do
+			if typeof(altarName) == "string" and enabled == true and not table.find(selections, altarName) then
+				table.insert(selections, altarName)
+			end
+		end
 	end
 	self.AltarSelections = selections
+	return self:update()
+end
+
+function Controller:SetCollectMedalEnabled(value)
+	self.CollectMedalEnabled = value == true
 	return self:update()
 end
 

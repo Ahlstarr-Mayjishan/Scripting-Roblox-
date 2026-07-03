@@ -7,6 +7,27 @@ local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local cachedGCH = nil
+local beaconPartStates = nil
+
+local function collectBeaconParts()
+	local beacon = workspace:FindFirstChild("Beacon")
+	if not beacon then
+		return {}
+	end
+
+	if beacon:IsA("BasePart") then
+		return { beacon }
+	end
+
+	local parts = {}
+	for _, descendant in ipairs(beacon:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			table.insert(parts, descendant)
+		end
+	end
+
+	return parts
+end
 
 function Context.getGiftClientHandler()
 	if cachedGCH then
@@ -87,6 +108,50 @@ end
 function Context.isBeaconActive()
 	local beacon = workspace:FindFirstChild("Beacon")
 	return not (beacon and beacon:GetAttribute("Beacon") == false)
+end
+
+function Context.suppressBeaconInteraction()
+	local parts = collectBeaconParts()
+	if #parts == 0 then
+		return false
+	end
+
+	beaconPartStates = beaconPartStates or {}
+	for _, part in ipairs(parts) do
+		if beaconPartStates[part] == nil then
+			beaconPartStates[part] = {
+				CanTouch = part.CanTouch,
+				CanCollide = part.CanCollide,
+				CanQuery = part.CanQuery,
+			}
+		end
+		pcall(function()
+			part.CanTouch = false
+			part.CanCollide = false
+			part.CanQuery = false
+		end)
+	end
+
+	return true
+end
+
+function Context.restoreBeaconInteraction()
+	if not beaconPartStates then
+		return false
+	end
+
+	for part, state in pairs(beaconPartStates) do
+		if part and part.Parent then
+			pcall(function()
+				part.CanTouch = state.CanTouch
+				part.CanCollide = state.CanCollide
+				part.CanQuery = state.CanQuery
+			end)
+		end
+	end
+
+	beaconPartStates = nil
+	return true
 end
 
 function Context.isInRound()
