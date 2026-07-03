@@ -81,11 +81,7 @@ local function returnToBeacon(controller, hrp, reason)
 	end
 
 	beaconReturnDone = true
-	hrp.CFrame = CFrame.new(beacon.Position + Vector3.new(0, 4, 0))
-	pcall(function()
-		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-	end)
+	Context.moveCharacterTo(CFrame.new(beacon.Position + Vector3.new(0, 4, 0)))
 	setStatus(controller, "ReturningToBeacon", reason or "Golden gifts complete")
 	return true
 end
@@ -197,12 +193,23 @@ local function processOnce(controller)
 			while #cluster > burstLimit do
 				table.remove(cluster)
 			end
+			local rawNormal = scanInfo and (tonumber(scanInfo.RawNormal) or 0) or 0
+			local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
+			local shouldHoldForGoldenWait = rawGolden == 0
+				and rawNormal > 0
+				and rawNormal <= #cluster
+				and getGoldenSpawnWait(controller) > 0
 
 			local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
 			local score = planInfo and planInfo.Score
 			local planned = score and (" | plan " .. tostring(score.Golden) .. "/" .. tostring(score.Total)) or ""
 			setStatus(controller, "Collecting", tostring(#cluster) .. " " .. focus .. planned)
-			Collector.collectCluster(controller, hrp, cluster, range)
+			Collector.collectCluster(controller, hrp, cluster, range, {
+				KeepPosition = shouldHoldForGoldenWait,
+			})
+			if shouldHoldForGoldenWait then
+				goldenMissingSince = os.clock()
+			end
 
 			local normalCollected, normalTotal, normalRatio = Progress.getNormalGiftProgress(gch)
 			local goldenText = scanInfo and (" | Golden " .. tostring(scanInfo.Golden or 0)) or ""

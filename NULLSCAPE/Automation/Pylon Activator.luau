@@ -8,6 +8,8 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
+
 local PylonActivator = {}
 
 local TARGET_LEVEL = 35
@@ -105,7 +107,7 @@ local function holdAtRoot(hrp, root)
 		return
 	end
 
-	hrp.CFrame = root.CFrame + ROOT_OFFSET
+	Context.moveCharacterTo(root.CFrame + ROOT_OFFSET)
 	pcall(function()
 		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
@@ -116,7 +118,7 @@ local function restorePosition(controller)
 	if controller and controller.PylonActivatorReturnAfter ~= false and savedCFrame then
 		local hrp = getRootPart()
 		if hrp and hrp.Parent then
-			hrp.CFrame = savedCFrame
+			Context.moveCharacterTo(savedCFrame)
 		end
 	end
 	savedCFrame = nil

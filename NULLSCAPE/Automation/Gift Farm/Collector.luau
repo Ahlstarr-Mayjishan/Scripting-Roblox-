@@ -55,7 +55,7 @@ function Collector.restoreMovement()
 	if restore and restore.Hrp and restore.Hrp.Parent then
 		local hrp = restore.Hrp
 		if restore.ReturnAfter ~= false and restore.CFrame then
-			hrp.CFrame = restore.CFrame
+			Context.moveCharacterTo(restore.CFrame)
 		end
 		hrp.Anchored = false
 		clearVelocity(hrp)
@@ -66,15 +66,16 @@ function Collector.restoreMovement()
 	return false
 end
 
-function Collector.collectCluster(controller, hrp, cluster, range)
+function Collector.collectCluster(controller, hrp, cluster, range, options)
 	if not (hrp and hrp.Parent and cluster and cluster[1]) then
 		return false
 	end
 
+	options = options or {}
 	local oldCFrame = hrp.CFrame
 	local targetCFrame = CFrame.new(cluster[1].pos + Vector3.new(0, 3, 0))
 	local collectedEvent = Context.getCollectedGiftEvent()
-	local returnAfter = controller.GiftFarmReturnAfterCluster ~= false
+	local returnAfter = controller.GiftFarmReturnAfterCluster ~= false and options.KeepPosition ~= true
 
 	activeRestore = {
 		Hrp = hrp,
@@ -84,7 +85,7 @@ function Collector.collectCluster(controller, hrp, cluster, range)
 
 	local ok, err = pcall(function()
 		hrp.Anchored = false
-		hrp.CFrame = targetCFrame
+		Context.moveCharacterTo(targetCFrame)
 		clearVelocity(hrp)
 		RunService.Heartbeat:Wait()
 		task.wait(CLUSTER_SETTLE)

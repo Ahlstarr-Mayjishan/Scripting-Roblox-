@@ -41,6 +41,32 @@ function Context.getRootPart()
 	return character and character:FindFirstChild("HumanoidRootPart")
 end
 
+function Context.moveCharacterTo(cframe)
+	local character = Players.LocalPlayer and Players.LocalPlayer.Character
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not (hrp and hrp.Parent) then
+		return false
+	end
+
+	local moved = false
+	if character and typeof(character.PivotTo) == "function" then
+		moved = pcall(function()
+			character:PivotTo(cframe)
+		end)
+	end
+
+	if not moved then
+		hrp.CFrame = cframe
+	end
+
+	pcall(function()
+		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+	end)
+
+	return true
+end
+
 function Context.getBeaconPart()
 	local beacon = workspace:FindFirstChild("Beacon")
 	if not beacon then
