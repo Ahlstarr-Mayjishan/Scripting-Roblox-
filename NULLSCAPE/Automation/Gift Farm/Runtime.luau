@@ -54,6 +54,9 @@ local function resetRoundState(controller, inRound)
 	if Scanner and typeof(Scanner.reset) == "function" then
 		Scanner.reset()
 	end
+	if Collector and typeof(Collector.resetAdaptive) == "function" then
+		Collector.resetAdaptive(controller)
+	end
 	if Medal and typeof(Medal.reset) == "function" then
 		Medal.reset()
 	end
@@ -119,11 +122,11 @@ local function getGoldenSpawnWait()
 end
 
 local function getBurstLimit(controller, range)
-	local speedScale = tonumber(controller and controller.GiftFarmAdaptiveSpeedScale) or 1
+	local loadScale = tonumber(controller and (controller.GiftFarmAdaptiveLoadScale or controller.GiftFarmAdaptiveSpeedScale)) or 1
 	if controller and controller.GiftFarmAdaptiveTiming == false then
-		speedScale = 1
+		loadScale = 1
 	end
-	return math.clamp(math.floor((tonumber(range) or DEFAULT_RANGE) * 0.35 * speedScale), 8, 30)
+	return math.clamp(math.floor((tonumber(range) or DEFAULT_RANGE) * 0.35 * loadScale), 8, 30)
 end
 
 local function markGoldenComplete(controller)
@@ -313,8 +316,9 @@ local function processOnce(controller)
 			local adaptiveText = ""
 			if controller.GiftFarmAdaptiveTiming ~= false then
 				local accepted = math.floor((tonumber(controller.GiftFarmAdaptiveSuccessRate) or 1) * 100)
-				local speedScale = tonumber(controller.GiftFarmAdaptiveSpeedScale) or 1
-				adaptiveText = string.format(" | Accept %d%% %.0f%%", accepted, speedScale * 100)
+				local loadScale = tonumber(controller.GiftFarmAdaptiveLoadScale or controller.GiftFarmAdaptiveSpeedScale) or 1
+				local validationWait = tonumber(controller.GiftFarmAdaptiveValidationWait) or 0
+				adaptiveText = string.format(" | Accept %d%% Load %.0f%% %.2fs", accepted, loadScale * 100, validationWait)
 			end
 			setStatus(
 				controller,
