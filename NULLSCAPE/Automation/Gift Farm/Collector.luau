@@ -5,10 +5,6 @@ local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.lua
 local RunService = game:GetService("RunService")
 
 local Collector = {}
-local MAX_STEP_DISTANCE = 160
-local BASE_TRAVEL_SPEED = 750
-local MIN_TRAVEL_SPEED = 150
-local MAX_TRAVEL_SPEED = 2000
 local BASE_COLLECTS_PER_FRAME = 12
 local COLLECT_SETTLE = 0.03
 local comboCount = 0
@@ -55,13 +51,6 @@ local function clearVelocity(hrp)
 	end)
 end
 
-local function getTravelSpeed(controller)
-	if isAdaptiveEnabled(controller) then
-		return math.clamp(BASE_TRAVEL_SPEED * adaptiveSpeedScale, MIN_TRAVEL_SPEED, MAX_TRAVEL_SPEED)
-	end
-	return BASE_TRAVEL_SPEED
-end
-
 local function getCollectsPerFrame(controller)
 	if isAdaptiveEnabled(controller) then
 		return math.clamp(math.floor(BASE_COLLECTS_PER_FRAME * adaptiveSpeedScale), 4, 24)
@@ -98,38 +87,13 @@ local function updateAdaptiveTiming(controller, attemptedGifts)
 	end
 end
 
-local function pacedMove(controller, hrp, targetCFrame)
+local function freeTeleport(hrp, targetCFrame)
 	if not (hrp and hrp.Parent) then
 		return false
 	end
 
-	local startPosition = hrp.Position
-	local targetPosition = targetCFrame.Position
-	local delta = targetPosition - startPosition
-	local distance = delta.Magnitude
-	if distance <= 1 then
-		Context.moveCharacterTo(targetCFrame)
-		RunService.Heartbeat:Wait()
-		return true
-	end
-
-	local travelSpeed = getTravelSpeed(controller)
-	local steps = math.max(1, math.ceil(distance / MAX_STEP_DISTANCE))
-	local totalTime = math.clamp(distance / travelSpeed, 0.08, 1.25)
-	local stepWait = math.clamp(totalTime / steps, 0.03, 0.2)
-
-	for step = 1, steps do
-		if not (hrp and hrp.Parent) then
-			return false
-		end
-
-		local alpha = step / steps
-		local position = startPosition:Lerp(targetPosition, alpha)
-		local cframe = targetCFrame - targetCFrame.Position + position
-		Context.moveCharacterTo(cframe)
-		task.wait(stepWait)
-	end
-
+	Context.moveCharacterTo(targetCFrame)
+	RunService.Heartbeat:Wait()
 	return true
 end
 
@@ -166,7 +130,9 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 
 	options = options or {}
 	local oldCFrame = hrp.CFrame
-	local targetCFrame = CFrame.new(cluster[1].pos + Vector3.new(0, 3, 0))
+	local targetPosition = options.TargetPosition or cluster.TargetPosition or cluster[1].pos
+	local collectRange = options.SafeRange or cluster.SafeRange or range
+	local targetCFrame = CFrame.new(targetPosition + Vector3.new(0, 3, 0))
 	local collectedEvent = Context.getCollectedGiftEvent()
 	local returnAfter = options.KeepPosition ~= true
 
@@ -178,7 +144,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 
 	local ok, err = pcall(function()
 		hrp.Anchored = false
-		pacedMove(controller, hrp, targetCFrame)
+		freeTeleport(hrp, targetCFrame)
 		clearVelocity(hrp)
 		RunService.Heartbeat:Wait()
 		task.wait(COLLECT_SETTLE)
@@ -192,7 +158,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 			if item.rawObj
 				and not item.rawObj.Destroyed
 				and not item.rawObj.Collected
-				and (item.pos - currentPos).Magnitude <= range + 1
+				and (item.pos - currentPos).Magnitude <= collectRange + 1
 			then
 				collectGift(item.rawObj, collectedEvent)
 				table.insert(attemptedGifts, item.rawObj)

@@ -2,18 +2,41 @@
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 
+local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local Medal = {}
 
 local ACTION_COOLDOWN = 0.8
 local TOUCH_SETTLE = 0.08
 local lastActionAt = 0
+local statusHandler = nil
 
 local function getCharacter()
-	return game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer.Character
+	return Players.LocalPlayer and Players.LocalPlayer.Character
 end
 
-local function getMedalPart()
-	local medal = workspace:FindFirstChild("Medal")
+local function getStatusHandler()
+	if statusHandler ~= nil then
+		return statusHandler
+	end
+
+	local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+		or ReplicatedStorage:FindFirstChild("ClientModules")
+	local module = clientModules and clientModules:FindFirstChild("StatusEffectHandler")
+	if not module then
+		statusHandler = false
+		return nil
+	end
+
+	local ok, result = pcall(require, module)
+	statusHandler = ok and result or false
+	return statusHandler ~= false and statusHandler or nil
+end
+
+local function getPartFromMedal(medal)
 	if not medal then
 		return nil
 	end
@@ -23,6 +46,53 @@ local function getMedalPart()
 	if medal:IsA("Model") then
 		return medal:FindFirstChild("Handle") or medal:FindFirstChildWhichIsA("BasePart", true)
 	end
+	return medal:FindFirstChild("Handle") or medal:FindFirstChildWhichIsA("BasePart", true)
+end
+
+local function medalHeldByLocalPlayer(medal)
+	local character = getCharacter()
+	if not (medal and character) then
+		return false
+	end
+
+	if medal:IsDescendantOf(character) then
+		return true
+	end
+
+	local holder = medal:FindFirstChild("Holder")
+	if holder and holder:IsA("ObjectValue") then
+		local value = holder.Value
+		return value == character
+			or value == character:FindFirstChild("HumanoidRootPart")
+			or (value and value:IsDescendantOf(character))
+	end
+
+	return false
+end
+
+local function getMedalPart()
+	local medal = workspace:FindFirstChild("Medal")
+	local part = getPartFromMedal(medal)
+	if part and not medalHeldByLocalPlayer(medal) then
+		return part
+	end
+
+	for _, tagged in ipairs(CollectionService:GetTagged("Medal")) do
+		part = getPartFromMedal(tagged)
+		if part and not medalHeldByLocalPlayer(tagged) then
+			return part
+		end
+	end
+
+	for _, descendant in ipairs(workspace:GetDescendants()) do
+		if descendant.Name == "Medal" then
+			part = getPartFromMedal(descendant)
+			if part and not medalHeldByLocalPlayer(descendant) then
+				return part
+			end
+		end
+	end
+
 	return nil
 end
 
@@ -39,7 +109,31 @@ end
 
 local function carriesMedal()
 	local character = getCharacter()
-	return character and character:FindFirstChild("Medal") ~= nil
+	if character and character:FindFirstChild("Medal") ~= nil then
+		return true
+	end
+
+	local handler = getStatusHandler()
+	if handler and typeof(handler.HasStatus) == "function" then
+		local ok, result = pcall(function()
+			return handler.HasStatus("Medal")
+		end)
+		if ok and result == true then
+			return true
+		end
+	end
+
+	local medal = workspace:FindFirstChild("Medal")
+	if medalHeldByLocalPlayer(medal) then
+		return true
+	end
+	for _, tagged in ipairs(CollectionService:GetTagged("Medal")) do
+		if medalHeldByLocalPlayer(tagged) then
+			return true
+		end
+	end
+
+	return false
 end
 
 function Medal.tryStep(controller, hrp)

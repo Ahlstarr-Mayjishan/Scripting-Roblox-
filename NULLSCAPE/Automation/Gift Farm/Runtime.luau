@@ -301,6 +301,8 @@ local function processOnce(controller)
 			setStatus(controller, "Collecting", tostring(#cluster) .. " " .. focus .. planned)
 			Collector.collectCluster(controller, hrp, cluster, range, {
 				KeepPosition = shouldHoldForGoldenWait,
+				SafeRange = planInfo and planInfo.SafeRange,
+				TargetPosition = planInfo and planInfo.TargetPosition,
 			})
 			if shouldHoldForGoldenWait then
 				goldenMissingSince = os.clock()
