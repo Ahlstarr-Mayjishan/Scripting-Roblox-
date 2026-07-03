@@ -100,9 +100,21 @@ Logic.Config = {
     },
     ["Celestial"] = {
         ControllerFlag = "CelestialImmune",
-        Remotes = { "Died" },
-        Keywords = { "Celestial" },
-        LegitKeywords = { "Celestial" }
+        Remotes = { "ClientEvent", "Died" },
+        Keywords = { "Kill", "Celestial" },
+        LegitKeywords = { "Kill", "Celestial" }
+    },
+    ["RealityBreak"] = {
+        ControllerFlag = "CelestialImmune",
+        Remotes = { "ClientEvent" },
+        Keywords = { "Kill" },
+        LegitKeywords = { "Kill" }
+    },
+    ["RealityBreaker"] = {
+        ControllerFlag = "CelestialImmune",
+        Remotes = { "ClientEvent" },
+        Keywords = { "Kill" },
+        LegitKeywords = { "Kill" }
     },
     ["Scrapmaw"] = {
         ControllerFlag = "ScrapmawImmune",
@@ -224,11 +236,20 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         return true
     end
 
-    if remoteName == "Died"
-        and (args[1] == "RealityBreak" or args[1] == "RealityBreaker")
-        and (controller.nilEnemyImmune == true or controller.nilMirageImmune == true)
+    if remoteName == "ClientEvent"
+        and args[1] == "Kill"
+        and controller.CelestialImmune == true
     then
-        return true
+        local current = remote.Parent
+        local depth = 0
+        while current and current ~= workspace and current ~= game and depth < 50 do
+            depth = depth + 1
+            local lowerName = string.lower(tostring(current.Name or ""))
+            if string.find(lowerName, "realitybreak", 1, true) or string.find(lowerName, "realitybreaker", 1, true) then
+                return true
+            end
+            current = current.Parent
+        end
     end
 
     if not Logic.TargetRemotes[remoteName] then

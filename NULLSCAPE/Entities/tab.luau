@@ -66,7 +66,7 @@ return function(Client, Controller)
 		table.insert(currentBellOptions, "Immunity")
 	end
 	if getFlag(Controller, "BellCurseImmune") then
-		table.insert(currentBellOptions, "Knockback (Curse)")
+		table.insert(currentBellOptions, "Mighty Gong")
 	end
 	if getFlag(Controller, "BellBlindnessImmune") then
 		table.insert(currentBellOptions, "Ring screen blindness")
@@ -77,10 +77,10 @@ return function(Client, Controller)
 
 	Tab:CreateDropdown({
 		Name = "Bell Hack Mode",
-		Options = { "Immunity", "Mighty Gong", "Ring screen blindness", "Overtuned" },
+		Options = { "Immunity", "Mighty Gong", "Ring screen blindness", "Overtuned kill" },
 		CurrentOption = currentBellOptions,
 		MultipleOptions = true,
-		Flag = "BellHackDropdown",
+		Flag = "BellHackDropdownV2",
 		Callback = function(Options)
 			local hasImmunity = false
 			local hasCurseImmune = false
@@ -89,7 +89,7 @@ return function(Client, Controller)
 			for _, opt in ipairs(Options) do
 				if opt == "Immunity" then
 					hasImmunity = true
-				elseif opt == "Knockback (Curse)" then
+				elseif opt == "Mighty Gong" or opt == "Knockback (Curse)" then
 					hasCurseImmune = true
 				elseif opt == "Ring screen blindness" then
 					hasBlindnessImmune = true
@@ -474,7 +474,7 @@ return function(Client, Controller)
 		Options = { "Fire", "Panic", "Insanity", "Overtuned", "Bell Knockback" },
 		CurrentOption = (StatusImmunity and StatusImmunity.GetActiveImmunities()) or {},
 		MultipleOptions = true,
-		Flag = "StatusImmunityDropdown",
+		Flag = "StatusImmunityDropdownV2",
 		Callback = function(Options)
 			if StatusImmunity and typeof(StatusImmunity.SetActiveImmunities) == "function" then
 				StatusImmunity.SetActiveImmunities(Options)
