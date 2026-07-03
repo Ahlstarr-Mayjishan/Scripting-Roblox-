@@ -3,6 +3,7 @@
 local Planner = {}
 
 local RANGE_BUFFER = 1.5
+local MAX_ROUTE_POINTS = 8
 
 local function distanceSq(a, b)
 	local offset = a - b
@@ -149,6 +150,45 @@ function Planner.pickBestCluster(candidates, range, origin)
 		SafeRange = bestCluster and bestCluster.SafeRange or getSafeRange(range),
 		Score = bestScore,
 	}
+end
+
+local function removeClusterItems(remaining, cluster)
+	local covered = {}
+	for _, item in ipairs(cluster) do
+		covered[item] = true
+	end
+
+	local nextRemaining = {}
+	for _, item in ipairs(remaining) do
+		if not covered[item] then
+			table.insert(nextRemaining, item)
+		end
+	end
+
+	return nextRemaining
+end
+
+function Planner.planRoute(candidates, range, origin)
+	local route = {}
+	local remaining = table.clone(candidates or {})
+	local currentOrigin = origin
+
+	while #remaining > 0 and #route < MAX_ROUTE_POINTS do
+		local cluster, planInfo = Planner.pickBestCluster(remaining, range, currentOrigin)
+		if not cluster or #cluster == 0 then
+			break
+		end
+
+		table.insert(route, {
+			Cluster = cluster,
+			Info = planInfo,
+		})
+
+		remaining = removeClusterItems(remaining, cluster)
+		currentOrigin = planInfo and planInfo.TargetPosition or currentOrigin
+	end
+
+	return route, remaining
 end
 
 return Planner

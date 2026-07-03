@@ -278,23 +278,51 @@ local function processOnce(controller)
 			else
 				range = math.clamp(tonumber(controller.GiftFarmRange) or DEFAULT_RANGE, 5, DEFAULT_RANGE)
 			end
-			local cluster, planInfo = ClusterPlanner.pickBestCluster(candidates, range, hrp.Position)
+			local route = nil
+			if ClusterPlanner and typeof(ClusterPlanner.planRoute) == "function" then
+				route = ClusterPlanner.planRoute(candidates, range, hrp.Position)
+			end
+			if not route or #route == 0 then
+				local cluster, planInfo = ClusterPlanner.pickBestCluster(candidates, range, hrp.Position)
+				route = {
+					{
+						Cluster = cluster,
+						Info = planInfo,
+					},
+				}
+			end
+
+			local firstStep = route[1] or {}
+			local cluster = firstStep.Cluster or {}
+			local totalPlanned = 0
+			for _, step in ipairs(route) do
+				totalPlanned += #(step.Cluster or {})
+			end
+
 			local rawNormal = scanInfo and (tonumber(scanInfo.RawNormal) or 0) or 0
 			local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
 			local shouldHoldForGoldenWait = rawGolden == 0
 				and rawNormal > 0
-				and rawNormal <= #cluster
+				and rawNormal <= totalPlanned
 				and getGoldenSpawnWait() > 0
 
 			local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
-			local score = planInfo and planInfo.Score
-			local planned = score and (" | plan " .. tostring(score.Golden) .. "/" .. tostring(score.Total)) or ""
-			setStatus(controller, "Collecting", tostring(#cluster) .. " " .. focus .. planned)
-			Collector.collectCluster(controller, hrp, cluster, range, {
-				KeepPosition = true,
-				SafeRange = planInfo and planInfo.SafeRange,
-				TargetPosition = planInfo and planInfo.TargetPosition,
-			})
+			for index, step in ipairs(route) do
+				cluster = step.Cluster or {}
+				local planInfo = step.Info
+				local score = planInfo and planInfo.Score
+				local planned = score and (" | plan " .. tostring(score.Golden) .. "/" .. tostring(score.Total)) or ""
+				setStatus(
+					controller,
+					"Collecting",
+					string.format("%d/%d route | %d/%d %s", index, #route, #cluster, totalPlanned, focus) .. planned
+				)
+				Collector.collectCluster(controller, hrp, cluster, range, {
+					KeepPosition = true,
+					SafeRange = planInfo and planInfo.SafeRange,
+					TargetPosition = planInfo and planInfo.TargetPosition,
+				})
+			end
 			if shouldHoldForGoldenWait then
 				goldenMissingSince = os.clock()
 			end
