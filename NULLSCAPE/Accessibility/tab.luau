@@ -17,6 +17,7 @@ local DEFAULTS = {
 	GrappleAssistEnabled = false,
 	GrappleAssistStrength = 1,
 	GrappleAssistCaptureAngle = 45,
+	GrappleAssistManualAnchorAngle = 18,
 	GrappleAssistRange = 500,
 	GrappleAssistConfidenceGateEnabled = true,
 	GrappleAssistMinConfidenceScore = -35,
@@ -26,11 +27,11 @@ local DEFAULTS = {
 	GrappleAssistSpecialPointPriority = true,
 	GrappleAssistSecondaryCastEnabled = false,
 	GrappleAssistSecondaryCastKeybind = "Q",
-	GrappleAnchorPriorityGrapplePoint = 900,
-	GrappleAnchorPriorityJumpPad = 1000,
-	GrappleAnchorPriorityTriaOrb = 850,
-	GrappleAnchorPriorityBell = 800,
-	GrappleAssistTerrainPriority = 100,
+	GrappleAnchorPriorityGrapplePoint = 700,
+	GrappleAnchorPriorityJumpPad = 650,
+	GrappleAnchorPriorityTriaOrb = 620,
+	GrappleAnchorPriorityBell = 550,
+	GrappleAssistTerrainPriority = 140,
 	GrappleVoidProtectionEnabled = false,
 	GrappleVoidProtectionHeight = 24,
 	GrappleVoidProtectionFallSpeed = 85,
@@ -343,6 +344,19 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateSlider({
+		Name = "Manual Anchor Snap Angle",
+		Info = "How close your aim must be before manual casts can snap to JumpPad, Bell, GrapplePoint, TriaOrb, or rail anchors.",
+		Range = { 4, 45 },
+		Increment = 1,
+		Suffix = " deg",
+		CurrentValue = Controller.GrappleAssistManualAnchorAngle or 18,
+		Flag = "GrappleAssistManualAnchorAngleSlider",
+		Callback = function(Value)
+			Controller:SetGrappleAssistManualAnchorAngle(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
 		Name = "Grapple Assist Range",
 		Info = "Maximum distance in studs for assisted fallback targets.",
 		Range = { 30, 500 },
@@ -427,7 +441,7 @@ return function(Client, Controller)
 		Range = { 0, 1000 },
 		Increment = 25,
 		Suffix = " pts",
-		CurrentValue = Controller.GrappleAnchorPriorityGrapplePoint or 900,
+		CurrentValue = Controller.GrappleAnchorPriorityGrapplePoint or 700,
 		Flag = "GrappleAnchorPriorityGrapplePointSlider",
 		Callback = function(Value)
 			Controller:SetGrappleAnchorPriorityGrapplePoint(Value)
@@ -440,7 +454,7 @@ return function(Client, Controller)
 		Range = { 0, 1000 },
 		Increment = 25,
 		Suffix = " pts",
-		CurrentValue = Controller.GrappleAnchorPriorityJumpPad or 1000,
+		CurrentValue = Controller.GrappleAnchorPriorityJumpPad or 650,
 		Flag = "GrappleAnchorPriorityJumpPadSlider",
 		Callback = function(Value)
 			Controller:SetGrappleAnchorPriorityJumpPad(Value)
@@ -453,7 +467,7 @@ return function(Client, Controller)
 		Range = { 0, 1000 },
 		Increment = 25,
 		Suffix = " pts",
-		CurrentValue = Controller.GrappleAnchorPriorityTriaOrb or 850,
+		CurrentValue = Controller.GrappleAnchorPriorityTriaOrb or 620,
 		Flag = "GrappleAnchorPriorityTriaOrbSlider",
 		Callback = function(Value)
 			Controller:SetGrappleAnchorPriorityTriaOrb(Value)
@@ -466,7 +480,7 @@ return function(Client, Controller)
 		Range = { 0, 1000 },
 		Increment = 25,
 		Suffix = " pts",
-		CurrentValue = Controller.GrappleAnchorPriorityBell or 800,
+		CurrentValue = Controller.GrappleAnchorPriorityBell or 550,
 		Flag = "GrappleAnchorPriorityBellSlider",
 		Callback = function(Value)
 			Controller:SetGrappleAnchorPriorityBell(Value)
@@ -479,7 +493,7 @@ return function(Client, Controller)
 		Range = { -50, 300 },
 		Increment = 10,
 		Suffix = " pts",
-		CurrentValue = Controller.GrappleAssistTerrainPriority or 100,
+		CurrentValue = Controller.GrappleAssistTerrainPriority or 140,
 		Flag = "GrappleAssistTerrainPrioritySlider",
 		Callback = function(Value)
 			Controller:SetGrappleAssistTerrainPriority(Value)

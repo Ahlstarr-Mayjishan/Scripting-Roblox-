@@ -11,9 +11,9 @@ local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler as
 local Profile = {}
 
 local DEFAULTS = {
-	TerrainPriority = 100,
+	TerrainPriority = 140,
 	RailPriority = 500,
-	SpecialPriority = 900,
+	SpecialPriority = 700,
 	VoidRescueSpecialBoost = 18,
 	ReelSaverTerrainBoost = 22,
 	RailCaptureBoost = 38,

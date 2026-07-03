@@ -27,6 +27,7 @@ local MAX_CACHED_TERRAIN_CANDIDATES = 260
 local CANDIDATE_CACHE_TTL = 3
 local DEFAULT_RANGE = 500
 local DEFAULT_CAPTURE_ANGLE = 45
+local DEFAULT_MANUAL_ANCHOR_ANGLE = 18
 local DEFAULT_VOID_PROTECTION_HEIGHT = 24
 local DEFAULT_VOID_PROTECTION_FALL_SPEED = 85
 local MAX_FALLBACK_AXIS = 160
@@ -69,6 +70,14 @@ end
 
 local function getCaptureAngle(controller)
 	return math.clamp(tonumber(controller and controller.GrappleAssistCaptureAngle) or DEFAULT_CAPTURE_ANGLE, 1, 45)
+end
+
+local function getManualAnchorAngle(controller)
+	return math.clamp(
+		tonumber(controller and controller.GrappleAssistManualAnchorAngle) or DEFAULT_MANUAL_ANCHOR_ANGLE,
+		4,
+		45
+	)
 end
 
 local function getVoidY()
@@ -409,7 +418,7 @@ local function scoreOptimalHit(hit, part, origin, distance, dot, controller, int
 		elseif part.Name == "_RailPart" then
 			score += 500
 		else
-			score += tonumber(controller and controller.GrappleAssistTerrainPriority) or 100
+			score += tonumber(controller and controller.GrappleAssistTerrainPriority) or 140
 		end
 	end
 
@@ -450,8 +459,20 @@ local function getIntent(grapple, controller, aimDirection, context)
 	return fallbackIntent
 end
 
-local function getOptimalMinDot(part, controller)
+local function isManualIntent(intent)
+	return intent and intent.PilotMode == "Manual"
+end
+
+local function isPriorityAnchor(part, specialName)
+	return specialName ~= nil or part.Name == "_RailPart"
+end
+
+local function getOptimalMinDot(part, controller, intent)
 	local specialName = getSpecialTargetName(part)
+	if isManualIntent(intent) and isPriorityAnchor(part, specialName) then
+		return math.cos(math.rad(getManualAnchorAngle(controller)))
+	end
+
 	if specialName then
 		local captureAngle = SpecialAnchors and SpecialAnchors.getCaptureAngle(specialName) or 70
 		return math.cos(math.rad(captureAngle))
@@ -489,7 +510,7 @@ function Targeting.findOptimalHit(grapple, controller, context)
 			local direction = offset.Unit
 			local dot = aimDirection:Dot(direction)
 
-			if dot >= getOptimalMinDot(part, controller) then
+			if dot >= getOptimalMinDot(part, controller, intent) then
 				local hit = Workspace:Raycast(origin, direction * (distance + HIT_OVERSHOOT), grapple.grappleParams)
 				local specialName = getSpecialTargetName(part)
 				local acceptedByIntent = not IntentTargetGate

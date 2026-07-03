@@ -9,23 +9,23 @@ local SpecialAnchors = {}
 local DEFINITIONS = {
 	JumpPad = {
 		Field = "GrappleAnchorPriorityJumpPad",
-		Priority = 1000,
+		Priority = 650,
 		CaptureAngle = 82,
 		Tags = { "JumpPad" },
 	},
 	GrapplePoint = {
 		Field = "GrappleAnchorPriorityGrapplePoint",
-		Priority = 900,
+		Priority = 700,
 		CaptureAngle = 70,
 	},
 	TriaOrb = {
 		Field = "GrappleAnchorPriorityTriaOrb",
-		Priority = 850,
+		Priority = 620,
 		CaptureAngle = 70,
 	},
 	Bell = {
 		Field = "GrappleAnchorPriorityBell",
-		Priority = 800,
+		Priority = 550,
 		CaptureAngle = 70,
 	},
 }

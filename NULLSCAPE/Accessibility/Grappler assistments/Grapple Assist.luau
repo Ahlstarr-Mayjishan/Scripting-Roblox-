@@ -16,7 +16,7 @@ local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler ass
 local FailFeedback = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Fail Feedback Loop.luau")
 local DeferredAim = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Deferred Aim Cast.luau")
 
-local HOOK_VERSION = 9
+local HOOK_VERSION = 10
 
 local Logic = {
 	Controller = nil,
@@ -132,8 +132,9 @@ local function installCastHook(grappleModule, globals)
 
 		if isEnabled() then
 			local controller = getController()
+			local manualCast = (self and self.specialHeld == true) or forceRefresh ~= true
 			local fallbackHit, fallbackDirection
-			if Targeting and typeof(Targeting.fallbackCast) == "function" then
+			if manualCast and Targeting and typeof(Targeting.fallbackCast) == "function" then
 				fallbackHit, fallbackDirection = Targeting.fallbackCast(self, controller)
 				if fallbackHit then
 					if DeferredAim and typeof(DeferredAim.reset) == "function" then
@@ -145,7 +146,9 @@ local function installCastHook(grappleModule, globals)
 				end
 			end
 
-			local assistedHit = Targeting.findOptimalHit(self, controller)
+			local assistedHit = Targeting.findOptimalHit(self, controller, {
+				ManualCast = manualCast,
+			})
 			if assistedHit then
 				if FailFeedback and typeof(FailFeedback.noteAssistCast) == "function" then
 					pcall(function()
@@ -155,11 +158,11 @@ local function installCastHook(grappleModule, globals)
 				return assistedHit
 			end
 
-			if fallbackDirection then
+			if manualCast and fallbackDirection then
 				return nil, fallbackDirection
 			end
 
-			if DeferredAim and typeof(DeferredAim.note) == "function" then
+			if manualCast and DeferredAim and typeof(DeferredAim.note) == "function" then
 				pcall(function()
 					DeferredAim.note(self, controller)
 				end)

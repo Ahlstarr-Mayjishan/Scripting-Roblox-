@@ -27,6 +27,10 @@ function PilotState.resolve(grapple, intent, context)
 		return context.PilotMode
 	end
 
+	if context and context.ManualCast == true then
+		return "Manual"
+	end
+
 	if intent and intent.Name == "VoidRescue" then
 		return "Emergency"
 	end
