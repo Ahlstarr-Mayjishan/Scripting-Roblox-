@@ -4,6 +4,7 @@ local Planner = {}
 
 local RANGE_BUFFER = 1.5
 local MAX_ROUTE_POINTS = 8
+local EDGE_PENALTY_RATIO = 0.92
 
 local function distanceSq(a, b)
 	local offset = a - b
@@ -14,11 +15,18 @@ local function getSafeRange(range)
 	return math.max(5, (tonumber(range) or 60) - RANGE_BUFFER)
 end
 
-local function scoreCluster(cluster, targetPosition, seed, origin)
+local function scoreCluster(cluster, targetPosition, seed, origin, range)
 	local golden = 0
+	local edgePenalty = 0
+	local rangeSq = range and range * range or nil
+	local edgeSq = range and (range * EDGE_PENALTY_RATIO) ^ 2 or nil
+
 	for _, item in ipairs(cluster) do
 		if item.golden then
 			golden += 1
+		end
+		if edgeSq and rangeSq and targetPosition and distanceSq(item.pos, targetPosition) >= edgeSq then
+			edgePenalty += 1
 		end
 	end
 
@@ -26,6 +34,7 @@ local function scoreCluster(cluster, targetPosition, seed, origin)
 	return {
 		Golden = golden,
 		Total = #cluster,
+		EdgePenalty = edgePenalty,
 		OriginDistance = originDistance,
 		SeedId = tostring(seed.id or ""),
 	}
@@ -40,6 +49,9 @@ local function isBetterScore(score, bestScore)
 	end
 	if score.Total ~= bestScore.Total then
 		return score.Total > bestScore.Total
+	end
+	if score.EdgePenalty ~= bestScore.EdgePenalty then
+		return score.EdgePenalty < bestScore.EdgePenalty
 	end
 	if score.OriginDistance ~= bestScore.OriginDistance then
 		return score.OriginDistance < bestScore.OriginDistance
@@ -77,6 +89,33 @@ local function getWeightedCenter(cluster)
 	return weighted / totalWeight
 end
 
+local function addCenter(centers, position)
+	if typeof(position) ~= "Vector3" then
+		return
+	end
+
+	for _, existing in ipairs(centers) do
+		if distanceSq(existing, position) <= 0.25 then
+			return
+		end
+	end
+
+	table.insert(centers, position)
+end
+
+local function addPairCenters(centers, seedCluster, range)
+	local rangeSq = range * range
+	for index, a in ipairs(seedCluster) do
+		for nextIndex = index + 1, #seedCluster do
+			local b = seedCluster[nextIndex]
+			local distSq = distanceSq(a.pos, b.pos)
+			if distSq <= rangeSq * 4 then
+				addCenter(centers, (a.pos + b.pos) * 0.5)
+			end
+		end
+	end
+end
+
 local function sortCluster(cluster, targetPosition)
 	table.sort(cluster, function(a, b)
 		if a.golden ~= b.golden then
@@ -100,11 +139,12 @@ function Planner.buildCluster(candidates, seed, range)
 	local weightedCenter = getWeightedCenter(seedCluster)
 
 	if weightedCenter then
-		table.insert(centers, weightedCenter)
+		addCenter(centers, weightedCenter)
 	end
 	for _, item in ipairs(seedCluster) do
-		table.insert(centers, item.pos)
+		addCenter(centers, item.pos)
 	end
+	addPairCenters(centers, seedCluster, safeRange)
 
 	local bestCluster = nil
 	local bestPosition = seed.pos
@@ -112,7 +152,7 @@ function Planner.buildCluster(candidates, seed, range)
 
 	for _, position in ipairs(centers) do
 		local cluster = buildAroundPosition(candidates, position, safeRange)
-		local score = scoreCluster(cluster, position, seed)
+		local score = scoreCluster(cluster, position, seed, nil, safeRange)
 		if isBetterScore(score, bestScore) then
 			bestCluster = cluster
 			bestPosition = position
@@ -136,7 +176,7 @@ function Planner.pickBestCluster(candidates, range, origin)
 	for _, seed in ipairs(candidates) do
 		local cluster = Planner.buildCluster(candidates, seed, range)
 		local targetPosition = cluster.TargetPosition or seed.pos
-		local score = scoreCluster(cluster, targetPosition, seed, origin)
+		local score = scoreCluster(cluster, targetPosition, seed, origin, cluster.SafeRange or getSafeRange(range))
 		if isBetterScore(score, bestScore) then
 			bestCluster = cluster
 			bestSeed = seed
