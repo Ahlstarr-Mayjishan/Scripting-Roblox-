@@ -170,6 +170,21 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateSection("Altars")
+
+	Tab:CreateDropdown({
+		Name = "Altar Selections",
+		Options = { "Passage", "Purgatory", "Chance", "Protection", "Chaos", "Echo", "Purification" },
+		CurrentOption = Controller and Controller.AltarSelections or {},
+		MultipleOptions = true,
+		Flag = "AutomationAltarSelectionsDropdown",
+		Callback = function(Options)
+			if Controller and typeof(Controller.SetAltarSelections) == "function" then
+				Controller:SetAltarSelections(Options)
+			end
+		end,
+	})
+
 	Tab:CreateSection("Pylons")
 
 	Tab:CreateToggle({

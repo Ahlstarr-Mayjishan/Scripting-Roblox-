@@ -124,7 +124,7 @@ return function(Client, Controller)
 		CurrentKeybind = Controller.CollectMedalKeybind or "V",
 		HoldToTrigger = false,
 		Flag = "CollectMedalKeybind",
-		Callback = function(Keybind)
+		Callback = function(_Keybind)
 			Controller:TriggerMedalAction()
 		end,
 	})

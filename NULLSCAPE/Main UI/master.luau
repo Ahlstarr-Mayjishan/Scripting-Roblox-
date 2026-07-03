@@ -222,6 +222,7 @@ pcall(function()
 			AutomationGiftFarmGoldenWaitSlider = 4,
 			AutomationGiftFarmReturnToggle = true,
 			AutomationGiftFarmReturnBeaconToggle = true,
+			AutomationAltarSelectionsDropdown = {},
 			AutomationPylonActivatorToggle = false,
 			AutomationPylonActivatorReturnToggle = true,
 		}
@@ -261,7 +262,6 @@ pcall(function()
 			currentSettings.ICBMHackDropdown = { "Immunity" }
 			updated = true
 		end
-
 		for k, v in pairs(defaultSettings) do
 			local currentValue = currentSettings[k]
 			if currentValue == nil or type(currentValue) ~= type(v) then

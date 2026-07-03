@@ -57,6 +57,7 @@ local Controller = {
 	GiftFarmGoldenSpawnWait = 4,
 	GiftFarmReturnAfterCluster = true,
 	GiftFarmReturnToBeaconAfterGolden = true,
+	AltarSelections = {},
 	GiftFarmStatus = "Idle",
 	GiftFarmDetail = "",
 	PylonActivatorEnabled = false,
@@ -203,6 +204,19 @@ end
 
 function Controller:SetGiftFarmReturnToBeaconAfterGolden(value)
 	self.GiftFarmReturnToBeaconAfterGolden = value == true
+	return self:update()
+end
+
+function Controller:SetAltarSelections(value)
+	local selections = {}
+	if typeof(value) == "table" then
+		for _, altarName in ipairs(value) do
+			if not table.find(selections, altarName) then
+				table.insert(selections, altarName)
+			end
+		end
+	end
+	self.AltarSelections = selections
 	return self:update()
 end
 
