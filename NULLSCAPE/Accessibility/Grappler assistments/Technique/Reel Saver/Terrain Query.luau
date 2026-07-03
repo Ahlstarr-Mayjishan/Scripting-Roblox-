@@ -155,7 +155,31 @@ local function scoreCandidate(hitResult, floorHit, direction, rootPart)
 	return heightGain * 4 + facingBonus - distance
 end
 
-function Probe.find(grapple, controller)
+local function collectDirections(rootPart, aimDirection)
+	local look = horizontal(aimDirection or rootPart.CFrame.LookVector)
+	local bodyLook = horizontal(rootPart.CFrame.LookVector)
+	local right = horizontal(rootPart.CFrame.RightVector)
+	local directions = {}
+
+	local function insertDirection(direction)
+		for _, existing in ipairs(directions) do
+			if existing:Dot(direction) > 0.96 then
+				return
+			end
+		end
+		table.insert(directions, direction)
+	end
+
+	insertDirection(look)
+	insertDirection(bodyLook)
+	insertDirection(right)
+	insertDirection(-right)
+	insertDirection(-bodyLook)
+
+	return directions
+end
+
+function Probe.find(grapple, controller, aimDirection)
 	local rootPart = grapple and grapple.RootPart
 	if not rootPart then
 		return nil
@@ -167,12 +191,10 @@ function Probe.find(grapple, controller)
 	local sideRange = getNumber(controller.GrappleReelSaverSideRange, DEFAULT_SIDE_RANGE, 8, 60)
 	local minHeight = getNumber(controller.GrappleReelSaverMinHeight, DEFAULT_MIN_HEIGHT, 3, 18)
 	local maxHeight = getNumber(controller.GrappleReelSaverMaxHeight, DEFAULT_MAX_HEIGHT, minHeight + 1, 28)
-	local look = horizontal(rootPart.CFrame.LookVector)
-	local right = horizontal(rootPart.CFrame.RightVector)
 
 	local best = nil
 	local bestScore = -math.huge
-	for _, direction in ipairs({ look, right, -right, -look }) do
+	for _, direction in ipairs(collectDirections(rootPart, aimDirection)) do
 		for height = minHeight, maxHeight, 2 do
 			local origin = rootPart.Position + Vector3.new(0, height, 0)
 			local hit = Workspace:Raycast(origin, direction * sideRange, params)

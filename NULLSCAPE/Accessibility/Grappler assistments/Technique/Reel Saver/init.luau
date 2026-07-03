@@ -192,13 +192,29 @@ function Logic.step(grapple, _dt, controller)
 	return false
 end
 
-function Logic.trigger(grapple, controller)
+function Logic.trigger(grapple, controller, targeting)
 	local now = time()
 	if not canStart(grapple, controller, now) then
 		return false
 	end
 
-	local target = Probe.find(grapple, controller)
+	local aimDirection = targeting
+			and typeof(targeting.getAimDirection) == "function"
+			and targeting.getAimDirection(grapple)
+		or nil
+	local target = Probe.find(grapple, controller, aimDirection)
+	if not (target and target.Hit) and targeting and typeof(targeting.findBestAssistHit) == "function" then
+		local hit = targeting.findBestAssistHit(grapple, controller, {
+			Technique = "ReelSaver",
+			ManualCast = true,
+		})
+		if hit then
+			target = {
+				Hit = hit,
+			}
+		end
+	end
+
 	return castToTarget(grapple, controller, target, now)
 end
 

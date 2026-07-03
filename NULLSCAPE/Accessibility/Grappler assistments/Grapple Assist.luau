@@ -25,6 +25,7 @@ local Logic = {
 	WrappedStep = nil,
 	OriginalCast = nil,
 	OriginalStep = nil,
+	PendingReelSaverUntil = nil,
 	Enabled = false,
 }
 
@@ -205,6 +206,7 @@ local function installStepHook(grappleModule, globals)
 		end
 
 		local results = packValues(originalStep(self, dt, ...))
+		local controller = getController()
 
 		if BellContact and typeof(BellContact.afterStep) == "function" then
 			pcall(function()
@@ -220,13 +222,29 @@ local function installStepHook(grappleModule, globals)
 
 		if ReelSaver and typeof(ReelSaver.step) == "function" then
 			pcall(function()
-				ReelSaver.step(self, dt, getController())
+				ReelSaver.step(self, dt, controller)
 			end)
+		end
+
+		if
+			Logic.PendingReelSaverUntil
+			and time() <= Logic.PendingReelSaverUntil
+			and ReelSaver
+			and typeof(ReelSaver.trigger) == "function"
+		then
+			local success, triggered = pcall(function()
+				return ReelSaver.trigger(self, controller, Targeting)
+			end)
+			if success and triggered then
+				Logic.PendingReelSaverUntil = nil
+			end
+		elseif Logic.PendingReelSaverUntil and time() > Logic.PendingReelSaverUntil then
+			Logic.PendingReelSaverUntil = nil
 		end
 
 		if DeferredAim and typeof(DeferredAim.step) == "function" then
 			pcall(function()
-				DeferredAim.step(self, getController())
+				DeferredAim.step(self, controller)
 			end)
 		end
 
@@ -296,7 +314,16 @@ function Logic.triggerReelSaver(controller)
 		return false
 	end
 
-	return ReelSaver.trigger(Logic.LastGrapple, getController())
+	if not Logic.LastGrapple then
+		Logic.PendingReelSaverUntil = time() + 1.2
+		return true
+	end
+
+	local triggered = ReelSaver.trigger(Logic.LastGrapple, getController(), Targeting)
+	if not triggered then
+		Logic.PendingReelSaverUntil = time() + 0.35
+	end
+	return triggered
 end
 
 function Logic.disable()
@@ -331,6 +358,7 @@ function Logic.disable()
 	Logic.WrappedStep = nil
 	Logic.OriginalCast = nil
 	Logic.OriginalStep = nil
+	Logic.PendingReelSaverUntil = nil
 	Logic.Enabled = false
 
 	if VoidRescue and typeof(VoidRescue.reset) == "function" then

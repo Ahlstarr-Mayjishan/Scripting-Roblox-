@@ -59,7 +59,7 @@ function UpgradeGate.has(movement, upgradeName)
 		return movement:HasUpgrade(nativeName)
 	end)
 
-	return success and enabled == true, nativeName, stack
+	return success and (enabled == true or (tonumber(enabled) or 0) > 0), nativeName, stack
 end
 
 function UpgradeGate.hasAll(movement, upgradeNames)

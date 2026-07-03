@@ -56,7 +56,7 @@ local Controller = {
 	GrappleAssistEnabled = false,
 	GrappleAssistStrength = 1,
 	GrappleAssistCaptureAngle = 45,
-	GrappleAssistManualAnchorAngle = 18,
+	GrappleAssistManualAnchorAngle = 24,
 	GrappleAssistRange = 500,
 	GrappleAssistConfidenceGateEnabled = true,
 	GrappleAssistMinConfidenceScore = -35,
@@ -64,6 +64,7 @@ local Controller = {
 	GrappleAssistBiomeTuningEnabled = true,
 	GrappleAssistFailFeedbackEnabled = true,
 	GrappleAssistSpecialPointPriority = true,
+	GrappleAnchorTargetingStyle = "Balanced",
 	GrappleAssistSecondaryCastEnabled = false,
 	GrappleAssistSecondaryCastKeybind = "Q",
 	GrappleAnchorPriorityGrapplePoint = 700,
@@ -101,6 +102,41 @@ local Controller = {
 	PermanentConnections = {},
 	RespawnRefreshToken = 0,
 	LastReapplyAt = 0,
+}
+
+local ANCHOR_TARGETING_STYLES = {
+	["Manual Control"] = {
+		ManualAngle = 18,
+		GrapplePoint = 620,
+		JumpPad = 520,
+		TriaOrb = 520,
+		Bell = 460,
+		Terrain = 170,
+	},
+	Balanced = {
+		ManualAngle = 24,
+		GrapplePoint = 700,
+		JumpPad = 650,
+		TriaOrb = 620,
+		Bell = 550,
+		Terrain = 140,
+	},
+	["Anchor Friendly"] = {
+		ManualAngle = 30,
+		GrapplePoint = 850,
+		JumpPad = 800,
+		TriaOrb = 760,
+		Bell = 720,
+		Terrain = 110,
+	},
+	["Terrain First"] = {
+		ManualAngle = 16,
+		GrapplePoint = 480,
+		JumpPad = 420,
+		TriaOrb = 420,
+		Bell = 380,
+		Terrain = 210,
+	},
 }
 
 local _LocalPlayer = Players.LocalPlayer
@@ -446,7 +482,8 @@ function Controller:SetGrappleAssistCaptureAngle(value)
 end
 
 function Controller:SetGrappleAssistManualAnchorAngle(value)
-	self.GrappleAssistManualAnchorAngle = math.clamp(tonumber(value) or 18, 4, 45)
+	self.GrappleAssistManualAnchorAngle = math.clamp(tonumber(value) or 24, 4, 45)
+	self.GrappleAnchorTargetingStyle = "Custom"
 end
 
 function Controller:SetGrappleAssistRange(value)
@@ -477,24 +514,41 @@ function Controller:SetGrappleAssistSpecialPointPriority(value)
 	self.GrappleAssistSpecialPointPriority = value == true
 end
 
+function Controller:SetGrappleAnchorTargetingStyle(value)
+	local styleName = tostring(value or "Balanced")
+	local style = ANCHOR_TARGETING_STYLES[styleName] or ANCHOR_TARGETING_STYLES.Balanced
+	self.GrappleAnchorTargetingStyle = ANCHOR_TARGETING_STYLES[styleName] and styleName or "Balanced"
+	self.GrappleAssistManualAnchorAngle = style.ManualAngle
+	self.GrappleAnchorPriorityGrapplePoint = style.GrapplePoint
+	self.GrappleAnchorPriorityJumpPad = style.JumpPad
+	self.GrappleAnchorPriorityTriaOrb = style.TriaOrb
+	self.GrappleAnchorPriorityBell = style.Bell
+	self.GrappleAssistTerrainPriority = style.Terrain
+end
+
 function Controller:SetGrappleAnchorPriorityGrapplePoint(value)
 	self.GrappleAnchorPriorityGrapplePoint = math.clamp(tonumber(value) or 700, 0, 1000)
+	self.GrappleAnchorTargetingStyle = "Custom"
 end
 
 function Controller:SetGrappleAnchorPriorityJumpPad(value)
 	self.GrappleAnchorPriorityJumpPad = math.clamp(tonumber(value) or 650, 0, 1000)
+	self.GrappleAnchorTargetingStyle = "Custom"
 end
 
 function Controller:SetGrappleAnchorPriorityTriaOrb(value)
 	self.GrappleAnchorPriorityTriaOrb = math.clamp(tonumber(value) or 620, 0, 1000)
+	self.GrappleAnchorTargetingStyle = "Custom"
 end
 
 function Controller:SetGrappleAnchorPriorityBell(value)
 	self.GrappleAnchorPriorityBell = math.clamp(tonumber(value) or 550, 0, 1000)
+	self.GrappleAnchorTargetingStyle = "Custom"
 end
 
 function Controller:SetGrappleAssistTerrainPriority(value)
 	self.GrappleAssistTerrainPriority = math.clamp(tonumber(value) or 140, -50, 300)
+	self.GrappleAnchorTargetingStyle = "Custom"
 end
 
 function Controller:SetGrappleIntentHighSpeed(value)

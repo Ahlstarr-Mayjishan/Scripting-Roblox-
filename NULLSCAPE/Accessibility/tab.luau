@@ -17,7 +17,7 @@ local DEFAULTS = {
 	GrappleAssistEnabled = false,
 	GrappleAssistStrength = 1,
 	GrappleAssistCaptureAngle = 45,
-	GrappleAssistManualAnchorAngle = 18,
+	GrappleAssistManualAnchorAngle = 24,
 	GrappleAssistRange = 500,
 	GrappleAssistConfidenceGateEnabled = true,
 	GrappleAssistMinConfidenceScore = -35,
@@ -25,6 +25,7 @@ local DEFAULTS = {
 	GrappleAssistBiomeTuningEnabled = true,
 	GrappleAssistFailFeedbackEnabled = true,
 	GrappleAssistSpecialPointPriority = true,
+	GrappleAnchorTargetingStyle = "Balanced",
 	GrappleAssistSecondaryCastEnabled = false,
 	GrappleAssistSecondaryCastKeybind = "Q",
 	GrappleAnchorPriorityGrapplePoint = 700,
@@ -349,7 +350,7 @@ return function(Client, Controller)
 		Range = { 4, 45 },
 		Increment = 1,
 		Suffix = " deg",
-		CurrentValue = Controller.GrappleAssistManualAnchorAngle or 18,
+		CurrentValue = Controller.GrappleAssistManualAnchorAngle or 24,
 		Flag = "GrappleAssistManualAnchorAngleSlider",
 		Callback = function(Value)
 			Controller:SetGrappleAssistManualAnchorAngle(Value)
@@ -426,8 +427,8 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateToggle({
-		Name = "Prioritize Grapple Points",
-		Info = "Prefers JumpPad, GrapplePoint, Bell, and TriaOrb targets over ordinary collision surfaces.",
+		Name = "Named Anchor Assist",
+		Info = "Lets Grapple Assist use JumpPad, GrapplePoint, Bell, and TriaOrb anchors when they match your aim.",
 		CurrentValue = Controller.GrappleAssistSpecialPointPriority ~= false,
 		Flag = "GrappleAssistSpecialPriorityToggle",
 		Callback = function(Value)
@@ -435,68 +436,15 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateSlider({
-		Name = "Anchor Priority - GrapplePoint",
-		Info = "Higher values make GrapplePoint anchors win targeting decisions more often.",
-		Range = { 0, 1000 },
-		Increment = 25,
-		Suffix = " pts",
-		CurrentValue = Controller.GrappleAnchorPriorityGrapplePoint or 700,
-		Flag = "GrappleAnchorPriorityGrapplePointSlider",
-		Callback = function(Value)
-			Controller:SetGrappleAnchorPriorityGrapplePoint(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Anchor Priority - JumpPad",
-		Info = "Higher values make JumpPad anchors win targeting decisions more often.",
-		Range = { 0, 1000 },
-		Increment = 25,
-		Suffix = " pts",
-		CurrentValue = Controller.GrappleAnchorPriorityJumpPad or 650,
-		Flag = "GrappleAnchorPriorityJumpPadSlider",
-		Callback = function(Value)
-			Controller:SetGrappleAnchorPriorityJumpPad(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Anchor Priority - TriaOrb",
-		Info = "Higher values make TriaOrb anchors win targeting decisions more often.",
-		Range = { 0, 1000 },
-		Increment = 25,
-		Suffix = " pts",
-		CurrentValue = Controller.GrappleAnchorPriorityTriaOrb or 620,
-		Flag = "GrappleAnchorPriorityTriaOrbSlider",
-		Callback = function(Value)
-			Controller:SetGrappleAnchorPriorityTriaOrb(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Anchor Priority - Bell",
-		Info = "Higher values make Bell anchors win targeting decisions more often.",
-		Range = { 0, 1000 },
-		Increment = 25,
-		Suffix = " pts",
-		CurrentValue = Controller.GrappleAnchorPriorityBell or 550,
-		Flag = "GrappleAnchorPriorityBellSlider",
-		Callback = function(Value)
-			Controller:SetGrappleAnchorPriorityBell(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Terrain Priority",
-		Info = "Base score for ordinary solid surfaces before height, ceiling, distance, and aim-angle scoring are applied.",
-		Range = { -50, 300 },
-		Increment = 10,
-		Suffix = " pts",
-		CurrentValue = Controller.GrappleAssistTerrainPriority or 140,
-		Flag = "GrappleAssistTerrainPrioritySlider",
-		Callback = function(Value)
-			Controller:SetGrappleAssistTerrainPriority(Value)
+	Tab:CreateDropdown({
+		Name = "Anchor Targeting Style",
+		Info = "Choose how strongly Grapple Assist should prefer named anchors compared with ordinary terrain.",
+		Options = { "Balanced", "Manual Control", "Anchor Friendly", "Terrain First" },
+		CurrentOption = Controller.GrappleAnchorTargetingStyle or "Balanced",
+		Flag = "GrappleAnchorTargetingStyleDropdown",
+		Callback = function(Option)
+			local selected = typeof(Option) == "table" and Option[1] or Option
+			Controller:SetGrappleAnchorTargetingStyle(selected)
 		end,
 	})
 
