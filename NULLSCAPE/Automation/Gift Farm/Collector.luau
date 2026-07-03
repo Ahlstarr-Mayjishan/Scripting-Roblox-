@@ -10,6 +10,9 @@ local BASE_VALIDATION_WAIT = 0.08
 local ARRIVAL_TOLERANCE = 3
 local ARRIVAL_STABLE_FRAMES = 2
 local ARRIVAL_TIMEOUT = 0.35
+local TRAVEL_SPEED = 1600
+local MIN_TRAVEL_TIME = 0.035
+local MAX_TRAVEL_TIME = 0.22
 local comboCount = 0
 local lastCollectTick = 0
 local activeRestore = nil
@@ -127,13 +130,30 @@ local function updateAdaptiveTiming(controller, attemptedGifts)
 	end
 end
 
-local function freeTeleport(hrp, targetCFrame)
+local function travelToTarget(hrp, targetPosition)
 	if not (hrp and hrp.Parent) then
 		return false
 	end
 
-	Context.moveCharacterTo(targetCFrame)
-	RunService.Heartbeat:Wait()
+	local startPosition = hrp.Position
+	local distance = (targetPosition - startPosition).Magnitude
+	local duration = math.clamp(distance / TRAVEL_SPEED, MIN_TRAVEL_TIME, MAX_TRAVEL_TIME)
+	local startedAt = os.clock()
+
+	while os.clock() - startedAt < duration do
+		if not (hrp and hrp.Parent) then
+			return false
+		end
+
+		local alpha = math.clamp((os.clock() - startedAt) / duration, 0, 1)
+		local nextPosition = startPosition:Lerp(targetPosition, alpha)
+		Context.moveCharacterTo(CFrame.new(nextPosition))
+		clearVelocity(hrp)
+		RunService.Heartbeat:Wait()
+	end
+
+	Context.moveCharacterTo(CFrame.new(targetPosition))
+	clearVelocity(hrp)
 	return true
 end
 
@@ -216,7 +236,6 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 	local targetPosition = options.TargetPosition or cluster.TargetPosition or cluster[1].pos
 	local collectRange = options.SafeRange or cluster.SafeRange or range
 	local standingPosition = targetPosition + Vector3.new(0, 3, 0)
-	local targetCFrame = CFrame.new(standingPosition)
 	local collectedEvent = Context.getCollectedGiftEvent()
 	local returnAfter = options.KeepPosition ~= true
 
@@ -228,7 +247,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 
 	local ok, err = pcall(function()
 		hrp.Anchored = false
-		freeTeleport(hrp, targetCFrame)
+		travelToTarget(hrp, standingPosition)
 		clearVelocity(hrp)
 		waitForArrival(hrp, standingPosition)
 		task.wait(COLLECT_SETTLE)
