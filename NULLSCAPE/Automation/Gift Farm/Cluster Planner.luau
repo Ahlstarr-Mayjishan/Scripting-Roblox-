@@ -2,7 +2,7 @@
 
 local Planner = {}
 
-local RANGE_BUFFER = 4
+local RANGE_BUFFER = 1.5
 
 local function distanceSq(a, b)
 	local offset = a - b

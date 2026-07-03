@@ -14,7 +14,7 @@ local Medal = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Medal.luau")
 
 local Runtime = {}
 local DEFAULT_RANGE = 60
-local MIN_SCAN_INTERVAL = 0.12
+local MIN_SCAN_INTERVAL = 0.06
 local EMPTY_COMPLETE_DELAY = 2.5
 local GOLDEN_SPAWN_WAIT = 4
 local PYLON_LEVEL = 35
@@ -119,14 +119,6 @@ end
 
 local function getGoldenSpawnWait()
 	return GOLDEN_SPAWN_WAIT
-end
-
-local function getBurstLimit(controller, range)
-	local loadScale = tonumber(controller and (controller.GiftFarmAdaptiveLoadScale or controller.GiftFarmAdaptiveSpeedScale)) or 1
-	if controller and controller.GiftFarmAdaptiveTiming == false then
-		loadScale = 1
-	end
-	return math.clamp(math.floor((tonumber(range) or DEFAULT_RANGE) * 0.35 * loadScale), 8, 30)
 end
 
 local function markGoldenComplete(controller)
@@ -287,10 +279,6 @@ local function processOnce(controller)
 				range = math.clamp(tonumber(controller.GiftFarmRange) or DEFAULT_RANGE, 5, DEFAULT_RANGE)
 			end
 			local cluster, planInfo = ClusterPlanner.pickBestCluster(candidates, range, hrp.Position)
-			local burstLimit = getBurstLimit(controller, range)
-			while #cluster > burstLimit do
-				table.remove(cluster)
-			end
 			local rawNormal = scanInfo and (tonumber(scanInfo.RawNormal) or 0) or 0
 			local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
 			local shouldHoldForGoldenWait = rawGolden == 0
@@ -303,7 +291,7 @@ local function processOnce(controller)
 			local planned = score and (" | plan " .. tostring(score.Golden) .. "/" .. tostring(score.Total)) or ""
 			setStatus(controller, "Collecting", tostring(#cluster) .. " " .. focus .. planned)
 			Collector.collectCluster(controller, hrp, cluster, range, {
-				KeepPosition = shouldHoldForGoldenWait,
+				KeepPosition = true,
 				SafeRange = planInfo and planInfo.SafeRange,
 				TargetPosition = planInfo and planInfo.TargetPosition,
 			})
@@ -316,9 +304,8 @@ local function processOnce(controller)
 			local adaptiveText = ""
 			if controller.GiftFarmAdaptiveTiming ~= false then
 				local accepted = math.floor((tonumber(controller.GiftFarmAdaptiveSuccessRate) or 1) * 100)
-				local loadScale = tonumber(controller.GiftFarmAdaptiveLoadScale or controller.GiftFarmAdaptiveSpeedScale) or 1
 				local validationWait = tonumber(controller.GiftFarmAdaptiveValidationWait) or 0
-				adaptiveText = string.format(" | Accept %d%% Load %.0f%% %.2fs", accepted, loadScale * 100, validationWait)
+				adaptiveText = string.format(" | Accept %d%% Wait %.2fs", accepted, validationWait)
 			end
 			setStatus(
 				controller,

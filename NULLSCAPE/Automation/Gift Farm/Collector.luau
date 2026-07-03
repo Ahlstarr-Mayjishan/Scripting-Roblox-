@@ -5,13 +5,11 @@ local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.lua
 local RunService = game:GetService("RunService")
 
 local Collector = {}
-local BASE_COLLECTS_PER_FRAME = 12
-local COLLECT_SETTLE = 0.03
-local BASE_VALIDATION_WAIT = 0.16
+local COLLECT_SETTLE = 0.02
+local BASE_VALIDATION_WAIT = 0.08
 local comboCount = 0
 local lastCollectTick = 0
 local activeRestore = nil
-local adaptiveLoadScale = 1
 local adaptiveSuccessRate = 1
 local adaptiveValidationWait = BASE_VALIDATION_WAIT
 
@@ -53,16 +51,9 @@ local function clearVelocity(hrp)
 	end)
 end
 
-local function getCollectsPerFrame(controller)
-	if isAdaptiveEnabled(controller) then
-		return math.clamp(math.floor(BASE_COLLECTS_PER_FRAME * adaptiveLoadScale), 4, 24)
-	end
-	return BASE_COLLECTS_PER_FRAME
-end
-
 local function getValidationWait(controller)
 	if isAdaptiveEnabled(controller) then
-		return math.clamp(adaptiveValidationWait, 0.08, 0.55)
+		return math.clamp(adaptiveValidationWait, 0.04, 0.45)
 	end
 	return BASE_VALIDATION_WAIT
 end
@@ -83,20 +74,17 @@ local function updateAdaptiveTiming(controller, attemptedGifts)
 	adaptiveSuccessRate = adaptiveSuccessRate * 0.7 + ratio * 0.3
 
 	if ratio < 0.65 then
-		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.06, BASE_VALIDATION_WAIT, 0.55)
-		adaptiveLoadScale = math.clamp(adaptiveLoadScale - 0.12, 0.45, 1)
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.06, BASE_VALIDATION_WAIT, 0.45)
 	elseif ratio < 0.9 then
-		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.025, BASE_VALIDATION_WAIT, 0.55)
-		adaptiveLoadScale = math.clamp(adaptiveLoadScale - 0.04, 0.45, 1)
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.025, BASE_VALIDATION_WAIT, 0.45)
 	elseif adaptiveSuccessRate > 0.96 then
-		adaptiveValidationWait = math.clamp(adaptiveValidationWait - 0.01, 0.08, 0.55)
-		adaptiveLoadScale = math.clamp(adaptiveLoadScale + 0.03, 0.45, 1)
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait - 0.01, 0.04, 0.45)
 	end
 
 	if controller then
 		controller.GiftFarmAdaptiveSuccessRate = adaptiveSuccessRate
-		controller.GiftFarmAdaptiveLoadScale = adaptiveLoadScale
-		controller.GiftFarmAdaptiveSpeedScale = adaptiveLoadScale
+		controller.GiftFarmAdaptiveLoadScale = 1
+		controller.GiftFarmAdaptiveSpeedScale = 1
 		controller.GiftFarmAdaptiveValidationWait = adaptiveValidationWait
 	end
 end
@@ -138,13 +126,12 @@ function Collector.restoreMovement()
 end
 
 function Collector.resetAdaptive(controller)
-	adaptiveLoadScale = 1
 	adaptiveSuccessRate = 1
 	adaptiveValidationWait = BASE_VALIDATION_WAIT
 	if controller then
 		controller.GiftFarmAdaptiveSuccessRate = adaptiveSuccessRate
-		controller.GiftFarmAdaptiveLoadScale = adaptiveLoadScale
-		controller.GiftFarmAdaptiveSpeedScale = adaptiveLoadScale
+		controller.GiftFarmAdaptiveLoadScale = 1
+		controller.GiftFarmAdaptiveSpeedScale = 1
 		controller.GiftFarmAdaptiveValidationWait = adaptiveValidationWait
 	end
 end
@@ -176,8 +163,6 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 		task.wait(COLLECT_SETTLE)
 
 		local currentPos = hrp.Position
-		local perFrame = getCollectsPerFrame(controller)
-		local collectedThisFrame = 0
 		local attemptedGifts = {}
 
 		for _, item in ipairs(cluster) do
@@ -188,15 +173,6 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 			then
 				collectGift(item.rawObj, collectedEvent)
 				table.insert(attemptedGifts, item.rawObj)
-				collectedThisFrame += 1
-				if collectedThisFrame >= perFrame then
-					collectedThisFrame = 0
-					RunService.Heartbeat:Wait()
-					if not (hrp and hrp.Parent) then
-						break
-					end
-					currentPos = hrp.Position
-				end
 			end
 		end
 
