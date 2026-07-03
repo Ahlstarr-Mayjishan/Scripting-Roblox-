@@ -52,6 +52,8 @@ local Controller = {
 	GiftFarmRange = 60,
 	GiftFarmBurstSize = 16,
 	GiftFarmCollectsPerFrame = 8,
+	GiftFarmTravelSpeed = 750,
+	GiftFarmCollectSettle = 0.18,
 	GiftFarmGoldenSpawnWait = 4,
 	GiftFarmReturnAfterCluster = true,
 	GiftFarmReturnToBeaconAfterGolden = true,
@@ -176,6 +178,16 @@ end
 
 function Controller:SetGiftFarmCollectsPerFrame(value)
 	self.GiftFarmCollectsPerFrame = math.clamp(tonumber(value) or 8, 1, 60)
+	return self:update()
+end
+
+function Controller:SetGiftFarmTravelSpeed(value)
+	self.GiftFarmTravelSpeed = math.clamp(tonumber(value) or 750, 150, 2000)
+	return self:update()
+end
+
+function Controller:SetGiftFarmCollectSettle(value)
+	self.GiftFarmCollectSettle = math.clamp(tonumber(value) or 0.18, 0.03, 0.6)
 	return self:update()
 end
 

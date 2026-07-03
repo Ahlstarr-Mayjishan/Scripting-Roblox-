@@ -5,7 +5,7 @@ local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.lua
 local RunService = game:GetService("RunService")
 
 local Collector = {}
-local CLUSTER_SETTLE = 0.04
+local MAX_STEP_DISTANCE = 160
 local comboCount = 0
 local lastCollectTick = 0
 local activeRestore = nil
@@ -38,6 +38,49 @@ local function clearVelocity(hrp)
 		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 	end)
+end
+
+local function getTravelSpeed(controller)
+	return math.clamp(tonumber(controller.GiftFarmTravelSpeed) or 750, 150, 2000)
+end
+
+local function getCollectSettle(controller)
+	return math.clamp(tonumber(controller.GiftFarmCollectSettle) or 0.18, 0.03, 0.6)
+end
+
+local function pacedMove(controller, hrp, targetCFrame)
+	if not (hrp and hrp.Parent) then
+		return false
+	end
+
+	local startPosition = hrp.Position
+	local targetPosition = targetCFrame.Position
+	local delta = targetPosition - startPosition
+	local distance = delta.Magnitude
+	if distance <= 1 then
+		Context.moveCharacterTo(targetCFrame)
+		RunService.Heartbeat:Wait()
+		return true
+	end
+
+	local travelSpeed = getTravelSpeed(controller)
+	local steps = math.max(1, math.ceil(distance / MAX_STEP_DISTANCE))
+	local totalTime = math.clamp(distance / travelSpeed, 0.08, 1.25)
+	local stepWait = math.clamp(totalTime / steps, 0.03, 0.2)
+
+	for step = 1, steps do
+		if not (hrp and hrp.Parent) then
+			return false
+		end
+
+		local alpha = step / steps
+		local position = startPosition:Lerp(targetPosition, alpha)
+		local cframe = targetCFrame - targetCFrame.Position + position
+		Context.moveCharacterTo(cframe)
+		task.wait(stepWait)
+	end
+
+	return true
 end
 
 function Collector.releaseCharacter()
@@ -85,10 +128,10 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 
 	local ok, err = pcall(function()
 		hrp.Anchored = false
-		Context.moveCharacterTo(targetCFrame)
+		pacedMove(controller, hrp, targetCFrame)
 		clearVelocity(hrp)
 		RunService.Heartbeat:Wait()
-		task.wait(CLUSTER_SETTLE)
+		task.wait(getCollectSettle(controller))
 
 		local currentPos = hrp.Position
 		local perFrame = math.clamp(tonumber(controller.GiftFarmCollectsPerFrame) or 8, 1, 60)
@@ -113,7 +156,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 			end
 		end
 
-		task.wait(CLUSTER_SETTLE)
+		task.wait(getCollectSettle(controller))
 	end)
 
 	Collector.restoreMovement()

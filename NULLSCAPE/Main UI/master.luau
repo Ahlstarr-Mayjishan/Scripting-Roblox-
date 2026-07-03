@@ -217,6 +217,8 @@ pcall(function()
 			AutomationGiftFarmRangeSlider = 60,
 			AutomationGiftFarmBurstSlider = 16,
 			AutomationGiftFarmCollectsPerFrameSlider = 8,
+			AutomationGiftFarmTravelSpeedSlider = 750,
+			AutomationGiftFarmCollectSettleSlider = 0.18,
 			AutomationGiftFarmGoldenWaitSlider = 4,
 			AutomationGiftFarmReturnToggle = true,
 			AutomationGiftFarmReturnBeaconToggle = true,

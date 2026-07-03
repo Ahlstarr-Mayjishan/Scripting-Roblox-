@@ -107,6 +107,34 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateSlider({
+		Name = "Travel Speed",
+		Range = { 150, 2000 },
+		CurrentValue = Controller and Controller.GiftFarmTravelSpeed or 750,
+		Increment = 50,
+		ValueName = "stud/s",
+		Flag = "AutomationGiftFarmTravelSpeedSlider",
+		Callback = function(Value)
+			if Controller and typeof(Controller.SetGiftFarmTravelSpeed) == "function" then
+				Controller:SetGiftFarmTravelSpeed(Value)
+			end
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Collect Settle",
+		Range = { 0.03, 0.6 },
+		CurrentValue = Controller and Controller.GiftFarmCollectSettle or 0.18,
+		Increment = 0.01,
+		ValueName = "s",
+		Flag = "AutomationGiftFarmCollectSettleSlider",
+		Callback = function(Value)
+			if Controller and typeof(Controller.SetGiftFarmCollectSettle) == "function" then
+				Controller:SetGiftFarmCollectSettle(Value)
+			end
+		end,
+	})
+
+	Tab:CreateSlider({
 		Name = "Golden Spawn Wait",
 		Range = { 0, 10 },
 		CurrentValue = Controller and Controller.GiftFarmGoldenSpawnWait or 4,
