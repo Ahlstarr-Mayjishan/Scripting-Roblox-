@@ -202,6 +202,9 @@ end
 function Runtime.disable(controller)
 	enabled = false
 	busy = false
+	if Collector and typeof(Collector.restoreMovement) == "function" then
+		Collector.restoreMovement()
+	end
 	if connection then
 		pcall(function()
 			connection:Disconnect()
