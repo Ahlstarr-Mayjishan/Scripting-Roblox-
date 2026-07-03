@@ -58,7 +58,9 @@ local function getNativeHit(grapple)
 end
 
 local function hideCrosshair(grapple)
-	grapple.specialHeld = false
+	if not (grapple.Movement and grapple.Movement.toggleAbility == true) then
+		grapple.specialHeld = false
+	end
 	grapple.grappleCancelled = false
 	if grapple.grapplerCrosshair then
 		grapple.grapplerCrosshair.Parent = nil
@@ -72,7 +74,9 @@ function SecondaryCast.cast(grapple, controller, targeting)
 
 	local hit = getNativeHit(grapple)
 	if not hit and targeting and typeof(targeting.findBestAssistHit) == "function" then
-		hit = targeting.findBestAssistHit(grapple, controller)
+		hit = targeting.findBestAssistHit(grapple, controller, {
+			ManualCast = true,
+		})
 	end
 	if not hit then
 		return false
