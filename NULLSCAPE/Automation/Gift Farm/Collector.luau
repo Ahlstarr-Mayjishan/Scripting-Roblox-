@@ -7,13 +7,39 @@ local RunService = game:GetService("RunService")
 local Collector = {}
 local COLLECT_SETTLE = 0.02
 local BASE_VALIDATION_WAIT = 0.08
+local ARRIVAL_TOLERANCE = 3
+local ARRIVAL_STABLE_FRAMES = 2
+local ARRIVAL_TIMEOUT = 0.35
 local comboCount = 0
 local lastCollectTick = 0
 local activeRestore = nil
 local adaptiveSuccessRate = 1
 local adaptiveValidationWait = BASE_VALIDATION_WAIT
+local failedAttempts = setmetatable({}, { __mode = "k" })
+local hookedGifts = setmetatable({}, { __mode = "k" })
+
+local function hookGiftFailure(gift)
+	if not gift or hookedGifts[gift] then
+		return
+	end
+
+	local originalUncollect = gift.Uncollect
+	if typeof(originalUncollect) ~= "function" then
+		hookedGifts[gift] = true
+		return
+	end
+
+	hookedGifts[gift] = true
+	gift.Uncollect = function(self, ...)
+		failedAttempts[self] = os.clock()
+		return originalUncollect(self, ...)
+	end
+end
 
 local function collectGift(gift, collectedEvent)
+	hookGiftFailure(gift)
+	failedAttempts[gift] = nil
+
 	local now = tick()
 	if math.min(1.2, math.pow(1.1, comboCount) * 0.8) <= now - lastCollectTick then
 		comboCount = 0
@@ -37,7 +63,13 @@ local function isAdaptiveEnabled(controller)
 end
 
 local function isGiftAccepted(gift)
-	return not gift or gift.Destroyed == true or gift.Collected == true or gift.ClientCollected == true
+	if not gift then
+		return true
+	end
+	if failedAttempts[gift] ~= nil then
+		return false
+	end
+	return gift.Destroyed == true or gift.Collected == true or gift.ClientCollected == true
 end
 
 local function clearVelocity(hrp)
@@ -64,16 +96,21 @@ local function updateAdaptiveTiming(controller, attemptedGifts)
 	end
 
 	local accepted = 0
+	local failed = 0
 	for _, gift in ipairs(attemptedGifts) do
 		if isGiftAccepted(gift) then
 			accepted += 1
+		elseif failedAttempts[gift] ~= nil then
+			failed += 1
 		end
 	end
 
 	local ratio = accepted / #attemptedGifts
 	adaptiveSuccessRate = adaptiveSuccessRate * 0.7 + ratio * 0.3
 
-	if ratio < 0.65 then
+	if failed > 0 then
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.08, BASE_VALIDATION_WAIT, 0.45)
+	elseif ratio < 0.65 then
 		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.06, BASE_VALIDATION_WAIT, 0.45)
 	elseif ratio < 0.9 then
 		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.025, BASE_VALIDATION_WAIT, 0.45)
@@ -86,6 +123,7 @@ local function updateAdaptiveTiming(controller, attemptedGifts)
 		controller.GiftFarmAdaptiveLoadScale = 1
 		controller.GiftFarmAdaptiveSpeedScale = 1
 		controller.GiftFarmAdaptiveValidationWait = adaptiveValidationWait
+		controller.GiftFarmAdaptiveRejects = failed
 	end
 end
 
@@ -97,6 +135,36 @@ local function freeTeleport(hrp, targetCFrame)
 	Context.moveCharacterTo(targetCFrame)
 	RunService.Heartbeat:Wait()
 	return true
+end
+
+local function waitForArrival(hrp, targetPosition)
+	if not (hrp and hrp.Parent and typeof(targetPosition) == "Vector3") then
+		return false
+	end
+
+	local startedAt = os.clock()
+	local stableFrames = 0
+	while os.clock() - startedAt <= ARRIVAL_TIMEOUT do
+		if not (hrp and hrp.Parent) then
+			return false
+		end
+
+		clearVelocity(hrp)
+		local distance = (hrp.Position - targetPosition).Magnitude
+		if distance <= ARRIVAL_TOLERANCE then
+			stableFrames += 1
+			if stableFrames >= ARRIVAL_STABLE_FRAMES then
+				return true
+			end
+		else
+			stableFrames = 0
+			Context.moveCharacterTo(CFrame.new(targetPosition))
+		end
+
+		RunService.Heartbeat:Wait()
+	end
+
+	return (hrp.Position - targetPosition).Magnitude <= ARRIVAL_TOLERANCE
 end
 
 function Collector.releaseCharacter()
@@ -128,11 +196,13 @@ end
 function Collector.resetAdaptive(controller)
 	adaptiveSuccessRate = 1
 	adaptiveValidationWait = BASE_VALIDATION_WAIT
+	failedAttempts = setmetatable({}, { __mode = "k" })
 	if controller then
 		controller.GiftFarmAdaptiveSuccessRate = adaptiveSuccessRate
 		controller.GiftFarmAdaptiveLoadScale = 1
 		controller.GiftFarmAdaptiveSpeedScale = 1
 		controller.GiftFarmAdaptiveValidationWait = adaptiveValidationWait
+		controller.GiftFarmAdaptiveRejects = 0
 	end
 end
 
@@ -145,7 +215,8 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 	local oldCFrame = hrp.CFrame
 	local targetPosition = options.TargetPosition or cluster.TargetPosition or cluster[1].pos
 	local collectRange = options.SafeRange or cluster.SafeRange or range
-	local targetCFrame = CFrame.new(targetPosition + Vector3.new(0, 3, 0))
+	local standingPosition = targetPosition + Vector3.new(0, 3, 0)
+	local targetCFrame = CFrame.new(standingPosition)
 	local collectedEvent = Context.getCollectedGiftEvent()
 	local returnAfter = options.KeepPosition ~= true
 
@@ -159,7 +230,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 		hrp.Anchored = false
 		freeTeleport(hrp, targetCFrame)
 		clearVelocity(hrp)
-		RunService.Heartbeat:Wait()
+		waitForArrival(hrp, standingPosition)
 		task.wait(COLLECT_SETTLE)
 
 		local currentPos = hrp.Position

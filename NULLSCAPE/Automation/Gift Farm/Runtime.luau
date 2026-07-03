@@ -305,7 +305,8 @@ local function processOnce(controller)
 			if controller.GiftFarmAdaptiveTiming ~= false then
 				local accepted = math.floor((tonumber(controller.GiftFarmAdaptiveSuccessRate) or 1) * 100)
 				local validationWait = tonumber(controller.GiftFarmAdaptiveValidationWait) or 0
-				adaptiveText = string.format(" | Accept %d%% Wait %.2fs", accepted, validationWait)
+				local rejects = tonumber(controller.GiftFarmAdaptiveRejects) or 0
+				adaptiveText = string.format(" | Accept %d%% Reject %d Wait %.2fs", accepted, rejects, validationWait)
 			end
 			setStatus(
 				controller,
