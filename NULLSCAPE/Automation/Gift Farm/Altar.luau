@@ -9,9 +9,13 @@ local Altar = {}
 local ALTAR_ORDER = { "Passage", "Purgatory", "Chance", "Protection", "Chaos", "Echo", "Purification" }
 local ACTION_COOLDOWN = 0.7
 local TOUCH_SETTLE = 0.08
+local MAX_ACTIVATION_SECONDS = 5
+local SKIP_SECONDS = 12
 
 local currentTarget = nil
+local currentTargetStartedAt = 0
 local lastActionAt = 0
+local skippedUntil = setmetatable({}, { __mode = "k" })
 
 local function touch(part, hrp)
 	if typeof(firetouchinterest) ~= "function" then
@@ -140,6 +144,9 @@ local function isValidTarget(target, selected)
 	if not selected[target.Name] then
 		return false
 	end
+	if skippedUntil[target.Root] and os.clock() < skippedUntil[target.Root] then
+		return false
+	end
 	return not isUsed(target.Root, target.Tagged)
 end
 
@@ -160,7 +167,11 @@ local function findBestTarget(controller, hrp)
 	for _, root in ipairs(roots) do
 		local tagged = taggedByRoot[root]
 		local name = getAltarName(root, tagged)
-		if name and selected[name] and not isUsed(root, tagged) then
+		if name
+			and selected[name]
+			and not isUsed(root, tagged)
+			and not (skippedUntil[root] and os.clock() < skippedUntil[root])
+		then
 			local hitbox = getHitbox(root) or getHitbox(tagged)
 			if hitbox then
 				local distance = (hitbox.Position - hrp.Position).Magnitude
@@ -183,6 +194,7 @@ local function findBestTarget(controller, hrp)
 	end
 
 	currentTarget = best
+	currentTargetStartedAt = best and os.clock() or 0
 	return best
 end
 
@@ -197,6 +209,12 @@ function Altar.tryStep(controller, hrp)
 
 	local target = findBestTarget(controller, hrp)
 	if not target then
+		return false
+	end
+	if currentTargetStartedAt > 0 and os.clock() - currentTargetStartedAt > MAX_ACTIVATION_SECONDS then
+		skippedUntil[target.Root] = os.clock() + SKIP_SECONDS
+		currentTarget = nil
+		currentTargetStartedAt = 0
 		return false
 	end
 
@@ -214,7 +232,9 @@ end
 
 function Altar.reset()
 	currentTarget = nil
+	currentTargetStartedAt = 0
 	lastActionAt = 0
+	skippedUntil = setmetatable({}, { __mode = "k" })
 end
 
 return Altar

@@ -1,5 +1,7 @@
 --!nocheck
 
+local CollectionService = game:GetService("CollectionService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
@@ -15,6 +17,7 @@ local DEFAULT_RANGE = 60
 local MIN_SCAN_INTERVAL = 0.12
 local EMPTY_COMPLETE_DELAY = 2.5
 local GOLDEN_SPAWN_WAIT = 4
+local PYLON_LEVEL = 35
 
 local enabled = false
 local busy = false
@@ -129,6 +132,33 @@ local function markGoldenComplete(controller)
 	end
 end
 
+local function getLevel()
+	local level = ReplicatedStorage:FindFirstChild("Level")
+	if level and (level:IsA("IntValue") or level:IsA("NumberValue")) then
+		return tonumber(level.Value) or 0
+	end
+	return 0
+end
+
+local function hasActivePylon()
+	for _, model in ipairs(CollectionService:GetTagged("Pylon")) do
+		if model and model:IsDescendantOf(workspace) and model:GetAttribute("Completed") ~= true then
+			return true
+		end
+	end
+	return false
+end
+
+local function shouldWaitForPylons(controller)
+	if not (controller and controller.PylonActivatorEnabled == true and controller.PylonActivatorComplete ~= true) then
+		return false
+	end
+	if getLevel() < PYLON_LEVEL then
+		return false
+	end
+	return hasActivePylon()
+end
+
 local function waitForLateGolden(controller, scanInfo, reason)
 	if not (lastGiftSeenAt > 0 and scanInfo and scanInfo.RawGolden == 0) then
 		goldenMissingSince = nil
@@ -225,7 +255,7 @@ local function processOnce(controller)
 			end
 			if lastGiftSeenAt > 0 and hasSeenGoldenThisRound and scanInfo and scanInfo.RawGolden == 0 then
 				markGoldenComplete(controller)
-				if controller.PylonActivatorEnabled == true and controller.PylonActivatorComplete ~= true then
+				if shouldWaitForPylons(controller) then
 					setStatus(controller, "WaitingForPylons", "Golden gifts complete")
 					return
 				end
