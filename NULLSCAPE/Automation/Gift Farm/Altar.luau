@@ -28,6 +28,45 @@ local function touch(part, hrp)
 	end)
 end
 
+local function getPrompt(root, tagged)
+	local prompt = root and root:FindFirstChildWhichIsA("ProximityPrompt", true)
+	if prompt then
+		return prompt
+	end
+	return tagged and tagged:FindFirstChildWhichIsA("ProximityPrompt", true)
+end
+
+local function triggerPrompt(prompt)
+	if not (prompt and prompt:IsDescendantOf(workspace)) then
+		return false
+	end
+
+	local oldHoldDuration = prompt.HoldDuration
+	local triggered = false
+
+	pcall(function()
+		prompt.HoldDuration = 0
+	end)
+
+	if typeof(fireproximityprompt) == "function" then
+		triggered = pcall(function()
+			fireproximityprompt(prompt)
+		end) == true
+	elseif typeof(prompt.InputHoldBegin) == "function" and typeof(prompt.InputHoldEnd) == "function" then
+		triggered = pcall(function()
+			prompt:InputHoldBegin()
+			task.wait()
+			prompt:InputHoldEnd()
+		end) == true
+	end
+
+	pcall(function()
+		prompt.HoldDuration = oldHoldDuration
+	end)
+
+	return triggered
+end
+
 local function readStringValue(instance)
 	if not instance then
 		return nil
@@ -179,6 +218,7 @@ local function findBestTarget(controller, hrp)
 					Root = root,
 					Tagged = tagged,
 					Hitbox = hitbox,
+					Prompt = getPrompt(root, tagged),
 					Name = name,
 					Priority = priority[name] or 999,
 					Distance = distance,
@@ -224,7 +264,9 @@ function Altar.tryStep(controller, hrp)
 	if os.clock() - lastActionAt >= ACTION_COOLDOWN then
 		lastActionAt = os.clock()
 		task.wait(TOUCH_SETTLE)
-		touch(target.Hitbox, hrp)
+		if not triggerPrompt(target.Prompt) then
+			touch(target.Hitbox, hrp)
+		end
 	end
 
 	return true, "ActivatingAltar", target.Name
