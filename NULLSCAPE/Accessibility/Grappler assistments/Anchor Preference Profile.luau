@@ -18,6 +18,9 @@ local DEFAULTS = {
 	ReelSaverTerrainBoost = 22,
 	RailCaptureBoost = 38,
 	MomentumRailBoost = 20,
+	RazorbloomEscapeAnchorBoost = 360,
+	RazorbloomEscapeOtherSpecialPenalty = -80,
+	RazorbloomEscapeTerrainBoost = 25,
 }
 
 local function getNumber(value, fallback, minimum, maximum)
@@ -60,7 +63,7 @@ end
 function Profile.getBasePriority(part, controller)
 	local kind = Profile.getKind(part)
 	if kind == "Rail" then
-		return DEFAULTS.RailPriority
+		return getNumber(controller and controller.GrappleAssistRailPriority, DEFAULTS.RailPriority, 0, 1000)
 	end
 
 	if kind == "Special" then
@@ -80,6 +83,32 @@ function Profile.getIntentBonus(part, intent, controller)
 
 	local kind = Profile.getKind(part)
 	local name = intent.Name
+
+	if name == "RazorbloomEscape" then
+		local specialName = Profile.getSpecialName(part)
+		if specialName == "JumpPad" or specialName == "GrapplePoint" then
+			return getNumber(
+				controller and controller.GrappleIntentRazorbloomAnchorBoost,
+				DEFAULTS.RazorbloomEscapeAnchorBoost,
+				0,
+				700
+			)
+		end
+		if kind == "Special" then
+			return getNumber(
+				controller and controller.GrappleIntentRazorbloomOtherSpecialPenalty,
+				DEFAULTS.RazorbloomEscapeOtherSpecialPenalty,
+				-500,
+				0
+			)
+		end
+		return getNumber(
+			controller and controller.GrappleIntentRazorbloomTerrainBoost,
+			DEFAULTS.RazorbloomEscapeTerrainBoost,
+			0,
+			80
+		)
+	end
 
 	if name == "VoidRescue" and kind == "Special" then
 		return getNumber(

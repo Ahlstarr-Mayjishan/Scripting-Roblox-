@@ -25,7 +25,7 @@ local DEFAULTS = {
 	GrappleAssistBiomeTuningEnabled = true,
 	GrappleAssistFailFeedbackEnabled = true,
 	GrappleAssistSpecialPointPriority = true,
-	GrappleAnchorTargetingStyle = "Balanced",
+	GrappleAnchorTargetingStyle = "Auto",
 	GrappleAssistSecondaryCastEnabled = false,
 	GrappleAssistSecondaryCastKeybind = "Q",
 	GrappleAnchorPriorityGrapplePoint = 700,
@@ -438,9 +438,10 @@ return function(Client, Controller)
 
 	Tab:CreateDropdown({
 		Name = "Anchor Targeting Style",
-		Info = "Choose how strongly Grapple Assist should prefer named anchors compared with ordinary terrain.",
-		Options = { "Balanced", "Manual Control", "Anchor Friendly", "Terrain First" },
-		CurrentOption = Controller.GrappleAnchorTargetingStyle or "Balanced",
+		Info = "Auto changes targeting behavior from manual control to rescue, reel saver, rail, or pilot mode based on the current situation.",
+		Options = { "Auto", "Balanced", "Manual Control", "Anchor Friendly", "Terrain First" },
+		CurrentOption = Controller.GrappleAnchorTargetingStyle or "Auto",
+		MultipleOptions = false,
 		Flag = "GrappleAnchorTargetingStyleDropdown",
 		Callback = function(Option)
 			local selected = typeof(Option) == "table" and Option[1] or Option

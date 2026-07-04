@@ -11,6 +11,7 @@ local TerrainMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
 local RailMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau")
+local EntityContext = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Entity Intent Context.luau")
 
 local Resolver = {}
 
@@ -109,6 +110,21 @@ function Resolver.resolve(grapple, controller, context)
 			MomentumState = state,
 			Airborne = airborne,
 			HeightAboveVoid = heightAboveVoid,
+			AimDirection = context and context.AimDirection,
+		}
+	end
+
+	if
+		EntityContext
+		and typeof(EntityContext.isRazorbloomActive) == "function"
+		and EntityContext.isRazorbloomActive()
+	then
+		return {
+			Name = "RazorbloomEscape",
+			Confidence = 0.92,
+			Velocity = velocity,
+			MomentumState = state,
+			Airborne = airborne,
 			AimDirection = context and context.AimDirection,
 		}
 	end

@@ -7,6 +7,7 @@
 local Executor = {}
 local GiftFarm = nil
 local PylonActivator = nil
+local KolonaAutoComplete = nil
 
 local function loadGiftFarm()
 	if GiftFarm then
@@ -42,6 +43,23 @@ local function loadPylonActivator()
 	return nil
 end
 
+local function loadKolonaAutoComplete()
+	if KolonaAutoComplete then
+		return KolonaAutoComplete
+	end
+
+	local ok, result = pcall(function()
+		return getgenv().loadModule("NULLSCAPE/Automation/Auto Complete/Kolona.luau")
+	end)
+	if ok and typeof(result) == "table" then
+		KolonaAutoComplete = result
+		return result
+	end
+
+	warn("[NULLSCAPE] Automation Kolona auto complete failed to load: " .. tostring(result))
+	return nil
+end
+
 function Executor.enable(controller, gc)
 	local farm = loadGiftFarm()
 	if farm and typeof(farm.update) == "function" then
@@ -50,6 +68,10 @@ function Executor.enable(controller, gc)
 	local pylonActivator = loadPylonActivator()
 	if pylonActivator and typeof(pylonActivator.update) == "function" then
 		pylonActivator.update(controller, gc)
+	end
+	local kolona = loadKolonaAutoComplete()
+	if kolona and typeof(kolona.update) == "function" then
+		kolona.update(controller, gc)
 	end
 	return true
 end
@@ -62,6 +84,10 @@ function Executor.disable(controller, gc)
 	local pylonActivator = loadPylonActivator()
 	if pylonActivator and typeof(pylonActivator.disable) == "function" then
 		pylonActivator.disable(controller)
+	end
+	local kolona = loadKolonaAutoComplete()
+	if kolona and typeof(kolona.disable) == "function" then
+		kolona.disable(controller)
 	end
 	if gc and typeof(gc.cleanAll) == "function" then
 		gc.cleanAll()
@@ -78,6 +104,10 @@ function Executor.update(controller, gc)
 	local pylonActivator = loadPylonActivator()
 	if pylonActivator and typeof(pylonActivator.update) == "function" then
 		ok = pylonActivator.update(controller, gc) ~= false and ok
+	end
+	local kolona = loadKolonaAutoComplete()
+	if kolona and typeof(kolona.update) == "function" then
+		ok = kolona.update(controller, gc) ~= false and ok
 	end
 	return ok
 end

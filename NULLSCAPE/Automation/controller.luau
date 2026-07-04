@@ -66,6 +66,10 @@ local Controller = {
 	PylonActivatorComplete = false,
 	PylonActivatorStatus = "Idle",
 	PylonActivatorDetail = "",
+	AutomationSelections = {},
+	AutoCompleteKolonaEnabled = false,
+	AutoCompleteKolonaStatus = "Idle",
+	AutoCompleteKolonaDetail = "",
 }
 
 local function isControllerActiveOrUnclaimed(controller)
@@ -204,6 +208,26 @@ end
 
 function Controller:SetPylonActivatorReturnAfter(value)
 	self.PylonActivatorReturnAfter = value == true
+	return self:update()
+end
+
+function Controller:SetAutomationSelections(value)
+	local selections = {}
+	if typeof(value) == "table" then
+		for _, selection in ipairs(value) do
+			if typeof(selection) == "string" and not table.find(selections, selection) then
+				table.insert(selections, selection)
+			end
+		end
+		for selection, selected in pairs(value) do
+			if typeof(selection) == "string" and selected == true and not table.find(selections, selection) then
+				table.insert(selections, selection)
+			end
+		end
+	end
+
+	self.AutomationSelections = selections
+	self.AutoCompleteKolonaEnabled = table.find(selections, "Auto Complete - Kolóna") ~= nil
 	return self:update()
 end
 

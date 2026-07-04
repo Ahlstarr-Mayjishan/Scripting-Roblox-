@@ -5,7 +5,6 @@
 -- ]]
 
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
-local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
 local Logic = {
@@ -14,7 +13,7 @@ local Logic = {
 	HookedCurseHandler = false,
 	CallingOriginal = false,
 	Connections = {},
-	LastBeaconScanAt = 0,
+	KnownMirages = setmetatable({}, { __mode = "k" }),
 	OriginalProperties = setmetatable({}, { __mode = "k" }),
 }
 
@@ -156,7 +155,7 @@ local function isBeaconMirage(instance)
 	end
 
 	if instance:IsA("Model") or instance:IsA("BasePart") then
-		local beaconModel = instance:FindFirstChild("BeaconModel", true)
+		local beaconModel = instance:FindFirstChild("BeaconModel")
 		local clientEvent = instance:FindFirstChild("ClientEvent")
 		local sound = instance:FindFirstChild("Sound")
 		return beaconModel ~= nil and clientEvent ~= nil and sound ~= nil and not isRealBeacon(instance)
@@ -169,6 +168,10 @@ local function applyMirageVisual(instance)
 	if not Logic.BeaconMirageIdentifier or not isBeaconMirage(instance) then
 		return
 	end
+	if Logic.KnownMirages[instance] == true then
+		return
+	end
+	Logic.KnownMirages[instance] = true
 
 	for _, desc in ipairs(instance:GetDescendants()) do
 		if desc:IsA("BasePart") then
@@ -221,11 +224,22 @@ end
 
 local function scanBeaconMirages()
 	ensureRealBeaconMarker()
-	for _, child in ipairs(Workspace:GetDescendants()) do
+	for _, child in ipairs(Workspace:GetChildren()) do
 		if isBeaconMirage(child) then
 			applyMirageVisual(child)
 		end
 	end
+end
+
+local function findMirageRoot(instance)
+	local current = instance
+	while current and current.Parent and current.Parent ~= Workspace do
+		current = current.Parent
+	end
+	if current and current.Parent == Workspace then
+		return current
+	end
+	return instance
 end
 
 local function startBeaconMirageIdentifier()
@@ -239,29 +253,22 @@ local function startBeaconMirageIdentifier()
 		Workspace.DescendantAdded:Connect(function(instance)
 			task.defer(function()
 				if Logic.BeaconMirageIdentifier and instance and instance.Parent then
-					if isBeaconMirage(instance) then
-						applyMirageVisual(instance)
-					elseif instance.Name == "BeaconModel" then
-						applyMirageVisual(instance.Parent)
+					local root = findMirageRoot(instance)
+					if isBeaconMirage(root) then
+						applyMirageVisual(root)
+					elseif instance.Name == "BeaconModel" and instance.Parent then
+						applyMirageVisual(findMirageRoot(instance.Parent))
 					end
 					ensureRealBeaconMarker()
 				end
 			end)
 		end)
 	)
-	table.insert(
-		Logic.Connections,
-		RunService.Heartbeat:Connect(function()
-			if Logic.BeaconMirageIdentifier and time() - (Logic.LastBeaconScanAt or 0) >= 0.5 then
-				Logic.LastBeaconScanAt = time()
-				scanBeaconMirages()
-			end
-		end)
-	)
 end
 
 local function stopBeaconMirageIdentifier()
 	disconnectAll()
+	Logic.KnownMirages = setmetatable({}, { __mode = "k" })
 	local beacon = Workspace:FindFirstChild("Beacon")
 	local marker = beacon and beacon:FindFirstChild("NULLSCAPE_RealBeaconMarker")
 	if marker then

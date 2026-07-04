@@ -15,8 +15,19 @@ local ReelSaver = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistm
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
 local FailFeedback = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Fail Feedback Loop.luau")
 local DeferredAim = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Deferred Aim Cast.luau")
+local Arbiter = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique Arbiter.luau")
+local EntityContext = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Entity Intent Context.luau")
 
-local HOOK_VERSION = 11
+local HOOK_VERSION = 13
+
+local PRIORITY = {
+	SharkVoid = 100,
+	ReelSaver = 82,
+	ReleaseTiming = 76,
+	SecondaryCast = 72,
+	DeferredAim = 45,
+	Feedback = 10,
+}
 
 local Logic = {
 	Controller = nil,
@@ -135,6 +146,25 @@ local function installCastHook(grappleModule, globals)
 			local controller = getController()
 			local manualCast = true
 			local fallbackHit, fallbackDirection
+			local prioritizeAssist = EntityContext
+				and typeof(EntityContext.isRazorbloomActive) == "function"
+				and EntityContext.isRazorbloomActive()
+
+			if prioritizeAssist then
+				local assistedHit = Targeting.findOptimalHit(self, controller, {
+					ManualCast = manualCast,
+					EntityIntent = "RazorbloomEscape",
+				})
+				if assistedHit then
+					if FailFeedback and typeof(FailFeedback.noteAssistCast) == "function" then
+						pcall(function()
+							FailFeedback.noteAssistCast(self, assistedHit, controller)
+						end)
+					end
+					return assistedHit
+				end
+			end
+
 			if manualCast and Targeting and typeof(Targeting.fallbackCast) == "function" then
 				fallbackHit, fallbackDirection = Targeting.fallbackCast(self, controller)
 				if fallbackHit then
@@ -147,16 +177,18 @@ local function installCastHook(grappleModule, globals)
 				end
 			end
 
-			local assistedHit = Targeting.findOptimalHit(self, controller, {
-				ManualCast = manualCast,
-			})
-			if assistedHit then
-				if FailFeedback and typeof(FailFeedback.noteAssistCast) == "function" then
-					pcall(function()
-						FailFeedback.noteAssistCast(self, assistedHit, controller)
-					end)
+			if not prioritizeAssist then
+				local assistedHit = Targeting.findOptimalHit(self, controller, {
+					ManualCast = manualCast,
+				})
+				if assistedHit then
+					if FailFeedback and typeof(FailFeedback.noteAssistCast) == "function" then
+						pcall(function()
+							FailFeedback.noteAssistCast(self, assistedHit, controller)
+						end)
+					end
+					return assistedHit
 				end
-				return assistedHit
 			end
 
 			if manualCast and fallbackDirection then
@@ -207,6 +239,11 @@ local function installStepHook(grappleModule, globals)
 
 		local results = packValues(originalStep(self, dt, ...))
 		local controller = getController()
+		if Arbiter and typeof(Arbiter.beginFrame) == "function" then
+			pcall(function()
+				Arbiter.beginFrame(self)
+			end)
+		end
 
 		if BellContact and typeof(BellContact.afterStep) == "function" then
 			pcall(function()
@@ -214,44 +251,103 @@ local function installStepHook(grappleModule, globals)
 			end)
 		end
 
-		if VoidRescue and typeof(VoidRescue.step) == "function" then
-			pcall(function()
-				VoidRescue.step(self, dt, getController(), Targeting)
-			end)
-		end
+		local activeTechnique = nil
 
-		if ReelSaver and typeof(ReelSaver.step) == "function" then
-			pcall(function()
-				ReelSaver.step(self, dt, controller)
+		if VoidRescue and typeof(VoidRescue.step) == "function" then
+			local success, handled = pcall(function()
+				return VoidRescue.step(self, dt, getController(), Targeting)
 			end)
+			if success and handled then
+				activeTechnique = "SharkVoid"
+				if Arbiter and typeof(Arbiter.claim) == "function" then
+					pcall(function()
+						Arbiter.claim(self, "SharkVoid", PRIORITY.SharkVoid, 0.45)
+					end)
+				end
+			end
 		end
 
 		if
-			Logic.PendingReelSaverUntil
+			not activeTechnique
+			and ReelSaver
+			and typeof(ReelSaver.step) == "function"
+			and not (Arbiter and Arbiter.isBlocked and Arbiter.isBlocked(self, "ReelSaver", PRIORITY.ReelSaver))
+		then
+			local success, handled = pcall(function()
+				return ReelSaver.step(self, dt, controller)
+			end)
+			if success and handled then
+				activeTechnique = "ReelSaver"
+				if Arbiter and typeof(Arbiter.claim) == "function" then
+					pcall(function()
+						Arbiter.claim(self, "ReelSaver", PRIORITY.ReelSaver, 0.35)
+					end)
+				end
+			end
+		end
+
+		if
+			not activeTechnique
+			and Logic.PendingReelSaverUntil
 			and time() <= Logic.PendingReelSaverUntil
 			and ReelSaver
 			and typeof(ReelSaver.trigger) == "function"
+			and not (Arbiter and Arbiter.isBlocked and Arbiter.isBlocked(self, "ReelSaver", PRIORITY.ReelSaver))
 		then
 			local success, triggered = pcall(function()
 				return ReelSaver.trigger(self, controller, Targeting)
 			end)
 			if success and triggered then
 				Logic.PendingReelSaverUntil = nil
+				activeTechnique = "ReelSaver"
+				if Arbiter and typeof(Arbiter.claim) == "function" then
+					pcall(function()
+						Arbiter.claim(self, "ReelSaver", PRIORITY.ReelSaver, 0.55)
+					end)
+				end
 			end
 		elseif Logic.PendingReelSaverUntil and time() > Logic.PendingReelSaverUntil then
 			Logic.PendingReelSaverUntil = nil
 		end
 
-		if DeferredAim and typeof(DeferredAim.step) == "function" then
-			pcall(function()
-				DeferredAim.step(self, controller)
+		if
+			not activeTechnique
+			and DeferredAim
+			and typeof(DeferredAim.step) == "function"
+			and not (Arbiter and Arbiter.isBlocked and Arbiter.isBlocked(self, "DeferredAim", PRIORITY.DeferredAim))
+		then
+			local success, handled = pcall(function()
+				return DeferredAim.step(self, controller)
 			end)
+			if success and handled then
+				activeTechnique = "DeferredAim"
+				if Arbiter and typeof(Arbiter.claim) == "function" then
+					pcall(function()
+						Arbiter.claim(self, "DeferredAim", PRIORITY.DeferredAim, 0.25)
+					end)
+				end
+			end
 		end
 
 		if ReleaseTiming and typeof(ReleaseTiming.step) == "function" then
-			pcall(function()
-				ReleaseTiming.step(self)
-			end)
+			local pending = ReleaseTiming.get and ReleaseTiming.get(self) or nil
+			local reason = pending and pending.Reason or "ReleaseTiming"
+			local releaseName = reason == "SharkVoid" and "SharkVoid"
+				or reason == "ReelSaver" and "ReelSaver"
+				or "ReleaseTiming"
+			local releasePriority = releaseName == "SharkVoid" and PRIORITY.SharkVoid
+				or releaseName == "ReelSaver" and PRIORITY.ReelSaver
+				or PRIORITY.ReleaseTiming
+			if not (Arbiter and Arbiter.isBlocked and Arbiter.isBlocked(self, releaseName, releasePriority)) then
+				local success, handled = pcall(function()
+					return ReleaseTiming.step(self)
+				end)
+				if success and handled and Arbiter and typeof(Arbiter.claim) == "function" then
+					pcall(function()
+						Arbiter.claim(self, releaseName, releasePriority, 0.12)
+					end)
+				end
+			end
 		end
 
 		if FailFeedback and typeof(FailFeedback.step) == "function" then
@@ -300,7 +396,19 @@ function Logic.triggerSecondaryCast(controller)
 		return false
 	end
 
-	return SecondaryCast.cast(Logic.LastGrapple, getController(), Targeting)
+	if
+		Arbiter
+		and typeof(Arbiter.isBlocked) == "function"
+		and Arbiter.isBlocked(Logic.LastGrapple, "SecondaryCast", PRIORITY.SecondaryCast)
+	then
+		return false
+	end
+
+	local triggered = SecondaryCast.cast(Logic.LastGrapple, getController(), Targeting)
+	if triggered and Arbiter and typeof(Arbiter.claim) == "function" then
+		Arbiter.claim(Logic.LastGrapple, "SecondaryCast", PRIORITY.SecondaryCast, 0.35)
+	end
+	return triggered
 end
 
 function Logic.triggerReelSaver(controller)
@@ -314,6 +422,14 @@ function Logic.triggerReelSaver(controller)
 		return false
 	end
 
+	if
+		Arbiter
+		and typeof(Arbiter.isBlocked) == "function"
+		and Arbiter.isBlocked(Logic.LastGrapple, "ReelSaver", PRIORITY.ReelSaver)
+	then
+		return false
+	end
+
 	if not Logic.LastGrapple then
 		Logic.PendingReelSaverUntil = time() + 1.2
 		return true
@@ -322,6 +438,8 @@ function Logic.triggerReelSaver(controller)
 	local triggered = ReelSaver.trigger(Logic.LastGrapple, getController(), Targeting)
 	if not triggered then
 		Logic.PendingReelSaverUntil = time() + 0.35
+	elseif Arbiter and typeof(Arbiter.claim) == "function" then
+		Arbiter.claim(Logic.LastGrapple, "ReelSaver", PRIORITY.ReelSaver, 0.55)
 	end
 	return triggered
 end
@@ -394,6 +512,12 @@ function Logic.disable()
 	if FailFeedback and typeof(FailFeedback.reset) == "function" then
 		pcall(function()
 			FailFeedback.reset()
+		end)
+	end
+
+	if Arbiter and typeof(Arbiter.reset) == "function" then
+		pcall(function()
+			Arbiter.reset()
 		end)
 	end
 end

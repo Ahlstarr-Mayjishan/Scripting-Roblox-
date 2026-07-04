@@ -64,7 +64,7 @@ local Controller = {
 	GrappleAssistBiomeTuningEnabled = true,
 	GrappleAssistFailFeedbackEnabled = true,
 	GrappleAssistSpecialPointPriority = true,
-	GrappleAnchorTargetingStyle = "Balanced",
+	GrappleAnchorTargetingStyle = "Auto",
 	GrappleAssistSecondaryCastEnabled = false,
 	GrappleAssistSecondaryCastKeybind = "Q",
 	GrappleAnchorPriorityGrapplePoint = 700,
@@ -515,7 +515,12 @@ function Controller:SetGrappleAssistSpecialPointPriority(value)
 end
 
 function Controller:SetGrappleAnchorTargetingStyle(value)
-	local styleName = tostring(value or "Balanced")
+	local styleName = tostring(value or "Auto")
+	if styleName == "Auto" then
+		self.GrappleAnchorTargetingStyle = "Auto"
+		return
+	end
+
 	local style = ANCHOR_TARGETING_STYLES[styleName] or ANCHOR_TARGETING_STYLES.Balanced
 	self.GrappleAnchorTargetingStyle = ANCHOR_TARGETING_STYLES[styleName] and styleName or "Balanced"
 	self.GrappleAssistManualAnchorAngle = style.ManualAngle

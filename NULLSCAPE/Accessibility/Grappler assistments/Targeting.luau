@@ -19,6 +19,7 @@ local IntentResolver = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler as
 local IntentTargetGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Intent Target Gate.luau")
 local ConfidenceGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Assist Confidence Gate.luau")
 local PilotState = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Pilot State.luau")
+local AdaptiveStyle = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Adaptive Anchor Style.luau")
 
 local Targeting = {}
 
@@ -497,6 +498,15 @@ function Targeting.findOptimalHit(grapple, controller, context)
 	local origin = rootPart.Position
 	local maxRange = getRange(controller)
 	local intent = getIntent(grapple, controller, aimDirection, context)
+	local effectiveController = controller
+	if AdaptiveStyle and typeof(AdaptiveStyle.resolve) == "function" then
+		local success, styledController = pcall(function()
+			return AdaptiveStyle.resolve(controller, intent)
+		end)
+		if success and styledController then
+			effectiveController = styledController
+		end
+	end
 	local bestHit = nil
 	local bestScore = -math.huge
 	local secondScore = -math.huge
@@ -510,7 +520,7 @@ function Targeting.findOptimalHit(grapple, controller, context)
 			local direction = offset.Unit
 			local dot = aimDirection:Dot(direction)
 
-			if dot >= getOptimalMinDot(part, controller, intent) then
+			if dot >= getOptimalMinDot(part, effectiveController, intent) then
 				local hit = Workspace:Raycast(origin, direction * (distance + HIT_OVERSHOOT), grapple.grappleParams)
 				local specialName = getSpecialTargetName(part)
 				local acceptedByIntent = not IntentTargetGate
@@ -518,9 +528,9 @@ function Targeting.findOptimalHit(grapple, controller, context)
 				if
 					acceptedByIntent
 					and canUseOptimalHit(hit, part)
-					and not isVoidProtectedHit(grapple, hit, part, origin, controller)
+					and not isVoidProtectedHit(grapple, hit, part, origin, effectiveController)
 				then
-					local score = scoreOptimalHit(hit, part, origin, distance, dot, controller, intent)
+					local score = scoreOptimalHit(hit, part, origin, distance, dot, effectiveController, intent)
 					if score > bestScore then
 						secondScore = bestScore
 						bestScore = score

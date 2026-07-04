@@ -121,6 +121,16 @@ local function getGoldenSpawnWait()
 	return GOLDEN_SPAWN_WAIT
 end
 
+local function getGiftFarmRange(controller)
+	local range = DEFAULT_RANGE
+	if typeof(controller.GetGiftFarmRange) == "function" then
+		range = controller:GetGiftFarmRange()
+	else
+		range = math.clamp(tonumber(controller.GiftFarmRange) or DEFAULT_RANGE, 5, DEFAULT_RANGE)
+	end
+	return range
+end
+
 local function markGoldenComplete(controller)
 	if controller then
 		controller.GiftFarmGoldenComplete = true
@@ -272,12 +282,7 @@ local function processOnce(controller)
 			end
 
 			lastGiftSeenAt = os.clock()
-			local range = DEFAULT_RANGE
-			if typeof(controller.GetGiftFarmRange) == "function" then
-				range = controller:GetGiftFarmRange()
-			else
-				range = math.clamp(tonumber(controller.GiftFarmRange) or DEFAULT_RANGE, 5, DEFAULT_RANGE)
-			end
+			local range = getGiftFarmRange(controller)
 			local route = ClusterPlanner.planRoute(candidates, range, hrp.Position)
 			local totalPlanned = 0
 			for _, step in ipairs(route) do
@@ -300,7 +305,8 @@ local function processOnce(controller)
 				setStatus(
 					controller,
 					"Collecting",
-					string.format("%d/%d route | %d/%d %s", index, #route, #cluster, totalPlanned, focus) .. planned
+					string.format("%d/%d route | %d/%d %s", index, #route, #cluster, totalPlanned, focus)
+						.. planned
 				)
 				Collector.collectCluster(controller, hrp, cluster, range, {
 					SafeRange = planInfo and planInfo.SafeRange,
