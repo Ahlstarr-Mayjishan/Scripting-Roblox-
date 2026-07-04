@@ -16,7 +16,8 @@ local GoldenWait = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Golden W
 
 local Runtime = {}
 local DEFAULT_RANGE = 60
-local MIN_SCAN_INTERVAL = 0.035
+local MIN_SCAN_INTERVAL = 0.07
+local STATUS_UPDATE_INTERVAL = 0.15
 local EMPTY_COMPLETE_DELAY = 2.5
 local DISABLE_FOOTHOLD_DURATION = 2
 local PYLON_LEVEL = 35
@@ -27,18 +28,31 @@ local connection = nil
 local inRoundConnection = nil
 local lastScan = 0
 local lastGiftSeenAt = 0
+local lastStatusAt = 0
+local lastStatus = nil
+local roundToken = 0
 
-local function setStatus(controller, status, detail)
+local function setStatus(controller, status, detail, force)
 	if controller then
-		controller.GiftFarmStatus = status or "Idle"
+		local nextStatus = status or "Idle"
+		local now = os.clock()
+		if not force and nextStatus == lastStatus and now - lastStatusAt < STATUS_UPDATE_INTERVAL then
+			return
+		end
+		lastStatus = nextStatus
+		lastStatusAt = now
+		controller.GiftFarmStatus = nextStatus
 		controller.GiftFarmDetail = detail or ""
 	end
 end
 
 local function resetRoundState(controller, inRound)
+	roundToken += 1
 	busy = false
 	lastScan = 0
 	lastGiftSeenAt = 0
+	lastStatusAt = 0
+	lastStatus = nil
 	if controller then
 		controller.GiftFarmGoldenComplete = false
 	end
@@ -47,6 +61,18 @@ local function resetRoundState(controller, inRound)
 	end
 	if Beacon and typeof(Beacon.reset) == "function" then
 		Beacon.reset(inRound)
+	end
+	if not inRound then
+		if Beacon and typeof(Beacon.restore) == "function" then
+			Beacon.restore()
+		end
+		if Collector and typeof(Collector.restoreMovement) == "function" then
+			Collector.restoreMovement({
+				KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
+				OnlyKeepFootholdIfAirborne = true,
+				SkipVelocityClear = true,
+			})
+		end
 	end
 	if Scanner and typeof(Scanner.reset) == "function" then
 		Scanner.reset()
@@ -70,7 +96,7 @@ end
 local function observeInRound(controller, gc)
 	local inRound = Context.getInRoundValue()
 	if not inRound then
-		setStatus(controller, "WaitingForGifts")
+		setStatus(controller, "WaitingForGifts", nil, true)
 		return
 	end
 
@@ -141,10 +167,15 @@ local function processOnce(controller)
 	end
 	lastScan = now
 	busy = true
+	local token = roundToken
+
+	local function isCurrentRoundActive()
+		return enabled and token == roundToken and Context.isInRound()
+	end
 
 	task.spawn(function()
 		local ok, err = pcall(function()
-			if not Context.isInRound() then
+			if not isCurrentRoundActive() then
 				setStatus(controller, "WaitingForRound")
 				return
 			end
@@ -166,6 +197,10 @@ local function processOnce(controller)
 
 			if Altar and typeof(Altar.tryStep) == "function" then
 				local handledAltar, altarStatus, altarDetail = Altar.tryStep(controller, hrp)
+				if not isCurrentRoundActive() then
+					setStatus(controller, "WaitingForRound")
+					return
+				end
 				if handledAltar then
 					setStatus(controller, altarStatus or "ActivatingAltar", altarDetail or "")
 					return
@@ -174,6 +209,10 @@ local function processOnce(controller)
 
 			if Medal and typeof(Medal.tryStep) == "function" then
 				local handledMedal, medalStatus = Medal.tryStep(controller, hrp)
+				if not isCurrentRoundActive() then
+					setStatus(controller, "WaitingForRound")
+					return
+				end
 				if handledMedal then
 					if medalStatus == "SubmittingMedal" then
 						if Beacon and typeof(Beacon.restore) == "function" then
@@ -192,6 +231,10 @@ local function processOnce(controller)
 			end
 
 			local candidates, scanInfo = Scanner.scan(controller, gch)
+			if not isCurrentRoundActive() then
+				setStatus(controller, "WaitingForRound")
+				return
+			end
 			if GoldenWait and typeof(GoldenWait.noteScan) == "function" then
 				GoldenWait.noteScan(scanInfo)
 			end
@@ -250,7 +293,14 @@ local function processOnce(controller)
 					SafeRange = planInfo and planInfo.SafeRange,
 					TargetPosition = planInfo and planInfo.TargetPosition,
 					PrecisionMode = precisionMode,
+					AbortCheck = function()
+						return not isCurrentRoundActive()
+					end,
 				})
+				if not isCurrentRoundActive() then
+					setStatus(controller, "WaitingForRound")
+					return
+				end
 				if collectResult and (tonumber(collectResult.Rejected) or 0) > 0 then
 					routeRejected = true
 				end
@@ -290,7 +340,7 @@ local function processOnce(controller)
 		end)
 
 		if not ok then
-			setStatus(controller, "Error", tostring(err))
+			setStatus(controller, "Error", tostring(err), true)
 		end
 		busy = false
 	end)
@@ -340,7 +390,7 @@ function Runtime.disable(controller)
 		inRoundConnection = nil
 	end
 	resetRoundState(controller, false)
-	setStatus(controller, "Idle")
+	setStatus(controller, "Idle", nil, true)
 	return true
 end
 

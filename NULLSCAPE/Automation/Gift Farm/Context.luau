@@ -135,6 +135,10 @@ function Context.suppressBeaconInteraction()
 	return true
 end
 
+function Context.isBeaconInteractionSuppressed()
+	return beaconPartStates ~= nil
+end
+
 function Context.restoreBeaconInteraction()
 	if not beaconPartStates then
 		return false

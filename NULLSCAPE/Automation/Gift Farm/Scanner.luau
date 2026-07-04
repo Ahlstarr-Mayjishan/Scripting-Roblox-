@@ -2,6 +2,7 @@
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 local Progress = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Progress.luau")
+local Collapse = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Collapse.luau")
 
 local Scanner = {}
 local SPAWN_SETTLE = 0.35
@@ -10,6 +11,9 @@ local seenGifts = setmetatable({}, { __mode = "k" })
 
 function Scanner.reset()
 	seenGifts = setmetatable({}, { __mode = "k" })
+	if Collapse and typeof(Collapse.reset) == "function" then
+		Collapse.reset()
+	end
 end
 
 function Scanner.scan(controller, gch)
@@ -36,10 +40,15 @@ function Scanner.scan(controller, gch)
 				end
 				local settleTime = gift.Golden and GOLDEN_SPAWN_SETTLE or SPAWN_SETTLE
 				if now - seenGifts[gift] >= settleTime then
+					local collapsePriority = 0
+					if Collapse and typeof(Collapse.getGiftUrgency) == "function" then
+						collapsePriority = Collapse.getGiftUrgency(pos)
+					end
 					local entry = {
 						rawObj = gift,
 						pos = pos,
 						priority = priority,
+						collapsePriority = collapsePriority,
 						id = gift.Id or 0,
 						golden = gift.Golden == true,
 					}
@@ -63,6 +72,9 @@ function Scanner.scan(controller, gch)
 		if a.priority ~= b.priority then
 			return a.priority < b.priority
 		end
+		if a.collapsePriority ~= b.collapsePriority then
+			return (a.collapsePriority or 0) > (b.collapsePriority or 0)
+		end
 		return tostring(a.id) < tostring(b.id)
 	end)
 
@@ -71,6 +83,7 @@ function Scanner.scan(controller, gch)
 		Normal = #normalGifts,
 		RawGolden = rawGolden,
 		RawNormal = rawNormal,
+		CollapseTracked = true,
 		GoldenLocked = #goldenGifts > 0,
 	}
 end

@@ -331,6 +331,10 @@ local function waitForArrival(hrp, targetPosition, precisionMode)
 	return (hrp.Position - targetPosition).Magnitude <= tolerance
 end
 
+local function isAborted(options)
+	return options and typeof(options.AbortCheck) == "function" and options.AbortCheck() == true
+end
+
 local function collectItems(items, currentPos, collectRange, collectedEvent, attemptedGifts)
 	local collected = 0
 	for _, item in ipairs(items) do
@@ -419,13 +423,26 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 	}
 
 	local ok, err = pcall(function()
+		if isAborted(options) then
+			return
+		end
+
 		hrp.Anchored = false
 		placeFoothold(standingPosition)
 		jumpToWaypoint(hrp, standingPosition)
+		if isAborted(options) then
+			return
+		end
 		clearVelocity(hrp)
 		waitForArrival(hrp, standingPosition, precisionMode)
+		if isAborted(options) then
+			return
+		end
 		waitIfPositive(precisionMode and PRECISION_COLLECT_SETTLE or COLLECT_SETTLE)
 		waitForReplicationSync(precisionMode)
+		if isAborted(options) then
+			return
+		end
 
 		local currentPos = hrp.Position
 		local attemptedGifts = {}
@@ -435,9 +452,15 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 		end
 
 		collectItems(cluster, currentPos, collectRange, collectedEvent, attemptedGifts)
+		if isAborted(options) then
+			return
+		end
 		task.wait(getValidationWait(controller, precisionMode))
 
 		for _ = 1, MAX_RETRY_PASSES do
+			if isAborted(options) then
+				return
+			end
 			currentPos = hrp.Position
 			local rejected = getRejectedItems(cluster, currentPos, collectRange)
 			if #rejected == 0 then

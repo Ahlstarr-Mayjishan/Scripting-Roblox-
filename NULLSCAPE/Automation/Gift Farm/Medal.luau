@@ -1,6 +1,7 @@
 --!nocheck
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
+local Beacon = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Beacon.luau")
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -155,8 +156,8 @@ function Medal.tryStep(controller, hrp)
 		end
 
 		lastActionAt = os.clock()
-		if Context and typeof(Context.restoreBeaconInteraction) == "function" then
-			Context.restoreBeaconInteraction()
+		if Beacon and typeof(Beacon.restore) == "function" then
+			Beacon.restore()
 		end
 		Context.moveCharacterTo(CFrame.new(beacon.Position + Vector3.new(0, 4, 0)))
 		task.wait(TOUCH_SETTLE)

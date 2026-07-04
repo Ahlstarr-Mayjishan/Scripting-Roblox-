@@ -4,10 +4,10 @@ local Planner = {}
 local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.luau")
 
 local RANGE_BUFFER = 0.75
-local MAX_ROUTE_POINTS = 5
-local MAX_SEED_CANDIDATES = 48
-local MAX_CENTER_ITEMS = 18
-local MAX_PAIR_CENTERS = 36
+local MAX_ROUTE_POINTS = 4
+local MAX_SEED_CANDIDATES = 32
+local MAX_CENTER_ITEMS = 12
+local MAX_PAIR_CENTERS = 16
 local EDGE_PENALTY_RATIO = 0.92
 
 local function nativeDistanceSq(a, b)
@@ -24,12 +24,19 @@ end
 
 local function scoreCluster(cluster, targetPosition, seed, origin, range)
 	local golden = 0
+	local collapseUrgency = 0
+	local collapseCount = 0
 	local edgePenalty = 0
 	local edgeSq = range and (range * EDGE_PENALTY_RATIO) ^ 2 or nil
 
 	for _, item in ipairs(cluster) do
 		if item.golden then
 			golden += 1
+		end
+		local itemCollapse = tonumber(item.collapsePriority) or 0
+		if itemCollapse > 0 then
+			collapseUrgency += itemCollapse
+			collapseCount += 1
 		end
 		if edgeSq and targetPosition and collectDistanceSq(item.pos, targetPosition) >= edgeSq then
 			edgePenalty += 1
@@ -40,6 +47,8 @@ local function scoreCluster(cluster, targetPosition, seed, origin, range)
 	local originDistance = origin and nativeDistanceSq(targetRootPosition, origin) or 0
 	return {
 		Golden = golden,
+		CollapseUrgency = collapseUrgency,
+		CollapseCount = collapseCount,
 		Total = #cluster,
 		EdgePenalty = edgePenalty,
 		OriginDistance = originDistance,
@@ -53,6 +62,12 @@ local function isBetterScore(score, bestScore)
 	end
 	if score.Golden ~= bestScore.Golden then
 		return score.Golden > bestScore.Golden
+	end
+	if score.CollapseUrgency ~= bestScore.CollapseUrgency then
+		return score.CollapseUrgency > bestScore.CollapseUrgency
+	end
+	if score.CollapseCount ~= bestScore.CollapseCount then
+		return score.CollapseCount > bestScore.CollapseCount
 	end
 	if score.Total ~= bestScore.Total then
 		return score.Total > bestScore.Total
@@ -85,6 +100,9 @@ local function getWeightedCenter(cluster)
 
 	for _, item in ipairs(cluster) do
 		local weight = item.golden and 3 or 1
+		if (tonumber(item.collapsePriority) or 0) > 0 then
+			weight += math.min(4, item.collapsePriority)
+		end
 		totalWeight += weight
 		weighted += item.pos * weight
 	end
@@ -139,6 +157,10 @@ local function getSeedCandidates(candidates, origin)
 			return a.golden == true
 		end
 
+		if a.collapsePriority ~= b.collapsePriority then
+			return (a.collapsePriority or 0) > (b.collapsePriority or 0)
+		end
+
 		if origin then
 			local distanceA = nativeDistanceSq(a.pos, origin)
 			local distanceB = nativeDistanceSq(b.pos, origin)
@@ -161,6 +183,10 @@ local function sortCluster(cluster, targetPosition)
 	table.sort(cluster, function(a, b)
 		if a.golden ~= b.golden then
 			return a.golden == true
+		end
+
+		if a.collapsePriority ~= b.collapsePriority then
+			return (a.collapsePriority or 0) > (b.collapsePriority or 0)
 		end
 
 		local distanceA = collectDistanceSq(a.pos, targetPosition)
