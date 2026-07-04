@@ -304,8 +304,7 @@ local function processOnce(controller)
 				local planInfo = step.Info
 				local score = planInfo and planInfo.Score
 				local planned = score and (" | plan " .. tostring(score.Golden) .. "/" .. tostring(score.Total)) or ""
-				local remainingAfterStep = math.max(totalPlanned - collectedPlanned - #cluster, 0)
-				local precisionMode = #cluster <= 2 or remainingAfterStep <= 2
+				local precisionMode = #cluster <= 2
 				setStatus(
 					controller,
 					precisionMode and "CollectingPrecision" or "Collecting",
