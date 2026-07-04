@@ -4,21 +4,25 @@ local GoldenWait = {}
 
 local GOLDEN_SPAWN_WAIT = 2
 local PASSAGE_GOLDEN_WAIT = 2.5
+local NORMAL_CLEAR_GOLDEN_WAIT = 5
 
 local hasSeenGoldenThisRound = false
 local goldenMissingSince = nil
 local passageGoldenUntil = 0
+local normalClearGoldenUntil = 0
 
 function GoldenWait.reset()
 	hasSeenGoldenThisRound = false
 	goldenMissingSince = nil
 	passageGoldenUntil = 0
+	normalClearGoldenUntil = 0
 end
 
 function GoldenWait.noteScan(scanInfo)
 	if scanInfo and scanInfo.RawGolden and scanInfo.RawGolden > 0 then
 		hasSeenGoldenThisRound = true
 		goldenMissingSince = nil
+		normalClearGoldenUntil = 0
 	end
 end
 
@@ -31,8 +35,17 @@ function GoldenWait.startPassageWindow()
 	goldenMissingSince = os.clock()
 end
 
+function GoldenWait.startNormalClearWindow()
+	normalClearGoldenUntil = math.max(normalClearGoldenUntil, os.clock() + NORMAL_CLEAR_GOLDEN_WAIT)
+	goldenMissingSince = os.clock()
+end
+
 function GoldenWait.isPassageWindowActive()
 	return os.clock() < passageGoldenUntil
+end
+
+function GoldenWait.isNormalClearWindowActive()
+	return os.clock() < normalClearGoldenUntil
 end
 
 function GoldenWait.getWaitTime()
@@ -41,16 +54,23 @@ end
 
 function GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, setStatus, reason)
 	local passageActive = GoldenWait.isPassageWindowActive()
-	if not (scanInfo and scanInfo.RawGolden == 0 and (passageActive or lastGiftSeenAt > 0)) then
+	local normalClearActive = GoldenWait.isNormalClearWindowActive()
+	if not (scanInfo and scanInfo.RawGolden == 0 and (passageActive or normalClearActive or lastGiftSeenAt > 0)) then
 		goldenMissingSince = nil
 		return false
 	end
 
-	if not passageActive and not hasSeenGoldenThisRound and (tonumber(scanInfo.RawNormal) or 0) > 0 then
+	if not (passageActive or normalClearActive) and not hasSeenGoldenThisRound and (tonumber(scanInfo.RawNormal) or 0) > 0 then
 		return false
 	end
 
-	local waitTime = passageActive and PASSAGE_GOLDEN_WAIT or GoldenWait.getWaitTime()
+	local waitTime = GoldenWait.getWaitTime()
+	if passageActive then
+		waitTime = math.max(waitTime, PASSAGE_GOLDEN_WAIT)
+	end
+	if normalClearActive then
+		waitTime = math.max(waitTime, NORMAL_CLEAR_GOLDEN_WAIT)
+	end
 	if waitTime <= 0 then
 		return false
 	end

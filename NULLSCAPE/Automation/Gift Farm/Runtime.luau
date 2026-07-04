@@ -437,7 +437,11 @@ local function processOnce(controller)
 				return
 			end
 			if shouldHoldForGoldenWait then
-				GoldenWait.holdNow()
+				if typeof(GoldenWait.startNormalClearWindow) == "function" then
+					GoldenWait.startNormalClearWindow()
+				else
+					GoldenWait.holdNow()
+				end
 			end
 
 			local normalCollected, normalTotal, displayNormalRatio = Progress.getNormalGiftProgress(gch)
