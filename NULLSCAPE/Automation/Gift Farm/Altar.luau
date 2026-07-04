@@ -9,6 +9,7 @@ local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.lua
 local Altar = {}
 
 local ALTAR_ORDER = { "Passage", "Purgatory", "Chance", "Protection", "Chaos", "Echo", "Purification" }
+local ALTAR_COMBO_ORDER = { "Purgatory", "Echo" }
 local ACTION_COOLDOWN = 0.7
 local TOUCH_SETTLE = 0.08
 local MAX_ACTIVATION_SECONDS = 5
@@ -220,6 +221,7 @@ end
 local function buildSelectionPriority(controller)
 	local selected = {}
 	local priority = {}
+	local orderedSelections = {}
 	local selections = controller and controller.AltarSelections
 
 	if typeof(selections) ~= "table" then
@@ -229,7 +231,9 @@ local function buildSelectionPriority(controller)
 	for index, altarName in ipairs(selections) do
 		if typeof(altarName) == "string" and altarName ~= "" then
 			selected[altarName] = true
-			priority[altarName] = priority[altarName] or index
+			if not table.find(orderedSelections, altarName) then
+				table.insert(orderedSelections, altarName)
+			end
 		end
 	end
 
@@ -239,9 +243,25 @@ local function buildSelectionPriority(controller)
 		end
 	end
 
-	for index, altarName in ipairs(ALTAR_ORDER) do
+	local nextPriority = 1
+	if selected.Purgatory == true and selected.Echo == true then
+		for _, altarName in ipairs(ALTAR_COMBO_ORDER) do
+			priority[altarName] = nextPriority
+			nextPriority += 1
+		end
+	end
+
+	for _, altarName in ipairs(orderedSelections) do
 		if selected[altarName] and not priority[altarName] then
-			priority[altarName] = index
+			priority[altarName] = nextPriority
+			nextPriority += 1
+		end
+	end
+
+	for _, altarName in ipairs(ALTAR_ORDER) do
+		if selected[altarName] and not priority[altarName] then
+			priority[altarName] = nextPriority
+			nextPriority += 1
 		end
 	end
 

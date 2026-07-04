@@ -277,13 +277,24 @@ local function processOnce(controller)
 				Beacon.suppressUntilReturn()
 			end
 
-			if Altar and typeof(Altar.tryStep) == "function" then
+			local passageGoldenPriority = GoldenWait
+				and typeof(GoldenWait.isPassageWindowActive) == "function"
+				and GoldenWait.isPassageWindowActive() == true
+			if not passageGoldenPriority and Altar and typeof(Altar.tryStep) == "function" then
 				local handledAltar, altarStatus, altarDetail = Altar.tryStep(controller, hrp)
 				if not isCurrentRoundActive() then
 					setStatus(controller, "WaitingForRound")
 					return
 				end
 				if handledAltar then
+					if typeof(altarDetail) == "string"
+						and string.find(altarDetail, "Passage", 1, true)
+						and GoldenWait
+						and typeof(GoldenWait.startPassageWindow) == "function"
+					then
+						lastGiftSeenAt = os.clock()
+						GoldenWait.startPassageWindow()
+					end
 					setStatus(controller, altarStatus or "ActivatingAltar", altarDetail or "")
 					return
 				end

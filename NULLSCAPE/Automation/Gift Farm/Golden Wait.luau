@@ -3,13 +3,16 @@
 local GoldenWait = {}
 
 local GOLDEN_SPAWN_WAIT = 2
+local PASSAGE_GOLDEN_WAIT = 2.5
 
 local hasSeenGoldenThisRound = false
 local goldenMissingSince = nil
+local passageGoldenUntil = 0
 
 function GoldenWait.reset()
 	hasSeenGoldenThisRound = false
 	goldenMissingSince = nil
+	passageGoldenUntil = 0
 end
 
 function GoldenWait.noteScan(scanInfo)
@@ -23,21 +26,31 @@ function GoldenWait.hasSeenGolden()
 	return hasSeenGoldenThisRound
 end
 
+function GoldenWait.startPassageWindow()
+	passageGoldenUntil = math.max(passageGoldenUntil, os.clock() + PASSAGE_GOLDEN_WAIT)
+	goldenMissingSince = os.clock()
+end
+
+function GoldenWait.isPassageWindowActive()
+	return os.clock() < passageGoldenUntil
+end
+
 function GoldenWait.getWaitTime()
 	return GOLDEN_SPAWN_WAIT
 end
 
 function GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, setStatus, reason)
-	if not (lastGiftSeenAt > 0 and scanInfo and scanInfo.RawGolden == 0) then
+	local passageActive = GoldenWait.isPassageWindowActive()
+	if not (scanInfo and scanInfo.RawGolden == 0 and (passageActive or lastGiftSeenAt > 0)) then
 		goldenMissingSince = nil
 		return false
 	end
 
-	if not hasSeenGoldenThisRound and (tonumber(scanInfo.RawNormal) or 0) > 0 then
+	if not passageActive and not hasSeenGoldenThisRound and (tonumber(scanInfo.RawNormal) or 0) > 0 then
 		return false
 	end
 
-	local waitTime = GoldenWait.getWaitTime()
+	local waitTime = passageActive and PASSAGE_GOLDEN_WAIT or GoldenWait.getWaitTime()
 	if waitTime <= 0 then
 		return false
 	end
