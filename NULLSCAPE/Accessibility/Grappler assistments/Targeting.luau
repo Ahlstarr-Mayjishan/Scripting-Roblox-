@@ -70,7 +70,14 @@ local function getRange(controller)
 end
 
 local function getCaptureAngle(controller)
-	return math.clamp(tonumber(controller and controller.GrappleAssistCaptureAngle) or DEFAULT_CAPTURE_ANGLE, 1, 45)
+	local baseAngle =
+		math.clamp(tonumber(controller and controller.GrappleAssistCaptureAngle) or DEFAULT_CAPTURE_ANGLE, 1, 45)
+	local strength = math.clamp(tonumber(controller and controller.GrappleAssistStrength) or 1, 0.1, 3)
+	return math.clamp(baseAngle * strength, 1, 85)
+end
+
+local function getAssistStrength(controller)
+	return math.clamp(tonumber(controller and controller.GrappleAssistStrength) or 1, 0.1, 3)
 end
 
 local function getManualAnchorAngle(controller)
@@ -427,7 +434,7 @@ local function scoreOptimalHit(hit, part, origin, distance, dot, controller, int
 		score += getTerrainScore(hit, origin)
 	end
 	score -= distance * 0.4
-	score -= math.deg(math.acos(math.clamp(dot, -1, 1))) * 6
+	score -= math.deg(math.acos(math.clamp(dot, -1, 1))) * (6 / getAssistStrength(controller))
 
 	return score
 end
