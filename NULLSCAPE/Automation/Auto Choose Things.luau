@@ -21,7 +21,6 @@ local CATEGORY_ORDER = {
 	"Curses",
 	"Greater Curses",
 	"Chaos",
-	"Reroll",
 }
 
 local CHOOSE_DISTANCE = 6
@@ -174,7 +173,7 @@ local function normalizeCategory(choiceType, choiceName, root)
 	local rawName = tostring(choiceName or "")
 
 	if root and root.Name == "Reroll" then
-		return "Reroll"
+		return nil
 	elseif root and root.Name == "Sign" then
 		return "Continue"
 	elseif rawType == "SELECTION" and rawName == "MedalCurses" then
@@ -308,7 +307,7 @@ local function collectTarget(controller, hrp)
 
 	local hasPrimaryChoice = false
 	for _, candidate in ipairs(candidates) do
-		if candidate.Category ~= "Reroll" and candidate.Category ~= "Continue" then
+		if candidate.Category ~= "Continue" then
 			hasPrimaryChoice = true
 			break
 		end
@@ -316,7 +315,7 @@ local function collectTarget(controller, hrp)
 	if hasPrimaryChoice then
 		for index = #candidates, 1, -1 do
 			local category = candidates[index].Category
-			if category == "Reroll" or category == "Continue" then
+			if category == "Continue" then
 				table.remove(candidates, index)
 			end
 		end
