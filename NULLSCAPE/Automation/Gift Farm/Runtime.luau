@@ -16,7 +16,7 @@ local GoldenWait = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Golden W
 
 local Runtime = {}
 local DEFAULT_RANGE = 60
-local MIN_SCAN_INTERVAL = 0.07
+local MIN_SCAN_INTERVAL = 0.04
 local STATUS_UPDATE_INTERVAL = 0.15
 local EMPTY_COMPLETE_DELAY = 2.5
 local DISABLE_FOOTHOLD_DURATION = 2
@@ -157,23 +157,20 @@ local function shouldWaitForPylons(controller)
 	return hasActivePylon()
 end
 
-local function buildPrecisionRoute(candidates)
-	local route = {}
-	for _, item in ipairs(candidates or {}) do
-		table.insert(route, {
-			Cluster = { item },
-			Info = {
-				TargetPosition = item.pos,
-				SafeRange = 18,
-				Score = {
-					Golden = item.golden and 1 or 0,
-					CollapseCount = (tonumber(item.collapsePriority) or 0) > 0 and 1 or 0,
-					Total = 1,
-				},
-			},
-		})
+local function isHoldingMedalBeforeGoldenComplete(controller)
+	return controller
+		and controller.CollectMedalEnabled == true
+		and controller.GiftFarmGoldenComplete ~= true
+		and Medal
+		and typeof(Medal.isCarrying) == "function"
+		and Medal.isCarrying() == true
+end
+
+local function tryMedalStep(controller, hrp)
+	if Medal and typeof(Medal.tryStep) == "function" then
+		return Medal.tryStep(controller, hrp)
 	end
-	return route
+	return false
 end
 
 local function isTailPrecision(candidates, scanInfo, normalRatio)
@@ -250,23 +247,6 @@ local function processOnce(controller)
 				end
 			end
 
-			if Medal and typeof(Medal.tryStep) == "function" then
-				local handledMedal, medalStatus = Medal.tryStep(controller, hrp)
-				if not isCurrentRoundActive() then
-					setStatus(controller, "WaitingForRound")
-					return
-				end
-				if handledMedal then
-					if medalStatus == "SubmittingMedal" then
-						if Beacon and typeof(Beacon.restore) == "function" then
-							Beacon.restore()
-						end
-					end
-					setStatus(controller, medalStatus or "MedalAction")
-					return
-				end
-			end
-
 			local gch = Context.getGiftClientHandler()
 			if not (gch and gch.Gifts) then
 				setStatus(controller, "WaitingForGiftClient")
@@ -291,12 +271,45 @@ local function processOnce(controller)
 					setStatus(controller, "WaitingForPylons", "Golden gifts complete")
 					return
 				end
+				local handledMedal, medalStatus = tryMedalStep(controller, hrp)
+				if not isCurrentRoundActive() then
+					setStatus(controller, "WaitingForRound")
+					return
+				end
+				if handledMedal then
+					setStatus(controller, medalStatus or "MedalAction")
+					return
+				end
 				if Beacon.returnToBeacon(controller, hrp, setStatus, "Golden gifts complete") then
 					return
 				end
 			end
 
 			if #candidates == 0 then
+				local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
+				local rawNormal = scanInfo and (tonumber(scanInfo.RawNormal) or 0) or 0
+				if rawGolden > 0 or rawNormal > 0 then
+					lastGiftSeenAt = os.clock()
+					setStatus(
+						controller,
+						"WaitingForGiftSettle",
+						string.format("Raw gifts visible | Golden %d Normal %d", rawGolden, rawNormal)
+					)
+					return
+				end
+				if isHoldingMedalBeforeGoldenComplete(controller) then
+					setStatus(controller, "HoldingMedalForGolden", "Waiting for golden gifts before beacon")
+					return
+				end
+				local handledMedal, medalStatus = tryMedalStep(controller, hrp)
+				if not isCurrentRoundActive() then
+					setStatus(controller, "WaitingForRound")
+					return
+				end
+				if handledMedal then
+					setStatus(controller, medalStatus or "MedalAction")
+					return
+				end
 				if lastGiftSeenAt > 0 and os.clock() - lastGiftSeenAt >= EMPTY_COMPLETE_DELAY then
 					if Beacon.returnToBeacon(controller, hrp, setStatus, "Round targets complete") then
 						return
@@ -312,8 +325,13 @@ local function processOnce(controller)
 			local range = getGiftFarmRange(controller)
 			local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 			local tailPrecision = isTailPrecision(candidates, scanInfo, normalRatio)
-			local route = tailPrecision and buildPrecisionRoute(candidates)
-				or ClusterPlanner.planRoute(candidates, range, hrp.Position)
+			local route, remaining = ClusterPlanner.planRoute(candidates, range, hrp.Position)
+			if remaining and #remaining > 0 and typeof(ClusterPlanner.planTailRoute) == "function" then
+				local tailRoute = ClusterPlanner.planTailRoute(remaining, range, hrp.Position)
+				for _, step in ipairs(tailRoute) do
+					table.insert(route, step)
+				end
+			end
 			local totalPlanned = 0
 			for _, step in ipairs(route) do
 				totalPlanned += #(step.Cluster or {})
@@ -329,7 +347,10 @@ local function processOnce(controller)
 				local score = planInfo and planInfo.Score
 				local planned = score and (" | plan " .. tostring(score.Golden) .. "/" .. tostring(score.Total)) or ""
 				local collapseCount = score and tonumber(score.CollapseCount) or 0
-				local precisionMode = tailPrecision or #cluster <= 2 or (collapseCount > 0 and #cluster <= 4)
+				local precisionMode = tailPrecision
+					or (planInfo and planInfo.TailCleanup == true)
+					or #cluster <= 2
+					or (collapseCount > 0 and #cluster <= 4)
 				setStatus(
 					controller,
 					precisionMode and "CollectingPrecision" or "Collecting",

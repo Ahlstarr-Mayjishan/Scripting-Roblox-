@@ -177,6 +177,10 @@ function Medal.tryStep(controller, hrp)
 	return true, "CollectingMedal"
 end
 
+function Medal.isCarrying()
+	return carriesMedal()
+end
+
 function Medal.reset()
 	lastActionAt = 0
 end

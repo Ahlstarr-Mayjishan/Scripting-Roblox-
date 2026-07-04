@@ -3,8 +3,9 @@
 local Planner = {}
 local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.luau")
 
-local RANGE_BUFFER = 6
-local MAX_ROUTE_POINTS = 4
+local RANGE_BUFFER = 3.5
+local MAX_ROUTE_POINTS = 12
+local MAX_TAIL_ROUTE_POINTS = 32
 local MAX_SEED_CANDIDATES = 32
 local MAX_CENTER_ITEMS = 12
 local MAX_PAIR_CENTERS = 16
@@ -300,6 +301,52 @@ function Planner.planRoute(candidates, range, origin)
 
 		remaining = removeClusterItems(remaining, cluster)
 		currentOrigin = planInfo and Distance.getRootPosition(planInfo.TargetPosition) or currentOrigin
+	end
+
+	return route, remaining
+end
+
+function Planner.planTailRoute(candidates, range, origin)
+	local route = {}
+	local remaining = table.clone(candidates or {})
+	local currentOrigin = origin
+	local safeRange = getSafeRange(range)
+
+	while #remaining > 0 and #route < MAX_TAIL_ROUTE_POINTS do
+		table.sort(remaining, function(a, b)
+			if a.golden ~= b.golden then
+				return a.golden == true
+			end
+			if a.collapsePriority ~= b.collapsePriority then
+				return (a.collapsePriority or 0) > (b.collapsePriority or 0)
+			end
+			if currentOrigin then
+				local distanceA = nativeDistanceSq(a.pos, currentOrigin)
+				local distanceB = nativeDistanceSq(b.pos, currentOrigin)
+				if distanceA ~= distanceB then
+					return distanceA < distanceB
+				end
+			end
+			return tostring(a.id or "") < tostring(b.id or "")
+		end)
+
+		local seed = table.remove(remaining, 1)
+		local cluster = buildAroundPosition(remaining, seed.pos, safeRange)
+		table.insert(cluster, 1, seed)
+		sortCluster(cluster, seed.pos)
+
+		table.insert(route, {
+			Cluster = cluster,
+			Info = {
+				TargetPosition = seed.pos,
+				SafeRange = safeRange,
+				Score = scoreCluster(cluster, seed.pos, seed, currentOrigin, safeRange),
+				TailCleanup = true,
+			},
+		})
+
+		remaining = removeClusterItems(remaining, cluster)
+		currentOrigin = Distance.getRootPosition(seed.pos)
 	end
 
 	return route, remaining

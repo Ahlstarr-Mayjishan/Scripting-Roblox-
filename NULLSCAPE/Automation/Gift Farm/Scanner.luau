@@ -5,8 +5,8 @@ local Progress = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Progress.l
 local Collapse = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Collapse.luau")
 
 local Scanner = {}
-local SPAWN_SETTLE = 0.35
-local GOLDEN_SPAWN_SETTLE = 0.1
+local SPAWN_SETTLE = 0.22
+local GOLDEN_SPAWN_SETTLE = 0.05
 local seenGifts = setmetatable({}, { __mode = "k" })
 local peakRawGolden = 0
 local peakRawNormal = 0

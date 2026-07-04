@@ -9,28 +9,28 @@ local Workspace = game:GetService("Workspace")
 
 local Collector = {}
 local COLLECT_SETTLE = 0
-local PRECISION_COLLECT_SETTLE = 0.09
+local PRECISION_COLLECT_SETTLE = 0.05
 local SYNC_MIN = 0.02
-local SYNC_MAX = 0.07
-local PRECISION_SYNC_MIN = 0.04
-local PRECISION_SYNC_MAX = 0.11
+local SYNC_MAX = 0.055
+local PRECISION_SYNC_MIN = 0.025
+local PRECISION_SYNC_MAX = 0.08
 local BASE_VALIDATION_WAIT = 0.06
-local FAST_VALIDATION_MAX = 0.16
-local PRECISION_VALIDATION_WAIT = 0.18
-local PRECISION_VALIDATION_MAX = 0.26
+local FAST_VALIDATION_MAX = 0.13
+local PRECISION_VALIDATION_WAIT = 0.12
+local PRECISION_VALIDATION_MAX = 0.2
 local ARRIVAL_TOLERANCE = 3
-local PRECISION_ARRIVAL_TOLERANCE = 1.25
+local PRECISION_ARRIVAL_TOLERANCE = 1.75
 local ARRIVAL_STABLE_FRAMES = 1
 local PRECISION_STABLE_FRAMES = 2
-local TAIL_STABLE_FRAMES = 4
+local TAIL_STABLE_FRAMES = 2
 local ARRIVAL_TIMEOUT = 0.22
-local PRECISION_ARRIVAL_TIMEOUT = 0.35
-local TAIL_ARRIVAL_TIMEOUT = 0.55
+local PRECISION_ARRIVAL_TIMEOUT = 0.28
+local TAIL_ARRIVAL_TIMEOUT = 0.38
 local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
 local MAX_RETRY_PASSES = 2
 local MAX_PRECISION_RETRY_PASSES = 3
-local RETRY_SETTLE = 0.075
+local RETRY_SETTLE = 0.045
 local comboCount = 0
 local lastCollectTick = 0
 local foothold = nil
@@ -223,8 +223,10 @@ local function updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
 		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.03, BASE_VALIDATION_WAIT, PRECISION_VALIDATION_MAX)
 	elseif ratio < 0.9 then
 		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.015, BASE_VALIDATION_WAIT, PRECISION_VALIDATION_MAX)
-	elseif adaptiveSuccessRate > 0.96 then
-		adaptiveValidationWait = math.clamp(adaptiveValidationWait - 0.02, 0.035, PRECISION_VALIDATION_MAX)
+	elseif adaptiveSuccessRate > 0.98 then
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait - 0.035, 0.03, PRECISION_VALIDATION_MAX)
+	elseif adaptiveSuccessRate > 0.94 then
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait - 0.02, 0.03, PRECISION_VALIDATION_MAX)
 	end
 
 	if controller then

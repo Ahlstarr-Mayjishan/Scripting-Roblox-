@@ -104,6 +104,34 @@ local function readAttribute(root, prompt, name)
 	return prompt and prompt.Parent and prompt.Parent:GetAttribute(name) or nil
 end
 
+local function hasAncestorNamed(instance, name)
+	local current = instance
+	while current and current ~= workspace do
+		if current.Name == name then
+			return true
+		end
+		current = current.Parent
+	end
+	return false
+end
+
+local function textContains(value, needle)
+	return string.find(string.lower(tostring(value or "")), needle, 1, true) ~= nil
+end
+
+local function isContinuePromptRoot(root, prompt)
+	if hasAncestorNamed(root, "Sign") or hasAncestorNamed(prompt, "Sign") then
+		return true
+	end
+
+	return textContains(root and root.Name, "continue")
+		or textContains(prompt and prompt.Name, "continue")
+		or textContains(prompt and prompt.ActionText, "continue")
+		or textContains(prompt and prompt.ObjectText, "continue")
+		or textContains(prompt and prompt.ActionText, "proceed")
+		or textContains(prompt and prompt.ObjectText, "proceed")
+end
+
 local function isPromptReady(prompt)
 	return prompt
 		and prompt:IsDescendantOf(workspace)
@@ -168,13 +196,13 @@ local function tryContinue(controller)
 	return true
 end
 
-local function normalizeCategory(choiceType, choiceName, root)
+local function normalizeCategory(choiceType, choiceName, root, prompt)
 	local rawType = tostring(choiceType or ""):upper()
 	local rawName = tostring(choiceName or "")
 
-	if root and root.Name == "Reroll" then
+	if hasAncestorNamed(root, "Reroll") or hasAncestorNamed(prompt, "Reroll") then
 		return nil
-	elseif root and root.Name == "Sign" then
+	elseif isContinuePromptRoot(root, prompt) then
 		return "Continue"
 	elseif rawType == "SELECTION" and rawName == "MedalCurses" then
 		return "Selection - Medal Curses"
@@ -256,7 +284,7 @@ local function addCandidate(candidates, seen, root, selected, priority, hrp)
 	local choiceType = readAttribute(root, prompt, "ChoiceType")
 	local choiceName = readAttribute(root, prompt, "ChoiceName")
 	local itemIndex = readAttribute(root, prompt, "ItemIndex")
-	local category = normalizeCategory(choiceType, choiceName, root)
+	local category = normalizeCategory(choiceType, choiceName, root, prompt)
 	if not (category and selected[category]) then
 		return
 	end
@@ -300,6 +328,11 @@ local function collectTarget(controller, hrp)
 	local candidates, seen = {}, {}
 	for _, child in ipairs(selectFolder:GetChildren()) do
 		addCandidate(candidates, seen, child, selected, priority, hrp)
+	end
+	for _, descendant in ipairs(selectFolder:GetDescendants()) do
+		if descendant:IsA("ProximityPrompt") and isContinuePromptRoot(descendant.Parent, descendant) then
+			addCandidate(candidates, seen, descendant.Parent or descendant, selected, priority, hrp)
+		end
 	end
 	for _, tagged in ipairs(CollectionService:GetTagged("ChoiceOrb")) do
 		addCandidate(candidates, seen, tagged, selected, priority, hrp)
