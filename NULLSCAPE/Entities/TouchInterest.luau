@@ -22,6 +22,7 @@ Logic.Config = {
 	["Catalyst"] = "CatalystImmune",
 	["nilEnemy"] = "nilEnemyImmune",
 	["nilMirage"] = "nilMirageImmune",
+	["Ponderer"] = "PondererImmune",
 }
 
 local processedEntities = setmetatable({}, { __mode = "k" })

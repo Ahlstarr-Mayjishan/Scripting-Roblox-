@@ -326,6 +326,45 @@ return function(Client, Controller)
 		end,
 	})
 
+	local currentPondererOptions = {}
+	if getFlag(Controller, "PondererImmune") then
+		table.insert(currentPondererOptions, "Immunity")
+	end
+	if getFlag(Controller, "PondererSilentLookat") then
+		table.insert(currentPondererOptions, "Silent Lookat")
+	end
+
+	Tab:CreateDropdown({
+		Name = "Ponderer Mode",
+		Options = { "Immunity", "Silent Lookat" },
+		CurrentOption = currentPondererOptions,
+		MultipleOptions = true,
+		Flag = "PondererHackDropdown",
+		Callback = function(Options)
+			local hasImmunity = false
+			local hasSilentLookat = false
+			for _, opt in ipairs(Options) do
+				if opt == "Immunity" then
+					hasImmunity = true
+				elseif opt == "Silent Lookat" then
+					hasSilentLookat = true
+				end
+			end
+
+			local activeController = resolveController(nil, Controller)
+			if activeController then
+				if typeof(activeController.SetImmunity) == "function" then
+					activeController:SetImmunity("Ponderer", hasImmunity)
+				end
+				if typeof(activeController.SetPondererSilentLookat) == "function" then
+					activeController:SetPondererSilentLookat(hasSilentLookat)
+				end
+			else
+				warn("[NULLSCAPE] Entities controller is not ready; ignored Ponderer Mode change")
+			end
+		end,
+	})
+
 	Tab:CreateToggle({
 		Name = "Celestial",
 		CurrentValue = getFlag(Controller, "CelestialImmune"),

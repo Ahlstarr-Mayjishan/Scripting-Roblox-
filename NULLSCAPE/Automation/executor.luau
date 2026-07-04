@@ -8,6 +8,7 @@ local Executor = {}
 local GiftFarm = nil
 local PylonActivator = nil
 local KolonaAutoComplete = nil
+local AutoChooseThings = nil
 
 local function loadGiftFarm()
 	if GiftFarm then
@@ -60,6 +61,23 @@ local function loadKolonaAutoComplete()
 	return nil
 end
 
+local function loadAutoChooseThings()
+	if AutoChooseThings then
+		return AutoChooseThings
+	end
+
+	local ok, result = pcall(function()
+		return getgenv().loadModule("NULLSCAPE/Automation/Auto Choose Things.luau")
+	end)
+	if ok and typeof(result) == "table" then
+		AutoChooseThings = result
+		return result
+	end
+
+	warn("[NULLSCAPE] Automation Auto Choose Things failed to load: " .. tostring(result))
+	return nil
+end
+
 function Executor.enable(controller, gc)
 	local farm = loadGiftFarm()
 	if farm and typeof(farm.update) == "function" then
@@ -72,6 +90,10 @@ function Executor.enable(controller, gc)
 	local kolona = loadKolonaAutoComplete()
 	if kolona and typeof(kolona.update) == "function" then
 		kolona.update(controller, gc)
+	end
+	local chooser = loadAutoChooseThings()
+	if chooser and typeof(chooser.update) == "function" then
+		chooser.update(controller, gc)
 	end
 	return true
 end
@@ -88,6 +110,10 @@ function Executor.disable(controller, gc)
 	local kolona = loadKolonaAutoComplete()
 	if kolona and typeof(kolona.disable) == "function" then
 		kolona.disable(controller)
+	end
+	local chooser = loadAutoChooseThings()
+	if chooser and typeof(chooser.disable) == "function" then
+		chooser.disable(controller)
 	end
 	if gc and typeof(gc.cleanAll) == "function" then
 		gc.cleanAll()
@@ -108,6 +134,10 @@ function Executor.update(controller, gc)
 	local kolona = loadKolonaAutoComplete()
 	if kolona and typeof(kolona.update) == "function" then
 		ok = kolona.update(controller, gc) ~= false and ok
+	end
+	local chooser = loadAutoChooseThings()
+	if chooser and typeof(chooser.update) == "function" then
+		ok = chooser.update(controller, gc) ~= false and ok
 	end
 	return ok
 end
@@ -131,6 +161,17 @@ function Executor.getPylonActivatorStatus(controller)
 	return {
 		Status = controller and controller.PylonActivatorStatus or "Idle",
 		Detail = controller and controller.PylonActivatorDetail or "",
+	}
+end
+
+function Executor.getAutoChooseThingsStatus(controller)
+	local chooser = loadAutoChooseThings()
+	if chooser and typeof(chooser.getStatus) == "function" then
+		return chooser.getStatus(controller)
+	end
+	return {
+		Status = controller and controller.AutoChooseThingsStatus or "Idle",
+		Detail = controller and controller.AutoChooseThingsDetail or "",
 	}
 end
 

@@ -93,6 +93,8 @@ local Controller = {
 	VoidbreakerImmune = false,
 	RazorbloomImmune = false,
 	CadenceImmune = false,
+	PondererImmune = false,
+	PondererSilentLookat = false,
 	VoidImplosionImmune = false,
 	CelestialImmune = false,
 	ScrapmawImmune = false,
@@ -835,6 +837,8 @@ function Controller:SetImmunity(entityName, value)
 		end
 	elseif entityName == "Cadence" then
 		self.CadenceImmune = value
+	elseif entityName == "Ponderer" then
+		self.PondererImmune = value
 	elseif entityName == "Celestial" then
 		self.CelestialImmune = value
 	elseif entityName == "Scrapmaw" then
@@ -914,6 +918,7 @@ function Controller:SetImmunity(entityName, value)
 			or entityName == "ShadowGuardian"
 			or entityName == "Sigil"
 			or entityName == "Cadence"
+			or entityName == "Ponderer"
 			or entityName == "Catalyst"
 			or entityName == "nilEnemy"
 			or entityName == "nilMirage"
@@ -943,6 +948,11 @@ function Controller:SetImmunity(entityName, value)
 	if not self.BellImmune and not self.SpringerImmune then
 		restoreCharacterTouchStates()
 	end
+end
+
+-- Cấu hình Silent Lookat của Ponderer
+function Controller:SetPondererSilentLookat(enabled)
+	self.PondererSilentLookat = enabled == true
 end
 
 -- Cấu hình miễn nhiễm knockback của Springer
@@ -1964,6 +1974,7 @@ local function initializeICBMHook()
 		["BroSecureMethod"] = true,
 		["GrappleReplicator"] = true,
 		["UnreliableRemoteEvent"] = true,
+		["LookEvent"] = true,
 	}
 
 	local function handleRemoteCall(self, ...)
@@ -2026,9 +2037,9 @@ local function initializeICBMHook()
 			return true
 		end
 
-		local block = RemoteBlocking.shouldBlockRemoteCall(self, args, activeCtrl)
+		local block, modifiedArgs = RemoteBlocking.shouldBlockRemoteCall(self, args, activeCtrl)
 		if block then
-			return true
+			return true, modifiedArgs
 		end
 
 		return false
@@ -2049,16 +2060,15 @@ local function initializeICBMHook()
 					local isRemoteFunction = false
 
 					if method == "FireServer" or method == "InvokeServer" then
-						pcall(function()
-							if typeof(self) == "Instance" then
-								if self.ClassName == "RemoteEvent" then
-									isRemote = true
-								elseif self.ClassName == "RemoteFunction" then
-									isRemote = true
-									isRemoteFunction = true
-								end
+						if typeof(self) == "Instance" then
+							local className = self.ClassName
+							if className == "RemoteEvent" then
+								isRemote = true
+							elseif className == "RemoteFunction" then
+								isRemote = true
+								isRemoteFunction = true
 							end
-						end)
+						end
 					end
 
 					if isRemote then

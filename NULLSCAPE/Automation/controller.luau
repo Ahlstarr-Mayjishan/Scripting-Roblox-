@@ -70,6 +70,10 @@ local Controller = {
 	AutoCompleteKolonaEnabled = false,
 	AutoCompleteKolonaStatus = "Idle",
 	AutoCompleteKolonaDetail = "",
+	AutoChooseThingsEnabled = false,
+	AutoChooseThingSelections = {},
+	AutoChooseThingsStatus = "Idle",
+	AutoChooseThingsDetail = "",
 }
 
 local function isControllerActiveOrUnclaimed(controller)
@@ -228,6 +232,30 @@ function Controller:SetAutomationSelections(value)
 
 	self.AutomationSelections = selections
 	self.AutoCompleteKolonaEnabled = table.find(selections, "Auto Complete - Kolóna") ~= nil
+	return self:update()
+end
+
+function Controller:SetAutoChooseThingsEnabled(value)
+	self.AutoChooseThingsEnabled = value == true
+	return self:update()
+end
+
+function Controller:SetAutoChooseThingSelections(value)
+	local selections = {}
+	if typeof(value) == "table" then
+		for _, selection in ipairs(value) do
+			if typeof(selection) == "string" and not table.find(selections, selection) then
+				table.insert(selections, selection)
+			end
+		end
+		for selection, selected in pairs(value) do
+			if typeof(selection) == "string" and selected == true and not table.find(selections, selection) then
+				table.insert(selections, selection)
+			end
+		end
+	end
+
+	self.AutoChooseThingSelections = selections
 	return self:update()
 end
 

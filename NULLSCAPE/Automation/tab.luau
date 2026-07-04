@@ -52,6 +52,19 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateSection("Auto Choose Things")
+
+	Tab:CreateToggle({
+		Name = "Auto Choose Things",
+		CurrentValue = Controller and Controller.AutoChooseThingsEnabled or false,
+		Flag = "AutomationAutoChooseThingsToggle",
+		Callback = function(Value)
+			if Controller and typeof(Controller.SetAutoChooseThingsEnabled) == "function" then
+				Controller:SetAutoChooseThingsEnabled(Value)
+			end
+		end,
+	})
+
 	Tab:CreateSection("Auto Farm")
 
 	Tab:CreateToggle({

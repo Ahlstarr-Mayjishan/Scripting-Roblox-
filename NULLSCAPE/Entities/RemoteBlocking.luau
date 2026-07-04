@@ -15,7 +15,7 @@ Logic.Config = {
     ["ICBM"] = {
         ControllerFlag = "ICBMImmune",
         Remotes = { "ClientEvent" },
-        Keywords = { "kill", "damage", "hit" },
+        Keywords = { "kill", "damage", "hit", "combust" },
         LegitKeywords = { "kill" }
     },
     ["Guardian"] = {
@@ -195,6 +195,47 @@ local function localPlayerHasStatus(statusName)
     return okStatusOnly and hasStatusOnly == true
 end
 
+-- Helper check xem remote có thuộc Model của thực thể mục tiêu không
+local function findEntityParent(obj, targetSubName)
+    local current = obj.Parent
+    local depth = 0
+    local lowerTarget = string.lower(targetSubName)
+    while current and current ~= workspace and current ~= game and depth < 50 do
+        depth = depth + 1
+        local name = current.Name
+        if name and string.find(string.lower(name), lowerTarget, 1, true) then
+            return current
+        end
+        current = current.Parent
+    end
+    return nil
+end
+
+-- Helper check xem remote hoặc args có nhắm tới người khác không
+local function isTargetsSomeoneElse(args, localPlayer, char)
+    for i = 2, #args do
+        local arg = args[i]
+        if typeof(arg) == "Instance" then
+            if arg:IsA("Player") and arg ~= localPlayer then
+                return true
+            elseif arg:IsA("Model") and arg:FindFirstChildOfClass("Humanoid") and arg ~= char then
+                return true
+            end
+        elseif typeof(arg) == "table" then
+            for _, val in pairs(arg) do
+                if typeof(val) == "Instance" then
+                    if val:IsA("Player") and val ~= localPlayer then
+                        return true
+                    elseif val:IsA("Model") and val:FindFirstChildOfClass("Humanoid") and val ~= char then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
 function Logic.shouldBlockRemoteCall(remote, args, controller)
     if not controller or controller.inLobby then
         return false
@@ -202,6 +243,17 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 
     if typeof(remote) ~= "Instance" then
         return false
+    end
+
+    local remoteName = remote.Name
+    if remoteName == "LookEvent" then
+        if controller.PondererSilentLookat == true and findEntityParent(remote, "Ponderer") then
+            if args[1] ~= true then
+                local newArgs = table.clone(args)
+                newArgs[1] = true
+                return true, newArgs
+            end
+        end
     end
 
     if remote.ClassName == "RemoteEvent"
@@ -252,14 +304,14 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         return false
     end
 
-    local remoteName = remote.Name
+    remoteName = remote.Name
     if controller.CelestialImmune == true then
-        if remoteName == "Died" and args[1] == "Celestial" then
+        if remoteName == "Died" and (args[1] == "Celestial" or args[1] == "RealityBreak" or args[1] == "Reality Break") then
             return true
         end
 
         if remoteName == "ClientEvent" and CELESTIAL_CLIENT_BLOCKLIST[tostring(args[1])] then
-            if hasAncestorName(remote, "Celestial") or hasAncestorName(remote, "RealityBreak") then
+            if hasAncestorName(remote, "Celestial") or hasAncestorName(remote, "Reality") then
                 return true
             end
         end
@@ -275,55 +327,6 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 
     local LocalPlayer = Players.LocalPlayer
     local char = LocalPlayer and LocalPlayer.Character
-
-    -- Helper check xem remote có thuộc Model của thực thể mục tiêu không
-    local function findEntityParent(obj, targetSubName)
-        local current = obj.Parent
-        local depth = 0
-        while current and current ~= workspace and current ~= game and depth < 50 do
-            depth = depth + 1
-            local nameSuccess, name = pcall(function()
-                return current.Name
-            end)
-            if nameSuccess and name and string.find(string.lower(name), string.lower(targetSubName), 1, true) then
-                return current
-            end
-            local parentSuccess, parent = pcall(function()
-                return current.Parent
-            end)
-            if parentSuccess then
-                current = parent
-            else
-                break
-            end
-        end
-        return nil
-    end
-
-    -- Helper check xem remote hoặc args có nhắm tới người khác không
-    local function isTargetsSomeoneElse()
-        for i = 2, #args do
-            local arg = args[i]
-            if typeof(arg) == "Instance" then
-                if arg:IsA("Player") and arg ~= LocalPlayer then
-                    return true
-                elseif arg:IsA("Model") and arg:FindFirstChildOfClass("Humanoid") and arg ~= char then
-                    return true
-                end
-            elseif typeof(arg) == "table" then
-                for _, val in pairs(arg) do
-                    if typeof(val) == "Instance" then
-                        if val:IsA("Player") and val ~= LocalPlayer then
-                            return true
-                        elseif val:IsA("Model") and val:FindFirstChildOfClass("Humanoid") and val ~= char then
-                            return true
-                        end
-                    end
-                end
-            end
-        end
-        return false
-    end
 
     -- Quét qua các cấu hình chặn remote
     for entityName, config in pairs(Logic.Config) do
@@ -372,7 +375,7 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
                         end
                     end
 
-                    if isRelated and not isTargetsSomeoneElse() then
+                    if isRelated and not isTargetsSomeoneElse(args, LocalPlayer, char) then
                         return true
                     end
                 end
