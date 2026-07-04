@@ -1,17 +1,21 @@
 --!nocheck
 
 local Planner = {}
+local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.luau")
 
-local RANGE_BUFFER = 1.5
+local RANGE_BUFFER = 0.75
 local MAX_ROUTE_POINTS = 5
 local MAX_SEED_CANDIDATES = 48
 local MAX_CENTER_ITEMS = 18
 local MAX_PAIR_CENTERS = 36
 local EDGE_PENALTY_RATIO = 0.92
 
-local function distanceSq(a, b)
-	local offset = a - b
-	return offset:Dot(offset)
+local function nativeDistanceSq(a, b)
+	return Distance.nativeDistanceSq(a, b)
+end
+
+local function collectDistanceSq(giftPosition, targetPosition)
+	return Distance.collectDistanceSq(giftPosition, targetPosition)
 end
 
 local function getSafeRange(range)
@@ -21,19 +25,19 @@ end
 local function scoreCluster(cluster, targetPosition, seed, origin, range)
 	local golden = 0
 	local edgePenalty = 0
-	local rangeSq = range and range * range or nil
 	local edgeSq = range and (range * EDGE_PENALTY_RATIO) ^ 2 or nil
 
 	for _, item in ipairs(cluster) do
 		if item.golden then
 			golden += 1
 		end
-		if edgeSq and rangeSq and targetPosition and distanceSq(item.pos, targetPosition) >= edgeSq then
+		if edgeSq and targetPosition and collectDistanceSq(item.pos, targetPosition) >= edgeSq then
 			edgePenalty += 1
 		end
 	end
 
-	local originDistance = origin and distanceSq(targetPosition or seed.pos, origin) or 0
+	local targetRootPosition = Distance.getRootPosition(targetPosition or seed.pos)
+	local originDistance = origin and nativeDistanceSq(targetRootPosition, origin) or 0
 	return {
 		Golden = golden,
 		Total = #cluster,
@@ -67,7 +71,7 @@ local function buildAroundPosition(candidates, position, range)
 	local rangeSq = range * range
 
 	for _, item in ipairs(candidates) do
-		if distanceSq(item.pos, position) <= rangeSq then
+		if collectDistanceSq(item.pos, position) <= rangeSq then
 			table.insert(cluster, item)
 		end
 	end
@@ -98,7 +102,7 @@ local function addCenter(centers, position)
 	end
 
 	for _, existing in ipairs(centers) do
-		if distanceSq(existing, position) <= 0.25 then
+		if nativeDistanceSq(existing, position) <= 0.25 then
 			return
 		end
 	end
@@ -112,7 +116,7 @@ local function addPairCenters(centers, seedCluster, range)
 	for index, a in ipairs(seedCluster) do
 		for nextIndex = index + 1, #seedCluster do
 			local b = seedCluster[nextIndex]
-			local distSq = distanceSq(a.pos, b.pos)
+			local distSq = nativeDistanceSq(a.pos, b.pos)
 			if distSq <= rangeSq * 4 then
 				addCenter(centers, (a.pos + b.pos) * 0.5)
 				added += 1
@@ -136,8 +140,8 @@ local function getSeedCandidates(candidates, origin)
 		end
 
 		if origin then
-			local distanceA = distanceSq(a.pos, origin)
-			local distanceB = distanceSq(b.pos, origin)
+			local distanceA = nativeDistanceSq(a.pos, origin)
+			local distanceB = nativeDistanceSq(b.pos, origin)
 			if distanceA ~= distanceB then
 				return distanceA < distanceB
 			end
@@ -159,8 +163,8 @@ local function sortCluster(cluster, targetPosition)
 			return a.golden == true
 		end
 
-		local distanceA = distanceSq(a.pos, targetPosition)
-		local distanceB = distanceSq(b.pos, targetPosition)
+		local distanceA = collectDistanceSq(a.pos, targetPosition)
+		local distanceB = collectDistanceSq(b.pos, targetPosition)
 		if distanceA ~= distanceB then
 			return distanceA < distanceB
 		end
@@ -269,7 +273,7 @@ function Planner.planRoute(candidates, range, origin)
 		})
 
 		remaining = removeClusterItems(remaining, cluster)
-		currentOrigin = planInfo and planInfo.TargetPosition or currentOrigin
+		currentOrigin = planInfo and Distance.getRootPosition(planInfo.TargetPosition) or currentOrigin
 	end
 
 	return route, remaining

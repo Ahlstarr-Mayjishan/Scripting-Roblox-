@@ -1,15 +1,21 @@
 --!nocheck
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
+local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.luau")
 
 local RunService = game:GetService("RunService")
 
 local Collector = {}
 local COLLECT_SETTLE = 0.02
+local PRECISION_COLLECT_SETTLE = 0.08
 local BASE_VALIDATION_WAIT = 0.08
+local PRECISION_VALIDATION_WAIT = 0.38
 local ARRIVAL_TOLERANCE = 3
+local PRECISION_ARRIVAL_TOLERANCE = 1.25
 local ARRIVAL_STABLE_FRAMES = 2
+local PRECISION_STABLE_FRAMES = 4
 local ARRIVAL_TIMEOUT = 0.35
+local PRECISION_ARRIVAL_TIMEOUT = 0.6
 local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
 local MAX_RETRY_PASSES = 2
@@ -87,7 +93,10 @@ local function clearVelocity(hrp)
 	end)
 end
 
-local function getValidationWait(controller)
+local function getValidationWait(controller, precisionMode)
+	if precisionMode then
+		return math.max(PRECISION_VALIDATION_WAIT, adaptiveValidationWait)
+	end
 	if isAdaptiveEnabled(controller) then
 		return math.clamp(adaptiveValidationWait, 0.04, 0.45)
 	end
@@ -175,23 +184,27 @@ local function removeFoothold()
 	end
 end
 
-local function waitForArrival(hrp, targetPosition)
+local function waitForArrival(hrp, targetPosition, precisionMode)
 	if not (hrp and hrp.Parent and typeof(targetPosition) == "Vector3") then
 		return false
 	end
 
 	local startedAt = os.clock()
 	local stableFrames = 0
-	while os.clock() - startedAt <= ARRIVAL_TIMEOUT do
+	local timeout = precisionMode and PRECISION_ARRIVAL_TIMEOUT or ARRIVAL_TIMEOUT
+	local tolerance = precisionMode and PRECISION_ARRIVAL_TOLERANCE or ARRIVAL_TOLERANCE
+	local requiredFrames = precisionMode and PRECISION_STABLE_FRAMES or ARRIVAL_STABLE_FRAMES
+
+	while os.clock() - startedAt <= timeout do
 		if not (hrp and hrp.Parent) then
 			return false
 		end
 
 		clearVelocity(hrp)
 		local distance = (hrp.Position - targetPosition).Magnitude
-		if distance <= ARRIVAL_TOLERANCE then
+		if distance <= tolerance then
 			stableFrames += 1
-			if stableFrames >= ARRIVAL_STABLE_FRAMES then
+			if stableFrames >= requiredFrames then
 				return true
 			end
 		else
@@ -202,7 +215,7 @@ local function waitForArrival(hrp, targetPosition)
 		RunService.Heartbeat:Wait()
 	end
 
-	return (hrp.Position - targetPosition).Magnitude <= ARRIVAL_TOLERANCE
+	return (hrp.Position - targetPosition).Magnitude <= tolerance
 end
 
 local function collectItems(items, currentPos, collectRange, collectedEvent, attemptedGifts)
@@ -211,7 +224,7 @@ local function collectItems(items, currentPos, collectRange, collectedEvent, att
 		if item.rawObj
 			and not item.rawObj.Destroyed
 			and not item.rawObj.Collected
-			and (item.pos - currentPos).Magnitude <= collectRange + 1
+			and Distance.isWithinRange(item.pos, currentPos, collectRange)
 		then
 			collectGift(item.rawObj, collectedEvent)
 			table.insert(attemptedGifts, item.rawObj)
@@ -228,7 +241,7 @@ local function getRejectedItems(items, currentPos, collectRange)
 			and failedAttempts[item.rawObj] ~= nil
 			and not item.rawObj.Destroyed
 			and not item.rawObj.Collected
-			and (item.pos - currentPos).Magnitude <= collectRange + 1
+			and Distance.isWithinRange(item.pos, currentPos, collectRange)
 		then
 			table.insert(rejected, item)
 		end
@@ -268,25 +281,35 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 	end
 
 	options = options or {}
+	local precisionMode = options.PrecisionMode == true or #cluster <= 2
 	local targetPosition = options.TargetPosition or cluster.TargetPosition or cluster[1].pos
 	local collectRange = options.SafeRange or cluster.SafeRange or range
-	local standingPosition = targetPosition + Vector3.new(0, 3, 0)
+	local standingPosition = Distance.getRootPosition(targetPosition)
 	local collectedEvent = Context.getCollectedGiftEvent()
+	local result = {
+		Attempted = 0,
+		Rejected = 0,
+		Accepted = 0,
+		Precision = precisionMode,
+	}
 
 	local ok, err = pcall(function()
 		hrp.Anchored = false
 		placeFoothold(standingPosition)
 		jumpToWaypoint(hrp, standingPosition)
 		clearVelocity(hrp)
-		waitForArrival(hrp, standingPosition)
-		task.wait(COLLECT_SETTLE)
+		waitForArrival(hrp, standingPosition, precisionMode)
+		task.wait(precisionMode and PRECISION_COLLECT_SETTLE or COLLECT_SETTLE)
 
 		local currentPos = hrp.Position
 		local attemptedGifts = {}
 		local observedRejects = 0
+		if precisionMode then
+			comboCount = 0
+		end
 
 		collectItems(cluster, currentPos, collectRange, collectedEvent, attemptedGifts)
-		task.wait(getValidationWait(controller))
+		task.wait(getValidationWait(controller, precisionMode))
 
 		for _ = 1, MAX_RETRY_PASSES do
 			currentPos = hrp.Position
@@ -296,14 +319,22 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 			end
 
 			observedRejects += #rejected
-			waitForArrival(hrp, standingPosition)
+			comboCount = 0
+			waitForArrival(hrp, standingPosition, true)
 			task.wait(RETRY_SETTLE)
 			currentPos = hrp.Position
 			collectItems(rejected, currentPos, collectRange, collectedEvent, attemptedGifts)
-			task.wait(getValidationWait(controller))
+			task.wait(getValidationWait(controller, true))
 		end
 
 		updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
+		result.Attempted = #attemptedGifts
+		result.Rejected = observedRejects
+		for _, gift in ipairs(attemptedGifts) do
+			if isGiftAccepted(gift) then
+				result.Accepted += 1
+			end
+		end
 	end)
 
 	Collector.restoreMovement()
@@ -311,7 +342,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 		error(err, 0)
 	end
 
-	return true
+	return result
 end
 
 return Collector

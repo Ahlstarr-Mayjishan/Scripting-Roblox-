@@ -297,21 +297,35 @@ local function processOnce(controller)
 				and getGoldenSpawnWait() > 0
 
 			local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
+			local routeRejected = false
+			local collectedPlanned = 0
 			for index, step in ipairs(route) do
 				local cluster = step.Cluster or {}
 				local planInfo = step.Info
 				local score = planInfo and planInfo.Score
 				local planned = score and (" | plan " .. tostring(score.Golden) .. "/" .. tostring(score.Total)) or ""
+				local remainingAfterStep = math.max(totalPlanned - collectedPlanned - #cluster, 0)
+				local precisionMode = #cluster <= 2 or remainingAfterStep <= 2
 				setStatus(
 					controller,
-					"Collecting",
+					precisionMode and "CollectingPrecision" or "Collecting",
 					string.format("%d/%d route | %d/%d %s", index, #route, #cluster, totalPlanned, focus)
 						.. planned
 				)
-				Collector.collectCluster(controller, hrp, cluster, range, {
+				local collectResult = Collector.collectCluster(controller, hrp, cluster, range, {
 					SafeRange = planInfo and planInfo.SafeRange,
 					TargetPosition = planInfo and planInfo.TargetPosition,
+					PrecisionMode = precisionMode,
 				})
+				collectedPlanned += #cluster
+				if collectResult and (tonumber(collectResult.Rejected) or 0) > 0 then
+					routeRejected = true
+				end
+			end
+			if routeRejected then
+				lastGiftSeenAt = os.clock()
+				setStatus(controller, "RetryingRejectedGifts", "Server returned one or more late gifts")
+				return
 			end
 			if shouldHoldForGoldenWait then
 				goldenMissingSince = os.clock()
