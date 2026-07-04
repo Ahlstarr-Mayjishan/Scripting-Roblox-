@@ -22,6 +22,8 @@ local EMPTY_COMPLETE_DELAY = 2.5
 local DISABLE_FOOTHOLD_DURATION = 2
 local PYLON_LEVEL = 35
 local TAIL_REMAINING_RATIO = 0.12
+local SOFT_GC_INTERVAL = 1.5
+local SOFT_GC_STEP = 64
 
 local enabled = false
 local busy = false
@@ -31,6 +33,7 @@ local lastScan = 0
 local lastGiftSeenAt = 0
 local lastStatusAt = 0
 local lastStatus = nil
+local lastSoftGcAt = 0
 local roundToken = 0
 
 local function setStatus(controller, status, detail, force)
@@ -128,6 +131,45 @@ local function markGoldenComplete(controller)
 	if controller then
 		controller.GiftFarmGoldenComplete = true
 	end
+end
+
+local function clearRoute(route)
+	if typeof(route) ~= "table" then
+		return
+	end
+	for _, step in ipairs(route) do
+		if typeof(step) == "table" then
+			if typeof(step.Cluster) == "table" then
+				table.clear(step.Cluster)
+			end
+			if typeof(step.Info) == "table" and typeof(step.Info.Score) == "table" then
+				table.clear(step.Info.Score)
+			end
+			table.clear(step)
+		end
+	end
+	table.clear(route)
+end
+
+local function softCleanup(...)
+	for index = 1, select("#", ...) do
+		local value = select(index, ...)
+		if typeof(value) == "table" then
+			table.clear(value)
+		end
+	end
+
+	local now = os.clock()
+	if now - lastSoftGcAt < SOFT_GC_INTERVAL then
+		return
+	end
+	lastSoftGcAt = now
+
+	task.defer(function()
+		pcall(function()
+			collectgarbage("step", SOFT_GC_STEP)
+		end)
+	end)
 end
 
 local function getLevel()
@@ -367,6 +409,8 @@ local function processOnce(controller)
 					end,
 				})
 				if not isCurrentRoundActive() then
+					clearRoute(route)
+					softCleanup(candidates, remaining)
 					setStatus(controller, "WaitingForRound")
 					return
 				end
@@ -374,6 +418,8 @@ local function processOnce(controller)
 					routeRejected = true
 				end
 			end
+			clearRoute(route)
+			softCleanup(candidates, remaining)
 			if routeRejected then
 				lastGiftSeenAt = os.clock()
 				setStatus(controller, "RetryingRejectedGifts", "Server returned one or more late gifts")
@@ -459,6 +505,7 @@ function Runtime.disable(controller)
 		inRoundConnection = nil
 	end
 	resetRoundState(controller, false)
+	softCleanup()
 	setStatus(controller, "Idle", nil, true)
 	return true
 end
