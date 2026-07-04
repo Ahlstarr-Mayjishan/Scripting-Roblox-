@@ -182,12 +182,9 @@ pcall(function()
 			GrappleSharkTailPullMultiplierSlider = 1.1,
 			GrappleJumpPadUsesBypassToggle = false,
 			GrappleDisableGroundReleaseToggle = false,
-			GrappleNoReelCooldownToggle = false,
-			GrappleSharkTailNoCooldownToggle = false,
 			GrappleHookCastSpeedMultiplierSlider = 1,
 			GrappleMaxRangeSlider = 90,
 			GrappleEasierVoidCastToggle = false,
-			GrappleSharkTailWindowSlider = 0.25,
 			MatrixTetrahedronToggle = false,
 			MomentumReductionSlider = 100, -- Mặc định là 100% giảm quán tính
 			SpeedBuffSelectionsDropdown = {},

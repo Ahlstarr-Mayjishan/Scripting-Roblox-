@@ -3,7 +3,10 @@
 local Planner = {}
 
 local RANGE_BUFFER = 1.5
-local MAX_ROUTE_POINTS = 8
+local MAX_ROUTE_POINTS = 5
+local MAX_SEED_CANDIDATES = 48
+local MAX_CENTER_ITEMS = 18
+local MAX_PAIR_CENTERS = 36
 local EDGE_PENALTY_RATIO = 0.92
 
 local function distanceSq(a, b)
@@ -105,15 +108,49 @@ end
 
 local function addPairCenters(centers, seedCluster, range)
 	local rangeSq = range * range
+	local added = 0
 	for index, a in ipairs(seedCluster) do
 		for nextIndex = index + 1, #seedCluster do
 			local b = seedCluster[nextIndex]
 			local distSq = distanceSq(a.pos, b.pos)
 			if distSq <= rangeSq * 4 then
 				addCenter(centers, (a.pos + b.pos) * 0.5)
+				added += 1
+				if added >= MAX_PAIR_CENTERS then
+					return
+				end
 			end
 		end
 	end
+end
+
+local function getSeedCandidates(candidates, origin)
+	if #candidates <= MAX_SEED_CANDIDATES then
+		return candidates
+	end
+
+	local seeds = table.clone(candidates)
+	table.sort(seeds, function(a, b)
+		if a.golden ~= b.golden then
+			return a.golden == true
+		end
+
+		if origin then
+			local distanceA = distanceSq(a.pos, origin)
+			local distanceB = distanceSq(b.pos, origin)
+			if distanceA ~= distanceB then
+				return distanceA < distanceB
+			end
+		end
+
+		return tostring(a.id or "") < tostring(b.id or "")
+	end)
+
+	local limited = {}
+	for index = 1, math.min(#seeds, MAX_SEED_CANDIDATES) do
+		table.insert(limited, seeds[index])
+	end
+	return limited
 end
 
 local function sortCluster(cluster, targetPosition)
@@ -141,10 +178,16 @@ function Planner.buildCluster(candidates, seed, range)
 	if weightedCenter then
 		addCenter(centers, weightedCenter)
 	end
-	for _, item in ipairs(seedCluster) do
+
+	local centerItems = {}
+	for index, item in ipairs(seedCluster) do
+		if index > MAX_CENTER_ITEMS then
+			break
+		end
+		table.insert(centerItems, item)
 		addCenter(centers, item.pos)
 	end
-	addPairCenters(centers, seedCluster, safeRange)
+	addPairCenters(centers, centerItems, safeRange)
 
 	local bestCluster = nil
 	local bestPosition = seed.pos
@@ -172,8 +215,9 @@ function Planner.pickBestCluster(candidates, range, origin)
 	local bestCluster = nil
 	local bestSeed = nil
 	local bestScore = nil
+	local seedCandidates = getSeedCandidates(candidates, origin)
 
-	for _, seed in ipairs(candidates) do
+	for _, seed in ipairs(seedCandidates) do
 		local cluster = Planner.buildCluster(candidates, seed, range)
 		local targetPosition = cluster.TargetPosition or seed.pos
 		local score = scoreCluster(cluster, targetPosition, seed, origin, cluster.SafeRange or getSafeRange(range))

@@ -19,6 +19,7 @@ local GrappleRecovery = nil
 local GrappleRange = nil
 local HookCastSpeed = nil
 local ChargerTripmineAssist = nil
+local SharkTailWindowState = setmetatable({}, { __mode = "k" })
 
 local MODULE_PATHS = {
 	AirControl = "NULLSCAPE/Class Adjustment/Grappler/Grapple Air Control.luau",
@@ -135,6 +136,52 @@ local function applySharkTailAdjustment(self, previousVelocity)
 	end
 end
 
+local function applySharkTailWindow(Control, grapple)
+	if
+		not (
+			Control
+			and Control.GrappleSharkTailWindow
+			and grapple
+			and grapple.Movement
+			and grapple.Movement:HasUpgrade("SharkTail")
+			and not grapple.sharkTailDisable
+			and grapple.lastGrappleRelease
+			and grapple.lastGrappleRelease > 0
+		)
+	then
+		SharkTailWindowState[grapple] = nil
+		return
+	end
+
+	local elapsed = time() - grapple.lastGrappleRelease
+	if elapsed > Control.GrappleSharkTailWindow then
+		SharkTailWindowState[grapple] = nil
+		return
+	end
+
+	local state = SharkTailWindowState[grapple]
+	if not state or state.ReleaseAt ~= grapple.lastGrappleRelease then
+		state = {
+			ReleaseAt = grapple.lastGrappleRelease,
+			Applied = false,
+		}
+		SharkTailWindowState[grapple] = state
+	end
+
+	grapple.allowSharkTail = true
+	if state.Applied then
+		return
+	end
+
+	state.Applied = true
+	if grapple.UI and grapple.UI:FindFirstChild("Frame") then
+		pcall(function()
+			grapple.UI.Frame.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 130)
+			grapple.UI.Frame.Outline.UIStroke.Color = Color3.fromRGB(255, 255, 130)
+		end)
+	end
+end
+
 function Executor.enable()
 	if HooksActive then
 		return true
@@ -191,27 +238,7 @@ function Executor.enable()
 				self.reelCooldown = false
 			end
 
-			if
-				Control
-				and Control.GrappleSharkTailWindow
-				and self
-				and self.Movement
-				and self.Movement:HasUpgrade("SharkTail")
-				and not self.sharkTailDisable
-				and self.lastGrappleRelease
-				and self.lastGrappleRelease > 0
-			then
-				local elapsed = time() - self.lastGrappleRelease
-				if elapsed <= Control.GrappleSharkTailWindow then
-					self.allowSharkTail = true
-					if self.UI and self.UI:FindFirstChild("Frame") then
-						pcall(function()
-							self.UI.Frame.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 130)
-							self.UI.Frame.Outline.UIStroke.Color = Color3.fromRGB(255, 255, 130)
-						end)
-					end
-				end
-			end
+			applySharkTailWindow(Control, self)
 
 			return table.unpack(stepResults, 2, stepResults.n)
 		end
@@ -314,6 +341,7 @@ end
 
 function Executor.disable()
 	HooksActive = false
+	SharkTailWindowState = setmetatable({}, { __mode = "k" })
 	if ChargerTripmineAssist and typeof(ChargerTripmineAssist.update) == "function" then
 		pcall(ChargerTripmineAssist.update, {
 			ChargerTripmineAssistEnabled = false,

@@ -6,6 +6,7 @@
 local SharkTailCooldown = {}
 
 local CachedControl = nil
+local ReleaseState = setmetatable({}, { __mode = "k" })
 
 local function getControl()
 	if CachedControl then
@@ -21,9 +22,24 @@ function SharkTailCooldown.apply(grapple)
 	end
 
 	local Control = getControl()
-	if Control and Control.GrappleSharkTailNoCooldown then
-		grapple.sharkTailDisable = false
+	if not (Control and Control.GrappleSharkTailNoCooldown) then
+		ReleaseState[grapple] = nil
+		return
 	end
+
+	local releaseAt = tonumber(grapple.lastGrappleRelease)
+	if not releaseAt or releaseAt <= 0 then
+		ReleaseState[grapple] = nil
+		return
+	end
+
+	local state = ReleaseState[grapple]
+	if state == releaseAt then
+		return
+	end
+
+	ReleaseState[grapple] = releaseAt
+	grapple.sharkTailDisable = false
 end
 
 return SharkTailCooldown

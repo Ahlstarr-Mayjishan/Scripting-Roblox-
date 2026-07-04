@@ -18,6 +18,8 @@ local Logic = {
 	LastAutoReelAt = 0,
 	LastSharkTailAt = 0,
 	LastVoidAnchorAt = 0,
+	SharkTailWindowGrapple = nil,
+	SharkTailWindowConsumed = false,
 }
 
 local function getNumber(value, fallback, minimum, maximum)
@@ -283,11 +285,26 @@ local function autoSharkTail(grapple, controller, now)
 		return false
 	end
 
+	if not (grapple and grapple.allowSharkTail == true) then
+		if Logic.SharkTailWindowGrapple == grapple then
+			Logic.SharkTailWindowGrapple = nil
+			Logic.SharkTailWindowConsumed = false
+		end
+		return false
+	end
+
+	if Logic.SharkTailWindowGrapple ~= grapple then
+		Logic.SharkTailWindowGrapple = grapple
+		Logic.SharkTailWindowConsumed = false
+	elseif Logic.SharkTailWindowConsumed == true then
+		return false
+	end
+
 	if now - (Logic.LastSharkTailAt or 0) < RESCUE_COOLDOWN then
 		return false
 	end
 
-	if not (grapple and grapple.allowSharkTail == true and grapple.sharkTailDisable ~= true) then
+	if grapple.sharkTailDisable == true then
 		return false
 	end
 
@@ -306,6 +323,7 @@ local function autoSharkTail(grapple, controller, now)
 	if success then
 		recordMomentum(grapple, "SharkVoidAutoSharkTail")
 		Logic.LastSharkTailAt = now
+		Logic.SharkTailWindowConsumed = true
 	end
 
 	return success
@@ -341,6 +359,8 @@ function Logic.reset()
 	Logic.LastAutoReelAt = 0
 	Logic.LastSharkTailAt = 0
 	Logic.LastVoidAnchorAt = 0
+	Logic.SharkTailWindowGrapple = nil
+	Logic.SharkTailWindowConsumed = false
 	if ReleaseTiming and typeof(ReleaseTiming.cancel) == "function" then
 		ReleaseTiming.cancel()
 	end
