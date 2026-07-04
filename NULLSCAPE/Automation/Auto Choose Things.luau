@@ -29,11 +29,13 @@ local ACTION_COOLDOWN = 0.65
 local RETRY_COOLDOWN = 1.2
 local MOVE_SETTLE = 0.08
 local CONTINUE_COOLDOWN = 1.5
+local CONTINUE_AFTER_PRIMARY_GRACE = 1.25
 
 local enabled = false
 local running = false
 local lastActionAt = 0
 local lastContinueAt = 0
+local lastPrimaryChoiceAt = 0
 local lastSelectFolder = nil
 local attemptedAt = {}
 
@@ -310,6 +312,26 @@ local function addCandidate(candidates, seen, root, selected, priority, hrp)
 	})
 end
 
+local function hasReadyPrimaryChoice(root, selected)
+	if not (root and root:IsDescendantOf(workspace)) then
+		return false
+	end
+
+	local prompt = getPrompt(root)
+	if not isPromptReady(prompt) then
+		return false
+	end
+
+	local choiceType = readAttribute(root, prompt, "ChoiceType")
+	local choiceName = readAttribute(root, prompt, "ChoiceName")
+	local category = normalizeCategory(choiceType, choiceName, root, prompt)
+	if not (category and category ~= "Continue" and selected[category]) then
+		return false
+	end
+
+	return category ~= "Upgrades" or canAffordPrompt(prompt)
+end
+
 local function collectTarget(controller, hrp)
 	local selected, priority = buildSelectionPriority(controller)
 	if not hasAnySelection(selected) then
@@ -320,6 +342,7 @@ local function collectTarget(controller, hrp)
 	if selectFolder ~= lastSelectFolder then
 		lastSelectFolder = selectFolder
 		attemptedAt = {}
+		lastPrimaryChoiceAt = 0
 	end
 	if not selectFolder then
 		return nil, "WaitingForSelect"
@@ -344,6 +367,26 @@ local function collectTarget(controller, hrp)
 			hasPrimaryChoice = true
 			break
 		end
+	end
+	local waitingForChoiceRefresh = not hasPrimaryChoice and os.clock() - lastPrimaryChoiceAt < CONTINUE_AFTER_PRIMARY_GRACE
+	if waitingForChoiceRefresh then
+		for _, child in ipairs(selectFolder:GetChildren()) do
+			if hasReadyPrimaryChoice(child, selected) then
+				hasPrimaryChoice = true
+				break
+			end
+		end
+		if not hasPrimaryChoice then
+			for _, tagged in ipairs(CollectionService:GetTagged("ChoiceOrb")) do
+				if hasReadyPrimaryChoice(tagged, selected) then
+					hasPrimaryChoice = true
+					break
+				end
+			end
+		end
+	end
+	if waitingForChoiceRefresh and not hasPrimaryChoice then
+		return nil, "WaitingForChoiceRefresh"
 	end
 	if hasPrimaryChoice then
 		for index = #candidates, 1, -1 do
@@ -441,6 +484,9 @@ local function run(controller)
 				lastActionAt = os.clock()
 				attemptedAt[target.Key] = os.clock()
 				local fired = firePrompt(target.Prompt)
+				if fired and target.Category ~= "Continue" then
+					lastPrimaryChoiceAt = os.clock()
+				end
 				local name = tostring(target.ChoiceName or target.Root.Name)
 				setStatus(controller, fired and "Chosen" or "PromptFailed", target.Category .. " | " .. name)
 			end
