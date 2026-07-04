@@ -5,6 +5,7 @@ local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.l
 
 local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
+local Workspace = game:GetService("Workspace")
 
 local Collector = {}
 local COLLECT_SETTLE = 0
@@ -97,6 +98,37 @@ local function clearVelocity(hrp)
 		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 	end)
+end
+
+local function getHumanoid(hrp)
+	local character = hrp and hrp.Parent
+	return character and character:FindFirstChildOfClass("Humanoid")
+end
+
+local function releaseHumanoidState(hrp)
+	local humanoid = getHumanoid(hrp)
+	if not humanoid then
+		return
+	end
+
+	pcall(function()
+		humanoid.PlatformStand = false
+		humanoid.Sit = false
+		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+	end)
+end
+
+local function hasGroundBelow(hrp)
+	if not (hrp and hrp.Parent) then
+		return false
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { hrp.Parent, foothold }
+
+	local result = Workspace:Raycast(hrp.Position, Vector3.new(0, -8, 0), params)
+	return result ~= nil
 end
 
 local function waitIfPositive(seconds)
@@ -333,14 +365,21 @@ end
 function Collector.releaseCharacter(options)
 	options = options or {}
 	local hrp = Context.getRootPart()
-	if options.KeepFootholdDuration and (not foothold or not foothold.Parent) and hrp and hrp.Parent then
+	local shouldKeepFoothold = options.KeepFootholdDuration
+		and hrp
+		and hrp.Parent
+		and (not options.OnlyKeepFootholdIfAirborne or not hasGroundBelow(hrp))
+	if shouldKeepFoothold and (not foothold or not foothold.Parent) then
 		placeFoothold(hrp.Position)
 	end
 
-	removeFoothold(options.KeepFootholdDuration)
+	removeFoothold(shouldKeepFoothold and options.KeepFootholdDuration or nil)
 	if hrp and hrp.Parent then
 		hrp.Anchored = false
-		clearVelocity(hrp)
+		releaseHumanoidState(hrp)
+		if options.SkipVelocityClear ~= true then
+			clearVelocity(hrp)
+		end
 	end
 end
 

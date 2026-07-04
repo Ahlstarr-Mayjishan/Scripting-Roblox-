@@ -323,6 +323,8 @@ function Runtime.disable(controller)
 	if Collector and typeof(Collector.restoreMovement) == "function" then
 		Collector.restoreMovement({
 			KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
+			OnlyKeepFootholdIfAirborne = true,
+			SkipVelocityClear = true,
 		})
 	end
 	if connection then
