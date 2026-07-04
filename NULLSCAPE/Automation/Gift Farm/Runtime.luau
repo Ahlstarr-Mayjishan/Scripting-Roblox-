@@ -11,12 +11,14 @@ local ClusterPlanner = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Clus
 local Progress = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Progress.luau")
 local Altar = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Altar.luau")
 local Medal = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Medal.luau")
+local Beacon = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Beacon.luau")
+local GoldenWait = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Golden Wait.luau")
 
 local Runtime = {}
 local DEFAULT_RANGE = 60
-local MIN_SCAN_INTERVAL = 0.06
+local MIN_SCAN_INTERVAL = 0.035
 local EMPTY_COMPLETE_DELAY = 2.5
-local GOLDEN_SPAWN_WAIT = 4
+local DISABLE_FOOTHOLD_DURATION = 2
 local PYLON_LEVEL = 35
 
 local enabled = false
@@ -25,10 +27,6 @@ local connection = nil
 local inRoundConnection = nil
 local lastScan = 0
 local lastGiftSeenAt = 0
-local beaconReturnDone = false
-local hasSeenGoldenThisRound = false
-local goldenMissingSince = nil
-local beaconSuppressed = false
 
 local function setStatus(controller, status, detail)
 	if controller then
@@ -41,15 +39,14 @@ local function resetRoundState(controller, inRound)
 	busy = false
 	lastScan = 0
 	lastGiftSeenAt = 0
-	beaconReturnDone = false
-	hasSeenGoldenThisRound = false
-	goldenMissingSince = nil
 	if controller then
 		controller.GiftFarmGoldenComplete = false
 	end
-	if not inRound and beaconSuppressed then
-		Context.restoreBeaconInteraction()
-		beaconSuppressed = false
+	if GoldenWait and typeof(GoldenWait.reset) == "function" then
+		GoldenWait.reset()
+	end
+	if Beacon and typeof(Beacon.reset) == "function" then
+		Beacon.reset(inRound)
 	end
 	if Scanner and typeof(Scanner.reset) == "function" then
 		Scanner.reset()
@@ -88,37 +85,6 @@ local function observeInRound(controller, gc)
 	if gc and typeof(gc.registerConnection) == "function" then
 		gc.registerConnection(inRoundConnection)
 	end
-end
-
-local function returnToBeacon(controller, hrp, reason)
-	if beaconReturnDone or controller.GiftFarmReturnToBeaconAfterGolden == false then
-		return false
-	end
-	if not Context.isBeaconActive() then
-		return false
-	end
-
-	local beacon = Context.getBeaconPart()
-	if not (beacon and hrp and hrp.Parent) then
-		return false
-	end
-
-	beaconReturnDone = true
-	if beaconSuppressed then
-		Context.restoreBeaconInteraction()
-		beaconSuppressed = false
-	end
-	Context.moveCharacterTo(CFrame.new(beacon.Position + Vector3.new(0, 4, 0)))
-	setStatus(controller, "ReturningToBeacon", reason or "Golden gifts complete")
-	return true
-end
-
-local function suppressBeaconUntilReturn()
-	beaconSuppressed = Context.suppressBeaconInteraction() == true or beaconSuppressed
-end
-
-local function getGoldenSpawnWait()
-	return GOLDEN_SPAWN_WAIT
 end
 
 local function getGiftFarmRange(controller)
@@ -164,35 +130,6 @@ local function shouldWaitForPylons(controller)
 	return hasActivePylon()
 end
 
-local function waitForLateGolden(controller, scanInfo, reason)
-	if not (lastGiftSeenAt > 0 and scanInfo and scanInfo.RawGolden == 0) then
-		goldenMissingSince = nil
-		return false
-	end
-
-	if not hasSeenGoldenThisRound and (tonumber(scanInfo.RawNormal) or 0) > 0 then
-		return false
-	end
-
-	local waitTime = getGoldenSpawnWait()
-	if waitTime <= 0 then
-		return false
-	end
-
-	goldenMissingSince = goldenMissingSince or os.clock()
-	local elapsed = os.clock() - goldenMissingSince
-	if elapsed < waitTime then
-		setStatus(
-			controller,
-			"WaitingForGoldenSpawn",
-			string.format("%s %.1fs/%.1fs", reason or "Golden settle", elapsed, waitTime)
-		)
-		return true
-	end
-
-	return false
-end
-
 local function processOnce(controller)
 	if not enabled or busy or not controller or controller.Destroyed then
 		return
@@ -223,7 +160,9 @@ local function processOnce(controller)
 				return
 			end
 
-			suppressBeaconUntilReturn()
+			if Beacon and typeof(Beacon.suppressUntilReturn) == "function" then
+				Beacon.suppressUntilReturn()
+			end
 
 			if Altar and typeof(Altar.tryStep) == "function" then
 				local handledAltar, altarStatus, altarDetail = Altar.tryStep(controller, hrp)
@@ -237,7 +176,9 @@ local function processOnce(controller)
 				local handledMedal, medalStatus = Medal.tryStep(controller, hrp)
 				if handledMedal then
 					if medalStatus == "SubmittingMedal" then
-						beaconSuppressed = false
+						if Beacon and typeof(Beacon.restore) == "function" then
+							Beacon.restore()
+						end
 					end
 					setStatus(controller, medalStatus or "MedalAction")
 					return
@@ -251,27 +192,27 @@ local function processOnce(controller)
 			end
 
 			local candidates, scanInfo = Scanner.scan(controller, gch)
-			if scanInfo and scanInfo.RawGolden and scanInfo.RawGolden > 0 then
-				hasSeenGoldenThisRound = true
-				goldenMissingSince = nil
+			if GoldenWait and typeof(GoldenWait.noteScan) == "function" then
+				GoldenWait.noteScan(scanInfo)
 			end
-			if waitForLateGolden(controller, scanInfo, hasSeenGoldenThisRound and "Golden respawn check" or "Post-clear check") then
+			local goldenWaitReason = GoldenWait.hasSeenGolden() and "Golden respawn check" or "Post-clear check"
+			if GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, setStatus, goldenWaitReason) then
 				return
 			end
-			if lastGiftSeenAt > 0 and hasSeenGoldenThisRound and scanInfo and scanInfo.RawGolden == 0 then
+			if lastGiftSeenAt > 0 and GoldenWait.hasSeenGolden() and scanInfo and scanInfo.RawGolden == 0 then
 				markGoldenComplete(controller)
 				if shouldWaitForPylons(controller) then
 					setStatus(controller, "WaitingForPylons", "Golden gifts complete")
 					return
 				end
-				if returnToBeacon(controller, hrp, "Golden gifts complete") then
+				if Beacon.returnToBeacon(controller, hrp, setStatus, "Golden gifts complete") then
 					return
 				end
 			end
 
 			if #candidates == 0 then
 				if lastGiftSeenAt > 0 and os.clock() - lastGiftSeenAt >= EMPTY_COMPLETE_DELAY then
-					if returnToBeacon(controller, hrp, "Round targets complete") then
+					if Beacon.returnToBeacon(controller, hrp, setStatus, "Round targets complete") then
 						return
 					end
 					setStatus(controller, "RoundCompleteWatching")
@@ -289,16 +230,10 @@ local function processOnce(controller)
 				totalPlanned += #(step.Cluster or {})
 			end
 
-			local rawNormal = scanInfo and (tonumber(scanInfo.RawNormal) or 0) or 0
-			local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
-			local shouldHoldForGoldenWait = rawGolden == 0
-				and rawNormal > 0
-				and rawNormal <= totalPlanned
-				and getGoldenSpawnWait() > 0
+			local shouldHoldForGoldenWait = GoldenWait.shouldHoldAfterRoute(scanInfo, totalPlanned)
 
 			local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
 			local routeRejected = false
-			local collectedPlanned = 0
 			for index, step in ipairs(route) do
 				local cluster = step.Cluster or {}
 				local planInfo = step.Info
@@ -316,7 +251,6 @@ local function processOnce(controller)
 					TargetPosition = planInfo and planInfo.TargetPosition,
 					PrecisionMode = precisionMode,
 				})
-				collectedPlanned += #cluster
 				if collectResult and (tonumber(collectResult.Rejected) or 0) > 0 then
 					routeRejected = true
 				end
@@ -327,7 +261,7 @@ local function processOnce(controller)
 				return
 			end
 			if shouldHoldForGoldenWait then
-				goldenMissingSince = os.clock()
+				GoldenWait.holdNow()
 			end
 
 			local normalCollected, normalTotal, normalRatio = Progress.getNormalGiftProgress(gch)
@@ -383,12 +317,13 @@ end
 function Runtime.disable(controller)
 	enabled = false
 	busy = false
-	if beaconSuppressed then
-		Context.restoreBeaconInteraction()
-		beaconSuppressed = false
+	if Beacon and typeof(Beacon.restore) == "function" then
+		Beacon.restore()
 	end
 	if Collector and typeof(Collector.restoreMovement) == "function" then
-		Collector.restoreMovement()
+		Collector.restoreMovement({
+			KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
+		})
 	end
 	if connection then
 		pcall(function()

@@ -4,25 +4,31 @@ local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.lua
 local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.luau")
 
 local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
 
 local Collector = {}
-local COLLECT_SETTLE = 0.02
-local PRECISION_COLLECT_SETTLE = 0.05
-local BASE_VALIDATION_WAIT = 0.08
-local PRECISION_VALIDATION_WAIT = 0.24
+local COLLECT_SETTLE = 0
+local PRECISION_COLLECT_SETTLE = 0.035
+local PRECISION_SYNC_MIN = 0.025
+local PRECISION_SYNC_MAX = 0.08
+local BASE_VALIDATION_WAIT = 0.045
+local FAST_VALIDATION_MAX = 0.12
+local PRECISION_VALIDATION_WAIT = 0.18
+local PRECISION_VALIDATION_MAX = 0.26
 local ARRIVAL_TOLERANCE = 3
 local PRECISION_ARRIVAL_TOLERANCE = 1.25
-local ARRIVAL_STABLE_FRAMES = 2
-local PRECISION_STABLE_FRAMES = 3
-local ARRIVAL_TIMEOUT = 0.35
-local PRECISION_ARRIVAL_TIMEOUT = 0.45
+local ARRIVAL_STABLE_FRAMES = 1
+local PRECISION_STABLE_FRAMES = 2
+local ARRIVAL_TIMEOUT = 0.22
+local PRECISION_ARRIVAL_TIMEOUT = 0.35
 local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
 local MAX_RETRY_PASSES = 2
-local RETRY_SETTLE = 0.06
+local RETRY_SETTLE = 0.04
 local comboCount = 0
 local lastCollectTick = 0
 local foothold = nil
+local footholdRemovalToken = 0
 local adaptiveSuccessRate = 1
 local adaptiveValidationWait = BASE_VALIDATION_WAIT
 local failedAttempts = setmetatable({}, { __mode = "k" })
@@ -93,12 +99,64 @@ local function clearVelocity(hrp)
 	end)
 end
 
+local function waitIfPositive(seconds)
+	local duration = tonumber(seconds) or 0
+	if duration > 0 then
+		task.wait(duration)
+	end
+end
+
+local function normalizePingSeconds(value)
+	local ping = tonumber(value)
+	if not ping or ping <= 0 then
+		return nil
+	end
+	if ping > 1 then
+		ping /= 1000
+	end
+	return ping
+end
+
+local function getPingSeconds()
+	local ok, result = pcall(function()
+		if Stats.Network and typeof(Stats.Network.GetPing) == "function" then
+			return Stats.Network:GetPing()
+		end
+		return nil
+	end)
+	local ping = ok and normalizePingSeconds(result) or nil
+	if ping then
+		return ping
+	end
+
+	ok, result = pcall(function()
+		local serverStats = Stats.Network and Stats.Network:FindFirstChild("ServerStatsItem")
+		local dataPing = serverStats and serverStats:FindFirstChild("Data Ping")
+		if dataPing and typeof(dataPing.GetValue) == "function" then
+			return dataPing:GetValue()
+		end
+		return nil
+	end)
+	return ok and normalizePingSeconds(result) or nil
+end
+
+local function waitForReplicationSync(precisionMode)
+	if not precisionMode then
+		return
+	end
+
+	local ping = getPingSeconds()
+	local waitTime = math.clamp((ping or PRECISION_SYNC_MIN) * 0.5, PRECISION_SYNC_MIN, PRECISION_SYNC_MAX)
+	RunService.RenderStepped:Wait()
+	waitIfPositive(waitTime)
+end
+
 local function getValidationWait(controller, precisionMode)
 	if precisionMode then
-		return math.max(PRECISION_VALIDATION_WAIT, adaptiveValidationWait)
+		return math.clamp(math.max(PRECISION_VALIDATION_WAIT, adaptiveValidationWait), PRECISION_VALIDATION_WAIT, PRECISION_VALIDATION_MAX)
 	end
 	if isAdaptiveEnabled(controller) then
-		return math.clamp(adaptiveValidationWait, 0.04, 0.45)
+		return math.clamp(adaptiveValidationWait, 0.035, FAST_VALIDATION_MAX)
 	end
 	return BASE_VALIDATION_WAIT
 end
@@ -122,13 +180,13 @@ local function updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
 	adaptiveSuccessRate = adaptiveSuccessRate * 0.7 + ratio * 0.3
 
 	if failed > 0 then
-		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.08, BASE_VALIDATION_WAIT, 0.45)
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.04, BASE_VALIDATION_WAIT, PRECISION_VALIDATION_MAX)
 	elseif ratio < 0.65 then
-		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.06, BASE_VALIDATION_WAIT, 0.45)
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.03, BASE_VALIDATION_WAIT, PRECISION_VALIDATION_MAX)
 	elseif ratio < 0.9 then
-		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.025, BASE_VALIDATION_WAIT, 0.45)
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.015, BASE_VALIDATION_WAIT, PRECISION_VALIDATION_MAX)
 	elseif adaptiveSuccessRate > 0.96 then
-		adaptiveValidationWait = math.clamp(adaptiveValidationWait - 0.01, 0.04, 0.45)
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait - 0.02, 0.035, PRECISION_VALIDATION_MAX)
 	end
 
 	if controller then
@@ -170,13 +228,36 @@ local function getFoothold()
 end
 
 local function placeFoothold(position)
+	footholdRemovalToken += 1
 	local part = getFoothold()
 	part.CFrame = CFrame.new(position + FOOTHOLD_OFFSET)
 	return part
 end
 
-local function removeFoothold()
+local function removeFoothold(delaySeconds)
+	local delayTime = tonumber(delaySeconds) or 0
+	if delayTime > 0 and foothold and foothold.Parent then
+		local token = footholdRemovalToken + 1
+		footholdRemovalToken = token
+		local part = foothold
+		task.delay(delayTime, function()
+			if footholdRemovalToken ~= token or foothold ~= part then
+				return
+			end
+			if part and part.Parent then
+				pcall(function()
+					part:Destroy()
+				end)
+			end
+			if foothold == part then
+				foothold = nil
+			end
+		end)
+		return
+	end
+
 	if foothold then
+		footholdRemovalToken += 1
 		pcall(function()
 			foothold:Destroy()
 		end)
@@ -249,17 +330,22 @@ local function getRejectedItems(items, currentPos, collectRange)
 	return rejected
 end
 
-function Collector.releaseCharacter()
-	removeFoothold()
+function Collector.releaseCharacter(options)
+	options = options or {}
 	local hrp = Context.getRootPart()
+	if options.KeepFootholdDuration and (not foothold or not foothold.Parent) and hrp and hrp.Parent then
+		placeFoothold(hrp.Position)
+	end
+
+	removeFoothold(options.KeepFootholdDuration)
 	if hrp and hrp.Parent then
 		hrp.Anchored = false
 		clearVelocity(hrp)
 	end
 end
 
-function Collector.restoreMovement()
-	Collector.releaseCharacter()
+function Collector.restoreMovement(options)
+	Collector.releaseCharacter(options)
 	return true
 end
 
@@ -299,7 +385,8 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 		jumpToWaypoint(hrp, standingPosition)
 		clearVelocity(hrp)
 		waitForArrival(hrp, standingPosition, precisionMode)
-		task.wait(precisionMode and PRECISION_COLLECT_SETTLE or COLLECT_SETTLE)
+		waitIfPositive(precisionMode and PRECISION_COLLECT_SETTLE or COLLECT_SETTLE)
+		waitForReplicationSync(precisionMode)
 
 		local currentPos = hrp.Position
 		local attemptedGifts = {}
