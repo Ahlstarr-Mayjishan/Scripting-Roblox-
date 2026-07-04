@@ -8,9 +8,13 @@ local Scanner = {}
 local SPAWN_SETTLE = 0.35
 local GOLDEN_SPAWN_SETTLE = 0.1
 local seenGifts = setmetatable({}, { __mode = "k" })
+local peakRawGolden = 0
+local peakRawNormal = 0
 
 function Scanner.reset()
 	seenGifts = setmetatable({}, { __mode = "k" })
+	peakRawGolden = 0
+	peakRawNormal = 0
 	if Collapse and typeof(Collapse.reset) == "function" then
 		Collapse.reset()
 	end
@@ -62,6 +66,9 @@ function Scanner.scan(controller, gch)
 		end
 	end
 
+	peakRawGolden = math.max(peakRawGolden, rawGolden)
+	peakRawNormal = math.max(peakRawNormal, rawNormal)
+
 	if #goldenGifts > 0 then
 		gifts = goldenGifts
 	else
@@ -83,6 +90,10 @@ function Scanner.scan(controller, gch)
 		Normal = #normalGifts,
 		RawGolden = rawGolden,
 		RawNormal = rawNormal,
+		PeakRawGolden = peakRawGolden,
+		PeakRawNormal = peakRawNormal,
+		GoldenRemainingRatio = if peakRawGolden > 0 then rawGolden / peakRawGolden else 1,
+		NormalRemainingRatio = if peakRawNormal > 0 then rawNormal / peakRawNormal else 1,
 		CollapseTracked = true,
 		GoldenLocked = #goldenGifts > 0,
 	}

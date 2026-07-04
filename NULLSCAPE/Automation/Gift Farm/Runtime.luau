@@ -21,6 +21,7 @@ local STATUS_UPDATE_INTERVAL = 0.15
 local EMPTY_COMPLETE_DELAY = 2.5
 local DISABLE_FOOTHOLD_DURATION = 2
 local PYLON_LEVEL = 35
+local TAIL_REMAINING_RATIO = 0.12
 
 local enabled = false
 local busy = false
@@ -156,6 +157,45 @@ local function shouldWaitForPylons(controller)
 	return hasActivePylon()
 end
 
+local function buildPrecisionRoute(candidates)
+	local route = {}
+	for _, item in ipairs(candidates or {}) do
+		table.insert(route, {
+			Cluster = { item },
+			Info = {
+				TargetPosition = item.pos,
+				SafeRange = 18,
+				Score = {
+					Golden = item.golden and 1 or 0,
+					CollapseCount = (tonumber(item.collapsePriority) or 0) > 0 and 1 or 0,
+					Total = 1,
+				},
+			},
+		})
+	end
+	return route
+end
+
+local function isTailPrecision(candidates, scanInfo, normalRatio)
+	if #candidates <= 3 then
+		return true
+	end
+
+	if scanInfo and scanInfo.GoldenLocked then
+		local peakGolden = tonumber(scanInfo.PeakRawGolden) or 0
+		local rawGolden = tonumber(scanInfo.RawGolden) or 0
+		if peakGolden > 0 and rawGolden / peakGolden <= TAIL_REMAINING_RATIO then
+			return true
+		end
+	end
+
+	if not (scanInfo and scanInfo.GoldenLocked) and (tonumber(normalRatio) or 0) >= 1 - TAIL_REMAINING_RATIO then
+		return true
+	end
+
+	return false
+end
+
 local function processOnce(controller)
 	if not enabled or busy or not controller or controller.Destroyed then
 		return
@@ -191,7 +231,10 @@ local function processOnce(controller)
 				return
 			end
 
-			if Beacon and typeof(Beacon.suppressUntilReturn) == "function" then
+			if controller.GiftFarmGoldenComplete ~= true
+				and Beacon
+				and typeof(Beacon.suppressUntilReturn) == "function"
+			then
 				Beacon.suppressUntilReturn()
 			end
 
@@ -267,7 +310,10 @@ local function processOnce(controller)
 
 			lastGiftSeenAt = os.clock()
 			local range = getGiftFarmRange(controller)
-			local route = ClusterPlanner.planRoute(candidates, range, hrp.Position)
+			local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
+			local tailPrecision = isTailPrecision(candidates, scanInfo, normalRatio)
+			local route = tailPrecision and buildPrecisionRoute(candidates)
+				or ClusterPlanner.planRoute(candidates, range, hrp.Position)
 			local totalPlanned = 0
 			for _, step in ipairs(route) do
 				totalPlanned += #(step.Cluster or {})
@@ -282,7 +328,8 @@ local function processOnce(controller)
 				local planInfo = step.Info
 				local score = planInfo and planInfo.Score
 				local planned = score and (" | plan " .. tostring(score.Golden) .. "/" .. tostring(score.Total)) or ""
-				local precisionMode = #cluster <= 2
+				local collapseCount = score and tonumber(score.CollapseCount) or 0
+				local precisionMode = tailPrecision or #cluster <= 2 or (collapseCount > 0 and #cluster <= 4)
 				setStatus(
 					controller,
 					precisionMode and "CollectingPrecision" or "Collecting",
@@ -293,6 +340,7 @@ local function processOnce(controller)
 					SafeRange = planInfo and planInfo.SafeRange,
 					TargetPosition = planInfo and planInfo.TargetPosition,
 					PrecisionMode = precisionMode,
+					TailMode = tailPrecision,
 					AbortCheck = function()
 						return not isCurrentRoundActive()
 					end,
@@ -314,7 +362,7 @@ local function processOnce(controller)
 				GoldenWait.holdNow()
 			end
 
-			local normalCollected, normalTotal, normalRatio = Progress.getNormalGiftProgress(gch)
+			local normalCollected, normalTotal, displayNormalRatio = Progress.getNormalGiftProgress(gch)
 			local goldenText = scanInfo and (" | Golden " .. tostring(scanInfo.Golden or 0)) or ""
 			local adaptiveText = ""
 			if controller.GiftFarmAdaptiveTiming ~= false then
@@ -333,7 +381,7 @@ local function processOnce(controller)
 			setStatus(
 				controller,
 				"Rescanning",
-				string.format("Normal %d/%d (%.0f%%)", normalCollected, normalTotal, normalRatio * 100)
+				string.format("Normal %d/%d (%.0f%%)", normalCollected, normalTotal, displayNormalRatio * 100)
 					.. goldenText
 					.. adaptiveText
 			)

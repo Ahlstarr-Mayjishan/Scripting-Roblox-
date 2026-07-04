@@ -9,23 +9,28 @@ local Workspace = game:GetService("Workspace")
 
 local Collector = {}
 local COLLECT_SETTLE = 0
-local PRECISION_COLLECT_SETTLE = 0.035
-local PRECISION_SYNC_MIN = 0.025
-local PRECISION_SYNC_MAX = 0.08
-local BASE_VALIDATION_WAIT = 0.045
-local FAST_VALIDATION_MAX = 0.12
+local PRECISION_COLLECT_SETTLE = 0.09
+local SYNC_MIN = 0.02
+local SYNC_MAX = 0.07
+local PRECISION_SYNC_MIN = 0.04
+local PRECISION_SYNC_MAX = 0.11
+local BASE_VALIDATION_WAIT = 0.06
+local FAST_VALIDATION_MAX = 0.16
 local PRECISION_VALIDATION_WAIT = 0.18
 local PRECISION_VALIDATION_MAX = 0.26
 local ARRIVAL_TOLERANCE = 3
 local PRECISION_ARRIVAL_TOLERANCE = 1.25
 local ARRIVAL_STABLE_FRAMES = 1
 local PRECISION_STABLE_FRAMES = 2
+local TAIL_STABLE_FRAMES = 4
 local ARRIVAL_TIMEOUT = 0.22
 local PRECISION_ARRIVAL_TIMEOUT = 0.35
+local TAIL_ARRIVAL_TIMEOUT = 0.55
 local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
 local MAX_RETRY_PASSES = 2
-local RETRY_SETTLE = 0.04
+local MAX_PRECISION_RETRY_PASSES = 3
+local RETRY_SETTLE = 0.075
 local comboCount = 0
 local lastCollectTick = 0
 local foothold = nil
@@ -173,13 +178,14 @@ local function getPingSeconds()
 end
 
 local function waitForReplicationSync(precisionMode)
-	if not precisionMode then
-		return
-	end
-
 	local ping = getPingSeconds()
-	local waitTime = math.clamp((ping or PRECISION_SYNC_MIN) * 0.5, PRECISION_SYNC_MIN, PRECISION_SYNC_MAX)
-	RunService.RenderStepped:Wait()
+	local minWait = precisionMode and PRECISION_SYNC_MIN or SYNC_MIN
+	local maxWait = precisionMode and PRECISION_SYNC_MAX or SYNC_MAX
+	local waitTime = math.clamp((ping or minWait) * 0.5, minWait, maxWait)
+	local frames = precisionMode and 2 or 1
+	for _ = 1, frames do
+		RunService.Heartbeat:Wait()
+	end
 	waitIfPositive(waitTime)
 end
 
@@ -304,9 +310,10 @@ local function waitForArrival(hrp, targetPosition, precisionMode)
 
 	local startedAt = os.clock()
 	local stableFrames = 0
-	local timeout = precisionMode and PRECISION_ARRIVAL_TIMEOUT or ARRIVAL_TIMEOUT
+	local tailMode = precisionMode == "tail"
+	local timeout = tailMode and TAIL_ARRIVAL_TIMEOUT or (precisionMode and PRECISION_ARRIVAL_TIMEOUT or ARRIVAL_TIMEOUT)
 	local tolerance = precisionMode and PRECISION_ARRIVAL_TOLERANCE or ARRIVAL_TOLERANCE
-	local requiredFrames = precisionMode and PRECISION_STABLE_FRAMES or ARRIVAL_STABLE_FRAMES
+	local requiredFrames = tailMode and TAIL_STABLE_FRAMES or (precisionMode and PRECISION_STABLE_FRAMES or ARRIVAL_STABLE_FRAMES)
 
 	while os.clock() - startedAt <= timeout do
 		if not (hrp and hrp.Parent) then
@@ -355,9 +362,9 @@ local function getRejectedItems(items, currentPos, collectRange)
 	local rejected = {}
 	for _, item in ipairs(items) do
 		if item.rawObj
-			and failedAttempts[item.rawObj] ~= nil
 			and not item.rawObj.Destroyed
 			and not item.rawObj.Collected
+			and not item.rawObj.ClientCollected
 			and Distance.isWithinRange(item.pos, currentPos, collectRange)
 		then
 			table.insert(rejected, item)
@@ -410,7 +417,8 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 	end
 
 	options = options or {}
-	local precisionMode = options.PrecisionMode == true or #cluster <= 2
+	local tailMode = options.TailMode == true
+	local precisionMode = tailMode or options.PrecisionMode == true or #cluster <= 2
 	local targetPosition = options.TargetPosition or cluster.TargetPosition or cluster[1].pos
 	local collectRange = options.SafeRange or cluster.SafeRange or range
 	local standingPosition = Distance.getRootPosition(targetPosition)
@@ -434,7 +442,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 			return
 		end
 		clearVelocity(hrp)
-		waitForArrival(hrp, standingPosition, precisionMode)
+		waitForArrival(hrp, standingPosition, tailMode and "tail" or precisionMode)
 		if isAborted(options) then
 			return
 		end
@@ -457,7 +465,8 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 		end
 		task.wait(getValidationWait(controller, precisionMode))
 
-		for _ = 1, MAX_RETRY_PASSES do
+		local retryPasses = precisionMode and MAX_PRECISION_RETRY_PASSES or MAX_RETRY_PASSES
+		for _ = 1, retryPasses do
 			if isAborted(options) then
 				return
 			end
@@ -469,8 +478,12 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 
 			observedRejects += #rejected
 			comboCount = 0
-			waitForArrival(hrp, standingPosition, true)
+			waitForArrival(hrp, standingPosition, tailMode and "tail" or true)
 			task.wait(RETRY_SETTLE)
+			waitForReplicationSync(true)
+			if isAborted(options) then
+				return
+			end
 			currentPos = hrp.Position
 			collectItems(rejected, currentPos, collectRange, collectedEvent, attemptedGifts)
 			task.wait(getValidationWait(controller, true))

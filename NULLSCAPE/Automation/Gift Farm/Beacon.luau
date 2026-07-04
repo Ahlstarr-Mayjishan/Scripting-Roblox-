@@ -19,6 +19,11 @@ function Beacon.reset(inRound)
 end
 
 function Beacon.suppressUntilReturn()
+	if returnDone then
+		Beacon.restore()
+		return false
+	end
+
 	local contextSuppressed = typeof(Context.isBeaconInteractionSuppressed) == "function"
 		and Context.isBeaconInteractionSuppressed()
 	local now = os.clock()
