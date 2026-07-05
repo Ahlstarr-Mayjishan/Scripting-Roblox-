@@ -6,6 +6,41 @@
 
 local getgenv = getgenv
 
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+
+local antiAfkConnection = nil
+
+local function enableAntiAfk()
+	if antiAfkConnection then
+		return
+	end
+	local localPlayer = Players.LocalPlayer
+	if not localPlayer then
+		return
+	end
+	local ok, connection = pcall(function()
+		return localPlayer.Idled:Connect(function()
+			pcall(function()
+				VirtualUser:CaptureController()
+				VirtualUser:ClickButton2(Vector2.new(0, 0))
+			end)
+		end)
+	end)
+	if ok then
+		antiAfkConnection = connection
+	end
+end
+
+local function disableAntiAfk()
+	if antiAfkConnection then
+		pcall(function()
+			antiAfkConnection:Disconnect()
+		end)
+		antiAfkConnection = nil
+	end
+end
+
 local executorLoaded, Executor = pcall(function()
 	return getgenv().loadModule("NULLSCAPE/Automation/executor.luau")
 end)
@@ -133,6 +168,13 @@ function Controller:update()
 	end
 
 	claimActiveController(self)
+
+	if self.GiftFarmEnabled then
+		enableAntiAfk()
+	else
+		disableAntiAfk()
+	end
+
 	return callExecutor("update", self, GC)
 end
 
@@ -280,6 +322,7 @@ function Controller:CleanUp()
 	end
 
 	self.Destroyed = true
+	disableAntiAfk()
 	callExecutor("disable", self, GC)
 	if GC and typeof(GC.cleanAll) == "function" then
 		GC.cleanAll()
