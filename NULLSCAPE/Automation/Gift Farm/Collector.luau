@@ -189,7 +189,7 @@ local function getValidationWait(controller, precisionMode)
 	if precisionMode then
 		return math.clamp(math.max(PRECISION_VALIDATION_WAIT, adaptiveValidationWait), PRECISION_VALIDATION_WAIT, PRECISION_VALIDATION_MAX)
 	end
-	return math.clamp(adaptiveValidationWait, 0.035, FAST_VALIDATION_MAX)
+	return math.clamp(adaptiveValidationWait, 0.052, FAST_VALIDATION_MAX)
 end
 
 local function updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
@@ -217,9 +217,9 @@ local function updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
 	elseif ratio < 0.9 then
 		adaptiveValidationWait = math.clamp(adaptiveValidationWait + 0.015, BASE_VALIDATION_WAIT, PRECISION_VALIDATION_MAX)
 	elseif adaptiveSuccessRate > 0.98 then
-		adaptiveValidationWait = math.clamp(adaptiveValidationWait - 0.035, 0.03, PRECISION_VALIDATION_MAX)
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait - 0.035, 0.052, PRECISION_VALIDATION_MAX)
 	elseif adaptiveSuccessRate > 0.94 then
-		adaptiveValidationWait = math.clamp(adaptiveValidationWait - 0.02, 0.03, PRECISION_VALIDATION_MAX)
+		adaptiveValidationWait = math.clamp(adaptiveValidationWait - 0.02, 0.052, PRECISION_VALIDATION_MAX)
 	end
 
 	if controller then
