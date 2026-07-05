@@ -39,6 +39,8 @@ local lastStatusAt = 0
 local lastStatus = nil
 local roundToken = 0
 local modeToken = 0
+local characterToken = 0
+local characterReady = false
 local pendingGoldenReturnSince = nil
 
 local function setStatus(controller, status, detail, force)
@@ -69,8 +71,28 @@ local function forceReleasePipeline()
 	end
 end
 
+local function resetPipelineModules()
+	if Context and typeof(Context.resetGiftClientHandler) == "function" then
+		Context.resetGiftClientHandler()
+	end
+	if GoldenWait and typeof(GoldenWait.reset) == "function" then
+		GoldenWait.reset()
+	end
+	if Scanner and typeof(Scanner.reset) == "function" then
+		Scanner.reset()
+	end
+	if Medal and typeof(Medal.reset) == "function" then
+		Medal.reset()
+	end
+	if Altar and typeof(Altar.reset) == "function" then
+		Altar.reset()
+	end
+end
+
 local function resetCharacterState(controller)
 	roundToken += 1
+	characterToken += 1
+	characterReady = false
 	busy = false
 	lastScan = 0
 	lastGiftSeenAt = 0
@@ -81,6 +103,10 @@ local function resetCharacterState(controller)
 		controller.GiftFarmGoldenComplete = false
 	end
 	forceReleasePipeline()
+	resetPipelineModules()
+	if Beacon and typeof(Beacon.reset) == "function" then
+		Beacon.reset(Context.isInRound())
+	end
 	if Beacon and typeof(Beacon.restore) == "function" then
 		Beacon.restore()
 	end
@@ -98,9 +124,7 @@ local function resetRoundState(controller, inRound)
 	if controller then
 		controller.GiftFarmGoldenComplete = false
 	end
-	if GoldenWait and typeof(GoldenWait.reset) == "function" then
-		GoldenWait.reset()
-	end
+	resetPipelineModules()
 	if Beacon and typeof(Beacon.reset) == "function" then
 		Beacon.reset(inRound)
 	end
@@ -114,15 +138,6 @@ local function resetRoundState(controller, inRound)
 			Beacon.restore()
 		end
 		forceReleasePipeline()
-	end
-	if Scanner and typeof(Scanner.reset) == "function" then
-		Scanner.reset()
-	end
-	if Medal and typeof(Medal.reset) == "function" then
-		Medal.reset()
-	end
-	if Altar and typeof(Altar.reset) == "function" then
-		Altar.reset()
 	end
 	if inRound then
 		setStatus(controller, "WaitingForGifts", "Round started (Pipeline)")
@@ -143,15 +158,31 @@ local function observeCharacter(controller, gc)
 		end)
 		characterAddedConnection = nil
 	end
+	if characterRemovingConnection then
+		pcall(function()
+			characterRemovingConnection:Disconnect()
+		end)
+		characterRemovingConnection = nil
+	end
 
 	characterAddedConnection = localPlayer.CharacterAdded:Connect(function(character)
 		if not enabled or not controller or controller.Destroyed then
 			return
 		end
 		resetCharacterState(controller)
+		local thisCharacterToken = characterToken
 		task.spawn(function()
 			local hrp = character and character:WaitForChild("HumanoidRootPart", 6)
-			if enabled and hrp and ModeIsolation.isActive(PIPELINE_MODE, modeToken) then
+			for _ = 1, 3 do
+				RunService.Heartbeat:Wait()
+			end
+			if enabled
+				and hrp
+				and localPlayer.Character == character
+				and thisCharacterToken == characterToken
+				and ModeIsolation.isActive(PIPELINE_MODE, modeToken)
+			then
+				characterReady = true
 				if Context.isInRound() then
 					setStatus(controller, "WaitingForGifts", "Character ready (Pipeline)", true)
 				else
@@ -165,8 +196,13 @@ local function observeCharacter(controller, gc)
 		if not enabled or not controller or controller.Destroyed then
 			return
 		end
+		characterReady = false
 		resetCharacterState(controller)
 	end)
+
+	if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+		characterReady = true
+	end
 
 	if gc and typeof(gc.registerConnection) == "function" then
 		gc.registerConnection(characterAddedConnection)
@@ -382,7 +418,7 @@ local function processOnce(controller)
 			end
 
 			local hrp = Context.getRootPart()
-			if not hrp then
+			if not (characterReady and hrp) then
 				setStatus(controller, "WaitingForCharacter")
 				return
 			end

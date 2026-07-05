@@ -31,9 +31,10 @@ local function collectBeaconParts()
 end
 
 function Context.getGiftClientHandler()
-	if cachedGCH then
+	if cachedGCH and typeof(cachedGCH.Gifts) == "table" then
 		return cachedGCH
 	end
+	cachedGCH = nil
 
 	local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
 		or ReplicatedStorage:FindFirstChild("ClientModules")
@@ -50,6 +51,10 @@ function Context.getGiftClientHandler()
 	end
 
 	return nil
+end
+
+function Context.resetGiftClientHandler()
+	cachedGCH = nil
 end
 
 function Context.getCollectedGiftEvent()
