@@ -20,7 +20,6 @@ local DEFAULT_RANGE = 60
 local MIN_SCAN_INTERVAL = 0.04
 local STATUS_UPDATE_INTERVAL = 0.15
 local EMPTY_COMPLETE_DELAY = 2.5
-local DISABLE_FOOTHOLD_DURATION = 2
 local PYLON_LEVEL = 35
 
 local enabled = false
@@ -70,7 +69,7 @@ local function resetRoundState(controller, inRound)
 		if PipelinedCollector and typeof(PipelinedCollector.releaseCharacter) == "function" then
 			pcall(function()
 				PipelinedCollector.releaseCharacter({
-					KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
+					ForceRelease = true,
 				})
 			end)
 		end
@@ -432,7 +431,7 @@ function Coordinator.disable(controller)
 	if PipelinedCollector and typeof(PipelinedCollector.releaseCharacter) == "function" then
 		pcall(function()
 			PipelinedCollector.releaseCharacter({
-				KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
+				ForceRelease = true,
 			})
 		end)
 	end

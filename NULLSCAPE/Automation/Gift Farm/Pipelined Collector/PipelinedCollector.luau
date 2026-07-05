@@ -10,6 +10,7 @@ local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.l
 
 local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
+local Workspace = game:GetService("Workspace")
 
 local PipelinedCollector = {}
 local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
@@ -18,6 +19,7 @@ local DISABLE_FOOTHOLD_DURATION = 2
 
 local foothold = nil
 local footholdRemovalToken = 0
+local pipelineToken = 0
 
 local function getFoothold()
 	if foothold and foothold.Parent then
@@ -34,7 +36,7 @@ local function getFoothold()
 	foothold.Material = Enum.Material.SmoothPlastic
 	foothold.Transparency = 1
 	foothold.Size = FOOTHOLD_SIZE
-	foothold.Parent = workspace
+	foothold.Parent = Workspace
 	return foothold
 end
 
@@ -99,8 +101,22 @@ local function releaseHumanoidState(hrp)
 	pcall(function()
 		humanoid.PlatformStand = false
 		humanoid.Sit = false
+		humanoid.AutoRotate = true
 		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
 	end)
+end
+
+local function hasGroundBelow(hrp)
+	if not (hrp and hrp.Parent) then
+		return false
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { hrp.Parent, foothold }
+
+	local result = Workspace:Raycast(hrp.Position, Vector3.new(0, -8, 0), params)
+	return result ~= nil
 end
 
 local function normalizePingSeconds(value)
@@ -150,7 +166,7 @@ local function waitForReplicationSync()
 	end
 end
 
-local function waitForArrival(hrp, targetPosition)
+local function waitForArrival(hrp, targetPosition, shouldAbort)
 	if not (hrp and hrp.Parent and typeof(targetPosition) == "Vector3") then
 		return false
 	end
@@ -158,6 +174,9 @@ local function waitForArrival(hrp, targetPosition)
 	local start = os.clock()
 	local tolerance = 2.0
 	while os.clock() - start <= 0.15 do
+		if typeof(shouldAbort) == "function" and shouldAbort() then
+			return false
+		end
 		if not (hrp and hrp.Parent) then
 			return false
 		end
@@ -179,15 +198,31 @@ local function isAborted(options)
 	return options and typeof(options.AbortCheck) == "function" and options.AbortCheck() == true
 end
 
+function PipelinedCollector.cancelPending()
+	pipelineToken += 1
+end
+
 function PipelinedCollector.releaseCharacter(options)
 	options = options or {}
+	if options.ForceRelease == true then
+		PipelinedCollector.cancelPending()
+	end
+
 	local hrp = Context.getRootPart()
-	local shouldKeepFoothold = options.KeepFootholdDuration and hrp and hrp.Parent
+	local shouldKeepFoothold = options.KeepFootholdDuration
+		and hrp
+		and hrp.Parent
+		and options.ForceRelease ~= true
+		and (not options.OnlyKeepFootholdIfAirborne or not hasGroundBelow(hrp))
 	if shouldKeepFoothold and (not foothold or not foothold.Parent) then
 		placeFoothold(hrp.Position)
 	end
 
-	removeFoothold(shouldKeepFoothold and options.KeepFootholdDuration or nil)
+	local keepDuration = nil
+	if shouldKeepFoothold then
+		keepDuration = options.KeepFootholdDuration
+	end
+	removeFoothold(keepDuration)
 	if hrp and hrp.Parent then
 		hrp.Anchored = false
 		releaseHumanoidState(hrp)
@@ -201,11 +236,16 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 	end
 
 	options = options or {}
+	pipelineToken += 1
+	local routeToken = pipelineToken
 	local collectedEvent = Context.getCollectedGiftEvent()
+	local function shouldAbort()
+		return routeToken ~= pipelineToken or isAborted(options)
+	end
 
 	local ok, err = pcall(function()
 		for index, step in ipairs(route) do
-			if isAborted(options) then
+			if shouldAbort() then
 				return
 			end
 
@@ -228,15 +268,21 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 			Context.moveCharacterTo(CFrame.new(standingPosition))
 			clearVelocity(hrp)
 
-			local arrived = waitForArrival(hrp, standingPosition)
-			if isAborted(options) then
+			local arrived = waitForArrival(hrp, standingPosition, shouldAbort)
+			if shouldAbort() then
 				return
 			end
 
 			if arrived then
 				local currentPos = hrp.Position
 				task.spawn(function()
+					if routeToken ~= pipelineToken then
+						return
+					end
 					for _, item in ipairs(cluster) do
+						if routeToken ~= pipelineToken then
+							return
+						end
 						if item.rawObj
 							and not item.rawObj.Destroyed
 							and not item.rawObj.Collected
@@ -257,6 +303,9 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 			end
 
 			if index < #route then
+				if shouldAbort() then
+					return
+				end
 				waitForReplicationSync()
 			end
 		end
@@ -264,6 +313,7 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 
 	PipelinedCollector.releaseCharacter({
 		KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
+		OnlyKeepFootholdIfAirborne = true,
 	})
 
 	if not ok then
