@@ -285,9 +285,23 @@ local function processOnce(controller)
 					setStatus(controller, medalStatus or "MedalAction")
 					return
 				end
-				if Beacon.returnToBeacon(controller, hrp, setStatus, "Golden gifts complete") then
+				local success = Beacon.returnToBeacon(controller, hrp, setStatus, "Golden gifts complete")
+				if success then
 					return
 				end
+				local reason = ""
+				if not Beacon then
+					reason = "NoBeaconMod"
+				elseif not Context.isBeaconActive() then
+					reason = "BeaconInactive"
+				elseif not Context.getBeaconPart() then
+					reason = "NoBeaconPart"
+				elseif controller.GiftFarmReturnToBeaconAfterGolden == false then
+					reason = "ReturnDisabled"
+				else
+					reason = "Unknown/AlreadyDone"
+				end
+				setStatus(controller, "GoldenCompleteWatching", "Beacon fail: " .. reason)
 			end
 
 			if #candidates == 0 then
@@ -316,10 +330,23 @@ local function processOnce(controller)
 					return
 				end
 				if lastGiftSeenAt > 0 and os.clock() - lastGiftSeenAt >= EMPTY_COMPLETE_DELAY then
-					if Beacon.returnToBeacon(controller, hrp, setStatus, "Round targets complete") then
+					local success = Beacon.returnToBeacon(controller, hrp, setStatus, "Round targets complete")
+					if success then
 						return
 					end
-					setStatus(controller, "RoundCompleteWatching")
+					local reason = ""
+					if not Beacon then
+						reason = "NoBeaconMod"
+					elseif not Context.isBeaconActive() then
+						reason = "BeaconInactive"
+					elseif not Context.getBeaconPart() then
+						reason = "NoBeaconPart"
+					elseif controller.GiftFarmReturnToBeaconAfterGolden == false then
+						reason = "ReturnDisabled"
+					else
+						reason = "Unknown/AlreadyDone"
+					end
+					setStatus(controller, "RoundCompleteWatching", "Beacon fail: " .. reason)
 				else
 					setStatus(controller, "WaitingForGifts")
 				end
