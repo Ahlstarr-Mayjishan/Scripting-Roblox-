@@ -24,6 +24,8 @@ local MIN_SCAN_INTERVAL = 0.04
 local STATUS_UPDATE_INTERVAL = 0.15
 local EMPTY_COMPLETE_DELAY = 2.5
 local PYLON_LEVEL = 35
+local GOLDEN_RETURN_VERIFY_ATTEMPTS = 6
+local GOLDEN_RETURN_VERIFY_INTERVAL = 0.12
 
 local enabled = false
 local busy = false
@@ -37,6 +39,7 @@ local lastStatusAt = 0
 local lastStatus = nil
 local roundToken = 0
 local modeToken = 0
+local pendingGoldenReturnSince = nil
 
 local function setStatus(controller, status, detail, force)
 	if controller then
@@ -73,6 +76,7 @@ local function resetCharacterState(controller)
 	lastGiftSeenAt = 0
 	lastStatusAt = 0
 	lastStatus = nil
+	pendingGoldenReturnSince = nil
 	if controller then
 		controller.GiftFarmGoldenComplete = false
 	end
@@ -90,6 +94,7 @@ local function resetRoundState(controller, inRound)
 	lastGiftSeenAt = 0
 	lastStatusAt = 0
 	lastStatus = nil
+	pendingGoldenReturnSince = nil
 	if controller then
 		controller.GiftFarmGoldenComplete = false
 	end
@@ -279,6 +284,76 @@ local function returnToBeacon(controller, hrp, reason)
 	return false
 end
 
+local function tryGoldenCompleteReturn(controller, hrp, scanInfo, isCurrentRoundActive)
+	if not (pendingGoldenReturnSince and scanInfo and tonumber(scanInfo.RawGolden) == 0) then
+		return false
+	end
+
+	pendingGoldenReturnSince = nil
+	markGoldenComplete(controller)
+	if shouldWaitForPylons(controller) then
+		setStatus(controller, "WaitingForPylons", "Golden gifts complete")
+		return true
+	end
+
+	local handledMedal, medalStatus = tryMedalStep(controller, hrp)
+	if not isCurrentRoundActive() then
+		setStatus(controller, "WaitingForRound")
+		return true
+	end
+	if handledMedal then
+		setStatus(controller, medalStatus or "MedalAction")
+		return true
+	end
+
+	if returnToBeacon(controller, hrp, "Golden gifts complete") then
+		return true
+	end
+
+	setStatus(controller, "GoldenCompleteWatching", "Beacon return retry pending")
+	pendingGoldenReturnSince = os.clock()
+	return true
+end
+
+local function verifyGoldenRouteComplete(controller, hrp, isCurrentRoundActive)
+	for _ = 1, GOLDEN_RETURN_VERIFY_ATTEMPTS do
+		if not isCurrentRoundActive() then
+			setStatus(controller, "WaitingForRound")
+			return true
+		end
+
+		hrp = Context.getRootPart() or hrp
+		if not hrp then
+			setStatus(controller, "WaitingForCharacter")
+			return true
+		end
+
+		local gch = Context.getGiftClientHandler()
+		if not (gch and gch.Gifts) then
+			setStatus(controller, "WaitingForGiftClient")
+			return true
+		end
+
+		local verifyCandidates, verifyInfo = Scanner.scan(controller, gch)
+		if GoldenWait and typeof(GoldenWait.noteScan) == "function" then
+			GoldenWait.noteScan(verifyInfo)
+		end
+		softCleanup(verifyCandidates, nil)
+
+		if tryGoldenCompleteReturn(controller, hrp, verifyInfo, isCurrentRoundActive) then
+			return true
+		end
+
+		if verifyInfo and tonumber(verifyInfo.RawGolden) and tonumber(verifyInfo.RawGolden) > 0 then
+			return false
+		end
+
+		task.wait(GOLDEN_RETURN_VERIFY_INTERVAL)
+	end
+
+	return false
+end
+
 local function processOnce(controller)
 	if busy or not enabled or controller.Destroyed then
 		return
@@ -360,6 +435,9 @@ local function processOnce(controller)
 			end
 			if GoldenWait and typeof(GoldenWait.noteScan) == "function" then
 				GoldenWait.noteScan(scanInfo)
+			end
+			if tryGoldenCompleteReturn(controller, hrp, scanInfo, isCurrentRoundActive) then
+				return
 			end
 			local goldenWaitReason = GoldenWait.hasSeenGolden() and "Golden respawn check" or "Post-clear check"
 			if GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, setStatus, goldenWaitReason) then
@@ -465,6 +543,7 @@ local function processOnce(controller)
 				totalPlanned += #(step.Cluster or {})
 			end
 
+			local wasGoldenRoute = scanInfo and scanInfo.GoldenLocked == true
 			local shouldHoldForGoldenWait = GoldenWait.shouldHoldAfterRoute(scanInfo, totalPlanned)
 			local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
 			
@@ -475,7 +554,7 @@ local function processOnce(controller)
 				string.format("%d routes | %d %s planned", #route, totalPlanned, focus)
 			)
 
-			PipelinedCollector.collectRoute(controller, hrp, route, range, {
+			local routeCompleted = PipelinedCollector.collectRoute(controller, hrp, route, range, {
 				AbortCheck = function()
 					return not isCurrentRoundActive()
 				end,
@@ -489,6 +568,13 @@ local function processOnce(controller)
 					GoldenWait.startNormalClearWindow()
 				else
 					GoldenWait.holdNow()
+				end
+			end
+			if routeCompleted and wasGoldenRoute then
+				pendingGoldenReturnSince = os.clock()
+				setStatus(controller, "VerifyingGoldenComplete", "Checking final golden gifts")
+				if verifyGoldenRouteComplete(controller, hrp, isCurrentRoundActive) then
+					return
 				end
 			end
 		end)

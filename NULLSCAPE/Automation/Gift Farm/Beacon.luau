@@ -90,9 +90,6 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 	if returnDone or controller.GiftFarmReturnToBeaconAfterGolden == false then
 		return false
 	end
-	if not Context.isBeaconActive() then
-		return false
-	end
 
 	local beacon = Context.getBeaconPart()
 	if not (beacon and hrp and hrp.Parent) then
@@ -109,6 +106,7 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 	local target = CFrame.new(beacon.Position + Vector3.new(0, 4, 0))
 	local arrived = false
 	for _ = 1, RETURN_ATTEMPTS do
+		hrp = Context.getRootPart() or hrp
 		if not (hrp and hrp.Parent and beacon and beacon.Parent) then
 			break
 		end
