@@ -41,6 +41,71 @@ local function disableAntiAfk()
 	end
 end
 
+local characterAddedConnection = nil
+local antiAnchorConnection = nil
+
+local function stopAntiAnchor()
+	if antiAnchorConnection then
+		pcall(function()
+			antiAnchorConnection:Disconnect()
+		end)
+		antiAnchorConnection = nil
+	end
+	if characterAddedConnection then
+		pcall(function()
+			characterAddedConnection:Disconnect()
+		end)
+		characterAddedConnection = nil
+	end
+end
+
+local function startAntiAnchor(controller)
+	if characterAddedConnection then
+		return
+	end
+
+	local localPlayer = Players.LocalPlayer
+	if not localPlayer then
+		return
+	end
+
+	local function setupHrp(character)
+		if not character then
+			return
+		end
+		local hrp = character:WaitForChild("HumanoidRootPart", 5)
+		if not hrp then
+			return
+		end
+
+		if antiAnchorConnection then
+			pcall(function()
+				antiAnchorConnection:Disconnect()
+			end)
+			antiAnchorConnection = nil
+		end
+
+		antiAnchorConnection = hrp:GetPropertyChangedSignal("Anchored"):Connect(function()
+			if controller.GiftFarmEnabled and hrp.Anchored then
+				pcall(function()
+					hrp.Anchored = false
+				end)
+			end
+		end)
+
+		if controller.GiftFarmEnabled and hrp.Anchored then
+			pcall(function()
+				hrp.Anchored = false
+			end)
+		end
+	end
+
+	characterAddedConnection = localPlayer.CharacterAdded:Connect(setupHrp)
+	if localPlayer.Character then
+		task.spawn(setupHrp, localPlayer.Character)
+	end
+end
+
 local executorLoaded, Executor = pcall(function()
 	return getgenv().loadModule("NULLSCAPE/Automation/executor.luau")
 end)
@@ -171,8 +236,10 @@ function Controller:update()
 
 	if self.GiftFarmEnabled then
 		enableAntiAfk()
+		startAntiAnchor(self)
 	else
 		disableAntiAfk()
+		stopAntiAnchor()
 	end
 
 	return callExecutor("update", self, GC)
@@ -323,6 +390,7 @@ function Controller:CleanUp()
 
 	self.Destroyed = true
 	disableAntiAfk()
+	stopAntiAnchor()
 	callExecutor("disable", self, GC)
 	if GC and typeof(GC.cleanAll) == "function" then
 		GC.cleanAll()
