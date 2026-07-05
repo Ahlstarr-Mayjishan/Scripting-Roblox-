@@ -78,6 +78,19 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateDropdown({
+		Name = "Farm Modes",
+		Options = { "Normal (teleport)", "Pipelining (Network)" },
+		CurrentOption = Controller and Controller.GiftFarmMode or "Normal (teleport)",
+		MultipleOptions = false,
+		Flag = "AutomationGiftFarmModeDropdown",
+		Callback = function(Value)
+			if Controller and typeof(Controller.SetGiftFarmMode) == "function" then
+				Controller:SetGiftFarmMode(Value)
+			end
+		end,
+	})
+
 	Tab:CreateToggle({
 		Name = "Collect Medal",
 		CurrentValue = Controller and Controller.CollectMedalEnabled or false,
@@ -102,17 +115,6 @@ return function(Client, Controller)
 		Callback = function(Value)
 			if Controller and typeof(Controller.SetGiftFarmRange) == "function" then
 				Controller:SetGiftFarmRange(Value)
-			end
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "Adaptive Timing",
-		CurrentValue = Controller and Controller.GiftFarmAdaptiveTiming ~= false,
-		Flag = "AutomationGiftFarmAdaptiveTimingToggle",
-		Callback = function(Value)
-			if Controller and typeof(Controller.SetGiftFarmAdaptiveTiming) == "function" then
-				Controller:SetGiftFarmAdaptiveTiming(Value)
 			end
 		end,
 	})

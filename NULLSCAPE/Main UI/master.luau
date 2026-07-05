@@ -215,7 +215,6 @@ pcall(function()
 			AutomationGiftFarmToggle = false,
 			AutomationCollectMedalToggle = false,
 			AutomationGiftFarmRangeSlider = 60,
-			AutomationGiftFarmAdaptiveTimingToggle = true,
 			AutomationGiftFarmReturnBeaconToggle = true,
 			AutomationAltarSelectionsDropdown = {},
 			AutomationPylonActivatorToggle = false,

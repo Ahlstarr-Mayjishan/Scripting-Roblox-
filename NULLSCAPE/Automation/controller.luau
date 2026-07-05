@@ -48,9 +48,9 @@ local Controller = {
 	Destroyed = false,
 	Initialized = false,
 	GiftFarmEnabled = false,
+	GiftFarmMode = "Normal (teleport)",
 	CollectMedalEnabled = false,
 	GiftFarmRange = 60,
-	GiftFarmAdaptiveTiming = true,
 	GiftFarmAdaptiveSuccessRate = 1,
 	GiftFarmAdaptiveValidationWait = 0.08,
 	GiftFarmAdaptiveRejects = 0,
@@ -141,6 +141,11 @@ function Controller:SetGiftFarmEnabled(value)
 	return self:update()
 end
 
+function Controller:SetGiftFarmMode(value)
+	self.GiftFarmMode = value
+	return self:update()
+end
+
 function Controller:SetGiftFarmRange(value)
 	local range = clampGiftRange(value)
 	self.GiftFarmRange = range
@@ -170,11 +175,6 @@ function Controller:GetGiftFarmRange()
 	end
 
 	return clampGiftRange(self.GiftFarmRange)
-end
-
-function Controller:SetGiftFarmAdaptiveTiming(value)
-	self.GiftFarmAdaptiveTiming = value == true
-	return self:update()
 end
 
 function Controller:SetGiftFarmReturnToBeaconAfterGolden(value)

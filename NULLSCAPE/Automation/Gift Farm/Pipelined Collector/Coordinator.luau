@@ -1,40 +1,27 @@
 --!nocheck
-
-local CollectionService = game:GetService("CollectionService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+-- [[
+--  NULLSCAPE - Pipelined Gift Farm Coordinator
+--  Isolated runtime manager specifically for Pipelining (Network) mode.
+-- ]]
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 local Scanner = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Scanner.luau")
-local Collector = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Collector.luau")
+local PipelinedCollector = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Pipelined Collector/PipelinedCollector.luau")
 local ClusterPlanner = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Cluster Planner.luau")
-local Progress = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Progress.luau")
 local Altar = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Altar.luau")
 local Medal = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Medal.luau")
 local Beacon = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Beacon.luau")
 local GoldenWait = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Golden Wait.luau")
 
-local PipelinedCoordinator = nil
-local function getPipelinedCoordinator()
-	if PipelinedCoordinator then
-		return PipelinedCoordinator
-	end
-	pcall(function()
-		PipelinedCoordinator = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Pipelined Collector/Coordinator.luau")
-	end)
-	return PipelinedCoordinator
-end
+local RunService = game:GetService("RunService")
 
-local Runtime = {}
+local Coordinator = {}
 local DEFAULT_RANGE = 60
 local MIN_SCAN_INTERVAL = 0.04
 local STATUS_UPDATE_INTERVAL = 0.15
 local EMPTY_COMPLETE_DELAY = 2.5
 local DISABLE_FOOTHOLD_DURATION = 2
 local PYLON_LEVEL = 35
-local TAIL_REMAINING_RATIO = 0.12
-local SOFT_GC_INTERVAL = 1.5
-local SOFT_GC_STEP = 64
 
 local enabled = false
 local busy = false
@@ -44,7 +31,6 @@ local lastScan = 0
 local lastGiftSeenAt = 0
 local lastStatusAt = 0
 local lastStatus = nil
-local lastSoftGcAt = 0
 local roundToken = 0
 
 local function setStatus(controller, status, detail, force)
@@ -81,19 +67,16 @@ local function resetRoundState(controller, inRound)
 		if Beacon and typeof(Beacon.restore) == "function" then
 			Beacon.restore()
 		end
-		if Collector and typeof(Collector.restoreMovement) == "function" then
-			Collector.restoreMovement({
-				KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
-				OnlyKeepFootholdIfAirborne = true,
-				SkipVelocityClear = true,
-			})
+		if PipelinedCollector and typeof(PipelinedCollector.releaseCharacter) == "function" then
+			pcall(function()
+				PipelinedCollector.releaseCharacter({
+					KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
+				})
+			end)
 		end
 	end
 	if Scanner and typeof(Scanner.reset) == "function" then
 		Scanner.reset()
-	end
-	if Collector and typeof(Collector.resetAdaptive) == "function" then
-		Collector.resetAdaptive(controller)
 	end
 	if Medal and typeof(Medal.reset) == "function" then
 		Medal.reset()
@@ -102,9 +85,9 @@ local function resetRoundState(controller, inRound)
 		Altar.reset()
 	end
 	if inRound then
-		setStatus(controller, "WaitingForGifts", "Round started")
+		setStatus(controller, "WaitingForGifts", "Round started (Pipeline)")
 	else
-		setStatus(controller, "WaitingForRound", "Round ended")
+		setStatus(controller, "WaitingForRound", "Round ended (Pipeline)")
 	end
 end
 
@@ -159,95 +142,53 @@ local function clearRoute(route)
 			table.clear(step)
 		end
 	end
-	table.clear(route)
 end
 
-local function softCleanup(...)
-	for index = 1, select("#", ...) do
-		local value = select(index, ...)
-		if typeof(value) == "table" then
-			table.clear(value)
-		end
+local function softCleanup(candidates, remaining)
+	if typeof(candidates) == "table" then
+		table.clear(candidates)
 	end
-
-	local now = os.clock()
-	if now - lastSoftGcAt < SOFT_GC_INTERVAL then
-		return
+	if typeof(remaining) == "table" then
+		table.clear(remaining)
 	end
-	lastSoftGcAt = now
-
-	task.defer(function()
-		pcall(function()
-			collectgarbage("step", SOFT_GC_STEP)
-		end)
-	end)
-end
-
-local function getLevel()
-	local level = ReplicatedStorage:FindFirstChild("Level")
-	if level and (level:IsA("IntValue") or level:IsA("NumberValue")) then
-		return tonumber(level.Value) or 0
-	end
-	return 0
-end
-
-local function hasActivePylon()
-	for _, model in ipairs(CollectionService:GetTagged("Pylon")) do
-		if model and model:IsDescendantOf(workspace) and model:GetAttribute("Completed") ~= true then
-			return true
-		end
-	end
-	return false
 end
 
 local function shouldWaitForPylons(controller)
-	if not (controller and controller.PylonActivatorEnabled == true and controller.PylonActivatorComplete ~= true) then
+	if not (controller and controller.PylonActivatorEnabled) then
 		return false
 	end
-	if getLevel() < PYLON_LEVEL then
+	if controller.PylonActivatorComplete then
 		return false
 	end
-	return hasActivePylon()
-end
-
-local function isHoldingMedalBeforeGoldenComplete(controller)
-	return controller
-		and controller.CollectMedalEnabled == true
-		and controller.GiftFarmGoldenComplete ~= true
-		and Medal
-		and typeof(Medal.isCarrying) == "function"
-		and Medal.isCarrying() == true
+	local playerLevel = Context.getPlayerLevel() or 0
+	return playerLevel >= PYLON_LEVEL
 end
 
 local function tryMedalStep(controller, hrp)
+	if not (controller and controller.CollectMedalEnabled) then
+		return false
+	end
 	if Medal and typeof(Medal.tryStep) == "function" then
 		return Medal.tryStep(controller, hrp)
 	end
 	return false
 end
 
-local function isTailPrecision(candidates, scanInfo, normalRatio)
-	if #candidates <= 3 then
-		return true
+local function isHoldingMedalBeforeGoldenComplete(controller)
+	if not (controller and controller.CollectMedalEnabled) then
+		return false
 	end
-
-	if scanInfo and scanInfo.GoldenLocked then
-		local peakGolden = tonumber(scanInfo.PeakRawGolden) or 0
-		local rawGolden = tonumber(scanInfo.RawGolden) or 0
-		if peakGolden > 0 and rawGolden / peakGolden <= TAIL_REMAINING_RATIO then
-			return true
-		end
+	if controller.GiftFarmGoldenComplete == true then
+		return false
 	end
-
-	if not (scanInfo and scanInfo.GoldenLocked) and (tonumber(normalRatio) or 0) >= 1 - TAIL_REMAINING_RATIO then
-		return true
+	if Medal and typeof(Medal.isPlayerHoldingMedal) == "function" then
+		return Medal.isPlayerHoldingMedal() == true
 	end
-
 	return false
 end
 
 local function processOnce(controller)
-	if not enabled or busy or not controller or controller.Destroyed then
+	if busy or not enabled or controller.Destroyed then
 		return
 	end
 
@@ -257,8 +198,8 @@ local function processOnce(controller)
 	end
 	lastScan = now
 	busy = true
-	local token = roundToken
 
+	local token = roundToken
 	local function isCurrentRoundActive()
 		return enabled and token == roundToken and Context.isInRound()
 	end
@@ -387,8 +328,6 @@ local function processOnce(controller)
 
 			lastGiftSeenAt = os.clock()
 			local range = getGiftFarmRange(controller)
-			local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
-			local tailPrecision = isTailPrecision(candidates, scanInfo, normalRatio)
 			local route, remaining = ClusterPlanner.planRoute(candidates, range, hrp.Position)
 			if remaining and #remaining > 0 and typeof(ClusterPlanner.planTailRoute) == "function" then
 				local tailRoute = ClusterPlanner.planTailRoute(remaining, range, hrp.Position)
@@ -402,51 +341,24 @@ local function processOnce(controller)
 			end
 
 			local shouldHoldForGoldenWait = GoldenWait.shouldHoldAfterRoute(scanInfo, totalPlanned)
-
 			local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
-			local routeRejected = false
-			for index, step in ipairs(route) do
-				local cluster = step.Cluster or {}
-				local planInfo = step.Info
-				local score = planInfo and planInfo.Score
-				local planned = score and (" | plan " .. tostring(score.Golden) .. "/" .. tostring(score.Total)) or ""
-				local collapseCount = score and tonumber(score.CollapseCount) or 0
-				local precisionMode = tailPrecision
-					or (planInfo and planInfo.TailCleanup == true)
-					or #cluster <= 2
-					or (collapseCount > 0 and #cluster <= 4)
-				setStatus(
-					controller,
-					precisionMode and "CollectingPrecision" or "Collecting",
-					string.format("%d/%d route | %d/%d %s", index, #route, #cluster, totalPlanned, focus)
-						.. planned
-				)
-				local collectResult = Collector.collectCluster(controller, hrp, cluster, range, {
-					SafeRange = planInfo and planInfo.SafeRange,
-					TargetPosition = planInfo and planInfo.TargetPosition,
-					PrecisionMode = precisionMode,
-					TailMode = tailPrecision,
-					AbortCheck = function()
-						return not isCurrentRoundActive()
-					end,
-				})
-				if not isCurrentRoundActive() then
-					clearRoute(route)
-					softCleanup(candidates, remaining)
-					setStatus(controller, "WaitingForRound")
-					return
-				end
-				if collectResult and (tonumber(collectResult.Rejected) or 0) > 0 then
-					routeRejected = true
-				end
-			end
+			
+			-- Bắt đầu thu thập kiểu Pipelined
+			setStatus(
+				controller,
+				"Collecting (Pipeline)",
+				string.format("%d routes | %d %s planned", #route, totalPlanned, focus)
+			)
+
+			PipelinedCollector.collectRoute(controller, hrp, route, range, {
+				AbortCheck = function()
+					return not isCurrentRoundActive()
+				end,
+			})
+
 			clearRoute(route)
 			softCleanup(candidates, remaining)
-			if routeRejected then
-				lastGiftSeenAt = os.clock()
-				setStatus(controller, "RetryingRejectedGifts", "Server returned one or more late gifts")
-				return
-			end
+
 			if shouldHoldForGoldenWait then
 				if typeof(GoldenWait.startNormalClearWindow) == "function" then
 					GoldenWait.startNormalClearWindow()
@@ -454,37 +366,16 @@ local function processOnce(controller)
 					GoldenWait.holdNow()
 				end
 			end
-
-			local normalCollected, normalTotal, displayNormalRatio = Progress.getNormalGiftProgress(gch)
-			local goldenText = scanInfo and (" | Golden " .. tostring(scanInfo.Golden or 0)) or ""
-			local accepted = math.floor((tonumber(controller.GiftFarmAdaptiveSuccessRate) or 1) * 100)
-			local validationWait = tonumber(controller.GiftFarmAdaptiveValidationWait) or 0
-			local rejects = tonumber(controller.GiftFarmAdaptiveRejects) or 0
-			local retries = tonumber(controller.GiftFarmAdaptiveRetries) or 0
-			local adaptiveText = string.format(
-				" | Accept %d%% Reject %d Retry %d Wait %.2fs",
-				accepted,
-				rejects,
-				retries,
-				validationWait
-			)
-			setStatus(
-				controller,
-				"Rescanning",
-				string.format("Normal %d/%d (%.0f%%)", normalCollected, normalTotal, displayNormalRatio * 100)
-					.. goldenText
-					.. adaptiveText
-			)
 		end)
 
 		if not ok then
-			setStatus(controller, "Error", tostring(err), true)
+			setStatus(controller, "Error (Pipeline)", tostring(err), true)
 		end
 		busy = false
 	end)
 end
 
-function Runtime.enable(controller, gc)
+function Coordinator.enable(controller, gc)
 	if enabled then
 		return true
 	end
@@ -492,7 +383,7 @@ function Runtime.enable(controller, gc)
 	enabled = true
 	observeInRound(controller, gc)
 	connection = RunService.Heartbeat:Connect(function()
-		if controller and controller.GiftFarmEnabled and controller.GiftFarmMode == "Normal (teleport)" then
+		if controller and controller.GiftFarmEnabled and controller.GiftFarmMode == "Pipelining (Network)" then
 			processOnce(controller)
 		end
 	end)
@@ -502,18 +393,18 @@ function Runtime.enable(controller, gc)
 	return true
 end
 
-function Runtime.disable(controller)
+function Coordinator.disable(controller)
 	enabled = false
 	busy = false
 	if Beacon and typeof(Beacon.restore) == "function" then
 		Beacon.restore()
 	end
-	if Collector and typeof(Collector.restoreMovement) == "function" then
-		Collector.restoreMovement({
-			KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
-			OnlyKeepFootholdIfAirborne = true,
-			SkipVelocityClear = true,
-		})
+	if PipelinedCollector and typeof(PipelinedCollector.releaseCharacter) == "function" then
+		pcall(function()
+			PipelinedCollector.releaseCharacter({
+				KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
+			})
+		end)
 	end
 	if connection then
 		pcall(function()
@@ -533,33 +424,18 @@ function Runtime.disable(controller)
 	return true
 end
 
-function Runtime.update(controller, gc)
-	local pipelined = getPipelinedCoordinator()
-	if controller and controller.GiftFarmEnabled then
-		if controller.GiftFarmMode == "Pipelining (Network)" then
-			Runtime.disable(controller)
-			if pipelined then
-				pipelined.update(controller, gc)
-			end
-			return true
-		else
-			if pipelined then
-				pipelined.disable(controller)
-			end
-			return Runtime.enable(controller, gc)
-		end
+function Coordinator.update(controller, gc)
+	if controller and controller.GiftFarmEnabled and controller.GiftFarmMode == "Pipelining (Network)" then
+		return Coordinator.enable(controller, gc)
 	end
-	if pipelined then
-		pipelined.disable(controller)
-	end
-	return Runtime.disable(controller)
+	return Coordinator.disable(controller)
 end
 
-function Runtime.getStatus(controller)
+function Coordinator.getStatus(controller)
 	return {
 		Status = controller and controller.GiftFarmStatus or "Idle",
 		Detail = controller and controller.GiftFarmDetail or "",
 	}
 end
 
-return Runtime
+return Coordinator

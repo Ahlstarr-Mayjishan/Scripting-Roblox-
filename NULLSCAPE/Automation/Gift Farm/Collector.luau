@@ -80,10 +80,6 @@ local function collectGift(gift, collectedEvent)
 	end
 end
 
-local function isAdaptiveEnabled(controller)
-	return not (controller and controller.GiftFarmAdaptiveTiming == false)
-end
-
 local function isGiftAccepted(gift)
 	if not gift then
 		return true
@@ -193,14 +189,11 @@ local function getValidationWait(controller, precisionMode)
 	if precisionMode then
 		return math.clamp(math.max(PRECISION_VALIDATION_WAIT, adaptiveValidationWait), PRECISION_VALIDATION_WAIT, PRECISION_VALIDATION_MAX)
 	end
-	if isAdaptiveEnabled(controller) then
-		return math.clamp(adaptiveValidationWait, 0.035, FAST_VALIDATION_MAX)
-	end
-	return BASE_VALIDATION_WAIT
+	return math.clamp(adaptiveValidationWait, 0.035, FAST_VALIDATION_MAX)
 end
 
 local function updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
-	if not isAdaptiveEnabled(controller) or not attemptedGifts or #attemptedGifts == 0 then
+	if not attemptedGifts or #attemptedGifts == 0 then
 		return
 	end
 
