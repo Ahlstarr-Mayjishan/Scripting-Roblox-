@@ -144,7 +144,6 @@ end
 
 local function waitForReplicationSync()
 	RunService.Heartbeat:Wait()
-	RunService.RenderStepped:Wait()
 	local waitTime = getOneWayLatency()
 	if waitTime > 0 then
 		task.wait(waitTime)
