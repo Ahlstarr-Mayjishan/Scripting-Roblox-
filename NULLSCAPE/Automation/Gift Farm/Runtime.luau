@@ -13,6 +13,7 @@ local Altar = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Altar.luau")
 local Medal = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Medal.luau")
 local Beacon = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Beacon.luau")
 local GoldenWait = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Golden Wait.luau")
+local ModeIsolation = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Mode Isolation.luau")
 
 local PipelinedCoordinator = nil
 local function getPipelinedCoordinator()
@@ -31,11 +32,12 @@ local function getPipelinedCoordinator()
 end
 
 local Runtime = {}
+local NORMAL_MODE = "Normal (teleport)"
+local PIPELINE_MODE = "Pipelining (Network)"
 local DEFAULT_RANGE = 60
 local MIN_SCAN_INTERVAL = 0.04
 local STATUS_UPDATE_INTERVAL = 0.15
 local EMPTY_COMPLETE_DELAY = 2.5
-local DISABLE_FOOTHOLD_DURATION = 2
 local PYLON_LEVEL = 35
 local TAIL_REMAINING_RATIO = 0.12
 local SOFT_GC_INTERVAL = 1.5
@@ -51,6 +53,7 @@ local lastStatusAt = 0
 local lastStatus = nil
 local lastSoftGcAt = 0
 local roundToken = 0
+local modeToken = 0
 
 local function setStatus(controller, status, detail, force)
 	if controller then
@@ -88,9 +91,7 @@ local function resetRoundState(controller, inRound)
 		end
 		if Collector and typeof(Collector.restoreMovement) == "function" then
 			Collector.restoreMovement({
-				KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
-				OnlyKeepFootholdIfAirborne = true,
-				SkipVelocityClear = true,
+				ForceRelease = true,
 			})
 		end
 	end
@@ -265,7 +266,10 @@ local function processOnce(controller)
 	local token = roundToken
 
 	local function isCurrentRoundActive()
-		return enabled and token == roundToken and Context.isInRound()
+		return enabled
+			and token == roundToken
+			and ModeIsolation.isActive(NORMAL_MODE, modeToken)
+			and Context.isInRound()
 	end
 
 	task.spawn(function()
@@ -490,14 +494,22 @@ local function processOnce(controller)
 end
 
 function Runtime.enable(controller, gc)
-	if enabled then
+	if enabled and ModeIsolation.isActive(NORMAL_MODE, modeToken) then
 		return true
 	end
+	if enabled then
+		Runtime.disable(controller)
+	end
 
+	modeToken = ModeIsolation.enter(NORMAL_MODE)
 	enabled = true
 	observeInRound(controller, gc)
 	connection = RunService.Heartbeat:Connect(function()
-		if controller and controller.GiftFarmEnabled and controller.GiftFarmMode == "Normal (teleport)" then
+		if controller
+			and controller.GiftFarmEnabled
+			and controller.GiftFarmMode == NORMAL_MODE
+			and ModeIsolation.isActive(NORMAL_MODE, modeToken)
+		then
 			processOnce(controller)
 		end
 	end)
@@ -507,17 +519,20 @@ function Runtime.enable(controller, gc)
 	return true
 end
 
-function Runtime.disable(controller)
+local function disableNormalRuntime(controller)
+	if not enabled and not ModeIsolation.isActive(NORMAL_MODE, modeToken) then
+		return true
+	end
+
 	enabled = false
 	busy = false
+	ModeIsolation.leave(NORMAL_MODE, modeToken)
 	if Beacon and typeof(Beacon.restore) == "function" then
 		Beacon.restore()
 	end
 	if Collector and typeof(Collector.restoreMovement) == "function" then
 		Collector.restoreMovement({
-			KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
-			OnlyKeepFootholdIfAirborne = true,
-			SkipVelocityClear = true,
+			ForceRelease = true,
 		})
 	end
 	if connection then
@@ -538,11 +553,19 @@ function Runtime.disable(controller)
 	return true
 end
 
+function Runtime.disable(controller)
+	local pipelined = getPipelinedCoordinator()
+	if pipelined then
+		pipelined.disable(controller)
+	end
+	return disableNormalRuntime(controller)
+end
+
 function Runtime.update(controller, gc)
 	local pipelined = getPipelinedCoordinator()
 	if controller and controller.GiftFarmEnabled then
-		if controller.GiftFarmMode == "Pipelining (Network)" then
-			Runtime.disable(controller)
+		if controller.GiftFarmMode == PIPELINE_MODE then
+			disableNormalRuntime(controller)
 			if pipelined then
 				pipelined.update(controller, gc)
 			end

@@ -374,12 +374,17 @@ function Collector.releaseCharacter(options)
 	local shouldKeepFoothold = options.KeepFootholdDuration
 		and hrp
 		and hrp.Parent
+		and options.ForceRelease ~= true
 		and (not options.OnlyKeepFootholdIfAirborne or not hasGroundBelow(hrp))
 	if shouldKeepFoothold and (not foothold or not foothold.Parent) then
 		placeFoothold(hrp.Position)
 	end
 
-	removeFoothold(shouldKeepFoothold and options.KeepFootholdDuration or nil)
+	local keepDuration = nil
+	if shouldKeepFoothold then
+		keepDuration = options.KeepFootholdDuration
+	end
+	removeFoothold(keepDuration)
 	if hrp and hrp.Parent then
 		hrp.Anchored = false
 		releaseHumanoidState(hrp)

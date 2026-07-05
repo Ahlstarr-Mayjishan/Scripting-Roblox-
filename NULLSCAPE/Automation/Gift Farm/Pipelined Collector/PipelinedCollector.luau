@@ -311,10 +311,16 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 		end
 	end)
 
-	PipelinedCollector.releaseCharacter({
-		KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
-		OnlyKeepFootholdIfAirborne = true,
-	})
+	if shouldAbort() then
+		PipelinedCollector.releaseCharacter({
+			ForceRelease = true,
+		})
+	else
+		PipelinedCollector.releaseCharacter({
+			KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
+			OnlyKeepFootholdIfAirborne = true,
+		})
+	end
 
 	if not ok then
 		error(err, 0)

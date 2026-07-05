@@ -12,10 +12,12 @@ local Altar = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Altar.luau")
 local Medal = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Medal.luau")
 local Beacon = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Beacon.luau")
 local GoldenWait = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Golden Wait.luau")
+local ModeIsolation = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Mode Isolation.luau")
 
 local RunService = game:GetService("RunService")
 
 local Coordinator = {}
+local PIPELINE_MODE = "Pipelining (Network)"
 local DEFAULT_RANGE = 60
 local MIN_SCAN_INTERVAL = 0.04
 local STATUS_UPDATE_INTERVAL = 0.15
@@ -31,6 +33,7 @@ local lastGiftSeenAt = 0
 local lastStatusAt = 0
 local lastStatus = nil
 local roundToken = 0
+local modeToken = 0
 
 local function setStatus(controller, status, detail, force)
 	if controller then
@@ -200,7 +203,10 @@ local function processOnce(controller)
 
 	local token = roundToken
 	local function isCurrentRoundActive()
-		return enabled and token == roundToken and Context.isInRound()
+		return enabled
+			and token == roundToken
+			and ModeIsolation.isActive(PIPELINE_MODE, modeToken)
+			and Context.isInRound()
 	end
 
 	task.spawn(function()
@@ -405,14 +411,22 @@ local function processOnce(controller)
 end
 
 function Coordinator.enable(controller, gc)
-	if enabled then
+	if enabled and ModeIsolation.isActive(PIPELINE_MODE, modeToken) then
 		return true
 	end
+	if enabled then
+		Coordinator.disable(controller)
+	end
 
+	modeToken = ModeIsolation.enter(PIPELINE_MODE)
 	enabled = true
 	observeInRound(controller, gc)
 	connection = RunService.Heartbeat:Connect(function()
-		if controller and controller.GiftFarmEnabled and controller.GiftFarmMode == "Pipelining (Network)" then
+		if controller
+			and controller.GiftFarmEnabled
+			and controller.GiftFarmMode == PIPELINE_MODE
+			and ModeIsolation.isActive(PIPELINE_MODE, modeToken)
+		then
 			processOnce(controller)
 		end
 	end)
@@ -423,8 +437,13 @@ function Coordinator.enable(controller, gc)
 end
 
 function Coordinator.disable(controller)
+	if not enabled and not ModeIsolation.isActive(PIPELINE_MODE, modeToken) then
+		return true
+	end
+
 	enabled = false
 	busy = false
+	ModeIsolation.leave(PIPELINE_MODE, modeToken)
 	if Beacon and typeof(Beacon.restore) == "function" then
 		Beacon.restore()
 	end
@@ -454,7 +473,7 @@ function Coordinator.disable(controller)
 end
 
 function Coordinator.update(controller, gc)
-	if controller and controller.GiftFarmEnabled and controller.GiftFarmMode == "Pipelining (Network)" then
+	if controller and controller.GiftFarmEnabled and controller.GiftFarmMode == PIPELINE_MODE then
 		return Coordinator.enable(controller, gc)
 	end
 	return Coordinator.disable(controller)
