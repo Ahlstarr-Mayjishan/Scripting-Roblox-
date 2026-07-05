@@ -14,6 +14,7 @@ local Beacon = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Beacon.luau"
 local GoldenWait = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Golden Wait.luau")
 local ModeIsolation = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Mode Isolation.luau")
 
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local Coordinator = {}
@@ -28,6 +29,8 @@ local enabled = false
 local busy = false
 local connection = nil
 local inRoundConnection = nil
+local characterAddedConnection = nil
+local characterRemovingConnection = nil
 local lastScan = 0
 local lastGiftSeenAt = 0
 local lastStatusAt = 0
@@ -49,6 +52,37 @@ local function setStatus(controller, status, detail, force)
 	end
 end
 
+local function forceReleasePipeline()
+	if PipelinedCollector and typeof(PipelinedCollector.releaseCharacter) == "function" then
+		pcall(function()
+			PipelinedCollector.releaseCharacter({
+				ForceRelease = true,
+			})
+		end)
+	elseif PipelinedCollector and typeof(PipelinedCollector.cancelPending) == "function" then
+		pcall(function()
+			PipelinedCollector.cancelPending()
+		end)
+	end
+end
+
+local function resetCharacterState(controller)
+	roundToken += 1
+	busy = false
+	lastScan = 0
+	lastGiftSeenAt = 0
+	lastStatusAt = 0
+	lastStatus = nil
+	if controller then
+		controller.GiftFarmGoldenComplete = false
+	end
+	forceReleasePipeline()
+	if Beacon and typeof(Beacon.restore) == "function" then
+		Beacon.restore()
+	end
+	setStatus(controller, "WaitingForCharacter", "Character respawned (Pipeline)", true)
+end
+
 local function resetRoundState(controller, inRound)
 	roundToken += 1
 	busy = false
@@ -65,17 +99,16 @@ local function resetRoundState(controller, inRound)
 	if Beacon and typeof(Beacon.reset) == "function" then
 		Beacon.reset(inRound)
 	end
+	if PipelinedCollector and typeof(PipelinedCollector.cancelPending) == "function" then
+		pcall(function()
+			PipelinedCollector.cancelPending()
+		end)
+	end
 	if not inRound then
 		if Beacon and typeof(Beacon.restore) == "function" then
 			Beacon.restore()
 		end
-		if PipelinedCollector and typeof(PipelinedCollector.releaseCharacter) == "function" then
-			pcall(function()
-				PipelinedCollector.releaseCharacter({
-					ForceRelease = true,
-				})
-			end)
-		end
+		forceReleasePipeline()
 	end
 	if Scanner and typeof(Scanner.reset) == "function" then
 		Scanner.reset()
@@ -90,6 +123,49 @@ local function resetRoundState(controller, inRound)
 		setStatus(controller, "WaitingForGifts", "Round started (Pipeline)")
 	else
 		setStatus(controller, "WaitingForRound", "Round ended (Pipeline)")
+	end
+end
+
+local function observeCharacter(controller, gc)
+	local localPlayer = Players.LocalPlayer
+	if not localPlayer then
+		return
+	end
+
+	if characterAddedConnection then
+		pcall(function()
+			characterAddedConnection:Disconnect()
+		end)
+		characterAddedConnection = nil
+	end
+
+	characterAddedConnection = localPlayer.CharacterAdded:Connect(function(character)
+		if not enabled or not controller or controller.Destroyed then
+			return
+		end
+		resetCharacterState(controller)
+		task.spawn(function()
+			local hrp = character and character:WaitForChild("HumanoidRootPart", 6)
+			if enabled and hrp and ModeIsolation.isActive(PIPELINE_MODE, modeToken) then
+				if Context.isInRound() then
+					setStatus(controller, "WaitingForGifts", "Character ready (Pipeline)", true)
+				else
+					setStatus(controller, "WaitingForRound", "Character ready (Pipeline)", true)
+				end
+			end
+		end)
+	end)
+
+	characterRemovingConnection = localPlayer.CharacterRemoving:Connect(function()
+		if not enabled or not controller or controller.Destroyed then
+			return
+		end
+		resetCharacterState(controller)
+	end)
+
+	if gc and typeof(gc.registerConnection) == "function" then
+		gc.registerConnection(characterAddedConnection)
+		gc.registerConnection(characterRemovingConnection)
 	end
 end
 
@@ -185,6 +261,20 @@ local function isHoldingMedalBeforeGoldenComplete(controller)
 	end
 	if Medal and typeof(Medal.isPlayerHoldingMedal) == "function" then
 		return Medal.isPlayerHoldingMedal() == true
+	end
+	return false
+end
+
+local function returnToBeacon(controller, hrp, reason)
+	if PipelinedCollector and typeof(PipelinedCollector.releaseCharacter) == "function" then
+		pcall(function()
+			PipelinedCollector.releaseCharacter({
+				ForceRelease = true,
+			})
+		end)
+	end
+	if Beacon and typeof(Beacon.returnToBeacon) == "function" then
+		return Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 	end
 	return false
 end
@@ -290,7 +380,7 @@ local function processOnce(controller)
 					setStatus(controller, medalStatus or "MedalAction")
 					return
 				end
-				local success = Beacon.returnToBeacon(controller, hrp, setStatus, "Golden gifts complete")
+				local success = returnToBeacon(controller, hrp, "Golden gifts complete")
 				if success then
 					return
 				end
@@ -335,7 +425,7 @@ local function processOnce(controller)
 					return
 				end
 				if lastGiftSeenAt > 0 and os.clock() - lastGiftSeenAt >= EMPTY_COMPLETE_DELAY then
-					local success = Beacon.returnToBeacon(controller, hrp, setStatus, "Round targets complete")
+					local success = returnToBeacon(controller, hrp, "Round targets complete")
 					if success then
 						return
 					end
@@ -420,6 +510,7 @@ function Coordinator.enable(controller, gc)
 
 	modeToken = ModeIsolation.enter(PIPELINE_MODE)
 	enabled = true
+	observeCharacter(controller, gc)
 	observeInRound(controller, gc)
 	connection = RunService.Heartbeat:Connect(function()
 		if controller
@@ -447,13 +538,7 @@ function Coordinator.disable(controller)
 	if Beacon and typeof(Beacon.restore) == "function" then
 		Beacon.restore()
 	end
-	if PipelinedCollector and typeof(PipelinedCollector.releaseCharacter) == "function" then
-		pcall(function()
-			PipelinedCollector.releaseCharacter({
-				ForceRelease = true,
-			})
-		end)
-	end
+	forceReleasePipeline()
 	if connection then
 		pcall(function()
 			connection:Disconnect()
@@ -465,6 +550,18 @@ function Coordinator.disable(controller)
 			inRoundConnection:Disconnect()
 		end)
 		inRoundConnection = nil
+	end
+	if characterAddedConnection then
+		pcall(function()
+			characterAddedConnection:Disconnect()
+		end)
+		characterAddedConnection = nil
+	end
+	if characterRemovingConnection then
+		pcall(function()
+			characterRemovingConnection:Disconnect()
+		end)
+		characterRemovingConnection = nil
 	end
 	resetRoundState(controller, false)
 	softCleanup()

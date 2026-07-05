@@ -191,6 +191,9 @@ local function waitForArrival(hrp, targetPosition, shouldAbort)
 		RunService.Heartbeat:Wait()
 	end
 
+	if typeof(shouldAbort) == "function" and shouldAbort() then
+		return false
+	end
 	return (hrp.Position - targetPosition).Magnitude <= tolerance
 end
 
@@ -240,7 +243,9 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 	local routeToken = pipelineToken
 	local collectedEvent = Context.getCollectedGiftEvent()
 	local function shouldAbort()
-		return routeToken ~= pipelineToken or isAborted(options)
+		return routeToken ~= pipelineToken
+			or Context.getRootPart() ~= hrp
+			or isAborted(options)
 	end
 
 	local ok, err = pcall(function()
