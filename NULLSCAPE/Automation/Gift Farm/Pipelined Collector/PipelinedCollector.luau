@@ -103,15 +103,43 @@ local function releaseHumanoidState(hrp)
 	end)
 end
 
-local function getOneWayLatency()
-	local ping = 0.06
-	pcall(function()
-		local rawPing = Stats.Network:GetPing()
-		if rawPing > 0 then
-			ping = (rawPing > 1 and rawPing / 1000 or rawPing)
+local function normalizePingSeconds(value)
+	local ping = tonumber(value)
+	if not ping or ping <= 0 then
+		return nil
+	end
+	if ping > 1 then
+		ping /= 1000
+	end
+	return ping
+end
+
+local function getPingSeconds()
+	local ok, result = pcall(function()
+		if Stats.Network and typeof(Stats.Network.GetPing) == "function" then
+			return Stats.Network:GetPing()
 		end
+		return nil
 	end)
-	return math.clamp(ping * 0.5, 0.025, 0.075)
+	local ping = ok and normalizePingSeconds(result) or nil
+	if ping then
+		return ping
+	end
+
+	ok, result = pcall(function()
+		local serverStats = Stats.Network and Stats.Network:FindFirstChild("ServerStatsItem")
+		local dataPing = serverStats and serverStats:FindFirstChild("Data Ping")
+		if dataPing and typeof(dataPing.GetValue) == "function" then
+			return dataPing:GetValue()
+		end
+		return nil
+	end)
+	return ok and normalizePingSeconds(result) or nil
+end
+
+local function getOneWayLatency()
+	local ping = getPingSeconds() or 0.08
+	return math.clamp(ping * 0.5, 0.03, 0.12)
 end
 
 local function waitForReplicationSync()
@@ -201,31 +229,33 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 			Context.moveCharacterTo(CFrame.new(standingPosition))
 			clearVelocity(hrp)
 
-			waitForArrival(hrp, standingPosition)
+			local arrived = waitForArrival(hrp, standingPosition)
 			if isAborted(options) then
 				return
 			end
 
-			local currentPos = hrp.Position
-			task.spawn(function()
-				for _, item in ipairs(cluster) do
-					if item.rawObj
-						and not item.rawObj.Destroyed
-						and not item.rawObj.Collected
-						and not item.rawObj.ClientCollected
-						and Distance.isWithinRange(item.pos, currentPos, collectRange)
-					then
-						pcall(function()
-							item.rawObj:Collect(false, true)
-						end)
-						if collectedEvent then
+			if arrived then
+				local currentPos = hrp.Position
+				task.spawn(function()
+					for _, item in ipairs(cluster) do
+						if item.rawObj
+							and not item.rawObj.Destroyed
+							and not item.rawObj.Collected
+							and not item.rawObj.ClientCollected
+							and Distance.isWithinRange(item.pos, currentPos, collectRange)
+						then
 							pcall(function()
-								collectedEvent:Fire()
+								item.rawObj:Collect(false, true)
 							end)
+							if collectedEvent then
+								pcall(function()
+									collectedEvent:Fire()
+								end)
+							end
 						end
 					end
-				end
-			end)
+				end)
+			end
 
 			if index < #route then
 				waitForReplicationSync()

@@ -327,6 +327,9 @@ local function processOnce(controller)
 			end
 
 			lastGiftSeenAt = os.clock()
+			if Beacon and typeof(Beacon.reset) == "function" then
+				Beacon.reset(true)
+			end
 			local range = getGiftFarmRange(controller)
 			local route, remaining = ClusterPlanner.planRoute(candidates, range, hrp.Position)
 			if remaining and #remaining > 0 and typeof(ClusterPlanner.planTailRoute) == "function" then
