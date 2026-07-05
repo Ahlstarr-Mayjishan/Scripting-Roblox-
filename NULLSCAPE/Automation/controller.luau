@@ -142,7 +142,22 @@ function Controller:SetGiftFarmEnabled(value)
 end
 
 function Controller:SetGiftFarmMode(value)
+	if self.GiftFarmMode == value then
+		return true
+	end
+
+	local wasEnabled = self.GiftFarmEnabled
+	if wasEnabled then
+		self.GiftFarmEnabled = false
+		self:update()
+		task.wait(0.15)
+	end
+
 	self.GiftFarmMode = value
+
+	if wasEnabled then
+		self.GiftFarmEnabled = true
+	end
 	return self:update()
 end
 

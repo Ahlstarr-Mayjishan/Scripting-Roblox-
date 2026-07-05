@@ -85,8 +85,14 @@ return function(Client, Controller)
 		MultipleOptions = false,
 		Flag = "AutomationGiftFarmModeDropdown",
 		Callback = function(Value)
+			local selected = Value
+			if typeof(Value) == "table" then
+				selected = Value[1]
+			end
 			if Controller and typeof(Controller.SetGiftFarmMode) == "function" then
-				Controller:SetGiftFarmMode(Value)
+				task.spawn(function()
+					Controller:SetGiftFarmMode(selected)
+				end)
 			end
 		end,
 	})

@@ -19,9 +19,14 @@ local function getPipelinedCoordinator()
 	if PipelinedCoordinator then
 		return PipelinedCoordinator
 	end
-	pcall(function()
-		PipelinedCoordinator = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Pipelined Collector/Coordinator.luau")
+	local ok, result = pcall(function()
+		return getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Pipelined Collector/Coordinator.luau")
 	end)
+	if ok then
+		PipelinedCoordinator = result
+	else
+		warn("[NULLSCAPE] Failed to load Pipelined Coordinator: " .. tostring(result))
+	end
 	return PipelinedCoordinator
 end
 
