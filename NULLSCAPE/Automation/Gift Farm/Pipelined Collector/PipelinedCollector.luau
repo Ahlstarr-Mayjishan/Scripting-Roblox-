@@ -16,10 +16,20 @@ local PipelinedCollector = {}
 local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
 local DISABLE_FOOTHOLD_DURATION = 2
+local COLLECT_SETTLE_FRAMES = 1
+local COLLECT_ACCEPTANCE_STEP = 0.01
+local ADAPTIVE_MIN_MULTIPLIER = 0.85
+local ADAPTIVE_MAX_MULTIPLIER = 1.9
+local ADAPTIVE_FAILURE_STEP = 0.12
+local ADAPTIVE_SUCCESS_STEP = 0.025
+local TAIL_CLUSTER_SIZE = 2
+local TAIL_HOLD_MULTIPLIER = 1.35
+local MAX_RETRY_ITEMS = 24
 
 local foothold = nil
 local footholdRemovalToken = 0
 local pipelineToken = 0
+local acceptanceMultiplier = 1
 
 local function getFoothold()
 	if foothold and foothold.Parent then
@@ -158,14 +168,6 @@ local function getOneWayLatency()
 	return math.clamp(ping * 0.5, 0.03, 0.12)
 end
 
-local function waitForReplicationSync()
-	RunService.Heartbeat:Wait()
-	local waitTime = getOneWayLatency()
-	if waitTime > 0 then
-		task.wait(waitTime)
-	end
-end
-
 local function waitForArrival(hrp, targetPosition, shouldAbort)
 	if not (hrp and hrp.Parent and typeof(targetPosition) == "Vector3") then
 		return false
@@ -197,12 +199,120 @@ local function waitForArrival(hrp, targetPosition, shouldAbort)
 	return (hrp.Position - targetPosition).Magnitude <= tolerance
 end
 
+local function settleBeforeCollect(hrp, shouldAbort)
+	for _ = 1, COLLECT_SETTLE_FRAMES do
+		if typeof(shouldAbort) == "function" and shouldAbort() then
+			return false
+		end
+		clearVelocity(hrp)
+		RunService.Heartbeat:Wait()
+	end
+	if typeof(shouldAbort) == "function" and shouldAbort() then
+		return false
+	end
+	clearVelocity(hrp)
+	return true
+end
+
+local function collectCluster(routeToken, cluster, currentPos, collectRange, collectedEvent, stats)
+	if routeToken ~= pipelineToken then
+		return {}
+	end
+
+	local attempted = {}
+	for _, item in ipairs(cluster) do
+		if routeToken ~= pipelineToken then
+			return attempted
+		end
+		if item.rawObj
+			and not item.rawObj.Destroyed
+			and not item.rawObj.Collected
+			and not item.rawObj.ClientCollected
+			and Distance.isWithinRange(item.pos, currentPos, collectRange)
+		then
+			table.insert(attempted, item)
+			stats.Attempted += 1
+			pcall(function()
+				item.rawObj:Collect(false, true)
+			end)
+			if collectedEvent then
+				pcall(function()
+					collectedEvent:Fire()
+				end)
+			end
+		end
+	end
+
+	return attempted
+end
+
+local function waitForCollectAcceptance(hrp, shouldAbort, attempted, clusterSize)
+	if #attempted <= 0 then
+		return true
+	end
+
+	local tailMultiplier = clusterSize <= TAIL_CLUSTER_SIZE and TAIL_HOLD_MULTIPLIER or 1
+	local waitTime = getOneWayLatency() * acceptanceMultiplier * tailMultiplier
+	local start = os.clock()
+	while os.clock() - start < waitTime do
+		if typeof(shouldAbort) == "function" and shouldAbort() then
+			return false
+		end
+		clearVelocity(hrp)
+		task.wait(math.min(COLLECT_ACCEPTANCE_STEP, math.max(0, waitTime - (os.clock() - start))))
+	end
+
+	if typeof(shouldAbort) == "function" and shouldAbort() then
+		return false
+	end
+	clearVelocity(hrp)
+	return true
+end
+
+local function updateAdaptiveAcceptance(stats)
+	if stats.Attempted <= 0 then
+		return
+	end
+
+	local failed = stats.Failed or 0
+	if failed > 0 then
+		acceptanceMultiplier = math.min(
+			ADAPTIVE_MAX_MULTIPLIER,
+			acceptanceMultiplier + ADAPTIVE_FAILURE_STEP * math.min(failed, 3)
+		)
+	else
+		acceptanceMultiplier = math.max(ADAPTIVE_MIN_MULTIPLIER, acceptanceMultiplier - ADAPTIVE_SUCCESS_STEP)
+	end
+	stats.AcceptanceMultiplier = acceptanceMultiplier
+end
+
+local function noteAttemptResults(attempted, stats)
+	for _, item in ipairs(attempted) do
+		local rawObj = item.rawObj
+		local accepted = rawObj
+			and (rawObj.Destroyed or rawObj.Collected or rawObj.ClientCollected)
+		if accepted then
+			stats.Accepted += 1
+		else
+			stats.Failed += 1
+			if #stats.Retry < MAX_RETRY_ITEMS then
+				table.insert(stats.Retry, item)
+			end
+		end
+	end
+	updateAdaptiveAcceptance(stats)
+end
+
 local function isAborted(options)
 	return options and typeof(options.AbortCheck) == "function" and options.AbortCheck() == true
 end
 
 function PipelinedCollector.cancelPending()
 	pipelineToken += 1
+end
+
+function PipelinedCollector.resetAdaptive()
+	acceptanceMultiplier = 1
 end
 
 function PipelinedCollector.releaseCharacter(options)
@@ -242,6 +352,13 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 	pipelineToken += 1
 	local routeToken = pipelineToken
 	local collectedEvent = Context.getCollectedGiftEvent()
+	local stats = {
+		Attempted = 0,
+		Accepted = 0,
+		Failed = 0,
+		Retry = {},
+		AcceptanceMultiplier = acceptanceMultiplier,
+	}
 	local function shouldAbort()
 		return routeToken ~= pipelineToken
 			or Context.getRootPart() ~= hrp
@@ -278,40 +395,16 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 				return
 			end
 
-			if arrived then
-				local currentPos = hrp.Position
-				task.spawn(function()
-					if routeToken ~= pipelineToken then
-						return
-					end
-					for _, item in ipairs(cluster) do
-						if routeToken ~= pipelineToken then
-							return
-						end
-						if item.rawObj
-							and not item.rawObj.Destroyed
-							and not item.rawObj.Collected
-							and not item.rawObj.ClientCollected
-							and Distance.isWithinRange(item.pos, currentPos, collectRange)
-						then
-							pcall(function()
-								item.rawObj:Collect(false, true)
-							end)
-							if collectedEvent then
-								pcall(function()
-									collectedEvent:Fire()
-								end)
-							end
-						end
-					end
-				end)
+			local attempted = {}
+			if arrived and settleBeforeCollect(hrp, shouldAbort) then
+				attempted = collectCluster(routeToken, cluster, hrp.Position, collectRange, collectedEvent, stats)
 			end
-
-			if index < #route then
-				if shouldAbort() then
-					return
-				end
-				waitForReplicationSync()
+			if #attempted > 0 and not waitForCollectAcceptance(hrp, shouldAbort, attempted, #cluster) then
+				return
+			end
+			noteAttemptResults(attempted, stats)
+			if shouldAbort() then
+				return
 			end
 		end
 	end)
@@ -331,7 +424,7 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 		error(err, 0)
 	end
 
-	return true
+	return true, stats
 end
 
 return PipelinedCollector

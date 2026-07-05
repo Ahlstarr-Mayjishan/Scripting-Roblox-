@@ -26,6 +26,7 @@ local EMPTY_COMPLETE_DELAY = 2.5
 local PYLON_LEVEL = 35
 local GOLDEN_RETURN_VERIFY_ATTEMPTS = 6
 local GOLDEN_RETURN_VERIFY_INTERVAL = 0.12
+local MAX_RETRY_QUEUE = 32
 
 local enabled = false
 local busy = false
@@ -42,6 +43,7 @@ local modeToken = 0
 local characterToken = 0
 local characterReady = false
 local pendingGoldenReturnSince = nil
+local retryQueue = {}
 
 local function setStatus(controller, status, detail, force)
 	if controller then
@@ -69,6 +71,10 @@ local function forceReleasePipeline()
 			PipelinedCollector.cancelPending()
 		end)
 	end
+end
+
+local function clearRetryQueue()
+	table.clear(retryQueue)
 end
 
 local function resetPipelineModules()
@@ -99,6 +105,7 @@ local function resetCharacterState(controller)
 	lastStatusAt = 0
 	lastStatus = nil
 	pendingGoldenReturnSince = nil
+	clearRetryQueue()
 	if controller then
 		controller.GiftFarmGoldenComplete = false
 	end
@@ -121,6 +128,7 @@ local function resetRoundState(controller, inRound)
 	lastStatusAt = 0
 	lastStatus = nil
 	pendingGoldenReturnSince = nil
+	clearRetryQueue()
 	if controller then
 		controller.GiftFarmGoldenComplete = false
 	end
@@ -261,6 +269,85 @@ local function clearRoute(route)
 			table.clear(step)
 		end
 	end
+end
+
+local function isRetryGiftAlive(item)
+	local rawObj = item and item.rawObj
+	if not rawObj or rawObj.Destroyed or rawObj.Collected or rawObj.ClientCollected or rawObj.Tripmine then
+		return false
+	end
+	return Context.getGiftPosition(rawObj) ~= nil
+end
+
+local function enqueueRetryItems(routeStats)
+	if not (routeStats and typeof(routeStats.Retry) == "table") then
+		return 0
+	end
+
+	local queued = 0
+	local existing = {}
+	for _, item in ipairs(retryQueue) do
+		if item and item.rawObj then
+			existing[item.rawObj] = true
+		end
+	end
+
+	for _, item in ipairs(routeStats.Retry) do
+		if #retryQueue >= MAX_RETRY_QUEUE then
+			break
+		end
+		if isRetryGiftAlive(item) and not existing[item.rawObj] then
+			table.insert(retryQueue, item)
+			existing[item.rawObj] = true
+			queued += 1
+		end
+	end
+	return queued
+end
+
+local function applyRetryPriority(candidates, scanInfo)
+	if #retryQueue == 0 then
+		return candidates, 0
+	end
+
+	local goldenOnly = scanInfo and scanInfo.GoldenLocked == true
+	local nextQueue = {}
+	local retryCandidates = {}
+	local retryMap = {}
+	local retryCount = 0
+	for _, item in ipairs(retryQueue) do
+		local rawObj = item and item.rawObj
+		local pos = isRetryGiftAlive(item) and Context.getGiftPosition(rawObj) or nil
+		if pos then
+			local isGolden = rawObj.Golden == true
+			if goldenOnly and not isGolden then
+				table.insert(nextQueue, item)
+			elseif not retryMap[rawObj] then
+				table.insert(retryCandidates, {
+					rawObj = rawObj,
+					pos = pos,
+					priority = -1000,
+					collapsePriority = item.collapsePriority or 0,
+					id = item.id or rawObj.Id or 0,
+					golden = isGolden,
+				})
+				retryMap[rawObj] = true
+				retryCount += 1
+			end
+		end
+	end
+	retryQueue = nextQueue
+
+	if #retryCandidates == 0 then
+		return candidates, 0
+	end
+
+	for _, item in ipairs(candidates) do
+		if not (item and item.rawObj and retryMap[item.rawObj]) then
+			table.insert(retryCandidates, item)
+		end
+	end
+	return retryCandidates, retryCount
 end
 
 local function softCleanup(candidates, remaining)
@@ -479,6 +566,8 @@ local function processOnce(controller)
 			if GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, setStatus, goldenWaitReason) then
 				return
 			end
+			local retryCount = 0
+			candidates, retryCount = applyRetryPriority(candidates, scanInfo)
 			if lastGiftSeenAt > 0 and GoldenWait.hasSeenGolden() and scanInfo and scanInfo.RawGolden == 0 then
 				markGoldenComplete(controller)
 				if shouldWaitForPylons(controller) then
@@ -587,14 +676,21 @@ local function processOnce(controller)
 			setStatus(
 				controller,
 				"Collecting (Pipeline)",
-				string.format("%d routes | %d %s planned", #route, totalPlanned, focus)
+				string.format(
+					"%d routes | %d %s planned%s",
+					#route,
+					totalPlanned,
+					focus,
+					retryCount > 0 and string.format(" | retry %d", retryCount) or ""
+				)
 			)
 
-			local routeCompleted = PipelinedCollector.collectRoute(controller, hrp, route, range, {
+			local routeCompleted, routeStats = PipelinedCollector.collectRoute(controller, hrp, route, range, {
 				AbortCheck = function()
 					return not isCurrentRoundActive()
 				end,
 			})
+			enqueueRetryItems(routeStats)
 
 			clearRoute(route)
 			softCleanup(candidates, remaining)
