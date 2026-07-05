@@ -5,6 +5,7 @@ local Context = {}
 local Players = game:GetService("Players")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local cachedGCH = nil
 local beaconPartStates = nil
@@ -65,6 +66,42 @@ end
 function Context.moveCharacterTo(cframe)
 	local character = Players.LocalPlayer and Players.LocalPlayer.Character
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not (hrp and hrp.Parent) then
+		return false
+	end
+
+	local startPos = hrp.Position
+	local targetPos = cframe.Position
+	local direction = (targetPos - startPos)
+	local distance = direction.Magnitude
+	local stepSize = 75
+
+	if distance > stepSize then
+		local steps = math.ceil(distance / stepSize)
+		local unitDir = direction.Unit
+		for i = 1, steps - 1 do
+			if not (hrp and hrp.Parent) then
+				break
+			end
+			local intermediatePos = startPos + unitDir * (i * stepSize)
+			local intermediateCFrame = CFrame.new(intermediatePos, intermediatePos + hrp.CFrame.LookVector)
+
+			local ok = pcall(function()
+				if character and typeof(character.PivotTo) == "function" then
+					character:PivotTo(intermediateCFrame)
+				else
+					hrp.CFrame = intermediateCFrame
+				end
+				hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+				hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+			end)
+			if not ok then
+				break
+			end
+			RunService.Heartbeat:Wait()
+		end
+	end
+
 	if not (hrp and hrp.Parent) then
 		return false
 	end
