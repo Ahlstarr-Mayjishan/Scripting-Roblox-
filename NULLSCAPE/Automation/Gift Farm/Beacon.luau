@@ -10,13 +10,16 @@ local RETURN_ATTEMPTS = 8
 local RETURN_SETTLE_FRAMES = 2
 local RETURN_HOLD_FRAMES = 4
 local RETURN_DISTANCE = 8
+local RETURN_OPEN_DURATION = 5
 
 local returnDone = false
 local suppressed = false
 local lastSuppressAt = 0
+local returnOpenUntil = 0
 
 function Beacon.reset(inRound)
 	returnDone = false
+	returnOpenUntil = 0
 	lastSuppressAt = 0
 	if not inRound and suppressed then
 		Context.restoreBeaconInteraction()
@@ -25,8 +28,13 @@ function Beacon.reset(inRound)
 end
 
 function Beacon.suppressUntilReturn()
+	if os.clock() < returnOpenUntil then
+		Beacon.restore(true)
+		return false
+	end
+
 	if returnDone then
-		Beacon.restore()
+		Beacon.restore(true)
 		return false
 	end
 
@@ -45,9 +53,20 @@ function Beacon.suppressUntilReturn()
 	return suppressed
 end
 
-function Beacon.restore()
+function Beacon.restore(force)
 	local contextSuppressed = typeof(Context.isBeaconInteractionSuppressed) == "function"
 		and Context.isBeaconInteractionSuppressed()
+	if force == true then
+		local forced = false
+		if typeof(Context.forceBeaconInteraction) == "function" then
+			forced = Context.forceBeaconInteraction() == true
+		else
+			forced = Context.restoreBeaconInteraction() == true
+		end
+		suppressed = false
+		lastSuppressAt = 0
+		return forced or contextSuppressed or suppressed
+	end
 	if not suppressed and not contextSuppressed then
 		return false
 	end
@@ -87,7 +106,7 @@ local function waitFrames(frames)
 end
 
 function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
-	if returnDone or controller.GiftFarmReturnToBeaconAfterGolden == false then
+	if controller.GiftFarmReturnToBeaconAfterGolden == false then
 		return false
 	end
 
@@ -96,7 +115,9 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 		return false
 	end
 
-	Beacon.restore()
+	returnDone = false
+	returnOpenUntil = os.clock() + RETURN_OPEN_DURATION
+	Beacon.restore(true)
 	if typeof(setStatus) == "function" then
 		setStatus(controller, "ReturningToBeacon", reason or "Golden gifts complete")
 	end
@@ -126,6 +147,8 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 	end
 
 	returnDone = true
+	returnOpenUntil = os.clock() + RETURN_OPEN_DURATION
+	Beacon.restore(true)
 	for _ = 1, RETURN_HOLD_FRAMES do
 		if not (hrp and hrp.Parent) then
 			break

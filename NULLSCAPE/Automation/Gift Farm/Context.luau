@@ -85,7 +85,7 @@ function Context.moveCharacterTo(cframe)
 		local steps = math.ceil(distance / stepSize)
 		local unitDir = direction.Unit
 		for i = 1, steps - 1 do
-			if not (hrp and hrp.Parent) then
+			if not (hrp and hrp.Parent) or Players.LocalPlayer.Character ~= character then
 				break
 			end
 			local intermediatePos = startPos + unitDir * (i * stepSize)
@@ -107,7 +107,7 @@ function Context.moveCharacterTo(cframe)
 		end
 	end
 
-	if not (hrp and hrp.Parent) then
+	if not (hrp and hrp.Parent) or Players.LocalPlayer.Character ~= character then
 		return false
 	end
 
@@ -192,6 +192,26 @@ function Context.restoreBeaconInteraction()
 				part.CanTouch = state.CanTouch
 				part.CanCollide = state.CanCollide
 				part.CanQuery = state.CanQuery
+			end)
+		end
+	end
+
+	beaconPartStates = nil
+	return true
+end
+
+function Context.forceBeaconInteraction()
+	local parts = collectBeaconParts()
+	if #parts == 0 then
+		beaconPartStates = nil
+		return false
+	end
+
+	for _, part in ipairs(parts) do
+		if part and part.Parent then
+			pcall(function()
+				part.CanTouch = true
+				part.CanQuery = true
 			end)
 		end
 	end

@@ -27,6 +27,8 @@ local PYLON_LEVEL = 35
 local GOLDEN_RETURN_VERIFY_ATTEMPTS = 6
 local GOLDEN_RETURN_VERIFY_INTERVAL = 0.12
 local MAX_RETRY_QUEUE = 32
+local RESPAWN_RELEASE_FRAMES = 18
+local RESPAWN_READY_DELAY = 0.65
 
 local enabled = false
 local busy = false
@@ -42,6 +44,7 @@ local roundToken = 0
 local modeToken = 0
 local characterToken = 0
 local characterReady = false
+local characterReadyAt = 0
 local pendingGoldenReturnSince = nil
 local retryQueue = {}
 
@@ -73,6 +76,45 @@ local function forceReleasePipeline()
 	end
 end
 
+local function releaseCurrentCharacterControl()
+	forceReleasePipeline()
+	local hrp = Context.getRootPart()
+	if not (hrp and hrp.Parent) then
+		return
+	end
+
+	pcall(function()
+		hrp.Anchored = false
+		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+	end)
+
+	local humanoid = hrp.Parent and hrp.Parent:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		pcall(function()
+			humanoid.PlatformStand = false
+			humanoid.Sit = false
+			humanoid.AutoRotate = true
+			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+		end)
+		pcall(function()
+			humanoid:ChangeState(Enum.HumanoidStateType.Running)
+		end)
+	end
+end
+
+local function releaseCharacterControlForFrames(token, frames)
+	task.spawn(function()
+		for _ = 1, frames do
+			if not enabled or token ~= characterToken or not ModeIsolation.isActive(PIPELINE_MODE, modeToken) then
+				return
+			end
+			releaseCurrentCharacterControl()
+			RunService.Heartbeat:Wait()
+		end
+	end)
+end
+
 local function clearRetryQueue()
 	table.clear(retryQueue)
 end
@@ -99,6 +141,7 @@ local function resetCharacterState(controller)
 	roundToken += 1
 	characterToken += 1
 	characterReady = false
+	characterReadyAt = math.huge
 	busy = false
 	lastScan = 0
 	lastGiftSeenAt = 0
@@ -110,6 +153,7 @@ local function resetCharacterState(controller)
 		controller.GiftFarmGoldenComplete = false
 	end
 	forceReleasePipeline()
+	releaseCurrentCharacterControl()
 	resetPipelineModules()
 	if Beacon and typeof(Beacon.reset) == "function" then
 		Beacon.reset(Context.isInRound())
@@ -181,7 +225,8 @@ local function observeCharacter(controller, gc)
 		local thisCharacterToken = characterToken
 		task.spawn(function()
 			local hrp = character and character:WaitForChild("HumanoidRootPart", 6)
-			for _ = 1, 3 do
+			releaseCharacterControlForFrames(thisCharacterToken, RESPAWN_RELEASE_FRAMES)
+			for _ = 1, 6 do
 				RunService.Heartbeat:Wait()
 			end
 			if enabled
@@ -191,6 +236,7 @@ local function observeCharacter(controller, gc)
 				and ModeIsolation.isActive(PIPELINE_MODE, modeToken)
 			then
 				characterReady = true
+				characterReadyAt = os.clock() + RESPAWN_READY_DELAY
 				if Context.isInRound() then
 					setStatus(controller, "WaitingForGifts", "Character ready (Pipeline)", true)
 				else
@@ -210,6 +256,7 @@ local function observeCharacter(controller, gc)
 
 	if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
 		characterReady = true
+		characterReadyAt = os.clock()
 	end
 
 	if gc and typeof(gc.registerConnection) == "function" then
@@ -507,6 +554,11 @@ local function processOnce(controller)
 			local hrp = Context.getRootPart()
 			if not (characterReady and hrp) then
 				setStatus(controller, "WaitingForCharacter")
+				return
+			end
+			if os.clock() < characterReadyAt then
+				releaseCurrentCharacterControl()
+				setStatus(controller, "WaitingForCharacter", "Releasing respawn control")
 				return
 			end
 
