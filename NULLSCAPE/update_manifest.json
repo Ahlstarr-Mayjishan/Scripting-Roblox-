@@ -1,0 +1,58 @@
+{
+  "Version": "2026.07.06.1",
+  "MenuChanges": [
+    "Settings",
+    "Automation"
+  ],
+  "Files": [
+    {
+      "Path": "NULLSCAPE/Main UI/master.luau",
+      "Menu": [
+        "Settings"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Main UI/Updater.luau",
+      "Menu": [
+        "Settings"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Runtime.luau",
+      "Menu": [
+        "Automation",
+        "Gift Farm"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Collector.luau",
+      "Menu": [
+        "Automation",
+        "Gift Farm"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Beacon.luau",
+      "Menu": [
+        "Automation",
+        "Gift Farm"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Pipelined Collector/Coordinator.luau",
+      "Menu": [
+        "Automation",
+        "Gift Farm",
+        "Pipelining"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Pipelined Collector/PipelinedCollector.luau",
+      "Menu": [
+        "Automation",
+        "Gift Farm",
+        "Pipelining"
+      ]
+    }
+  ]
+}

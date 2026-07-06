@@ -219,6 +219,8 @@ pcall(function()
 			AutomationAltarSelectionsDropdown = {},
 			AutomationPylonActivatorToggle = false,
 			AutomationPylonActivatorReturnToggle = true,
+			RuntimeUpdaterEnabledToggle = false,
+			RuntimeUpdaterSilentToggle = false,
 		}
 
 		local currentSettings = {}
@@ -442,6 +444,7 @@ end)
 local moduleCache = {}
 local moduleLoading = {}
 local NIL_MODULE = {}
+local GITHUB_RAW_ROOT = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
 
 function Client:Destroy(reason)
 	if self.Destroying or self.Destroyed then
@@ -525,6 +528,72 @@ function Client:Destroy(reason)
 
 	return true
 end
+
+function Client:InvalidateModule(path)
+	if typeof(path) ~= "string" then
+		return false
+	end
+	moduleCache[path] = nil
+	moduleLoading[path] = nil
+	return true
+end
+
+function Client:InvalidateModulePrefix(prefix)
+	if typeof(prefix) ~= "string" then
+		return false
+	end
+	for path in pairs(moduleCache) do
+		if typeof(path) == "string" and string.sub(path, 1, #prefix) == prefix then
+			moduleCache[path] = nil
+		end
+	end
+	for path in pairs(moduleLoading) do
+		if typeof(path) == "string" and string.sub(path, 1, #prefix) == prefix then
+			moduleLoading[path] = nil
+		end
+	end
+	return true
+end
+
+function Client:HotRestart(reason)
+	if self.Destroying or self.Destroyed then
+		return false
+	end
+
+	local source = nil
+	if readfile and isfile and isfile("NULLSCAPE/Main UI/master.luau") then
+		local ok, result = pcall(readfile, "NULLSCAPE/Main UI/master.luau")
+		if ok and typeof(result) == "string" and #result > 0 then
+			source = result
+		end
+	end
+	if not source then
+		local ok, result = pcall(function()
+			return Game:HttpGet((GITHUB_RAW_ROOT .. "NULLSCAPE/Main UI/master.luau"):gsub(" ", "%%20"))
+		end)
+		if ok and typeof(result) == "string" and #result > 0 then
+			source = result
+		end
+	end
+	if not source then
+		return false
+	end
+
+	task.defer(function()
+		Client:Destroy(reason or "HotRestart")
+		task.wait(0.15)
+		local chunk, err = loadstring(source)
+		if not chunk then
+			warn("[NULLSCAPE] Hot restart compile failed: " .. tostring(err))
+			return
+		end
+		local ok, runtimeErr = pcall(chunk)
+		if not ok then
+			warn("[NULLSCAPE] Hot restart failed: " .. tostring(runtimeErr))
+		end
+	end)
+	return true
+end
 -- ==========================================
 -- TAB: SETTINGS
 -- ==========================================
@@ -535,6 +604,69 @@ SettingsTab:CreateButton({
 	Name = "Destroy UI",
 	Callback = function()
 		Client:Destroy("User")
+	end,
+})
+
+local function getRuntimeUpdater()
+	local updater = Client.Modules and Client.Modules.RuntimeUpdater
+	if updater then
+		return updater
+	end
+	if getgenv().loadModule then
+		local ok, result = pcall(function()
+			return getgenv().loadModule("NULLSCAPE/Main UI/Updater.luau")
+		end)
+		if ok and typeof(result) == "table" then
+			Client.Modules.RuntimeUpdater = result
+			if typeof(result.initialize) == "function" then
+				pcall(function()
+					result:initialize(Client, {
+						GithubRawRoot = GITHUB_RAW_ROOT,
+						ManifestPath = "NULLSCAPE/update_manifest.json",
+					})
+				end)
+			end
+			return result
+		end
+	end
+	return nil
+end
+
+SettingsTab:CreateSection("Runtime Updates")
+
+SettingsTab:CreateToggle({
+	Name = "Auto Runtime Update",
+	CurrentValue = false,
+	Flag = "RuntimeUpdaterEnabledToggle",
+	Callback = function(Value)
+		local updater = getRuntimeUpdater()
+		if updater and typeof(updater.setAutoUpdateEnabled) == "function" then
+			updater:setAutoUpdateEnabled(Value)
+		end
+	end,
+})
+
+SettingsTab:CreateToggle({
+	Name = "Silent Update Install",
+	CurrentValue = false,
+	Flag = "RuntimeUpdaterSilentToggle",
+	Callback = function(Value)
+		local updater = getRuntimeUpdater()
+		if updater and typeof(updater.setSilentInstall) == "function" then
+			updater:setSilentInstall(Value)
+		end
+	end,
+})
+
+SettingsTab:CreateButton({
+	Name = "Check Runtime Update",
+	Callback = function()
+		local updater = getRuntimeUpdater()
+		if updater and typeof(updater.checkAndInstall) == "function" then
+			task.spawn(function()
+				updater:checkAndInstall(true)
+			end)
+		end
 	end,
 })
 
@@ -582,8 +714,7 @@ local function loadModule(path)
 			end
 		end
 
-		local githubRawUrl = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
-		local url = (githubRawUrl .. path):gsub(" ", "%%20")
+		local url = (GITHUB_RAW_ROOT .. path):gsub(" ", "%%20")
 		return Game:HttpGet(url)
 	end)
 	if not sourceSuccess then
@@ -621,6 +752,21 @@ local function loadModule(path)
 	return result
 end
 getgenv().loadModule = loadModule
+
+local updaterLoaded, updaterResult = pcall(function()
+	return loadModule("NULLSCAPE/Main UI/Updater.luau")
+end)
+if updaterLoaded and typeof(updaterResult) == "table" then
+	Client.Modules.RuntimeUpdater = updaterResult
+	pcall(function()
+		updaterResult:initialize(Client, {
+			GithubRawRoot = GITHUB_RAW_ROOT,
+			ManifestPath = "NULLSCAPE/update_manifest.json",
+		})
+	end)
+else
+	warn("[NULLSCAPE] Runtime updater unavailable: " .. tostring(updaterResult))
+end
 
 -- Tải các module con
 local success0, err0 = pcall(function()
