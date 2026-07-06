@@ -112,7 +112,10 @@ local function releaseHumanoidState(hrp)
 		humanoid.PlatformStand = false
 		humanoid.Sit = false
 		humanoid.AutoRotate = true
-		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+	end)
+	pcall(function()
+		humanoid:ChangeState(Enum.HumanoidStateType.Running)
 	end)
 end
 
@@ -339,7 +342,9 @@ function PipelinedCollector.releaseCharacter(options)
 	if hrp and hrp.Parent then
 		hrp.Anchored = false
 		releaseHumanoidState(hrp)
-		clearVelocity(hrp)
+		if options.SkipVelocityClear ~= true then
+			clearVelocity(hrp)
+		end
 	end
 end
 

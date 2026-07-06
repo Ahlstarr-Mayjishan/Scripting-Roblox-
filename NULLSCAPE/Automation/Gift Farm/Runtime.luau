@@ -87,7 +87,7 @@ local function resetRoundState(controller, inRound)
 	end
 	if not inRound then
 		if Beacon and typeof(Beacon.restore) == "function" then
-			Beacon.restore()
+			Beacon.restore(true)
 		end
 		if Collector and typeof(Collector.restoreMovement) == "function" then
 			Collector.restoreMovement({
@@ -500,6 +500,21 @@ function Runtime.enable(controller, gc)
 	if enabled then
 		Runtime.disable(controller)
 	end
+	local pipelined = getPipelinedCoordinator()
+	if pipelined then
+		pipelined.disable(controller)
+	end
+	if Beacon and typeof(Beacon.restore) == "function" then
+		Beacon.restore(true)
+	end
+	if Collector and typeof(Collector.restoreMovement) == "function" then
+		Collector.restoreMovement({
+			ForceRelease = true,
+		})
+	end
+	if Context and typeof(Context.resetGiftClientHandler) == "function" then
+		Context.resetGiftClientHandler()
+	end
 
 	modeToken = ModeIsolation.enter(NORMAL_MODE)
 	enabled = true
@@ -521,6 +536,14 @@ end
 
 local function disableNormalRuntime(controller)
 	if not enabled and not ModeIsolation.isActive(NORMAL_MODE, modeToken) then
+		if Beacon and typeof(Beacon.restore) == "function" then
+			Beacon.restore(true)
+		end
+		if Collector and typeof(Collector.restoreMovement) == "function" then
+			Collector.restoreMovement({
+				ForceRelease = true,
+			})
+		end
 		return true
 	end
 
@@ -528,7 +551,7 @@ local function disableNormalRuntime(controller)
 	busy = false
 	ModeIsolation.leave(NORMAL_MODE, modeToken)
 	if Beacon and typeof(Beacon.restore) == "function" then
-		Beacon.restore()
+		Beacon.restore(true)
 	end
 	if Collector and typeof(Collector.restoreMovement) == "function" then
 		Collector.restoreMovement({

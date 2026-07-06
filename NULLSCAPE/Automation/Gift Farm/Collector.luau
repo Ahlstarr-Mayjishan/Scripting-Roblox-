@@ -26,6 +26,11 @@ local TAIL_STABLE_FRAMES = 2
 local ARRIVAL_TIMEOUT = 0.22
 local PRECISION_ARRIVAL_TIMEOUT = 0.28
 local TAIL_ARRIVAL_TIMEOUT = 0.38
+local PRECISION_CLEANUP_DURATION = 0.18
+local TAIL_CLEANUP_DURATION = 0.34
+local PRECISION_CLEANUP_MAX_PULSES = 6
+local TAIL_CLEANUP_MAX_PULSES = 10
+local CLEANUP_PULSE_INTERVAL = 0.015
 local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
 local MAX_RETRY_PASSES = 2
@@ -368,6 +373,51 @@ local function getRejectedItems(items, currentPos, collectRange)
 	return rejected
 end
 
+local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, collectedEvent, attemptedGifts, options)
+	if not (hrp and hrp.Parent and items and items[1]) then
+		return 0, 0
+	end
+
+	local tailMode = options and options.TailMode == true
+	local duration = tailMode and TAIL_CLEANUP_DURATION or PRECISION_CLEANUP_DURATION
+	local maxPulses = tailMode and TAIL_CLEANUP_MAX_PULSES or PRECISION_CLEANUP_MAX_PULSES
+	local deadline = os.clock() + duration
+	local pulses = 0
+
+	while pulses < maxPulses and os.clock() <= deadline do
+		if isAborted(options) then
+			break
+		end
+		if not (hrp and hrp.Parent) then
+			break
+		end
+
+		clearVelocity(hrp)
+		if (hrp.Position - standingPosition).Magnitude > PRECISION_ARRIVAL_TOLERANCE then
+			waitForArrival(hrp, standingPosition, tailMode and "tail" or true)
+		end
+
+		local currentPos = hrp.Position
+		local rejected = getRejectedItems(items, currentPos, collectRange)
+		if #rejected == 0 then
+			break
+		end
+
+		comboCount = 0
+		collectItems(rejected, currentPos, collectRange, collectedEvent, attemptedGifts)
+		pulses += 1
+		RunService.Heartbeat:Wait()
+		waitIfPositive(CLEANUP_PULSE_INTERVAL)
+	end
+
+	if not (hrp and hrp.Parent) then
+		return 0, pulses
+	end
+
+	local remainingRejected = getRejectedItems(items, hrp.Position, collectRange)
+	return #remainingRejected, pulses
+end
+
 function Collector.releaseCharacter(options)
 	options = options or {}
 	local hrp = Context.getRootPart()
@@ -428,6 +478,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 		Rejected = 0,
 		Accepted = 0,
 		Precision = precisionMode,
+		CleanupPulses = 0,
 	}
 
 	local ok, err = pcall(function()
@@ -487,6 +538,23 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 			currentPos = hrp.Position
 			collectItems(rejected, currentPos, collectRange, collectedEvent, attemptedGifts)
 			task.wait(getValidationWait(controller, true))
+		end
+
+		if precisionMode and not isAborted(options) then
+			local cleanupRejects, cleanupPulses = runPrecisionCleanup(
+				hrp,
+				cluster,
+				standingPosition,
+				collectRange,
+				collectedEvent,
+				attemptedGifts,
+				options
+			)
+			observedRejects += cleanupRejects
+			result.CleanupPulses = cleanupPulses
+			if cleanupPulses > 0 then
+				task.wait(getValidationWait(controller, true))
+			end
 		end
 
 		updateAdaptiveTiming(controller, attemptedGifts, observedRejects)

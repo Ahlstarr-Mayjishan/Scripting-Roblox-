@@ -27,7 +27,6 @@ local PYLON_LEVEL = 35
 local GOLDEN_RETURN_VERIFY_ATTEMPTS = 6
 local GOLDEN_RETURN_VERIFY_INTERVAL = 0.12
 local MAX_RETRY_QUEUE = 32
-local RESPAWN_RELEASE_FRAMES = 18
 local RESPAWN_READY_DELAY = 0.65
 
 local enabled = false
@@ -62,11 +61,13 @@ local function setStatus(controller, status, detail, force)
 	end
 end
 
-local function forceReleasePipeline()
+local function forceReleasePipeline(options)
+	options = options or {}
 	if PipelinedCollector and typeof(PipelinedCollector.releaseCharacter) == "function" then
 		pcall(function()
 			PipelinedCollector.releaseCharacter({
 				ForceRelease = true,
+				SkipVelocityClear = options.SkipVelocityClear == true,
 			})
 		end)
 	elseif PipelinedCollector and typeof(PipelinedCollector.cancelPending) == "function" then
@@ -76,18 +77,27 @@ local function forceReleasePipeline()
 	end
 end
 
-local function releaseCurrentCharacterControl()
-	forceReleasePipeline()
+local function releaseCurrentCharacterControl(options)
+	options = options or {}
+	forceReleasePipeline({
+		SkipVelocityClear = options.SkipVelocityClear == true,
+	})
 	local hrp = Context.getRootPart()
 	if not (hrp and hrp.Parent) then
 		return
 	end
 
-	pcall(function()
-		hrp.Anchored = false
-		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-	end)
+	if options.SkipVelocityClear == true then
+		pcall(function()
+			hrp.Anchored = false
+		end)
+	else
+		pcall(function()
+			hrp.Anchored = false
+			hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+		end)
+	end
 
 	local humanoid = hrp.Parent and hrp.Parent:FindFirstChildOfClass("Humanoid")
 	if humanoid then
@@ -101,18 +111,6 @@ local function releaseCurrentCharacterControl()
 			humanoid:ChangeState(Enum.HumanoidStateType.Running)
 		end)
 	end
-end
-
-local function releaseCharacterControlForFrames(token, frames)
-	task.spawn(function()
-		for _ = 1, frames do
-			if not enabled or token ~= characterToken or not ModeIsolation.isActive(PIPELINE_MODE, modeToken) then
-				return
-			end
-			releaseCurrentCharacterControl()
-			RunService.Heartbeat:Wait()
-		end
-	end)
 end
 
 local function clearRetryQueue()
@@ -152,14 +150,18 @@ local function resetCharacterState(controller)
 	if controller then
 		controller.GiftFarmGoldenComplete = false
 	end
-	forceReleasePipeline()
-	releaseCurrentCharacterControl()
+	forceReleasePipeline({
+		SkipVelocityClear = true,
+	})
+	releaseCurrentCharacterControl({
+		SkipVelocityClear = true,
+	})
 	resetPipelineModules()
 	if Beacon and typeof(Beacon.reset) == "function" then
 		Beacon.reset(Context.isInRound())
 	end
 	if Beacon and typeof(Beacon.restore) == "function" then
-		Beacon.restore()
+		Beacon.restore(true)
 	end
 	setStatus(controller, "WaitingForCharacter", "Character respawned (Pipeline)", true)
 end
@@ -187,7 +189,7 @@ local function resetRoundState(controller, inRound)
 	end
 	if not inRound then
 		if Beacon and typeof(Beacon.restore) == "function" then
-			Beacon.restore()
+			Beacon.restore(true)
 		end
 		forceReleasePipeline()
 	end
@@ -225,8 +227,17 @@ local function observeCharacter(controller, gc)
 		local thisCharacterToken = characterToken
 		task.spawn(function()
 			local hrp = character and character:WaitForChild("HumanoidRootPart", 6)
-			releaseCharacterControlForFrames(thisCharacterToken, RESPAWN_RELEASE_FRAMES)
-			for _ = 1, 6 do
+			if hrp
+				and enabled
+				and localPlayer.Character == character
+				and thisCharacterToken == characterToken
+				and ModeIsolation.isActive(PIPELINE_MODE, modeToken)
+			then
+				releaseCurrentCharacterControl({
+					SkipVelocityClear = true,
+				})
+			end
+			for _ = 1, 8 do
 				RunService.Heartbeat:Wait()
 			end
 			if enabled
@@ -557,8 +568,7 @@ local function processOnce(controller)
 				return
 			end
 			if os.clock() < characterReadyAt then
-				releaseCurrentCharacterControl()
-				setStatus(controller, "WaitingForCharacter", "Releasing respawn control")
+				setStatus(controller, "WaitingForCharacter", "Waiting for respawn replication")
 				return
 			end
 
@@ -799,6 +809,10 @@ end
 
 function Coordinator.disable(controller)
 	if not enabled and not ModeIsolation.isActive(PIPELINE_MODE, modeToken) then
+		if Beacon and typeof(Beacon.restore) == "function" then
+			Beacon.restore(true)
+		end
+		forceReleasePipeline()
 		return true
 	end
 
@@ -806,7 +820,7 @@ function Coordinator.disable(controller)
 	busy = false
 	ModeIsolation.leave(PIPELINE_MODE, modeToken)
 	if Beacon and typeof(Beacon.restore) == "function" then
-		Beacon.restore()
+		Beacon.restore(true)
 	end
 	forceReleasePipeline()
 	if connection then

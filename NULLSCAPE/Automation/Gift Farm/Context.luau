@@ -201,6 +201,10 @@ function Context.restoreBeaconInteraction()
 end
 
 function Context.forceBeaconInteraction()
+	if beaconPartStates then
+		Context.restoreBeaconInteraction()
+	end
+
 	local parts = collectBeaconParts()
 	if #parts == 0 then
 		beaconPartStates = nil
