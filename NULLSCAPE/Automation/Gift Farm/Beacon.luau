@@ -105,6 +105,11 @@ local function waitFrames(frames)
 	end
 end
 
+local function forceReturnOpen()
+	returnOpenUntil = os.clock() + RETURN_OPEN_DURATION
+	return Beacon.restore(true)
+end
+
 function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 	if controller.GiftFarmReturnToBeaconAfterGolden == false then
 		return false
@@ -116,13 +121,15 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 	end
 
 	returnDone = false
-	returnOpenUntil = os.clock() + RETURN_OPEN_DURATION
-	Beacon.restore(true)
+	forceReturnOpen()
 	if typeof(setStatus) == "function" then
 		setStatus(controller, "ReturningToBeacon", reason or "Golden gifts complete")
 	end
 
-	waitFrames(RETURN_SETTLE_FRAMES)
+	for _ = 1, RETURN_SETTLE_FRAMES do
+		forceReturnOpen()
+		RunService.Heartbeat:Wait()
+	end
 
 	local target = CFrame.new(beacon.Position + Vector3.new(0, 4, 0))
 	local arrived = false
@@ -132,6 +139,7 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 			break
 		end
 
+		forceReturnOpen()
 		clearMotion(hrp)
 		Context.moveCharacterTo(target)
 		waitFrames(1)
@@ -147,12 +155,12 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 	end
 
 	returnDone = true
-	returnOpenUntil = os.clock() + RETURN_OPEN_DURATION
-	Beacon.restore(true)
+	forceReturnOpen()
 	for _ = 1, RETURN_HOLD_FRAMES do
 		if not (hrp and hrp.Parent) then
 			break
 		end
+		forceReturnOpen()
 		clearMotion(hrp)
 		Context.moveCharacterTo(target)
 		RunService.Heartbeat:Wait()
