@@ -135,16 +135,82 @@ local function getAutomationController(client)
 		and client.Modules.AutomationController
 end
 
-local function isSafeToInstall(client, force)
-	if force == true then
-		return true
+local function addUnique(list, value)
+	if typeof(value) == "string" and value ~= "" and not table.find(list, value) then
+		table.insert(list, value)
 	end
+end
+
+local function collectManifestMenus(manifest)
+	local menus = normalizeList(manifest and (manifest.MenuChanges or manifest.menuChanges))
+	local files = manifest and (manifest.Files or manifest.files)
+	if typeof(files) == "table" then
+		for _, fileInfo in ipairs(files) do
+			if typeof(fileInfo) == "table" then
+				for _, menuName in ipairs(normalizeList(fileInfo.Menu or fileInfo.menu or fileInfo.MenuChanges or fileInfo.menuChanges)) do
+					addUnique(menus, menuName)
+				end
+			end
+		end
+	end
+	return menus
+end
+
+local function menuMatches(menus, names)
+	for _, menuName in ipairs(menus or {}) do
+		local lower = string.lower(tostring(menuName))
+		for _, name in ipairs(names) do
+			if string.find(lower, string.lower(name), 1, true) then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+local function getBlockingFeatures(client, menus)
 	local controller = getAutomationController(client)
-	if controller and controller.GiftFarmEnabled == true then
-		return false, "Gift Farm is running"
+	local blockers = {}
+
+	if controller then
+		if controller.GiftFarmEnabled == true and menuMatches(menus, { "Automation", "Gift Farm", "Pipelining" }) then
+			addUnique(blockers, "Gift Farm")
+		end
+		if controller.PylonActivatorEnabled == true and menuMatches(menus, { "Automation", "Pylon" }) then
+			addUnique(blockers, "Auto Activate Pylons")
+		end
+		if controller.AutoChooseThingsEnabled == true and menuMatches(menus, { "Automation", "Auto Choose" }) then
+			addUnique(blockers, "Auto Choose Things")
+		end
+		if controller.AutoCompleteKolonaEnabled == true and menuMatches(menus, { "Automation", "Kolona", "Auto Complete" }) then
+			addUnique(blockers, "Auto Complete - Kolona")
+		end
 	end
-	if controller and controller.PylonActivatorHolding == true then
-		return false, "Pylon activator is holding movement"
+
+	local accessibility = client and client.Modules and client.Modules.AccessibilityController
+	if accessibility and menuMatches(menus, { "Accessibility", "Grapple", "Rail" }) then
+		if accessibility.GrappleAssistEnabled == true then
+			addUnique(blockers, "Grapple Assist")
+		end
+		if accessibility.RailAssistSuiteEnabled == true or accessibility.RailAutoEnabled == true then
+			addUnique(blockers, "Rail Assist")
+		end
+	end
+
+	local entities = client and client.Modules and client.Modules.EntitiesController
+	if entities and menuMatches(menus, { "Entities", "Immunity" }) then
+		if entities.StatusImmunityEnabled == true or entities.ImmunityEnabled == true then
+			addUnique(blockers, "Entities/Immunity")
+		end
+	end
+
+	return blockers
+end
+
+local function isSafeToInstall(client, menus)
+	local blockers = getBlockingFeatures(client, menus or {})
+	if #blockers > 0 then
+		return false, blockers
 	end
 	return true
 end
@@ -320,14 +386,6 @@ function Updater:checkAndInstall(manual)
 			return false
 		end
 
-		local safe, reason = isSafeToInstall(self.Client, manual)
-		if not safe then
-			if manual or self.SilentInstall ~= true then
-				notify("Runtime Updater", "Update postponed: " .. tostring(reason), 6)
-			end
-			return false
-		end
-
 		local manifest, err = self:fetchManifest()
 		if not manifest then
 			if manual then
@@ -342,10 +400,23 @@ function Updater:checkAndInstall(manual)
 			return false
 		end
 
+		local manifestMenus = collectManifestMenus(manifest)
+		local safe, blockers = isSafeToInstall(self.Client, manifestMenus)
+		if not safe then
+			local changedText = #manifestMenus > 0 and joinShort(manifestMenus, 5) or "Code modules"
+			local blockerText = joinShort(blockers, 4)
+			notify(
+				"Runtime Update Available",
+				string.format("Changed: %s | Turn off: %s", changedText, blockerText),
+				10
+			)
+			return false
+		end
+
 		local changes = {
 			Version = manifest.Version or manifest.version or "unknown",
 			Files = {},
-			Menus = normalizeList(manifest.MenuChanges or manifest.menuChanges),
+			Menus = manifestMenus,
 		}
 		local backups = {}
 

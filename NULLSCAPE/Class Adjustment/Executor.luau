@@ -136,7 +136,40 @@ local function applySharkTailAdjustment(self, previousVelocity)
 	end
 end
 
+local function setSharkTailBarColor(grapple, color)
+	if not (grapple and grapple.UI and grapple.UI:FindFirstChild("Frame")) then
+		return
+	end
+
+	pcall(function()
+		grapple.UI.Frame.Bar.BackgroundColor3 = color
+		grapple.UI.Frame.Outline.UIStroke.Color = color
+	end)
+end
+
+local function resetSharkTailBar(grapple)
+	if not grapple then
+		return
+	end
+
+	local color = if grapple.reelCooldown or grapple.sharkTailDisable
+		then Color3.new(0.5, 0.5, 0.5)
+		else Color3.new(1, 1, 1)
+	setSharkTailBarColor(grapple, color)
+end
+
+local function closeSharkTailWindow(grapple)
+	if not grapple then
+		return
+	end
+
+	grapple.allowSharkTail = false
+	resetSharkTailBar(grapple)
+	SharkTailWindowState[grapple] = nil
+end
+
 local function applySharkTailWindow(Control, grapple)
+	local state = grapple and SharkTailWindowState[grapple]
 	if
 		not (
 			Control
@@ -149,23 +182,30 @@ local function applySharkTailWindow(Control, grapple)
 			and grapple.lastGrappleRelease > 0
 		)
 	then
-		SharkTailWindowState[grapple] = nil
+		if state then
+			closeSharkTailWindow(grapple)
+		end
 		return
 	end
 
 	local elapsed = time() - grapple.lastGrappleRelease
 	if elapsed > Control.GrappleSharkTailWindow then
-		SharkTailWindowState[grapple] = nil
+		closeSharkTailWindow(grapple)
 		return
 	end
 
-	local state = SharkTailWindowState[grapple]
 	if not state or state.ReleaseAt ~= grapple.lastGrappleRelease then
 		state = {
 			ReleaseAt = grapple.lastGrappleRelease,
 			Applied = false,
+			Consumed = false,
 		}
 		SharkTailWindowState[grapple] = state
+	end
+
+	if state.Consumed then
+		closeSharkTailWindow(grapple)
+		return
 	end
 
 	grapple.allowSharkTail = true
@@ -174,11 +214,16 @@ local function applySharkTailWindow(Control, grapple)
 	end
 
 	state.Applied = true
-	if grapple.UI and grapple.UI:FindFirstChild("Frame") then
-		pcall(function()
-			grapple.UI.Frame.Bar.BackgroundColor3 = Color3.fromRGB(255, 255, 130)
-			grapple.UI.Frame.Outline.UIStroke.Color = Color3.fromRGB(255, 255, 130)
-		end)
+	setSharkTailBarColor(grapple, Color3.fromRGB(255, 255, 130))
+end
+
+local function consumeSharkTailWindow(grapple)
+	local state = grapple and SharkTailWindowState[grapple]
+	if state then
+		state.Consumed = true
+	end
+	if grapple then
+		grapple.allowSharkTail = false
 	end
 end
 
@@ -254,6 +299,7 @@ function Executor.enable()
 		wrappedSharkTail = function(self, ...)
 			local previousVelocity = self and self.RootPart and self.RootPart.Velocity
 			local result = originalSharkTail(self, ...)
+			consumeSharkTailWindow(self)
 			applySharkTailAdjustment(self, previousVelocity)
 			return result
 		end

@@ -281,7 +281,8 @@ pcall(function()
 	end
 end)
 
--- Defensively patch Rayfield's Notification template to prevent "Icon is not a valid member of Frame" crash
+-- Defensively clean old notification icon shims. Newer Rayfield/Fusion builds treat Icon as data,
+-- so an Instance child named Icon can make ImageLabel.Image receive an Instance.
 task.spawn(function()
 	local function patchRayfieldGui(gui)
 		if Client.Destroyed then
@@ -300,14 +301,11 @@ task.spawn(function()
 			if Client.Destroyed then
 				return
 			end
-			if notif:IsA("Frame") and not notif:FindFirstChild("Icon") then
-				local dummyIcon = Instance.new("ImageLabel")
-				dummyIcon.Name = "Icon"
-				dummyIcon.Image = ""
-				dummyIcon.BackgroundTransparency = 1
-				dummyIcon.ImageTransparency = 1
-				dummyIcon.Visible = false
-				dummyIcon.Parent = notif
+			if notif:IsA("Frame") then
+				local icon = notif:FindFirstChild("Icon")
+				if icon and icon:IsA("ImageLabel") and icon.Image == "" and icon.Visible == false then
+					icon:Destroy()
+				end
 			end
 		end
 
@@ -345,6 +343,31 @@ end)
 
 local Rayfield = loadstring(Game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
+
+local DEFAULT_ICON = "rbxassetid://4483362458"
+
+local function normalizeIcon(icon)
+	if typeof(icon) == "string" then
+		return icon
+	end
+	if typeof(icon) == "number" then
+		return "rbxassetid://" .. tostring(icon)
+	end
+	return DEFAULT_ICON
+end
+
+do
+	local originalNotify = Rayfield.Notify
+	if typeof(originalNotify) == "function" then
+		function Rayfield:Notify(options)
+			if typeof(options) == "table" then
+				options = table.clone(options)
+				options.Icon = normalizeIcon(options.Icon)
+			end
+			return originalNotify(self, options)
+		end
+	end
+end
 
 -- Dịch vụ Roblox phổ biến
 local Players = game:GetService("Players")
@@ -397,6 +420,15 @@ local Window = Rayfield:CreateWindow({
 	KeySystem = false,
 })
 Client.Window = Window
+
+do
+	local originalCreateTab = Window.CreateTab
+	if typeof(originalCreateTab) == "function" then
+		function Window:CreateTab(name, icon, ...)
+			return originalCreateTab(self, name, normalizeIcon(icon), ...)
+		end
+	end
+end
 
 -- Hàm đăng ký các module tính năng
 function Client:LoadModule(moduleName, tabIcon, callback)

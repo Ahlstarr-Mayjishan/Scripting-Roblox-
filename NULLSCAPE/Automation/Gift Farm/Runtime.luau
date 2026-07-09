@@ -150,6 +150,18 @@ local function markGoldenComplete(controller)
 	end
 end
 
+local function hasRawGifts(scanInfo)
+	if not scanInfo then
+		return false
+	end
+	return (tonumber(scanInfo.RawGolden) or 0) > 0
+		or (tonumber(scanInfo.RawNormal) or 0) > 0
+end
+
+local function hasRawNormalGifts(scanInfo)
+	return scanInfo and (tonumber(scanInfo.RawNormal) or 0) > 0
+end
+
 local function clearRoute(route)
 	if typeof(route) ~= "table" then
 		return
@@ -290,10 +302,7 @@ local function processOnce(controller)
 				return
 			end
 
-			if controller.GiftFarmGoldenComplete ~= true
-				and Beacon
-				and typeof(Beacon.suppressUntilReturn) == "function"
-			then
+			if Beacon and typeof(Beacon.suppressUntilReturn) == "function" then
 				Beacon.suppressUntilReturn()
 			end
 
@@ -340,21 +349,29 @@ local function processOnce(controller)
 			end
 			if lastGiftSeenAt > 0 and GoldenWait.hasSeenGolden() and scanInfo and scanInfo.RawGolden == 0 then
 				markGoldenComplete(controller)
-				if shouldWaitForPylons(controller) then
-					setStatus(controller, "WaitingForPylons", "Golden gifts complete")
-					return
-				end
-				local handledMedal, medalStatus = tryMedalStep(controller, hrp)
-				if not isCurrentRoundActive() then
-					setStatus(controller, "WaitingForRound")
-					return
-				end
-				if handledMedal then
-					setStatus(controller, medalStatus or "MedalAction")
-					return
-				end
-				if Beacon.returnToBeacon(controller, hrp, setStatus, "Golden gifts complete") then
-					return
+				if hasRawNormalGifts(scanInfo) then
+					setStatus(
+						controller,
+						"CollectingNormalAfterGolden",
+						string.format("Golden complete | Normal %d remaining", tonumber(scanInfo.RawNormal) or 0)
+					)
+				else
+					if shouldWaitForPylons(controller) then
+						setStatus(controller, "WaitingForPylons", "Golden gifts complete")
+						return
+					end
+					local handledMedal, medalStatus = tryMedalStep(controller, hrp)
+					if not isCurrentRoundActive() then
+						setStatus(controller, "WaitingForRound")
+						return
+					end
+					if handledMedal then
+						setStatus(controller, medalStatus or "MedalAction")
+						return
+					end
+					if Beacon.returnToBeacon(controller, hrp, setStatus, "Golden gifts complete") then
+						return
+					end
 				end
 			end
 
@@ -383,7 +400,7 @@ local function processOnce(controller)
 					setStatus(controller, medalStatus or "MedalAction")
 					return
 				end
-				if lastGiftSeenAt > 0 and os.clock() - lastGiftSeenAt >= EMPTY_COMPLETE_DELAY then
+				if lastGiftSeenAt > 0 and os.clock() - lastGiftSeenAt >= EMPTY_COMPLETE_DELAY and not hasRawGifts(scanInfo) then
 					if Beacon.returnToBeacon(controller, hrp, setStatus, "Round targets complete") then
 						return
 					end
