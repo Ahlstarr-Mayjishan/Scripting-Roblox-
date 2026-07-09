@@ -7,6 +7,10 @@
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
 
+local RAZORBLOOM_CLEANUP_DELAY = 1.0
+local RAZORBLOOM_RETRY_WINDOW = 2.5
+local RAZORBLOOM_RETRY_STEP = 0.1
+
 local Logic = {
     Connections = {},
     SavedVoidbreakerHitbox = nil,
@@ -155,6 +159,66 @@ local function applyGuardianProjectileBypass()
     end
 end
 
+local function isDescendantOrSelf(instance, root)
+    if not (instance and root) then
+        return false
+    end
+
+    local current = instance
+    while current do
+        if current == root then
+            return true
+        end
+        current = current.Parent
+    end
+
+    return false
+end
+
+local function detachRazorbloom(razorbloom)
+    local character = Players.LocalPlayer and Players.LocalPlayer.Character
+    if not (character and razorbloom) then
+        return
+    end
+
+    for _, child in ipairs(character:GetDescendants()) do
+        if child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("Motor6D") then
+            local part0 = child.Part0
+            local part1 = child.Part1
+            if isDescendantOrSelf(part0, razorbloom) or isDescendantOrSelf(part1, razorbloom) then
+                pcall(function()
+                    child:Destroy()
+                end)
+            end
+        end
+    end
+end
+
+local function cleanupRazorbloom(razorbloom)
+    if not (razorbloom and razorbloom.Parent) then
+        return
+    end
+
+    pcall(function()
+        detachRazorbloom(razorbloom)
+        razorbloom:Destroy()
+    end)
+end
+
+local function findRazorbloomBindable(razorbloom)
+    local bindable = razorbloom:FindFirstChild("ClientBindable")
+    if bindable and bindable:IsA("BindableEvent") then
+        return bindable
+    end
+
+    bindable = razorbloom:FindFirstChild("ClientBindable", true)
+    if bindable and bindable:IsA("BindableEvent") then
+        return bindable
+    end
+
+    return nil
+end
+
 local function disableRazorbloom(razorbloom)
     if not isEnabled("Razorbloom") then
         return
@@ -166,52 +230,40 @@ local function disableRazorbloom(razorbloom)
         return
     end
 
-    local bindable = razorbloom:FindFirstChild("ClientBindable")
-    if not (bindable and bindable:IsA("BindableEvent")) then
-        return
-    end
-
     Logic.RazorbloomDisabled[razorbloom] = true
-    pcall(function()
-        bindable:Fire("Disable")
-    end)
 
-    -- Force clean up to prevent it from getting stuck on the player's head (delay to 1.5s to preserve the departure animation)
-    task.delay(1.5, function()
-        if razorbloom and razorbloom.Parent then
-            pcall(function()
-                -- Clear any weld/attachment holding it to the head
-                local char = Players.LocalPlayer.Character
-                local head = char and char:FindFirstChild("Head")
-                if head then
-                    for _, child in ipairs(head:GetChildren()) do
-                        if child:IsA("Weld") or child:IsA("WeldConstraint") then
-                            if child.Part0 == razorbloom or child.Part1 == razorbloom then
-                                child:Destroy()
-                            end
-                        end
-                    end
-                end
-                razorbloom:Destroy()
+    task.spawn(function()
+        local startedAt = time()
+        local firedNativeDisable = false
+        while razorbloom and razorbloom.Parent and time() - startedAt <= RAZORBLOOM_RETRY_WINDOW do
+            if not isEnabled("Razorbloom") then
+                Logic.RazorbloomDisabled[razorbloom] = nil
+                return
+            end
+
+            local bindable = findRazorbloomBindable(razorbloom)
+            if bindable then
+                pcall(function()
+                    bindable:Fire("Disable")
+                end)
+                firedNativeDisable = true
+                break
+            end
+
+            task.wait(RAZORBLOOM_RETRY_STEP)
+        end
+
+        if firedNativeDisable then
+            task.delay(RAZORBLOOM_CLEANUP_DELAY, function()
+                cleanupRazorbloom(razorbloom)
             end)
+        else
+            cleanupRazorbloom(razorbloom)
         end
     end)
 end
 
-local function applyRazorbloomBypass()
-    if not isEnabled("Razorbloom") then
-        return
-    end
-
-    local player = Players.LocalPlayer
-    local character = player and player.Character
-    local razorbloom = character and character:FindFirstChild("Razorbloom")
-    if razorbloom then
-        disableRazorbloom(razorbloom)
-    end
-end
-
-local function watchCharacter(character)
+local function scanCharacterForRazorbloom(character)
     if not character then
         return
     end
@@ -221,9 +273,48 @@ local function watchCharacter(character)
         task.defer(disableRazorbloom, existing)
     end
 
+    for _, child in ipairs(character:GetDescendants()) do
+        if child.Name == "Razorbloom" then
+            task.defer(disableRazorbloom, child)
+        end
+    end
+end
+
+local function applyRazorbloomBypass()
+    if not isEnabled("Razorbloom") then
+        return
+    end
+
+    local player = Players.LocalPlayer
+    local character = player and player.Character
+    scanCharacterForRazorbloom(character)
+end
+
+local function watchCharacter(character)
+    if not character then
+        return
+    end
+
+    scanCharacterForRazorbloom(character)
+
     table.insert(Logic.Connections, character.ChildAdded:Connect(function(child)
         if child.Name == "Razorbloom" then
             task.defer(disableRazorbloom, child)
+        end
+    end))
+
+    table.insert(Logic.Connections, character.DescendantAdded:Connect(function(child)
+        if child.Name == "Razorbloom" then
+            task.defer(disableRazorbloom, child)
+        elseif child.Name == "ClientBindable" then
+            local current = child.Parent
+            while current and current ~= character do
+                if current.Name == "Razorbloom" then
+                    task.defer(disableRazorbloom, current)
+                    break
+                end
+                current = current.Parent
+            end
         end
     end))
 end
