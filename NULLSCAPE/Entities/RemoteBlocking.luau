@@ -12,6 +12,19 @@ local ReplicatedFirst = game:GetService("ReplicatedFirst")
 --  CẤU HÌNH CHẶN REMOTE EVENT
 -- ============================================================
 Logic.Config = {
+    ["Baby"] = {
+        ControllerFlag = "BabyImmune",
+        Remotes = { "Died" },
+        Keywords = { "Baby" },
+        LegitKeywords = { "Baby" }
+    },
+    ["Mart"] = {
+        ControllerFlag = "MartImmune",
+        Remotes = { "ClientEvent" },
+        Keywords = {},
+        LegitKeywords = {},
+        BlockEmptyCalls = true
+    },
     ["ICBM"] = {
         ControllerFlag = "ICBMImmune",
         Remotes = { "ClientEvent" },
@@ -32,9 +45,9 @@ Logic.Config = {
     },
     ["Springer"] = {
         ControllerFlag = "SpringerImmune",
-        Remotes = { "ClientEvent", "ShockwaveEvent" },
-        Keywords = { "Kill", "DemonKill", "Debuff" },
-        LegitKeywords = { "Kill", "DemonKill" }
+        Remotes = { "ClientEvent", "ShockwaveEvent", "Died" },
+        Keywords = { "Springer", "Kill", "DemonKill", "Debuff" },
+        LegitKeywords = { "Springer", "Kill", "DemonKill" }
     },
     ["Bell"] = {
         ControllerFlag = "BellCurseImmune",
@@ -173,6 +186,29 @@ local function hasAncestorName(instance, targetSubName)
     return false
 end
 
+local function isCelestialKillReport(remote, args)
+    if typeof(remote) ~= "Instance" then
+        return false
+    end
+
+    local remoteName = remote.Name
+    local firstArg = tostring(args and args[1] or "")
+
+    if remoteName == "Died" then
+        return firstArg == "Celestial"
+            or firstArg == "RealityBreak"
+            or firstArg == "Reality Break"
+            or firstArg == "RealityBreaker"
+    end
+
+    if remoteName ~= "ClientEvent" or not CELESTIAL_CLIENT_BLOCKLIST[firstArg] then
+        return false
+    end
+
+    return hasAncestorName(remote, "Celestial")
+        or hasAncestorName(remote, "Reality")
+end
+
 local function localPlayerHasStatus(statusName)
     local LocalPlayer = Players.LocalPlayer
     local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
@@ -237,11 +273,19 @@ local function isTargetsSomeoneElse(args, localPlayer, char)
 end
 
 function Logic.shouldBlockRemoteCall(remote, args, controller)
-    if not controller or controller.inLobby then
+    if not controller then
         return false
     end
 
     if typeof(remote) ~= "Instance" then
+        return false
+    end
+
+    if controller.CelestialImmune == true and isCelestialKillReport(remote, args) then
+        return true
+    end
+
+    if controller.inLobby then
         return false
     end
 
@@ -306,14 +350,8 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 
     remoteName = remote.Name
     if controller.CelestialImmune == true then
-        if remoteName == "Died" and (args[1] == "Celestial" or args[1] == "RealityBreak" or args[1] == "Reality Break") then
+        if isCelestialKillReport(remote, args) then
             return true
-        end
-
-        if remoteName == "ClientEvent" and CELESTIAL_CLIENT_BLOCKLIST[tostring(args[1])] then
-            if hasAncestorName(remote, "Celestial") or hasAncestorName(remote, "Reality") then
-                return true
-            end
         end
     end
 
