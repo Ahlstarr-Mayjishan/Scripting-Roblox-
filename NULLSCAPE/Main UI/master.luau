@@ -5,7 +5,7 @@
 
 -- Tự động dọn dẹp phiên chạy cũ trước khi chạy phiên mới
 local getgenv = getgenv
-local Game = game :: any
+local Game = game
 
 if getgenv().Client then
 	pcall(function()
