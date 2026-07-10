@@ -235,7 +235,7 @@ local function isICBMClientReport(remote, args)
     local firstArg = typeof(args[1]) == "string" and string.lower(args[1])
     if not (
         remote
-        and remote.ClassName == "RemoteEvent"
+        and remote:IsA("RemoteEvent")
         and remote.Name == "ClientEvent"
         and (firstArg == "kill" or firstArg == "combust")
     ) then
@@ -247,8 +247,16 @@ local function isICBMClientReport(remote, args)
         return false
     end
     local parentName = string.lower(parent.Name)
-    return string.find(parentName, "icbm", 1, true) ~= nil
-        or string.find(parentName, "nuclear", 1, true) ~= nil
+    if string.find(parentName, "icbm", 1, true) ~= nil
+        or string.find(parentName, "nuclear", 1, true) ~= nil then
+        return true
+    end
+
+    if parent:FindFirstChild("ICBM_ClientAI") or parent:FindFirstChild("ICBM_AI") then
+        return true
+    end
+
+    return false
 end
 -- Helper check xem remote có thuộc Model của thực thể mục tiêu không
 local function findEntityParent(obj, targetSubName)
@@ -348,13 +356,16 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
     end
 
     -- Chặn riêng biệt hiệu ứng cháy (Burn curse) của ICBM nếu tùy chọn được bật
-    if remote.ClassName == "RemoteEvent"
+    if remote:IsA("RemoteEvent")
         and remote.Name == "ClientEvent"
         and typeof(args[1]) == "string" and string.lower(args[1]) == "combust" then
         local parent = remote.Parent
         if parent then
             local parentName = string.lower(parent.Name)
-            if string.find(parentName, "icbm", 1, true) or string.find(parentName, "nuclear", 1, true) then
+            if string.find(parentName, "icbm", 1, true)
+                or string.find(parentName, "nuclear", 1, true)
+                or parent:FindFirstChild("ICBM_ClientAI")
+                or parent:FindFirstChild("ICBM_AI") then
                 return controller.ICBMBurnImmune == true
             end
         end
