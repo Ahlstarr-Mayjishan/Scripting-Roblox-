@@ -463,7 +463,7 @@ function Client:ReleaseCharacterControl(options)
 			humanoid.AutoRotate = true
 		end)
 
-		if options.SkipStateChange ~= true and humanoid.Health > 0 then
+		if options.ForceStateRecovery == true and options.SkipStateChange ~= true and humanoid.Health > 0 then
 			local state = humanoid:GetState()
 			if
 				state == Enum.HumanoidStateType.PlatformStanding
@@ -537,6 +537,7 @@ function Client:RecoverCharacterAfterRespawn(character)
 				Reason = "RespawnRecovery",
 				SkipVelocityClear = true,
 				SkipStateChange = skipStateChange == true,
+				ForceStateRecovery = skipStateChange ~= true,
 			})
 		end
 

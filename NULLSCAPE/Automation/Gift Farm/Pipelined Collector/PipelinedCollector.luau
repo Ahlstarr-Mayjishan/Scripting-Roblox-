@@ -115,11 +115,21 @@ local function releaseHumanoidState(hrp)
 		humanoid.PlatformStand = false
 		humanoid.Sit = false
 		humanoid.AutoRotate = true
-		humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 	end)
-	pcall(function()
-		humanoid:ChangeState(Enum.HumanoidStateType.Running)
-	end)
+
+	if humanoid.Health > 0 then
+		local state = humanoid:GetState()
+		if
+			state == Enum.HumanoidStateType.PlatformStanding
+			or state == Enum.HumanoidStateType.Physics
+			or state == Enum.HumanoidStateType.Seated
+		then
+			pcall(function()
+				humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+				humanoid:ChangeState(Enum.HumanoidStateType.Running)
+			end)
+		end
+	end
 end
 
 local function hasGroundBelow(hrp)
