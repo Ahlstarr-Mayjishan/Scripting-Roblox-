@@ -82,21 +82,9 @@ local function clearMotion(hrp)
 		return
 	end
 
-	pcall(function()
-		hrp.Anchored = false
-		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-	end)
-
-	local humanoid = hrp.Parent and hrp.Parent:FindFirstChildOfClass("Humanoid")
-	if humanoid then
-		pcall(function()
-			humanoid.PlatformStand = false
-			humanoid.Sit = false
-			humanoid.AutoRotate = true
-			humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-		end)
-	end
+	Context.releaseCharacterControl({
+		State = Enum.HumanoidStateType.Freefall,
+	})
 end
 
 local function waitFrames(frames)

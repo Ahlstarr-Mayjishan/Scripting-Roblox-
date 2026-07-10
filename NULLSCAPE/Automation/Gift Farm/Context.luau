@@ -68,12 +68,50 @@ function Context.getRootPart()
 	return character and character:FindFirstChild("HumanoidRootPart")
 end
 
+function Context.releaseCharacterControl(options)
+	options = options or {}
+
+	local character = Players.LocalPlayer and Players.LocalPlayer.Character
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not (hrp and hrp.Parent) then
+		return false
+	end
+
+	pcall(function()
+		hrp.Anchored = false
+		if options.SkipVelocityClear ~= true then
+			hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+		end
+	end)
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		pcall(function()
+			humanoid.PlatformStand = false
+			humanoid.Sit = false
+			humanoid.AutoRotate = true
+		end)
+		if options.SkipStateChange ~= true and humanoid.Health > 0 then
+			pcall(function()
+				humanoid:ChangeState(options.State or Enum.HumanoidStateType.Running)
+			end)
+		end
+	end
+
+	return true
+end
+
 function Context.moveCharacterTo(cframe)
 	local character = Players.LocalPlayer and Players.LocalPlayer.Character
 	local hrp = character and character:FindFirstChild("HumanoidRootPart")
 	if not (hrp and hrp.Parent) then
 		return false
 	end
+	Context.releaseCharacterControl({
+		SkipVelocityClear = true,
+		SkipStateChange = true,
+	})
 
 	local startPos = hrp.Position
 	local targetPos = cframe.Position

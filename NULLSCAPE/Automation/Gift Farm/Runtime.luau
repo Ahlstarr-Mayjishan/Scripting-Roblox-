@@ -94,6 +94,9 @@ local function resetRoundState(controller, inRound)
 				ForceRelease = true,
 			})
 		end
+		if Context and typeof(Context.releaseCharacterControl) == "function" then
+			Context.releaseCharacterControl()
+		end
 	end
 	if Scanner and typeof(Scanner.reset) == "function" then
 		Scanner.reset()
@@ -529,6 +532,9 @@ function Runtime.enable(controller, gc)
 			ForceRelease = true,
 		})
 	end
+	if Context and typeof(Context.releaseCharacterControl) == "function" then
+		Context.releaseCharacterControl()
+	end
 	if Context and typeof(Context.resetGiftClientHandler) == "function" then
 		Context.resetGiftClientHandler()
 	end
@@ -561,6 +567,9 @@ local function disableNormalRuntime(controller)
 				ForceRelease = true,
 			})
 		end
+		if Context and typeof(Context.releaseCharacterControl) == "function" then
+			Context.releaseCharacterControl()
+		end
 		return true
 	end
 
@@ -574,6 +583,9 @@ local function disableNormalRuntime(controller)
 		Collector.restoreMovement({
 			ForceRelease = true,
 		})
+	end
+	if Context and typeof(Context.releaseCharacterControl) == "function" then
+		Context.releaseCharacterControl()
 	end
 	if connection then
 		pcall(function()

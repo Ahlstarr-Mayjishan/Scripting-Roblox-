@@ -646,16 +646,14 @@ function Controller:TriggerMedalAction()
 
 		local medal = findMedal()
 		if medal then
-			pcall(function()
-				local oldCFrame = hrp.CFrame
-				local oldAnchored = hrp.Anchored
+			local oldCFrame = hrp.CFrame
+			local oldAnchored = hrp.Anchored
+			local ok, err = pcall(function()
 
 				-- Safe blink pick: Anchors root and teleports right on top of the Medal handle for 0.05s
 				hrp.Anchored = true
 				hrp.CFrame = medal.CFrame * CFrame.new(0, 1.5, 0)
 				task.wait(0.05)
-				hrp.CFrame = oldCFrame
-				hrp.Anchored = oldAnchored
 
 				if getgenv().Rayfield then
 					getgenv().Rayfield:Notify({
@@ -665,6 +663,15 @@ function Controller:TriggerMedalAction()
 					})
 				end
 			end)
+			pcall(function()
+				if hrp and hrp.Parent then
+					hrp.CFrame = oldCFrame
+					hrp.Anchored = oldAnchored
+				end
+			end)
+			if not ok then
+				warn("[NULLSCAPE] Medal action failed: " .. tostring(err))
+			end
 		else
 			if getgenv().Rayfield then
 				getgenv().Rayfield:Notify({

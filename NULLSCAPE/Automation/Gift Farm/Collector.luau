@@ -436,11 +436,10 @@ function Collector.releaseCharacter(options)
 	end
 	removeFoothold(keepDuration)
 	if hrp and hrp.Parent then
-		hrp.Anchored = false
-		releaseHumanoidState(hrp)
-		if options.SkipVelocityClear ~= true then
-			clearVelocity(hrp)
-		end
+		Context.releaseCharacterControl({
+			SkipVelocityClear = options.SkipVelocityClear == true,
+			State = Enum.HumanoidStateType.Freefall,
+		})
 	end
 end
 

@@ -87,30 +87,10 @@ local function releaseCurrentCharacterControl(options)
 		return
 	end
 
-	if options.SkipVelocityClear == true then
-		pcall(function()
-			hrp.Anchored = false
-		end)
-	else
-		pcall(function()
-			hrp.Anchored = false
-			hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-			hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-		end)
-	end
-
-	local humanoid = hrp.Parent and hrp.Parent:FindFirstChildOfClass("Humanoid")
-	if humanoid then
-		pcall(function()
-			humanoid.PlatformStand = false
-			humanoid.Sit = false
-			humanoid.AutoRotate = true
-			humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-		end)
-		pcall(function()
-			humanoid:ChangeState(Enum.HumanoidStateType.Running)
-		end)
-	end
+	Context.releaseCharacterControl({
+		SkipVelocityClear = options.SkipVelocityClear == true,
+		State = Enum.HumanoidStateType.Running,
+	})
 end
 
 local function clearRetryQueue()
@@ -811,6 +791,9 @@ function Coordinator.disable(controller)
 			Beacon.restore(true)
 		end
 		forceReleasePipeline()
+		if Context and typeof(Context.releaseCharacterControl) == "function" then
+			Context.releaseCharacterControl()
+		end
 		return true
 	end
 
@@ -821,6 +804,9 @@ function Coordinator.disable(controller)
 		Beacon.restore(true)
 	end
 	forceReleasePipeline()
+	if Context and typeof(Context.releaseCharacterControl) == "function" then
+		Context.releaseCharacterControl()
+	end
 	if connection then
 		pcall(function()
 			connection:Disconnect()

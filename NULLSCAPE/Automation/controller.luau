@@ -43,6 +43,22 @@ end
 
 local characterAddedConnection = nil
 local antiAnchorConnection = nil
+local antiControlConnections = {}
+local giftFarmContext = nil
+
+local function getGiftFarmContext()
+	if giftFarmContext then
+		return giftFarmContext
+	end
+
+	local ok, result = pcall(function()
+		return getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
+	end)
+	if ok and typeof(result) == "table" then
+		giftFarmContext = result
+	end
+	return giftFarmContext
+end
 
 local function stopAntiAnchor()
 	if antiAnchorConnection then
@@ -57,6 +73,14 @@ local function stopAntiAnchor()
 		end)
 		characterAddedConnection = nil
 	end
+	for _, conn in ipairs(antiControlConnections) do
+		if conn then
+			pcall(function()
+				conn:Disconnect()
+			end)
+		end
+	end
+	table.clear(antiControlConnections)
 end
 
 local function startAntiAnchor(controller)
@@ -84,19 +108,59 @@ local function startAntiAnchor(controller)
 			end)
 			antiAnchorConnection = nil
 		end
+		for _, conn in ipairs(antiControlConnections) do
+			if conn then
+				pcall(function()
+					conn:Disconnect()
+				end)
+			end
+		end
+		table.clear(antiControlConnections)
 
-		antiAnchorConnection = hrp:GetPropertyChangedSignal("Anchored"):Connect(function()
-			if controller.GiftFarmEnabled and hrp.Anchored then
+		local function releaseIfGiftFarmActive()
+			if not controller.GiftFarmEnabled then
+				return
+			end
+			local context = getGiftFarmContext()
+			if context and typeof(context.releaseCharacterControl) == "function" then
+				context.releaseCharacterControl({
+					SkipVelocityClear = true,
+					State = Enum.HumanoidStateType.Running,
+				})
+			else
 				pcall(function()
 					hrp.Anchored = false
 				end)
 			end
+		end
+
+		antiAnchorConnection = hrp:GetPropertyChangedSignal("Anchored"):Connect(function()
+			if controller.GiftFarmEnabled and hrp.Anchored then
+				releaseIfGiftFarmActive()
+			end
 		end)
 
-		if controller.GiftFarmEnabled and hrp.Anchored then
-			pcall(function()
-				hrp.Anchored = false
-			end)
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			table.insert(antiControlConnections, humanoid:GetPropertyChangedSignal("PlatformStand"):Connect(function()
+				if controller.GiftFarmEnabled and humanoid.PlatformStand then
+					releaseIfGiftFarmActive()
+				end
+			end))
+			table.insert(antiControlConnections, humanoid:GetPropertyChangedSignal("Sit"):Connect(function()
+				if controller.GiftFarmEnabled and humanoid.Sit then
+					releaseIfGiftFarmActive()
+				end
+			end))
+			table.insert(antiControlConnections, humanoid:GetPropertyChangedSignal("AutoRotate"):Connect(function()
+				if controller.GiftFarmEnabled and not humanoid.AutoRotate then
+					releaseIfGiftFarmActive()
+				end
+			end))
+		end
+
+		if controller.GiftFarmEnabled then
+			releaseIfGiftFarmActive()
 		end
 	end
 
