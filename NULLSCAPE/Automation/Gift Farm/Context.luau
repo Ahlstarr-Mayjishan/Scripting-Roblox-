@@ -7,7 +7,6 @@ local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local cachedGCH = nil
 local beaconPartStates = nil
 
 local function collectBeaconParts()
@@ -31,11 +30,6 @@ local function collectBeaconParts()
 end
 
 function Context.getGiftClientHandler()
-	if cachedGCH and typeof(cachedGCH.Gifts) == "table" then
-		return cachedGCH
-	end
-	cachedGCH = nil
-
 	local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
 		or ReplicatedStorage:FindFirstChild("ClientModules")
 	local giftClient = clientModules and clientModules:FindFirstChild("GiftClient")
@@ -46,7 +40,6 @@ function Context.getGiftClientHandler()
 
 	local ok, result = pcall(require, handlerModule)
 	if ok and typeof(result) == "table" then
-		cachedGCH = result
 		return result
 	end
 
@@ -54,7 +47,7 @@ function Context.getGiftClientHandler()
 end
 
 function Context.resetGiftClientHandler()
-	cachedGCH = nil
+	-- No-op
 end
 
 function Context.getCollectedGiftEvent()

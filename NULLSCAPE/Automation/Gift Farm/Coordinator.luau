@@ -18,6 +18,7 @@ local GoldenWait = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Golden W
 local MovementLease = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/MovementLease.luau")
 
 local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
@@ -392,7 +393,6 @@ local function disconnectObservers()
 end
 
 local function observeCharacter(controller, gc)
-	local localPlayer = Players.LocalPlayer
 	if not localPlayer then
 		return
 	end
@@ -615,6 +615,17 @@ local function runLoop(controller)
 			if os.clock() < characterReadyAt then
 				transitionTo(controller, "Recovering", "Waiting for respawn replication")
 				task.wait(0.1)
+				continue
+			end
+
+			local deadVal = localPlayer and localPlayer:FindFirstChild("Dead")
+			if deadVal and deadVal.Value == true then
+				transitionTo(controller, "Paused", "Player is dead; waiting for respawn")
+				if activeLease then
+					activeLease:release()
+					activeLease = nil
+				end
+				task.wait(0.5)
 				continue
 			end
 
