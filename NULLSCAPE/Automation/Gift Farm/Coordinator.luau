@@ -58,6 +58,7 @@ local lastSoftGcAt = 0
 local lastGiftCount = nil
 local lastGiftCountChangedAt = 0
 local giftsStabilized = false
+local startWaitAt = nil
 local currentStatus = "Idle"
 local lastStatusAt = 0
 
@@ -500,6 +501,8 @@ local function observeInRound(controller, gc)
 		pendingGoldenReturnSince = nil
 		lastGiftCount = nil
 		giftsStabilized = false
+		startWaitAt = nil
+		lastGiftSeenAt = 0
 		table.clear(retryQueue)
 		if controller then
 			controller.GiftFarmGoldenComplete = false
@@ -623,6 +626,10 @@ local function runLoop(controller)
 
 			-- 3. Wait for normal gifts to spawn and stabilize
 			if not giftsStabilized then
+				if not startWaitAt then
+					startWaitAt = os.clock()
+				end
+
 				local function getGiftCount()
 					local gch = Context.getGiftClientHandler()
 					local _, total = Progress.getNormalGiftProgress(gch)
@@ -638,25 +645,35 @@ local function runLoop(controller)
 				end
 
 				local giftCount = getGiftCount()
+				local elapsed = os.clock() - startWaitAt
+
 				if giftCount == 0 then
-					transitionTo(controller, "Scanning", "Waiting for gifts to spawn...")
-					task.wait(0.2)
-					continue
-				end
+					if elapsed < 6 then
+						transitionTo(controller, "Scanning", string.format("Waiting for gifts to spawn (%.1fs/6.0s)...", elapsed))
+						task.wait(0.2)
+						continue
+					else
+						giftsStabilized = true
+						lastGiftSeenAt = os.clock()
+						startWaitAt = nil
+					end
+				else
+					if not lastGiftCount or lastGiftCount ~= giftCount then
+						lastGiftCount = giftCount
+						lastGiftCountChangedAt = os.clock()
+					end
 
-				if not lastGiftCount or lastGiftCount ~= giftCount then
-					lastGiftCount = giftCount
-					lastGiftCountChangedAt = os.clock()
-				end
+					local stableDuration = os.clock() - lastGiftCountChangedAt
+					if stableDuration < 3 then
+						transitionTo(controller, "Scanning", string.format("Waiting for gifts to stabilize (%.1fs/3.0s)", stableDuration))
+						task.wait(0.15)
+						continue
+					end
 
-				local stableDuration = os.clock() - lastGiftCountChangedAt
-				if stableDuration < 3 then
-					transitionTo(controller, "Scanning", string.format("Waiting for gifts to stabilize (%.1fs/3.0s)", stableDuration))
-					task.wait(0.15)
-					continue
+					giftsStabilized = true
+					lastGiftSeenAt = os.clock()
+					startWaitAt = nil
 				end
-
-				giftsStabilized = true
 			end
 
 			-- 3. Check pylon priority
