@@ -51,8 +51,34 @@ local function getMovementModule()
 	return movementModule
 end
 
+local function isGrapplerCallstack()
+	if not (debug and typeof(debug.info) == "function") then
+		return true
+	end
+
+	for level = 3, 12 do
+		local source = nil
+		local success = pcall(function()
+			source = debug.info(level, "s")
+		end)
+		if not success or source == nil then
+			break
+		end
+
+		source = tostring(source)
+		if string.find(source, "Grappler", 1, true) or string.find(source, "Grapple", 1, true) then
+			return true
+		end
+	end
+
+	return false
+end
+
 local function shouldSpoofGrapplerUpgrade(movement, upgradeName)
 	if not (movement and movement.ClassID == "class/Grappler") then
+		return false, nil
+	end
+	if not isGrapplerCallstack() then
 		return false, nil
 	end
 
@@ -129,19 +155,7 @@ local function setVirtualUpgradeVisual(upgradeName, enabled)
 
 	local existing = upgrades:FindFirstChild(upgradeName)
 	if enabled then
-		if existing then
-			if existing:IsA("IntValue") or existing:IsA("NumberValue") then
-				existing.Value = math.max(1, tonumber(existing.Value) or 0)
-			end
-			return true
-		end
-
-		local value = Instance.new("IntValue")
-		value.Name = upgradeName
-		value.Value = 1
-		value:SetAttribute("NULLSCAPEVirtualUpgrade", true)
-		value.Parent = upgrades
-		return true
+		return existing ~= nil
 	end
 
 	if existing and existing:GetAttribute("NULLSCAPEVirtualUpgrade") == true then
@@ -153,12 +167,8 @@ local function setVirtualUpgradeVisual(upgradeName, enabled)
 end
 
 function Executor.syncVirtualGrapplerUpgradeVisuals(controller)
-	if not controller then
-		return false
-	end
-
-	setVirtualUpgradeVisual("NinjaBelt", controller.GrappleVirtualNinjaBelt == true)
-	setVirtualUpgradeVisual("SharkTail", controller.GrappleVirtualSharkTail == true)
+	setVirtualUpgradeVisual("NinjaBelt", false)
+	setVirtualUpgradeVisual("SharkTail", false)
 	return true
 end
 

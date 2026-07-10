@@ -559,14 +559,12 @@ end
 function Controller:SetGrappleVirtualNinjaBelt(value)
 	self.GrappleVirtualNinjaBelt = value == true
 	syncVirtualGrapplerVisuals()
-	refreshUpgradeServerState()
 	startUtilityLoop()
 end
 
 function Controller:SetGrappleVirtualSharkTail(value)
 	self.GrappleVirtualSharkTail = value == true
 	syncVirtualGrapplerVisuals()
-	refreshUpgradeServerState()
 	startUtilityLoop()
 end
 
@@ -1051,8 +1049,6 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local isBetterJumpPad = false
 	local isHelmet = false
 	local isMiniatureHourglass = false
-	local isNinjaBelt = false
-	local isSharkTail = false
 	for _, v in ipairs(args) do
 		if v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
 			isTetrahedron = true
@@ -1066,10 +1062,6 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 			isHelmet = true
 		elseif v == "MiniatureHourglass" or v == "Miniature Hourglass" then
 			isMiniatureHourglass = true
-		elseif v == "NinjaBelt" or v == "Ninja Belt" then
-			isNinjaBelt = true
-		elseif v == "SharkTail" or v == "Shark Tail" or v == "SharkBelt" or v == "Shark Belt" then
-			isSharkTail = true
 		else
 			local shouldSpoof, result = Logic.shouldSpoofUpgradeEnabled(Controller, v)
 			if shouldSpoof then
@@ -1095,12 +1087,6 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	if isMiniatureHourglass and Controller.MiniatureHourglassEnabled then
 		return true, true
 	end
-	if isNinjaBelt and Controller.GrappleVirtualNinjaBelt then
-		return true, true
-	end
-	if isSharkTail and Controller.GrappleVirtualSharkTail then
-		return true, true
-	end
 	return false
 end
 
@@ -1112,8 +1098,6 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	local isBetterJumpPad = false
 	local isHelmet = false
 	local isMiniatureHourglass = false
-	local isNinjaBelt = false
-	local isSharkTail = false
 	for _, v in ipairs(args) do
 		if v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
 			isTetrahedron = true
@@ -1127,10 +1111,6 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 			isHelmet = true
 		elseif v == "MiniatureHourglass" or v == "Miniature Hourglass" then
 			isMiniatureHourglass = true
-		elseif v == "NinjaBelt" or v == "Ninja Belt" then
-			isNinjaBelt = true
-		elseif v == "SharkTail" or v == "Shark Tail" or v == "SharkBelt" or v == "Shark Belt" then
-			isSharkTail = true
 		else
 			local shouldSpoof, stack = Logic.shouldSpoofUpgradeStack(Controller, v)
 			if shouldSpoof then
@@ -1154,12 +1134,6 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 		return true, 1
 	end
 	if isMiniatureHourglass and Controller.MiniatureHourglassEnabled then
-		return true, 1
-	end
-	if isNinjaBelt and Controller.GrappleVirtualNinjaBelt then
-		return true, 1
-	end
-	if isSharkTail and Controller.GrappleVirtualSharkTail then
 		return true, 1
 	end
 	return false

@@ -11,6 +11,8 @@ local RETURN_SETTLE_FRAMES = 2
 local RETURN_HOLD_FRAMES = 4
 local RETURN_DISTANCE = 8
 local RETURN_OPEN_DURATION = 5
+local RETURN_APPROACH_DISTANCE = 10
+local RETURN_TOUCH_PULSES = 3
 
 local returnDone = false
 local suppressed = false
@@ -98,6 +100,44 @@ local function forceReturnOpen()
 	return Beacon.restore(true)
 end
 
+local function getReturnCFrames(beacon, hrp)
+	local beaconPos = beacon.Position
+	local rootPos = hrp and hrp.Position or beaconPos
+	local offset = rootPos - beaconPos
+	local flat = Vector3.new(offset.X, 0, offset.Z)
+	if flat.Magnitude < 0.1 then
+		flat = Vector3.new(1, 0, 0)
+	end
+
+	local approach = beaconPos + flat.Unit * RETURN_APPROACH_DISTANCE + Vector3.new(0, 4, 0)
+	local target = beaconPos + Vector3.new(0, 4, 0)
+	return CFrame.new(approach), CFrame.new(target)
+end
+
+local function pulseBeaconTouch(beacon, hrp)
+	if not (beacon and beacon.Parent and hrp and hrp.Parent) then
+		return false
+	end
+
+	if typeof(firetouchinterest) ~= "function" then
+		return false
+	end
+
+	for _ = 1, RETURN_TOUCH_PULSES do
+		forceReturnOpen()
+		pcall(function()
+			firetouchinterest(hrp, beacon, 0)
+		end)
+		RunService.Heartbeat:Wait()
+		pcall(function()
+			firetouchinterest(hrp, beacon, 1)
+		end)
+		RunService.Heartbeat:Wait()
+	end
+
+	return true
+end
+
 function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 	if controller.GiftFarmReturnToBeaconAfterGolden == false then
 		return false
@@ -119,7 +159,6 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 		RunService.Heartbeat:Wait()
 	end
 
-	local target = CFrame.new(beacon.Position + Vector3.new(0, 4, 0))
 	local arrived = false
 	for _ = 1, RETURN_ATTEMPTS do
 		hrp = Context.getRootPart() or hrp
@@ -127,9 +166,15 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 			break
 		end
 
+		local approach, target = getReturnCFrames(beacon, hrp)
+		forceReturnOpen()
+		clearMotion(hrp)
+		Context.moveCharacterTo(approach)
+		waitFrames(1)
 		forceReturnOpen()
 		clearMotion(hrp)
 		Context.moveCharacterTo(target)
+		pulseBeaconTouch(beacon, hrp)
 		waitFrames(1)
 
 		if (hrp.Position - beacon.Position).Magnitude <= RETURN_DISTANCE then
@@ -150,6 +195,8 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 		end
 		forceReturnOpen()
 		clearMotion(hrp)
+		pulseBeaconTouch(beacon, hrp)
+		local _, target = getReturnCFrames(beacon, hrp)
 		Context.moveCharacterTo(target)
 		RunService.Heartbeat:Wait()
 	end
