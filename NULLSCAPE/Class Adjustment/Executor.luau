@@ -11,6 +11,7 @@ local HooksActive = false
 local HookedStep = nil
 local HookedSharkTail = nil
 local HookedStart = nil
+local HookedEnd = nil
 local AirControl = nil
 local ReelPull = nil
 local SharkTailPull = nil
@@ -20,6 +21,7 @@ local GrappleRange = nil
 local HookCastSpeed = nil
 local ChargerTripmineAssist = nil
 local SharkTailWindowState = setmetatable({}, { __mode = "k" })
+local SharkTailEndTokens = setmetatable({}, { __mode = "k" })
 
 local MODULE_PATHS = {
 	AirControl = "NULLSCAPE/Class Adjustment/Grappler/Grapple Air Control.luau",
@@ -54,6 +56,7 @@ local function getGrappleModule()
 		or typeof(grappleModule.Cast) ~= "function"
 		or typeof(grappleModule.Start) ~= "function"
 		or typeof(grappleModule.Step) ~= "function"
+		or typeof(grappleModule.End) ~= "function"
 	then
 		return nil
 	end
@@ -101,6 +104,14 @@ local function clearStaleHooks(grappleModule, globals)
 		end
 		globals.ClassAdjustmentOriginalStart = nil
 		HookedStart = nil
+	end
+
+	if globals.ClassAdjustmentOriginalEnd then
+		if grappleModule.End ~= globals.ClassAdjustmentOriginalEnd then
+			grappleModule.End = globals.ClassAdjustmentOriginalEnd
+		end
+		globals.ClassAdjustmentOriginalEnd = nil
+		HookedEnd = nil
 	end
 
 	if globals.ClassAdjustmentOriginalCast then
@@ -166,6 +177,26 @@ local function closeSharkTailWindow(grapple)
 	grapple.allowSharkTail = false
 	resetSharkTailBar(grapple)
 	SharkTailWindowState[grapple] = nil
+	SharkTailEndTokens[grapple] = nil
+end
+
+local function scheduleSharkTailEndCleanup(grapple)
+	if not grapple then
+		return
+	end
+
+	local token = {}
+	SharkTailEndTokens[grapple] = token
+	task.delay(0.32, function()
+		if SharkTailEndTokens[grapple] ~= token then
+			return
+		end
+		SharkTailEndTokens[grapple] = nil
+
+		if grapple and grapple.allowSharkTail == true then
+			closeSharkTailWindow(grapple)
+		end
+	end)
 end
 
 local function applySharkTailWindow(Control, grapple)
@@ -224,7 +255,24 @@ local function consumeSharkTailWindow(grapple)
 	end
 	if grapple then
 		grapple.allowSharkTail = false
+		SharkTailEndTokens[grapple] = nil
 	end
+end
+
+local function shouldCloseSharkTailAfterEnd(grapple, wasCancelled)
+	if not grapple then
+		return false
+	end
+
+	if wasCancelled ~= false then
+		return true
+	end
+
+	if not grapple.UI then
+		return true
+	end
+
+	return false
 end
 
 function Executor.enable()
@@ -307,6 +355,29 @@ function Executor.enable()
 		globals.ClassAdjustmentOriginalSharkTail = originalSharkTail
 		HookedSharkTail = wrappedSharkTail
 		grappleModule.SharkTail = wrappedSharkTail
+	end
+
+	if typeof(grappleModule.End) == "function" and not globals.ClassAdjustmentOriginalEnd then
+		local originalEnd = grappleModule.End
+		local wrappedEnd
+		wrappedEnd = function(self, wasCancelled, ...)
+			local results = packValues(pcall(originalEnd, self, wasCancelled, ...))
+			if not results[1] then
+				error(results[2], 0)
+			end
+
+			if shouldCloseSharkTailAfterEnd(self, wasCancelled) then
+				closeSharkTailWindow(self)
+			elseif wasCancelled == false then
+				scheduleSharkTailEndCleanup(self)
+			end
+
+			return table.unpack(results, 2, results.n)
+		end
+
+		globals.ClassAdjustmentOriginalEnd = originalEnd
+		HookedEnd = wrappedEnd
+		grappleModule.End = wrappedEnd
 	end
 
 	if typeof(grappleModule.Start) == "function" and not globals.ClassAdjustmentOriginalStart then
@@ -414,6 +485,11 @@ function Executor.restore()
 		grappleModule.Start = globals.ClassAdjustmentOriginalStart
 		globals.ClassAdjustmentOriginalStart = nil
 		HookedStart = nil
+	end
+	if grappleModule and HookedEnd and grappleModule.End == HookedEnd then
+		grappleModule.End = globals.ClassAdjustmentOriginalEnd
+		globals.ClassAdjustmentOriginalEnd = nil
+		HookedEnd = nil
 	end
 	if
 		grappleModule
