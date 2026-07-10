@@ -165,6 +165,14 @@ local function hasUtilityWork()
 		or Controller.GrappleVirtualSharkTail
 end
 
+local function syncVirtualGrapplerVisuals()
+	if Executor and typeof(Executor.syncVirtualGrapplerUpgradeVisuals) == "function" then
+		pcall(function()
+			Executor.syncVirtualGrapplerUpgradeVisuals(Controller)
+		end)
+	end
+end
+
 -- RenderStepped connection management
 stopRenderStepped = function() end
 
@@ -531,12 +539,14 @@ end
 
 function Controller:SetGrappleVirtualNinjaBelt(value)
 	self.GrappleVirtualNinjaBelt = value == true
+	syncVirtualGrapplerVisuals()
 	refreshUpgradeServerState()
 	startUtilityLoop()
 end
 
 function Controller:SetGrappleVirtualSharkTail(value)
 	self.GrappleVirtualSharkTail = value == true
+	syncVirtualGrapplerVisuals()
 	refreshUpgradeServerState()
 	startUtilityLoop()
 end
@@ -941,6 +951,9 @@ function Controller:CleanUp()
 		self.MiniatureHourglassEnabled = false
 		self.GrappleVirtualNinjaBelt = false
 		self.GrappleVirtualSharkTail = false
+		if Executor and typeof(Executor.clearVirtualGrapplerUpgradeVisuals) == "function" then
+			pcall(Executor.clearVirtualGrapplerUpgradeVisuals)
+		end
 	end
 
 	if finalCleanup and MatrixTetrahedron then
@@ -1150,6 +1163,7 @@ end)
 startObservingFolders()
 updateRunningState()
 startUtilityLoop()
+syncVirtualGrapplerVisuals()
 
 local function scheduleRespawnFeatureRefresh()
 	Controller.RespawnRefreshToken = (Controller.RespawnRefreshToken or 0) + 1

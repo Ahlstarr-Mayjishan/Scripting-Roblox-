@@ -12,6 +12,7 @@ local HookedStep = nil
 local HookedSharkTail = nil
 local HookedStart = nil
 local HookedEnd = nil
+local HookedAltSpecialAction = nil
 local AirControl = nil
 local ReelPull = nil
 local SharkTailPull = nil
@@ -131,6 +132,14 @@ local function clearStaleHooks(grappleModule, globals)
 		end
 		globals.ClassAdjustmentOriginalEnd = nil
 		HookedEnd = nil
+	end
+
+	if globals.ClassAdjustmentOriginalAltSpecialAction then
+		if grappleModule.AltSpecialAction ~= globals.ClassAdjustmentOriginalAltSpecialAction then
+			grappleModule.AltSpecialAction = globals.ClassAdjustmentOriginalAltSpecialAction
+		end
+		globals.ClassAdjustmentOriginalAltSpecialAction = nil
+		HookedAltSpecialAction = nil
 	end
 
 	if globals.ClassAdjustmentOriginalCast then
@@ -294,6 +303,31 @@ local function shouldCloseSharkTailAfterEnd(grapple, wasCancelled)
 	return false
 end
 
+local function tryVirtualSharkTailInput(grapple, inputState)
+	if inputState ~= Enum.UserInputState.Begin then
+		return false
+	end
+	if not (grapple and grapple.allowSharkTail == true and grapple.sharkTailDisable ~= true) then
+		return false
+	end
+	if not (grapple.Movement and grapple.Movement:HasUpgrade("SharkTail")) then
+		return false
+	end
+	if typeof(grapple.SharkTail) ~= "function" then
+		return false
+	end
+
+	local success, err = pcall(function()
+		grapple:SharkTail()
+	end)
+	if not success then
+		warn("[NULLSCAPE] Virtual SharkTail trigger failed: " .. tostring(err))
+		return false
+	end
+
+	return true
+end
+
 function Executor.enable()
 	if HooksActive then
 		return true
@@ -405,6 +439,21 @@ function Executor.enable()
 		globals.ClassAdjustmentOriginalEnd = originalEnd
 		HookedEnd = wrappedEnd
 		grappleModule.End = wrappedEnd
+	end
+
+	if typeof(grappleModule.AltSpecialAction) == "function" and not globals.ClassAdjustmentOriginalAltSpecialAction then
+		local originalAltSpecialAction = grappleModule.AltSpecialAction
+		local wrappedAltSpecialAction
+		wrappedAltSpecialAction = function(self, inputState, ...)
+			if HooksActive and tryVirtualSharkTailInput(self, inputState) then
+				return
+			end
+			return originalAltSpecialAction(self, inputState, ...)
+		end
+
+		globals.ClassAdjustmentOriginalAltSpecialAction = originalAltSpecialAction
+		HookedAltSpecialAction = wrappedAltSpecialAction
+		grappleModule.AltSpecialAction = wrappedAltSpecialAction
 	end
 
 	if typeof(grappleModule.Start) == "function" and not globals.ClassAdjustmentOriginalStart then
@@ -522,6 +571,11 @@ function Executor.restore()
 		grappleModule.End = globals.ClassAdjustmentOriginalEnd
 		globals.ClassAdjustmentOriginalEnd = nil
 		HookedEnd = nil
+	end
+	if grappleModule and HookedAltSpecialAction and grappleModule.AltSpecialAction == HookedAltSpecialAction then
+		grappleModule.AltSpecialAction = globals.ClassAdjustmentOriginalAltSpecialAction
+		globals.ClassAdjustmentOriginalAltSpecialAction = nil
+		HookedAltSpecialAction = nil
 	end
 	if
 		grappleModule

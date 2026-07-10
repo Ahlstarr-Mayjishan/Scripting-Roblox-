@@ -11,6 +11,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Executor = {}
 local missingWarnings = {}
 local HookedMovementHasUpgrade = nil
+local VIRTUAL_GRAPPLER_UPGRADES = {
+	NinjaBelt = true,
+	SharkTail = true,
+}
 
 local function getCallable(module, methodName, label)
 	if module and typeof(module[methodName]) == "function" then
@@ -110,6 +114,59 @@ function Executor.restoreUpgradeSimulationHook()
 
 	globals.SimulatedUpgradesOriginalMovementHasUpgrade = nil
 	HookedMovementHasUpgrade = nil
+end
+
+local function getUpgradeFolder()
+	local upgradeFolder = ReplicatedStorage:FindFirstChild("UpgradeFolder")
+	return upgradeFolder and upgradeFolder:FindFirstChild("Upgrades")
+end
+
+local function setVirtualUpgradeVisual(upgradeName, enabled)
+	local upgrades = getUpgradeFolder()
+	if not upgrades then
+		return false
+	end
+
+	local existing = upgrades:FindFirstChild(upgradeName)
+	if enabled then
+		if existing then
+			if existing:IsA("IntValue") or existing:IsA("NumberValue") then
+				existing.Value = math.max(1, tonumber(existing.Value) or 0)
+			end
+			return true
+		end
+
+		local value = Instance.new("IntValue")
+		value.Name = upgradeName
+		value.Value = 1
+		value:SetAttribute("NULLSCAPEVirtualUpgrade", true)
+		value.Parent = upgrades
+		return true
+	end
+
+	if existing and existing:GetAttribute("NULLSCAPEVirtualUpgrade") == true then
+		existing:Destroy()
+		return true
+	end
+
+	return false
+end
+
+function Executor.syncVirtualGrapplerUpgradeVisuals(controller)
+	if not controller then
+		return false
+	end
+
+	setVirtualUpgradeVisual("NinjaBelt", controller.GrappleVirtualNinjaBelt == true)
+	setVirtualUpgradeVisual("SharkTail", controller.GrappleVirtualSharkTail == true)
+	return true
+end
+
+function Executor.clearVirtualGrapplerUpgradeVisuals()
+	for upgradeName in pairs(VIRTUAL_GRAPPLER_UPGRADES) do
+		setVirtualUpgradeVisual(upgradeName, false)
+	end
+	return true
 end
 
 -- Run visual cleanup
