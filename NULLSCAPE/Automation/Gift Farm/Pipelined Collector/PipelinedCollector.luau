@@ -10,13 +10,8 @@ local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.l
 
 local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
-local Workspace = game:GetService("Workspace")
 
 local PipelinedCollector = {}
-local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
-local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
-local DISABLE_FOOTHOLD_DURATION = 2
-local SAFETY_FOOTHOLD_DURATION = 2.5
 local COLLECT_SETTLE_FRAMES = 1
 local PRE_COLLECT_SYNC_MULTIPLIER = 0.75
 local PRE_COLLECT_SYNC_MIN = 0.035
@@ -30,67 +25,8 @@ local TAIL_CLUSTER_SIZE = 2
 local TAIL_HOLD_MULTIPLIER = 1.35
 local MAX_RETRY_ITEMS = 24
 
-local foothold = nil
-local footholdRemovalToken = 0
 local pipelineToken = 0
 local acceptanceMultiplier = 1
-
-local function getFoothold()
-	if foothold and foothold.Parent then
-		return foothold
-	end
-
-	foothold = Instance.new("Part")
-	foothold.Name = "NULLSCAPE_PipelinedFoothold"
-	foothold.Anchored = true
-	foothold.CanCollide = true
-	foothold.CanTouch = false
-	foothold.CanQuery = false
-	foothold.CastShadow = false
-	foothold.Material = Enum.Material.SmoothPlastic
-	foothold.Transparency = 1
-	foothold.Size = FOOTHOLD_SIZE
-	foothold.Parent = Workspace
-	return foothold
-end
-
-local function placeFoothold(position)
-	footholdRemovalToken += 1
-	local part = getFoothold()
-	part.CFrame = CFrame.new(position + FOOTHOLD_OFFSET)
-	return part
-end
-
-local function removeFoothold(delaySeconds)
-	local delayTime = tonumber(delaySeconds) or 0
-	if delayTime > 0 and foothold and foothold.Parent then
-		local token = footholdRemovalToken + 1
-		footholdRemovalToken = token
-		local part = foothold
-		task.delay(delayTime, function()
-			if footholdRemovalToken ~= token or foothold ~= part then
-				return
-			end
-			if part and part.Parent then
-				pcall(function()
-					part:Destroy()
-				end)
-			end
-			if foothold == part then
-				foothold = nil
-			end
-		end)
-		return
-	end
-
-	if foothold then
-		footholdRemovalToken += 1
-		pcall(function()
-			foothold:Destroy()
-		end)
-		foothold = nil
-	end
-end
 
 local function clearVelocity(hrp)
 	if not (hrp and hrp.Parent) then
@@ -100,50 +36,6 @@ local function clearVelocity(hrp)
 		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 	end)
-end
-
-local function getHumanoid(hrp)
-	local character = hrp and hrp.Parent
-	return character and character:FindFirstChildOfClass("Humanoid")
-end
-
-local function releaseHumanoidState(hrp)
-	local humanoid = getHumanoid(hrp)
-	if not humanoid then
-		return
-	end
-	pcall(function()
-		humanoid.PlatformStand = false
-		humanoid.Sit = false
-		humanoid.AutoRotate = true
-	end)
-
-	if humanoid.Health > 0 then
-		local state = humanoid:GetState()
-		if
-			state == Enum.HumanoidStateType.PlatformStanding
-			or state == Enum.HumanoidStateType.Physics
-			or state == Enum.HumanoidStateType.Seated
-		then
-			pcall(function()
-				humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-				humanoid:ChangeState(Enum.HumanoidStateType.Running)
-			end)
-		end
-	end
-end
-
-local function hasGroundBelow(hrp)
-	if not (hrp and hrp.Parent) then
-		return false
-	end
-
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { hrp.Parent, foothold }
-
-	local result = Workspace:Raycast(hrp.Position, Vector3.new(0, -8, 0), params)
-	return result ~= nil
 end
 
 local function normalizePingSeconds(value)
@@ -185,7 +77,7 @@ local function getOneWayLatency()
 	return math.clamp(ping * 0.5, 0.03, 0.12)
 end
 
-local function waitForArrival(hrp, targetPosition, shouldAbort)
+local function waitForArrival(hrp, targetPosition, lease, shouldAbort)
 	if not (hrp and hrp.Parent and typeof(targetPosition) == "Vector3") then
 		return false
 	end
@@ -206,7 +98,7 @@ local function waitForArrival(hrp, targetPosition, shouldAbort)
 			return true
 		end
 
-		Context.moveCharacterTo(CFrame.new(targetPosition))
+		lease:moveTo(CFrame.new(targetPosition))
 		RunService.Heartbeat:Wait()
 	end
 
@@ -240,14 +132,14 @@ local function settleBeforeCollect(hrp, shouldAbort)
 	return true
 end
 
-local function collectCluster(routeToken, cluster, currentPos, collectRange, collectedEvent, stats)
-	if routeToken ~= pipelineToken then
+local function collectCluster(routeToken, cluster, currentPos, collectRange, collectedEvent, stats, lease)
+	if routeToken ~= pipelineToken or not lease:isValid() then
 		return {}
 	end
 
 	local attempted = {}
 	for _, item in ipairs(cluster) do
-		if routeToken ~= pipelineToken then
+		if routeToken ~= pipelineToken or not lease:isValid() then
 			return attempted
 		end
 		if item.rawObj
@@ -341,39 +233,7 @@ function PipelinedCollector.resetAdaptive()
 	acceptanceMultiplier = 1
 end
 
-function PipelinedCollector.releaseCharacter(options)
-	options = options or {}
-	if options.ForceRelease == true then
-		PipelinedCollector.cancelPending()
-	end
-
-	local hrp = Context.getRootPart()
-	local airborneWithoutGround = hrp and hrp.Parent and not hasGroundBelow(hrp)
-	local keepDuration = tonumber(options.KeepFootholdDuration)
-	if airborneWithoutGround and (not keepDuration or keepDuration < SAFETY_FOOTHOLD_DURATION) then
-		keepDuration = SAFETY_FOOTHOLD_DURATION
-	end
-
-	local shouldKeepFoothold = keepDuration
-		and hrp
-		and hrp.Parent
-		and (not options.OnlyKeepFootholdIfAirborne or airborneWithoutGround)
-	if shouldKeepFoothold and (not foothold or not foothold.Parent) then
-		placeFoothold(hrp.Position)
-	end
-
-	removeFoothold(shouldKeepFoothold and keepDuration or nil)
-	if hrp and hrp.Parent then
-		Context.releaseCharacterControl({
-			SkipVelocityClear = options.SkipVelocityClear == true,
-			SkipTouchRestore = true,
-			SkipStateChange = options.SkipStateChange == true,
-			State = Enum.HumanoidStateType.Running,
-		})
-	end
-end
-
-function PipelinedCollector.collectRoute(_controller, hrp, route, range, options)
+function PipelinedCollector.collectRoute(_controller, hrp, route, range, options, lease, _currentSessionToken)
 	if not (hrp and hrp.Parent and route and route[1]) then
 		return false
 	end
@@ -389,14 +249,16 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 		Retry = {},
 		AcceptanceMultiplier = acceptanceMultiplier,
 	}
+	
 	local function shouldAbort()
 		return routeToken ~= pipelineToken
+			or not lease:isValid()
 			or Context.getRootPart() ~= hrp
 			or isAborted(options)
 	end
 
 	local ok, err = pcall(function()
-		for index, step in ipairs(route) do
+		for _, step in ipairs(route) do
 			if shouldAbort() then
 				return
 			end
@@ -416,18 +278,18 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 			local standingPosition = Distance.getRootPosition(targetPosition)
 
 			hrp.Anchored = false
-			placeFoothold(standingPosition)
-			Context.moveCharacterTo(CFrame.new(standingPosition))
+			lease:placeFoothold(standingPosition)
+			lease:moveTo(CFrame.new(standingPosition))
 			clearVelocity(hrp)
 
-			local arrived = waitForArrival(hrp, standingPosition, shouldAbort)
+			local arrived = waitForArrival(hrp, standingPosition, lease, shouldAbort)
 			if shouldAbort() then
 				return
 			end
 
 			local attempted = {}
 			if arrived and settleBeforeCollect(hrp, shouldAbort) then
-				attempted = collectCluster(routeToken, cluster, hrp.Position, collectRange, collectedEvent, stats)
+				attempted = collectCluster(routeToken, cluster, hrp.Position, collectRange, collectedEvent, stats, lease)
 			end
 			if #attempted > 0 and not waitForCollectAcceptance(hrp, shouldAbort, attempted, #cluster) then
 				return
@@ -439,25 +301,11 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 		end
 	end)
 
-	local aborted = shouldAbort()
-	if aborted then
-		PipelinedCollector.releaseCharacter({
-			ForceRelease = true,
-			KeepFootholdDuration = SAFETY_FOOTHOLD_DURATION,
-			OnlyKeepFootholdIfAirborne = true,
-		})
-	else
-		PipelinedCollector.releaseCharacter({
-			KeepFootholdDuration = DISABLE_FOOTHOLD_DURATION,
-			OnlyKeepFootholdIfAirborne = true,
-		})
-	end
-
 	if not ok then
 		error(err, 0)
 	end
 
-	if aborted then
+	if shouldAbort() then
 		return false, stats
 	end
 

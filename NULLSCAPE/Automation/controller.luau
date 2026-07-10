@@ -213,6 +213,7 @@ local function callExecutor(methodName, ...)
 end
 
 local Controller = {
+	ConfigChanged = Instance.new("BindableEvent"),
 	Destroyed = false,
 	Initialized = false,
 	GiftFarmEnabled = false,
@@ -324,7 +325,8 @@ function Controller:SetGiftFarmEnabled(value)
 		self.GiftFarmRangeRevision = (tonumber(self.GiftFarmRangeRevision) or 0) + 1
 	end
 	self.GiftFarmEnabled = nextEnabled
-	return self:update()
+	self.ConfigChanged:Fire()
+	return true
 end
 
 function Controller:SetGiftFarmMode(value)
@@ -333,21 +335,9 @@ function Controller:SetGiftFarmMode(value)
 	end
 
 	self.GiftFarmRangeRevision = (tonumber(self.GiftFarmRangeRevision) or 0) + 1
-	local wasEnabled = self.GiftFarmEnabled
-	if wasEnabled then
-		self.GiftFarmEnabled = false
-		self:update()
-		task.wait(0.15)
-	end
-
 	self.GiftFarmMode = value
-
-	if wasEnabled then
-		self.GiftFarmEnabled = true
-	else
-		return true
-	end
-	return self:update()
+	self.ConfigChanged:Fire()
+	return true
 end
 
 function Controller:SetGiftFarmRange(value)
@@ -367,10 +357,8 @@ function Controller:SetGiftFarmRange(value)
 		upgradeController.AutoCollectRange = range
 	end
 
-	if not self.GiftFarmEnabled then
-		return true
-	end
-	return self:update()
+	self.ConfigChanged:Fire()
+	return true
 end
 
 function Controller:GetGiftFarmRange()
@@ -389,10 +377,8 @@ end
 
 function Controller:SetGiftFarmReturnToBeaconAfterGolden(value)
 	self.GiftFarmReturnToBeaconAfterGolden = value == true
-	if not self.GiftFarmEnabled then
-		return true
-	end
-	return self:update()
+	self.ConfigChanged:Fire()
+	return true
 end
 
 function Controller:SetAltarSelections(value)
@@ -410,15 +396,14 @@ function Controller:SetAltarSelections(value)
 		end
 	end
 	self.AltarSelections = selections
-	return self:update()
+	self.ConfigChanged:Fire()
+	return true
 end
 
 function Controller:SetCollectMedalEnabled(value)
 	self.CollectMedalEnabled = value == true
-	if not self.GiftFarmEnabled then
-		return true
-	end
-	return self:update()
+	self.ConfigChanged:Fire()
+	return true
 end
 
 function Controller:SetPylonActivatorEnabled(value)
@@ -486,6 +471,12 @@ function Controller:CleanUp()
 	callExecutor("disable", self, GC)
 	if GC and typeof(GC.cleanAll) == "function" then
 		GC.cleanAll()
+	end
+
+	if self.ConfigChanged then
+		pcall(function()
+			self.ConfigChanged:Destroy()
+		end)
 	end
 
 	local globals = getGlobals()

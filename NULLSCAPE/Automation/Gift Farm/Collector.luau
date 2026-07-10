@@ -5,7 +5,6 @@ local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.l
 
 local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
-local Workspace = game:GetService("Workspace")
 
 local Collector = {}
 local COLLECT_SETTLE = 0
@@ -31,16 +30,12 @@ local TAIL_CLEANUP_DURATION = 0.34
 local PRECISION_CLEANUP_MAX_PULSES = 6
 local TAIL_CLEANUP_MAX_PULSES = 10
 local CLEANUP_PULSE_INTERVAL = 0.015
-local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
-local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
-local SAFETY_FOOTHOLD_DURATION = 2.5
 local MAX_RETRY_PASSES = 2
 local MAX_PRECISION_RETRY_PASSES = 3
 local RETRY_SETTLE = 0.045
+
 local comboCount = 0
 local lastCollectTick = 0
-local foothold = nil
-local footholdRemovalToken = 0
 local adaptiveSuccessRate = 1
 local adaptiveValidationWait = BASE_VALIDATION_WAIT
 local failedAttempts = setmetatable({}, { __mode = "k" })
@@ -107,37 +102,6 @@ local function clearVelocity(hrp)
 	end)
 end
 
-local function getHumanoid(hrp)
-	local character = hrp and hrp.Parent
-	return character and character:FindFirstChildOfClass("Humanoid")
-end
-
-local function releaseHumanoidState(hrp)
-	local humanoid = getHumanoid(hrp)
-	if not humanoid then
-		return
-	end
-
-	pcall(function()
-		humanoid.PlatformStand = false
-		humanoid.Sit = false
-		humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
-	end)
-end
-
-local function hasGroundBelow(hrp)
-	if not (hrp and hrp.Parent) then
-		return false
-	end
-
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { hrp.Parent, foothold }
-
-	local result = Workspace:Raycast(hrp.Position, Vector3.new(0, -8, 0), params)
-	return result ~= nil
-end
-
 local function waitIfPositive(seconds)
 	local duration = tonumber(seconds) or 0
 	if duration > 0 then
@@ -191,7 +155,7 @@ local function waitForReplicationSync(precisionMode)
 	waitIfPositive(waitTime)
 end
 
-local function getValidationWait(controller, precisionMode)
+local function getValidationWait(_controller, precisionMode)
 	if precisionMode then
 		return math.clamp(math.max(PRECISION_VALIDATION_WAIT, adaptiveValidationWait), PRECISION_VALIDATION_WAIT, PRECISION_VALIDATION_MAX)
 	end
@@ -236,75 +200,28 @@ local function updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
 	end
 end
 
-local function jumpToWaypoint(hrp, targetPosition)
+local function isAborted(options, lease, _currentSessionToken)
+	if options and typeof(options.AbortCheck) == "function" and options.AbortCheck() == true then
+		return true
+	end
+	if lease and not lease:isValid() then
+		return true
+	end
+	return false
+end
+
+local function jumpToWaypoint(hrp, targetPosition, lease)
 	if not (hrp and hrp.Parent) then
 		return false
 	end
 
-	Context.moveCharacterTo(CFrame.new(targetPosition))
+	lease:moveTo(CFrame.new(targetPosition))
 	clearVelocity(hrp)
 	RunService.Heartbeat:Wait()
 	return true
 end
 
-local function getFoothold()
-	if foothold and foothold.Parent then
-		return foothold
-	end
-
-	foothold = Instance.new("Part")
-	foothold.Name = "NULLSCAPE_GiftFarmFoothold"
-	foothold.Anchored = true
-	foothold.CanCollide = true
-	foothold.CanTouch = false
-	foothold.CanQuery = false
-	foothold.CastShadow = false
-	foothold.Material = Enum.Material.SmoothPlastic
-	foothold.Transparency = 1
-	foothold.Size = FOOTHOLD_SIZE
-	foothold.Parent = workspace
-	return foothold
-end
-
-local function placeFoothold(position)
-	footholdRemovalToken += 1
-	local part = getFoothold()
-	part.CFrame = CFrame.new(position + FOOTHOLD_OFFSET)
-	return part
-end
-
-local function removeFoothold(delaySeconds)
-	local delayTime = tonumber(delaySeconds) or 0
-	if delayTime > 0 and foothold and foothold.Parent then
-		local token = footholdRemovalToken + 1
-		footholdRemovalToken = token
-		local part = foothold
-		task.delay(delayTime, function()
-			if footholdRemovalToken ~= token or foothold ~= part then
-				return
-			end
-			if part and part.Parent then
-				pcall(function()
-					part:Destroy()
-				end)
-			end
-			if foothold == part then
-				foothold = nil
-			end
-		end)
-		return
-	end
-
-	if foothold then
-		footholdRemovalToken += 1
-		pcall(function()
-			foothold:Destroy()
-		end)
-		foothold = nil
-	end
-end
-
-local function waitForArrival(hrp, targetPosition, precisionMode)
+local function waitForArrival(hrp, targetPosition, precisionMode, lease, currentSessionToken, options)
 	if not (hrp and hrp.Parent and typeof(targetPosition) == "Vector3") then
 		return false
 	end
@@ -317,6 +234,9 @@ local function waitForArrival(hrp, targetPosition, precisionMode)
 	local requiredFrames = tailMode and TAIL_STABLE_FRAMES or (precisionMode and PRECISION_STABLE_FRAMES or ARRIVAL_STABLE_FRAMES)
 
 	while os.clock() - startedAt <= timeout do
+		if isAborted(options, lease, currentSessionToken) then
+			return false
+		end
 		if not (hrp and hrp.Parent) then
 			return false
 		end
@@ -330,17 +250,13 @@ local function waitForArrival(hrp, targetPosition, precisionMode)
 			end
 		else
 			stableFrames = 0
-			Context.moveCharacterTo(CFrame.new(targetPosition))
+			lease:moveTo(CFrame.new(targetPosition))
 		end
 
 		RunService.Heartbeat:Wait()
 	end
 
 	return (hrp.Position - targetPosition).Magnitude <= tolerance
-end
-
-local function isAborted(options)
-	return options and typeof(options.AbortCheck) == "function" and options.AbortCheck() == true
 end
 
 local function collectItems(items, currentPos, collectRange, collectedEvent, attemptedGifts)
@@ -374,7 +290,7 @@ local function getRejectedItems(items, currentPos, collectRange)
 	return rejected
 end
 
-local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, collectedEvent, attemptedGifts, options)
+local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, collectedEvent, attemptedGifts, options, lease, currentSessionToken)
 	if not (hrp and hrp.Parent and items and items[1]) then
 		return 0, 0
 	end
@@ -386,7 +302,7 @@ local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, c
 	local pulses = 0
 
 	while pulses < maxPulses and os.clock() <= deadline do
-		if isAborted(options) then
+		if isAborted(options, lease, currentSessionToken) then
 			break
 		end
 		if not (hrp and hrp.Parent) then
@@ -395,7 +311,7 @@ local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, c
 
 		clearVelocity(hrp)
 		if (hrp.Position - standingPosition).Magnitude > PRECISION_ARRIVAL_TOLERANCE then
-			waitForArrival(hrp, standingPosition, tailMode and "tail" or true)
+			waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
 		end
 
 		local currentPos = hrp.Position
@@ -419,38 +335,6 @@ local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, c
 	return #remainingRejected, pulses
 end
 
-function Collector.releaseCharacter(options)
-	options = options or {}
-	local hrp = Context.getRootPart()
-	local airborneWithoutGround = hrp and hrp.Parent and not hasGroundBelow(hrp)
-	local keepDuration = tonumber(options.KeepFootholdDuration)
-	if airborneWithoutGround and (not keepDuration or keepDuration < SAFETY_FOOTHOLD_DURATION) then
-		keepDuration = SAFETY_FOOTHOLD_DURATION
-	end
-
-	local shouldKeepFoothold = keepDuration
-		and hrp
-		and hrp.Parent
-		and (not options.OnlyKeepFootholdIfAirborne or airborneWithoutGround)
-	if shouldKeepFoothold and (not foothold or not foothold.Parent) then
-		placeFoothold(hrp.Position)
-	end
-
-	removeFoothold(shouldKeepFoothold and keepDuration or nil)
-	if hrp and hrp.Parent then
-		Context.releaseCharacterControl({
-			SkipVelocityClear = options.SkipVelocityClear == true,
-			SkipTouchRestore = true,
-			State = Enum.HumanoidStateType.Freefall,
-		})
-	end
-end
-
-function Collector.restoreMovement(options)
-	Collector.releaseCharacter(options)
-	return true
-end
-
 function Collector.resetAdaptive(controller)
 	adaptiveSuccessRate = 1
 	adaptiveValidationWait = BASE_VALIDATION_WAIT
@@ -463,7 +347,7 @@ function Collector.resetAdaptive(controller)
 	end
 end
 
-function Collector.collectCluster(controller, hrp, cluster, range, options)
+function Collector.collectCluster(controller, hrp, cluster, range, options, lease, currentSessionToken)
 	if not (hrp and hrp.Parent and cluster and cluster[1]) then
 		return false
 	end
@@ -484,24 +368,27 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 	}
 
 	local ok, err = pcall(function()
-		if isAborted(options) then
+		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
 
 		hrp.Anchored = false
-		placeFoothold(standingPosition)
-		jumpToWaypoint(hrp, standingPosition)
-		if isAborted(options) then
+		lease:placeFoothold(standingPosition)
+		jumpToWaypoint(hrp, standingPosition, lease)
+		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
 		clearVelocity(hrp)
-		waitForArrival(hrp, standingPosition, tailMode and "tail" or precisionMode)
-		if isAborted(options) then
+		waitForArrival(hrp, standingPosition, tailMode and "tail" or precisionMode, lease, currentSessionToken, options)
+		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
 		waitIfPositive(precisionMode and PRECISION_COLLECT_SETTLE or COLLECT_SETTLE)
+		if isAborted(options, lease, currentSessionToken) then
+			return
+		end
 		waitForReplicationSync(precisionMode)
-		if isAborted(options) then
+		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
 
@@ -513,14 +400,14 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 		end
 
 		collectItems(cluster, currentPos, collectRange, collectedEvent, attemptedGifts)
-		if isAborted(options) then
+		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
 		task.wait(getValidationWait(controller, precisionMode))
 
 		local retryPasses = precisionMode and MAX_PRECISION_RETRY_PASSES or MAX_RETRY_PASSES
 		for _ = 1, retryPasses do
-			if isAborted(options) then
+			if isAborted(options, lease, currentSessionToken) then
 				return
 			end
 			currentPos = hrp.Position
@@ -531,10 +418,13 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 
 			observedRejects += #rejected
 			comboCount = 0
-			waitForArrival(hrp, standingPosition, tailMode and "tail" or true)
+			waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
 			task.wait(RETRY_SETTLE)
+			if isAborted(options, lease, currentSessionToken) then
+				return
+			end
 			waitForReplicationSync(true)
-			if isAborted(options) then
+			if isAborted(options, lease, currentSessionToken) then
 				return
 			end
 			currentPos = hrp.Position
@@ -542,7 +432,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 			task.wait(getValidationWait(controller, true))
 		end
 
-		if precisionMode and not isAborted(options) then
+		if precisionMode and not isAborted(options, lease, currentSessionToken) then
 			local cleanupRejects, cleanupPulses = runPrecisionCleanup(
 				hrp,
 				cluster,
@@ -550,7 +440,9 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 				collectRange,
 				collectedEvent,
 				attemptedGifts,
-				options
+				options,
+				lease,
+				currentSessionToken
 			)
 			observedRejects += cleanupRejects
 			result.CleanupPulses = cleanupPulses
@@ -569,10 +461,6 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 		end
 	end)
 
-	Collector.restoreMovement({
-		KeepFootholdDuration = SAFETY_FOOTHOLD_DURATION,
-		OnlyKeepFootholdIfAirborne = true,
-	})
 	if not ok then
 		error(err, 0)
 	end

@@ -394,7 +394,7 @@ local function findBestTarget(controller, hrp)
 	return best
 end
 
-function Altar.tryStep(controller, hrp)
+function Altar.tryStep(controller, hrp, lease, _currentSessionToken)
 	if not (controller and hrp and hrp.Parent) then
 		return false
 	end
@@ -422,11 +422,22 @@ function Altar.tryStep(controller, hrp)
 	end
 
 	local offset = Vector3.new(0, math.clamp(target.Hitbox.Size.Y * 0.25, 1, 4), 0)
-	Context.moveCharacterTo(CFrame.new(target.Hitbox.Position + offset))
+	if lease then
+		lease:moveTo(CFrame.new(target.Hitbox.Position + offset))
+	else
+		Context.moveCharacterTo(CFrame.new(target.Hitbox.Position + offset))
+	end
+
+	if lease and not lease:isValid() then
+		return false
+	end
 
 	if os.clock() - lastActionAt >= ACTION_COOLDOWN then
 		lastActionAt = os.clock()
 		task.wait(TOUCH_SETTLE)
+		if lease and not lease:isValid() then
+			return false
+		end
 		if not triggerPrompt(target.Prompt) then
 			touch(target.Hitbox, hrp)
 		end

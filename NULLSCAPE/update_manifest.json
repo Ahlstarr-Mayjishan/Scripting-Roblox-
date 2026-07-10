@@ -18,7 +18,14 @@
       ]
     },
     {
-      "Path": "NULLSCAPE/Automation/Gift Farm/Runtime.luau",
+      "Path": "NULLSCAPE/Automation/Gift Farm/Coordinator.luau",
+      "Menu": [
+        "Automation",
+        "Gift Farm"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/MovementLease.luau",
       "Menu": [
         "Automation",
         "Gift Farm"
@@ -36,14 +43,6 @@
       "Menu": [
         "Automation",
         "Gift Farm"
-      ]
-    },
-    {
-      "Path": "NULLSCAPE/Automation/Gift Farm/Pipelined Collector/Coordinator.luau",
-      "Menu": [
-        "Automation",
-        "Gift Farm",
-        "Pipelining"
       ]
     },
     {

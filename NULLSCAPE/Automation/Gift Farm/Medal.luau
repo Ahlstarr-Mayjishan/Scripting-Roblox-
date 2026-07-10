@@ -137,7 +137,7 @@ local function carriesMedal()
 	return false
 end
 
-function Medal.tryStep(controller, hrp)
+function Medal.tryStep(controller, hrp, lease, _currentSessionToken)
 	if not (controller and controller.CollectMedalEnabled == true and hrp and hrp.Parent) then
 		return false
 	end
@@ -159,8 +159,18 @@ function Medal.tryStep(controller, hrp)
 		if Beacon and typeof(Beacon.restore) == "function" then
 			Beacon.restore()
 		end
-		Context.moveCharacterTo(CFrame.new(beacon.Position + Vector3.new(0, 4, 0)))
+		if lease then
+			lease:moveTo(CFrame.new(beacon.Position + Vector3.new(0, 4, 0)))
+		else
+			Context.moveCharacterTo(CFrame.new(beacon.Position + Vector3.new(0, 4, 0)))
+		end
+		if lease and not lease:isValid() then
+			return false
+		end
 		task.wait(TOUCH_SETTLE)
+		if lease and not lease:isValid() then
+			return false
+		end
 		touch(beacon, hrp)
 		return true, "SubmittingMedal"
 	end
@@ -171,8 +181,18 @@ function Medal.tryStep(controller, hrp)
 	end
 
 	lastActionAt = os.clock()
-	Context.moveCharacterTo(medalPart.CFrame + Vector3.new(0, 2, 0))
+	if lease then
+		lease:moveTo(medalPart.CFrame + Vector3.new(0, 2, 0))
+	else
+		Context.moveCharacterTo(medalPart.CFrame + Vector3.new(0, 2, 0))
+	end
+	if lease and not lease:isValid() then
+		return false
+	end
 	task.wait(TOUCH_SETTLE)
+	if lease and not lease:isValid() then
+		return false
+	end
 	touch(medalPart, hrp)
 	return true, "CollectingMedal"
 end

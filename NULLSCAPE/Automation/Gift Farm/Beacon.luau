@@ -138,7 +138,7 @@ local function pulseBeaconTouch(beacon, hrp)
 	return true
 end
 
-function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
+function Beacon.returnToBeacon(controller, hrp, setStatus, reason, lease, _currentSessionToken)
 	if controller.GiftFarmReturnToBeaconAfterGolden == false then
 		return false
 	end
@@ -155,12 +155,18 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 	end
 
 	for _ = 1, RETURN_SETTLE_FRAMES do
+		if lease and not lease:isValid() then
+			return false
+		end
 		forceReturnOpen()
 		RunService.Heartbeat:Wait()
 	end
 
 	local arrived = false
 	for _ = 1, RETURN_ATTEMPTS do
+		if lease and not lease:isValid() then
+			return false
+		end
 		hrp = Context.getRootPart() or hrp
 		if not (hrp and hrp.Parent and beacon and beacon.Parent) then
 			break
@@ -169,12 +175,35 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 		local approach, target = getReturnCFrames(beacon, hrp)
 		forceReturnOpen()
 		clearMotion(hrp)
-		Context.moveCharacterTo(approach)
+		if lease then
+			lease:moveTo(approach)
+		else
+			Context.moveCharacterTo(approach)
+		end
+		
+		if lease and not lease:isValid() then
+			return false
+		end
 		waitFrames(1)
+		
+		if lease and not lease:isValid() then
+			return false
+		end
 		forceReturnOpen()
 		clearMotion(hrp)
-		Context.moveCharacterTo(target)
+		if lease then
+			lease:moveTo(target)
+		else
+			Context.moveCharacterTo(target)
+		end
 		pulseBeaconTouch(beacon, hrp)
+		
+		if lease and not lease:isValid() then
+			if not (hrp and hrp.Parent) or Context.getRootPart() ~= hrp then
+				return true
+			end
+			return false
+		end
 		waitFrames(1)
 
 		if (hrp.Position - beacon.Position).Magnitude <= RETURN_DISTANCE then
@@ -190,6 +219,9 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 	returnDone = true
 	forceReturnOpen()
 	for _ = 1, RETURN_HOLD_FRAMES do
+		if lease and not lease:isValid() then
+			return true
+		end
 		if not (hrp and hrp.Parent) then
 			break
 		end
@@ -197,7 +229,11 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason)
 		clearMotion(hrp)
 		pulseBeaconTouch(beacon, hrp)
 		local _, target = getReturnCFrames(beacon, hrp)
-		Context.moveCharacterTo(target)
+		if lease then
+			lease:moveTo(target)
+		else
+			Context.moveCharacterTo(target)
+		end
 		RunService.Heartbeat:Wait()
 	end
 
