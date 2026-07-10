@@ -285,6 +285,11 @@ pcall(function()
 			updated = true
 		end
 
+		if currentSettings.AutoCollectGiftsToggle ~= false then
+			currentSettings.AutoCollectGiftsToggle = false
+			updated = true
+		end
+
 		if updated or not isfile(file) then
 			writefile(file, HttpService:JSONEncode(currentSettings))
 		end
@@ -413,6 +418,20 @@ local function resumeCharacterAnimation(character)
 	end
 end
 
+local function restoreCharacterTouch(character)
+	if not character then
+		return
+	end
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			pcall(function()
+				descendant.CanTouch = true
+			end)
+		end
+	end
+end
+
 function Client:ReleaseCharacterControl(options)
 	options = options or {}
 	local player = Players.LocalPlayer
@@ -432,6 +451,10 @@ function Client:ReleaseCharacterControl(options)
 		end)
 	end
 
+	if options.SkipTouchRestore ~= true then
+		restoreCharacterTouch(character)
+	end
+
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		pcall(function()
@@ -448,6 +471,7 @@ function Client:ReleaseCharacterControl(options)
 				or state == Enum.HumanoidStateType.Seated
 			then
 				pcall(function()
+					humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
 					humanoid:ChangeState(Enum.HumanoidStateType.Running)
 				end)
 			end
@@ -474,6 +498,66 @@ function Client:PrepareForRuntimeUpdate(reason)
 		})
 	end)
 	return true
+end
+
+local function clearRespawnMovementCaches()
+	local globals = getgenv()._NULLSCAPE_Globals
+	if typeof(globals) ~= "table" then
+		return
+	end
+
+	globals.NullscapeStaminaMovement = nil
+	globals.NullscapeLastActiveSpecial = nil
+	globals.NullscapeRailLocalMovement = nil
+	globals.InfiniteAirJumpLastMovement = nil
+	globals.NullscapeLastGrapple = nil
+end
+
+function Client:RecoverCharacterAfterRespawn(character)
+	self.RespawnRecoveryToken = (self.RespawnRecoveryToken or 0) + 1
+	local token = self.RespawnRecoveryToken
+
+	clearRespawnMovementCaches()
+
+	task.spawn(function()
+		if character then
+			character:WaitForChild("Humanoid", 6)
+			character:WaitForChild("HumanoidRootPart", 6)
+			character:WaitForChild("Animate", 6)
+		end
+
+		local function recover(skipStateChange)
+			if self.Destroyed or token ~= self.RespawnRecoveryToken then
+				return
+			end
+			if character and LocalPlayer.Character ~= character then
+				return
+			end
+			self:ReleaseCharacterControl({
+				Reason = "RespawnRecovery",
+				SkipVelocityClear = true,
+				SkipStateChange = skipStateChange == true,
+			})
+		end
+
+		recover(true)
+		task.wait(0.25)
+		recover(true)
+		task.wait(0.55)
+		recover(false)
+	end)
+end
+
+trackConnection(LocalPlayer.CharacterAdded:Connect(function(character)
+	Client:RecoverCharacterAfterRespawn(character)
+end))
+
+if LocalPlayer.Character then
+	task.defer(function()
+		if not Client.Destroyed then
+			Client:RecoverCharacterAfterRespawn(LocalPlayer.Character)
+		end
+	end)
 end
 
 if getgenv()._NULLSCAPE_PendingCharacterRelease == true then

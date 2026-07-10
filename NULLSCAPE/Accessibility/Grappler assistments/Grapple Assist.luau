@@ -444,6 +444,47 @@ function Logic.triggerReelSaver(controller)
 	return triggered
 end
 
+function Logic.resetRespawnState()
+	Logic.LastGrapple = nil
+	Logic.PendingReelSaverUntil = nil
+	if VoidRescue and typeof(VoidRescue.reset) == "function" then
+		pcall(function()
+			VoidRescue.reset()
+		end)
+	end
+	if ReelSaver and typeof(ReelSaver.reset) == "function" then
+		pcall(function()
+			ReelSaver.reset()
+		end)
+	end
+	if DeferredAim and typeof(DeferredAim.reset) == "function" then
+		pcall(function()
+			DeferredAim.reset()
+		end)
+	end
+	if BellContact and typeof(BellContact.reset) == "function" then
+		pcall(function()
+			BellContact.reset()
+		end)
+	end
+	if ReleaseTiming and typeof(ReleaseTiming.reset) == "function" then
+		pcall(function()
+			ReleaseTiming.reset()
+		end)
+	end
+	if FailFeedback and typeof(FailFeedback.reset) == "function" then
+		pcall(function()
+			FailFeedback.reset()
+		end)
+	end
+	if Arbiter and typeof(Arbiter.reset) == "function" then
+		pcall(function()
+			Arbiter.reset()
+		end)
+	end
+	return true
+end
+
 function Logic.disable()
 	local globals = getGlobals()
 	local grappleModule = getGrappleModule()
@@ -479,47 +520,7 @@ function Logic.disable()
 	Logic.PendingReelSaverUntil = nil
 	Logic.Enabled = false
 
-	if VoidRescue and typeof(VoidRescue.reset) == "function" then
-		pcall(function()
-			VoidRescue.reset()
-		end)
-	end
-
-	if ReelSaver and typeof(ReelSaver.reset) == "function" then
-		pcall(function()
-			ReelSaver.reset()
-		end)
-	end
-
-	if DeferredAim and typeof(DeferredAim.reset) == "function" then
-		pcall(function()
-			DeferredAim.reset()
-		end)
-	end
-
-	if BellContact and typeof(BellContact.reset) == "function" then
-		pcall(function()
-			BellContact.reset()
-		end)
-	end
-
-	if ReleaseTiming and typeof(ReleaseTiming.reset) == "function" then
-		pcall(function()
-			ReleaseTiming.reset()
-		end)
-	end
-
-	if FailFeedback and typeof(FailFeedback.reset) == "function" then
-		pcall(function()
-			FailFeedback.reset()
-		end)
-	end
-
-	if Arbiter and typeof(Arbiter.reset) == "function" then
-		pcall(function()
-			Arbiter.reset()
-		end)
-	end
+	Logic.resetRespawnState()
 end
 
 return Logic

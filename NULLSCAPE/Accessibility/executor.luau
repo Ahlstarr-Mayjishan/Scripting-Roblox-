@@ -210,6 +210,10 @@ function Executor.initializeStaminaAssist()
 	return callModule("StaminaAssist", "initialize")
 end
 
+function Executor.resetStaminaAssistRespawnState()
+	return callModule("StaminaAssist", "resetRespawnState")
+end
+
 function Executor.disableStaminaAssist()
 	callModule("StaminaAssist", "disable")
 end
@@ -240,6 +244,10 @@ end
 
 function Executor.initializeGrappleAssist(controller)
 	return callModule("GrappleAssist", "initialize", controller)
+end
+
+function Executor.resetGrappleAssistRespawnState()
+	return callModule("GrappleAssist", "resetRespawnState")
 end
 
 function Executor.disableGrappleAssist()

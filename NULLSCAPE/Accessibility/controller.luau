@@ -313,6 +313,9 @@ function Controller:ReapplyRespawnFeatures()
 	end
 	claimActiveController(self)
 
+	callExecutor("resetStaminaAssistRespawnState")
+	callExecutor("resetGrappleAssistRespawnState")
+
 	if self.InfiniteAirJumpEnabled then
 		callExecutor("initializeInfiniteAirJump")
 	end
@@ -335,6 +338,10 @@ function Controller:ReapplyRespawnFeatures()
 
 	if self.GrappleAssistEnabled then
 		callExecutor("initializeGrappleAssist", self)
+	end
+
+	if self.GrapplerStaminaMode ~= "Off" then
+		callExecutor("initializeStaminaAssist")
 	end
 
 	self:RefreshRailAssistHook()

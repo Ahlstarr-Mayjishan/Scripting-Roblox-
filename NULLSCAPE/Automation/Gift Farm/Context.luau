@@ -85,6 +85,16 @@ function Context.releaseCharacterControl(options)
 		end
 	end)
 
+	if options.SkipTouchRestore ~= true then
+		for _, descendant in ipairs(character:GetDescendants()) do
+			if descendant:IsA("BasePart") then
+				pcall(function()
+					descendant.CanTouch = true
+				end)
+			end
+		end
+	end
+
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		pcall(function()
@@ -100,6 +110,20 @@ function Context.releaseCharacterControl(options)
 	end
 
 	return true
+end
+
+local function setRootCFrame(character, hrp, cframe)
+	if not (character and hrp and hrp.Parent) then
+		return false
+	end
+
+	local ok = pcall(function()
+		hrp.Anchored = false
+		hrp.CFrame = cframe
+		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+	end)
+	return ok == true
 end
 
 function Context.moveCharacterTo(cframe)
@@ -129,15 +153,7 @@ function Context.moveCharacterTo(cframe)
 			local intermediatePos = startPos + unitDir * (i * stepSize)
 			local intermediateCFrame = CFrame.new(intermediatePos, intermediatePos + hrp.CFrame.LookVector)
 
-			local ok = pcall(function()
-				if character and typeof(character.PivotTo) == "function" then
-					character:PivotTo(intermediateCFrame)
-				else
-					hrp.CFrame = intermediateCFrame
-				end
-				hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-				hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-			end)
+			local ok = setRootCFrame(character, hrp, intermediateCFrame)
 			if not ok then
 				break
 			end
@@ -149,21 +165,9 @@ function Context.moveCharacterTo(cframe)
 		return false
 	end
 
-	local moved = false
-	if character and typeof(character.PivotTo) == "function" then
-		moved = pcall(function()
-			character:PivotTo(cframe)
-		end)
-	end
-
-	if not moved then
-		hrp.CFrame = cframe
-	end
-
-	pcall(function()
-		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-	end)
+	setRootCFrame(character, hrp, cframe)
+	RunService.Heartbeat:Wait()
+	setRootCFrame(character, hrp, cframe)
 
 	return true
 end

@@ -29,6 +29,14 @@ local function getController()
 	return getGlobals().activeAccessibilityController
 end
 
+local function clearRememberedMovement()
+	local globals = getGlobals()
+	Logic.LastSpecial = nil
+	Logic.LastMovement = nil
+	globals.NullscapeStaminaMovement = nil
+	globals.NullscapeLastActiveSpecial = nil
+end
+
 local function getMode()
 	local controller = getController()
 	local mode = controller and (controller.StaminaMode or controller.GrapplerStaminaMode)
@@ -264,10 +272,16 @@ function Logic.step()
 end
 
 function Logic.initialize()
+	clearRememberedMovement()
 	if not installMovementHook() then
 		return false
 	end
 
+	return true
+end
+
+function Logic.resetRespawnState()
+	clearRememberedMovement()
 	return true
 end
 
@@ -279,8 +293,7 @@ function Logic.disable()
 		Logic.Connection = nil
 	end
 	uninstallMovementHook()
-	Logic.LastSpecial = nil
-	Logic.LastMovement = nil
+	clearRememberedMovement()
 end
 
 return Logic

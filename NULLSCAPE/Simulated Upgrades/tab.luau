@@ -55,7 +55,7 @@ return function(Client, Controller)
 
 	Tab:CreateToggle({
 		Name = "Enable Magnet Gifts",
-		CurrentValue = Controller.AutoCollectEnabled,
+		CurrentValue = Controller.GiftMagnetBlocked == true and false or Controller.AutoCollectEnabled,
 		Flag = "AutoCollectGiftsToggle",
 		Callback = function(Value)
 			Controller:SetAutoCollectEnabled(Value)

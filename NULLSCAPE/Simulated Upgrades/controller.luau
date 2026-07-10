@@ -32,6 +32,7 @@ local Controller = {
 	inLobby = true,
 
 	AutoCollectEnabled = false,
+	GiftMagnetBlocked = true,
 	AutoCollectRange = 20,
 	AutoCollectGiftRange = 20,
 	AutoCollectInstrumentRange = 0,
@@ -152,7 +153,7 @@ local function startObservingFolders()
 end
 
 local function hasUtilityWork()
-	return Controller.AutoCollectEnabled
+	return (Controller.AutoCollectEnabled and Controller.GiftMagnetBlocked ~= true)
 		or Controller.TripmineBarrierEnabled
 		or Controller.MatrixTetrahedronEnabled
 		or Controller.GraceWingsEnabled
@@ -233,7 +234,7 @@ local function startUtilityLoop()
 			local char = LocalPlayer.Character
 			local hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if hrp and not Controller.inLobby then
-				if Controller.AutoCollectEnabled then
+				if Controller.AutoCollectEnabled and Controller.GiftMagnetBlocked ~= true then
 					pcall(function()
 						Executor.updateMagnet(Controller, hrp)
 					end)
@@ -355,7 +356,25 @@ function Controller:SetRadarFeatures(value)
 end
 
 function Controller:SetAutoCollectEnabled(value)
-	self.AutoCollectEnabled = value
+	if self.GiftMagnetBlocked == true then
+		self.AutoCollectEnabled = false
+		if value == true and getgenv().Rayfield and typeof(getgenv().Rayfield.Notify) == "function" then
+			pcall(function()
+				getgenv().Rayfield:Notify({
+					Title = "Gift Magnet Disabled",
+					Content = "Gift Magnet is isolated from Gift Farm and will not run.",
+					Duration = 3,
+				})
+			end)
+		end
+		return false
+	end
+
+	self.AutoCollectEnabled = value == true
+	if self.AutoCollectEnabled then
+		startUtilityLoop()
+	end
+	return true
 end
 
 -- Bật/tắt mô phỏng nâng cấp Matrix Tetrahedron

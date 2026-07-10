@@ -17,6 +17,9 @@ local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
 local DISABLE_FOOTHOLD_DURATION = 2
 local COLLECT_SETTLE_FRAMES = 1
+local PRE_COLLECT_SYNC_MULTIPLIER = 0.75
+local PRE_COLLECT_SYNC_MIN = 0.035
+local PRE_COLLECT_SYNC_MAX = 0.11
 local COLLECT_ACCEPTANCE_STEP = 0.01
 local ADAPTIVE_MIN_MULTIPLIER = 0.85
 local ADAPTIVE_MAX_MULTIPLIER = 1.9
@@ -213,6 +216,15 @@ local function settleBeforeCollect(hrp, shouldAbort)
 	if typeof(shouldAbort) == "function" and shouldAbort() then
 		return false
 	end
+	local syncWait = math.clamp(getOneWayLatency() * PRE_COLLECT_SYNC_MULTIPLIER, PRE_COLLECT_SYNC_MIN, PRE_COLLECT_SYNC_MAX)
+	local startedAt = os.clock()
+	while os.clock() - startedAt < syncWait do
+		if typeof(shouldAbort) == "function" and shouldAbort() then
+			return false
+		end
+		clearVelocity(hrp)
+		task.wait(math.min(COLLECT_ACCEPTANCE_STEP, math.max(0, syncWait - (os.clock() - startedAt))))
+	end
 	clearVelocity(hrp)
 	return true
 end
@@ -342,6 +354,7 @@ function PipelinedCollector.releaseCharacter(options)
 	if hrp and hrp.Parent then
 		Context.releaseCharacterControl({
 			SkipVelocityClear = options.SkipVelocityClear == true,
+			SkipStateChange = options.SkipStateChange == true,
 			State = Enum.HumanoidStateType.Running,
 		})
 	end

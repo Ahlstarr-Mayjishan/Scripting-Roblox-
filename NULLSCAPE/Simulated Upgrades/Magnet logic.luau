@@ -125,6 +125,9 @@ local function addCandidate(validGifts, seenRawObjects, rawObj, hrpPos, range)
 end
 
 function Magnet.update(controller, hrp)
+	if controller.GiftMagnetBlocked == true then
+		return
+	end
 	if not controller.AutoCollectEnabled then
 		return
 	end

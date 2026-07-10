@@ -68,6 +68,7 @@ local function forceReleasePipeline(options)
 			PipelinedCollector.releaseCharacter({
 				ForceRelease = true,
 				SkipVelocityClear = options.SkipVelocityClear == true,
+				SkipStateChange = options.SkipStateChange == true,
 			})
 		end)
 	elseif PipelinedCollector and typeof(PipelinedCollector.cancelPending) == "function" then
@@ -81,6 +82,7 @@ local function releaseCurrentCharacterControl(options)
 	options = options or {}
 	forceReleasePipeline({
 		SkipVelocityClear = options.SkipVelocityClear == true,
+		SkipStateChange = options.SkipStateChange == true,
 	})
 	local hrp = Context.getRootPart()
 	if not (hrp and hrp.Parent) then
@@ -133,6 +135,7 @@ local function resetCharacterState(controller)
 	end
 	forceReleasePipeline({
 		SkipVelocityClear = true,
+		SkipStateChange = true,
 	})
 	releaseCurrentCharacterControl({
 		SkipVelocityClear = true,
