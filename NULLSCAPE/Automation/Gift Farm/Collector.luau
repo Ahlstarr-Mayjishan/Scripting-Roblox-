@@ -14,7 +14,6 @@ local SYNC_MAX = 0.055
 local PRECISION_SYNC_MIN = 0.025
 local PRECISION_SYNC_MAX = 0.08
 local BASE_VALIDATION_WAIT = 0.06
-local FAST_VALIDATION_MAX = 0.13
 local PRECISION_VALIDATION_WAIT = 0.12
 local PRECISION_VALIDATION_MAX = 0.2
 local ARRIVAL_TOLERANCE = 3
@@ -144,10 +143,12 @@ local function getPingSeconds()
 end
 
 local function waitForReplicationSync(precisionMode)
-	local ping = getPingSeconds()
+	local ping = getPingSeconds() or 0.08
+	local targetWait = ping * 0.55
 	local minWait = precisionMode and PRECISION_SYNC_MIN or SYNC_MIN
-	local maxWait = precisionMode and PRECISION_SYNC_MAX or SYNC_MAX
-	local waitTime = math.clamp((ping or minWait) * 0.5, minWait, maxWait)
+	local maxWait = math.max(precisionMode and PRECISION_SYNC_MAX or SYNC_MAX, ping * 0.8)
+	local waitTime = math.clamp(targetWait, minWait, maxWait)
+
 	local frames = precisionMode and 2 or 1
 	for _ = 1, frames do
 		RunService.Heartbeat:Wait()
@@ -156,10 +157,17 @@ local function waitForReplicationSync(precisionMode)
 end
 
 local function getValidationWait(_controller, precisionMode)
+	local ping = getPingSeconds() or 0.08
+	local minWait = precisionMode and PRECISION_VALIDATION_WAIT or 0.065
+	local baseWait = math.max(minWait, ping * 1.2)
+
 	if precisionMode then
-		return math.clamp(math.max(PRECISION_VALIDATION_WAIT, adaptiveValidationWait), PRECISION_VALIDATION_WAIT, PRECISION_VALIDATION_MAX)
+		local maxWait = math.max(PRECISION_VALIDATION_MAX, ping * 1.6)
+		return math.clamp(math.max(baseWait, adaptiveValidationWait), PRECISION_VALIDATION_WAIT, maxWait)
 	end
-	return math.clamp(adaptiveValidationWait, 0.052, FAST_VALIDATION_MAX)
+	
+	local maxWait = math.max(0.22, ping * 1.4)
+	return math.clamp(math.max(baseWait, adaptiveValidationWait), 0.065, maxWait)
 end
 
 local function updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
