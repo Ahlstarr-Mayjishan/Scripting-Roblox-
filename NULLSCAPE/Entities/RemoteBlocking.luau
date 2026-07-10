@@ -232,17 +232,23 @@ local function localPlayerHasStatus(statusName)
 end
 
 local function isICBMClientReport(remote, args)
+    local firstArg = typeof(args[1]) == "string" and string.lower(args[1])
     if not (
         remote
         and remote.ClassName == "RemoteEvent"
         and remote.Name == "ClientEvent"
-        and (args[1] == "Kill" or args[1] == "Combust")
+        and (firstArg == "kill" or firstArg == "combust")
     ) then
         return false
     end
 
     local parent = remote.Parent
-    return parent and string.find(parent.Name, "ICBM", 1, true) ~= nil
+    if not parent then
+        return false
+    end
+    local parentName = string.lower(parent.Name)
+    return string.find(parentName, "icbm", 1, true) ~= nil
+        or string.find(parentName, "nuclear", 1, true) ~= nil
 end
 -- Helper check xem remote có thuộc Model của thực thể mục tiêu không
 local function findEntityParent(obj, targetSubName)
@@ -299,10 +305,11 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
     end
 
     if isICBMClientReport(remote, args) then
-        if args[1] == "Kill" then
+        local firstArg = string.lower(args[1])
+        if firstArg == "kill" then
             return controller.ICBMImmune == true
         end
-        if args[1] == "Combust" then
+        if firstArg == "combust" then
             return controller.ICBMImmune == true or controller.ICBMBurnImmune == true
         end
     end
@@ -343,10 +350,13 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
     -- Chặn riêng biệt hiệu ứng cháy (Burn curse) của ICBM nếu tùy chọn được bật
     if remote.ClassName == "RemoteEvent"
         and remote.Name == "ClientEvent"
-        and args[1] == "Combust" then
+        and typeof(args[1]) == "string" and string.lower(args[1]) == "combust" then
         local parent = remote.Parent
-        if parent and string.find(parent.Name, "ICBM", 1, true) then
-            return controller.ICBMBurnImmune == true
+        if parent then
+            local parentName = string.lower(parent.Name)
+            if string.find(parentName, "icbm", 1, true) or string.find(parentName, "nuclear", 1, true) then
+                return controller.ICBMBurnImmune == true
+            end
         end
     end
 
