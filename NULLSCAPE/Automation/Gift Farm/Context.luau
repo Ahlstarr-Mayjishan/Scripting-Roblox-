@@ -134,6 +134,7 @@ function Context.moveCharacterTo(cframe)
 	end
 	Context.releaseCharacterControl({
 		SkipVelocityClear = true,
+		SkipTouchRestore = true,
 		SkipStateChange = true,
 	})
 

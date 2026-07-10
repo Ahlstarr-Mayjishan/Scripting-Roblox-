@@ -125,6 +125,7 @@ local function startAntiAnchor(controller)
 			if context and typeof(context.releaseCharacterControl) == "function" then
 				context.releaseCharacterControl({
 					SkipVelocityClear = true,
+					SkipTouchRestore = true,
 					SkipStateChange = true,
 				})
 			else
@@ -218,6 +219,7 @@ local Controller = {
 	GiftFarmMode = "Normal (teleport)",
 	CollectMedalEnabled = false,
 	GiftFarmRange = 60,
+	GiftFarmRangeRevision = 0,
 	GiftFarmAdaptiveSuccessRate = 1,
 	GiftFarmAdaptiveValidationWait = 0.08,
 	GiftFarmAdaptiveRejects = 0,
@@ -256,10 +258,14 @@ local function claimActiveController(controller)
 	return globals.activeAutomationController == controller
 end
 
-local function getUpgradeController()
+local function getUpgradeController(loadIfMissing)
 	local globals = getGlobals()
 	if globals and typeof(globals.activeUpgradeController) == "table" then
 		return globals.activeUpgradeController
+	end
+
+	if loadIfMissing ~= true then
+		return nil
 	end
 
 	local success, result = pcall(function()
@@ -313,7 +319,11 @@ function Controller:update()
 end
 
 function Controller:SetGiftFarmEnabled(value)
-	self.GiftFarmEnabled = value == true
+	local nextEnabled = value == true
+	if self.GiftFarmEnabled ~= nextEnabled then
+		self.GiftFarmRangeRevision = (tonumber(self.GiftFarmRangeRevision) or 0) + 1
+	end
+	self.GiftFarmEnabled = nextEnabled
 	return self:update()
 end
 
@@ -322,6 +332,7 @@ function Controller:SetGiftFarmMode(value)
 		return true
 	end
 
+	self.GiftFarmRangeRevision = (tonumber(self.GiftFarmRangeRevision) or 0) + 1
 	local wasEnabled = self.GiftFarmEnabled
 	if wasEnabled then
 		self.GiftFarmEnabled = false
@@ -333,12 +344,17 @@ function Controller:SetGiftFarmMode(value)
 
 	if wasEnabled then
 		self.GiftFarmEnabled = true
+	else
+		return true
 	end
 	return self:update()
 end
 
 function Controller:SetGiftFarmRange(value)
 	local range = clampGiftRange(value)
+	if self.GiftFarmRange ~= range then
+		self.GiftFarmRangeRevision = (tonumber(self.GiftFarmRangeRevision) or 0) + 1
+	end
 	self.GiftFarmRange = range
 
 	local upgradeController = getUpgradeController()
@@ -351,6 +367,9 @@ function Controller:SetGiftFarmRange(value)
 		upgradeController.AutoCollectRange = range
 	end
 
+	if not self.GiftFarmEnabled then
+		return true
+	end
 	return self:update()
 end
 
@@ -370,6 +389,9 @@ end
 
 function Controller:SetGiftFarmReturnToBeaconAfterGolden(value)
 	self.GiftFarmReturnToBeaconAfterGolden = value == true
+	if not self.GiftFarmEnabled then
+		return true
+	end
 	return self:update()
 end
 
@@ -393,6 +415,9 @@ end
 
 function Controller:SetCollectMedalEnabled(value)
 	self.CollectMedalEnabled = value == true
+	if not self.GiftFarmEnabled then
+		return true
+	end
 	return self:update()
 end
 

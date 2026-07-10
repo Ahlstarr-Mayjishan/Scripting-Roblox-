@@ -416,6 +416,7 @@ local function processOnce(controller)
 
 			lastGiftSeenAt = os.clock()
 			local range = getGiftFarmRange(controller)
+			local rangeRevision = tonumber(controller.GiftFarmRangeRevision) or 0
 			local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 			local tailPrecision = isTailPrecision(candidates, scanInfo, normalRatio)
 			local route, remaining = ClusterPlanner.planRoute(candidates, range, hrp.Position)
@@ -457,8 +458,16 @@ local function processOnce(controller)
 					TailMode = tailPrecision,
 					AbortCheck = function()
 						return not isCurrentRoundActive()
+							or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision
 					end,
 				})
+				if (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision then
+					clearRoute(route)
+					softCleanup(candidates, remaining)
+					lastScan = 0
+					setStatus(controller, "RangeChanged", "Replanning gift route")
+					return
+				end
 				if not isCurrentRoundActive() then
 					clearRoute(route)
 					softCleanup(candidates, remaining)

@@ -16,6 +16,7 @@ local PipelinedCollector = {}
 local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
 local DISABLE_FOOTHOLD_DURATION = 2
+local SAFETY_FOOTHOLD_DURATION = 2.5
 local COLLECT_SETTLE_FRAMES = 1
 local PRE_COLLECT_SYNC_MULTIPLIER = 0.75
 local PRE_COLLECT_SYNC_MIN = 0.035
@@ -347,23 +348,25 @@ function PipelinedCollector.releaseCharacter(options)
 	end
 
 	local hrp = Context.getRootPart()
-	local shouldKeepFoothold = options.KeepFootholdDuration
+	local airborneWithoutGround = hrp and hrp.Parent and not hasGroundBelow(hrp)
+	local keepDuration = tonumber(options.KeepFootholdDuration)
+	if airborneWithoutGround and (not keepDuration or keepDuration < SAFETY_FOOTHOLD_DURATION) then
+		keepDuration = SAFETY_FOOTHOLD_DURATION
+	end
+
+	local shouldKeepFoothold = keepDuration
 		and hrp
 		and hrp.Parent
-		and options.ForceRelease ~= true
-		and (not options.OnlyKeepFootholdIfAirborne or not hasGroundBelow(hrp))
+		and (not options.OnlyKeepFootholdIfAirborne or airborneWithoutGround)
 	if shouldKeepFoothold and (not foothold or not foothold.Parent) then
 		placeFoothold(hrp.Position)
 	end
 
-	local keepDuration = nil
-	if shouldKeepFoothold then
-		keepDuration = options.KeepFootholdDuration
-	end
-	removeFoothold(keepDuration)
+	removeFoothold(shouldKeepFoothold and keepDuration or nil)
 	if hrp and hrp.Parent then
 		Context.releaseCharacterControl({
 			SkipVelocityClear = options.SkipVelocityClear == true,
+			SkipTouchRestore = true,
 			SkipStateChange = options.SkipStateChange == true,
 			State = Enum.HumanoidStateType.Running,
 		})
@@ -436,9 +439,12 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 		end
 	end)
 
-	if shouldAbort() then
+	local aborted = shouldAbort()
+	if aborted then
 		PipelinedCollector.releaseCharacter({
 			ForceRelease = true,
+			KeepFootholdDuration = SAFETY_FOOTHOLD_DURATION,
+			OnlyKeepFootholdIfAirborne = true,
 		})
 	else
 		PipelinedCollector.releaseCharacter({
@@ -449,6 +455,10 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 
 	if not ok then
 		error(err, 0)
+	end
+
+	if aborted then
+		return false, stats
 	end
 
 	return true, stats

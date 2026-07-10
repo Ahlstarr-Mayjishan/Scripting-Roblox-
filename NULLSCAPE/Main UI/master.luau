@@ -11,10 +11,22 @@ if getgenv().Client then
 	pcall(function()
 		local oldClient = getgenv().Client
 		if typeof(oldClient) == "table" and typeof(oldClient.ReleaseCharacterControl) == "function" then
+			local originalOldReleaseCharacterControl = oldClient.ReleaseCharacterControl
+			oldClient.ReleaseCharacterControl = function(self, options)
+				options = typeof(options) == "table" and table.clone(options) or {}
+				options.SkipVelocityClear = true
+				options.SkipTouchRestore = true
+				options.SkipStateChange = true
+				options.ForceStateRecovery = false
+				options.ForceTouchRestore = false
+				return originalOldReleaseCharacterControl(self, options)
+			end
 			pcall(function()
 				oldClient:ReleaseCharacterControl({
 					Reason = "Reload",
 					SkipVelocityClear = true,
+					SkipTouchRestore = true,
+					SkipStateChange = true,
 				})
 			end)
 		end
@@ -432,6 +444,60 @@ local function restoreCharacterTouch(character)
 	end
 end
 
+local function getCharacterControlSnapshot(character)
+	local snapshot = {
+		HasCharacter = character ~= nil,
+		HasHumanoidRootPart = false,
+		HasHumanoid = false,
+		RootAnchored = nil,
+		HumanoidState = nil,
+		PlatformStand = nil,
+		Sit = nil,
+		AutoRotate = nil,
+		AnimateDisabled = nil,
+		DisabledTouchParts = {},
+	}
+
+	if not character then
+		return snapshot
+	end
+
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	snapshot.HasHumanoidRootPart = hrp ~= nil
+	if hrp then
+		snapshot.RootAnchored = hrp.Anchored
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	snapshot.HasHumanoid = humanoid ~= nil
+	if humanoid then
+		snapshot.HumanoidState = tostring(humanoid:GetState())
+		snapshot.PlatformStand = humanoid.PlatformStand
+		snapshot.Sit = humanoid.Sit
+		snapshot.AutoRotate = humanoid.AutoRotate
+	end
+
+	local animate = character:FindFirstChild("Animate")
+	if animate and animate:IsA("LocalScript") then
+		snapshot.AnimateDisabled = animate.Disabled
+	end
+
+	for _, descendant in ipairs(character:GetDescendants()) do
+		if descendant:IsA("BasePart") and descendant.CanTouch == false then
+			table.insert(snapshot.DisabledTouchParts, descendant:GetFullName())
+			if #snapshot.DisabledTouchParts >= 12 then
+				break
+			end
+		end
+	end
+
+	return snapshot
+end
+
+function Client:GetCharacterControlSnapshot()
+	return getCharacterControlSnapshot(Players.LocalPlayer and Players.LocalPlayer.Character)
+end
+
 function Client:ReleaseCharacterControl(options)
 	options = options or {}
 	local player = Players.LocalPlayer
@@ -451,7 +517,7 @@ function Client:ReleaseCharacterControl(options)
 		end)
 	end
 
-	if options.SkipTouchRestore ~= true then
+	if options.ForceTouchRestore == true and options.SkipTouchRestore ~= true then
 		restoreCharacterTouch(character)
 	end
 
@@ -476,6 +542,11 @@ function Client:ReleaseCharacterControl(options)
 				end)
 			end
 		end
+	end
+
+	local globals = getgenv()._NULLSCAPE_Globals
+	if typeof(globals) == "table" then
+		globals.LastCharacterControlSnapshot = getCharacterControlSnapshot(character)
 	end
 
 	resumeCharacterAnimation(character)
@@ -538,6 +609,7 @@ function Client:RecoverCharacterAfterRespawn(character)
 				SkipVelocityClear = true,
 				SkipStateChange = skipStateChange == true,
 				ForceStateRecovery = skipStateChange ~= true,
+				ForceTouchRestore = true,
 			})
 		end
 
@@ -553,24 +625,20 @@ trackConnection(LocalPlayer.CharacterAdded:Connect(function(character)
 	Client:RecoverCharacterAfterRespawn(character)
 end))
 
-if LocalPlayer.Character then
-	task.defer(function()
-		if not Client.Destroyed then
-			Client:RecoverCharacterAfterRespawn(LocalPlayer.Character)
-		end
-	end)
-end
-
 if getgenv()._NULLSCAPE_PendingCharacterRelease == true then
 	task.defer(function()
 		Client:ReleaseCharacterControl({
 			Reason = "RuntimeUpdateBoot",
 			SkipVelocityClear = true,
+			SkipTouchRestore = true,
+			SkipStateChange = true,
 		})
 		task.wait(0.25)
 		Client:ReleaseCharacterControl({
 			Reason = "RuntimeUpdateBootDeferred",
 			SkipVelocityClear = true,
+			SkipTouchRestore = true,
+			SkipStateChange = true,
 		})
 		getgenv()._NULLSCAPE_PendingCharacterRelease = nil
 	end)

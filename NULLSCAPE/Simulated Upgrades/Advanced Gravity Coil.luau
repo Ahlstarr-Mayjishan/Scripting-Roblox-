@@ -19,6 +19,7 @@ local Logic = {
 	JumpPower = MIN_JUMP_POWER,
 	Connection = nil,
 	CharacterConnection = nil,
+	OriginalJumpPowerByHumanoid = setmetatable({}, { __mode = "k" }),
 	Hooked = false,
 }
 
@@ -32,6 +33,9 @@ local function applyJumpPower(controller)
 	if not humanoid then
 		return
 	end
+	if Logic.OriginalJumpPowerByHumanoid[humanoid] == nil then
+		Logic.OriginalJumpPowerByHumanoid[humanoid] = humanoid.JumpPower
+	end
 
 	local jumpPower =
 		math.clamp(tonumber(controller.AdvancedGravityCoilJumpPower) or Logic.JumpPower, MIN_JUMP_POWER, MAX_JUMP_POWER)
@@ -41,7 +45,8 @@ end
 local function restoreJumpPower()
 	local humanoid = getHumanoid()
 	if humanoid then
-		humanoid.JumpPower = BASE_JUMP_POWER
+		humanoid.JumpPower = Logic.OriginalJumpPowerByHumanoid[humanoid] or BASE_JUMP_POWER
+		Logic.OriginalJumpPowerByHumanoid[humanoid] = nil
 	end
 end
 
@@ -87,6 +92,7 @@ function Logic.stop()
 	end
 
 	restoreJumpPower()
+	Logic.OriginalJumpPowerByHumanoid = setmetatable({}, { __mode = "k" })
 	Logic.Hooked = false
 end
 

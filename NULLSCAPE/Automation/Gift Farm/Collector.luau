@@ -33,6 +33,7 @@ local TAIL_CLEANUP_MAX_PULSES = 10
 local CLEANUP_PULSE_INTERVAL = 0.015
 local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
+local SAFETY_FOOTHOLD_DURATION = 2.5
 local MAX_RETRY_PASSES = 2
 local MAX_PRECISION_RETRY_PASSES = 3
 local RETRY_SETTLE = 0.045
@@ -421,23 +422,25 @@ end
 function Collector.releaseCharacter(options)
 	options = options or {}
 	local hrp = Context.getRootPart()
-	local shouldKeepFoothold = options.KeepFootholdDuration
+	local airborneWithoutGround = hrp and hrp.Parent and not hasGroundBelow(hrp)
+	local keepDuration = tonumber(options.KeepFootholdDuration)
+	if airborneWithoutGround and (not keepDuration or keepDuration < SAFETY_FOOTHOLD_DURATION) then
+		keepDuration = SAFETY_FOOTHOLD_DURATION
+	end
+
+	local shouldKeepFoothold = keepDuration
 		and hrp
 		and hrp.Parent
-		and options.ForceRelease ~= true
-		and (not options.OnlyKeepFootholdIfAirborne or not hasGroundBelow(hrp))
+		and (not options.OnlyKeepFootholdIfAirborne or airborneWithoutGround)
 	if shouldKeepFoothold and (not foothold or not foothold.Parent) then
 		placeFoothold(hrp.Position)
 	end
 
-	local keepDuration = nil
-	if shouldKeepFoothold then
-		keepDuration = options.KeepFootholdDuration
-	end
-	removeFoothold(keepDuration)
+	removeFoothold(shouldKeepFoothold and keepDuration or nil)
 	if hrp and hrp.Parent then
 		Context.releaseCharacterControl({
 			SkipVelocityClear = options.SkipVelocityClear == true,
+			SkipTouchRestore = true,
 			State = Enum.HumanoidStateType.Freefall,
 		})
 	end
@@ -566,7 +569,10 @@ function Collector.collectCluster(controller, hrp, cluster, range, options)
 		end
 	end)
 
-	Collector.restoreMovement()
+	Collector.restoreMovement({
+		KeepFootholdDuration = SAFETY_FOOTHOLD_DURATION,
+		OnlyKeepFootholdIfAirborne = true,
+	})
 	if not ok then
 		error(err, 0)
 	end

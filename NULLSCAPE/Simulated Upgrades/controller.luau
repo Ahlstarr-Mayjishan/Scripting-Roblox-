@@ -674,7 +674,6 @@ function Controller:TriggerMedalAction()
 		local medal = findMedal()
 		if medal then
 			local oldCFrame = hrp.CFrame
-			local oldAnchored = hrp.Anchored
 			local ok, err = pcall(function()
 
 				-- Safe blink pick: Anchors root and teleports right on top of the Medal handle for 0.05s
@@ -693,7 +692,7 @@ function Controller:TriggerMedalAction()
 			pcall(function()
 				if hrp and hrp.Parent then
 					hrp.CFrame = oldCFrame
-					hrp.Anchored = oldAnchored
+					hrp.Anchored = false
 				end
 			end)
 			if not ok then

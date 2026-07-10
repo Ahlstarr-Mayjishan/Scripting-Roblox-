@@ -702,6 +702,7 @@ local function processOnce(controller)
 
 			lastGiftSeenAt = os.clock()
 			local range = getGiftFarmRange(controller)
+			local rangeRevision = tonumber(controller.GiftFarmRangeRevision) or 0
 			local route, remaining = ClusterPlanner.planRoute(candidates, range, hrp.Position)
 			if remaining and #remaining > 0 and typeof(ClusterPlanner.planTailRoute) == "function" then
 				local tailRoute = ClusterPlanner.planTailRoute(remaining, range, hrp.Position)
@@ -734,8 +735,16 @@ local function processOnce(controller)
 			local routeCompleted, routeStats = PipelinedCollector.collectRoute(controller, hrp, route, range, {
 				AbortCheck = function()
 					return not isCurrentRoundActive()
+						or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision
 				end,
 			})
+			if (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision then
+				clearRoute(route)
+				softCleanup(candidates, remaining)
+				lastScan = 0
+				setStatus(controller, "RangeChanged (Pipeline)", "Replanning gift route")
+				return
+			end
 			enqueueRetryItems(routeStats)
 
 			clearRoute(route)
