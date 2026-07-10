@@ -346,14 +346,18 @@ end)
 local Rayfield = loadstring(Game:HttpGet("https://sirius.menu/rayfield"))()
 getgenv().Rayfield = Rayfield
 
-local DEFAULT_ICON = "rbxassetid://4483362458"
+local DEFAULT_ICON = 4483362458
 
 local function normalizeIcon(icon)
-	if typeof(icon) == "string" then
+	if typeof(icon) == "number" then
 		return icon
 	end
-	if typeof(icon) == "number" then
-		return "rbxassetid://" .. tostring(icon)
+	if typeof(icon) == "string" then
+		local assetId = string.match(icon, "^rbxassetid://(%d+)$")
+		if assetId then
+			return tonumber(assetId) or DEFAULT_ICON
+		end
+		return icon
 	end
 	return DEFAULT_ICON
 end
