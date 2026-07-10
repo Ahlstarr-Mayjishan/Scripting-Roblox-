@@ -136,7 +136,13 @@ local function startAntiAnchor(controller)
 		end
 
 		antiAnchorConnection = hrp:GetPropertyChangedSignal("Anchored"):Connect(function()
-			if controller.GiftFarmEnabled and hrp.Anchored then
+			local context = getGiftFarmContext()
+			local inRound = not context or (typeof(context.isInRound) == "function" and context.isInRound() == true)
+
+			local deadVal = localPlayer and localPlayer:FindFirstChild("Dead")
+			local isDead = deadVal and deadVal.Value == true
+
+			if controller.GiftFarmEnabled and hrp.Anchored and inRound and not isDead then
 				releaseIfGiftFarmActive()
 			end
 		end)

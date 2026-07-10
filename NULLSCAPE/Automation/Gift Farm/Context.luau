@@ -71,7 +71,9 @@ function Context.releaseCharacterControl(options)
 	end
 
 	pcall(function()
-		hrp.Anchored = false
+		if Context.isInRound() then
+			hrp.Anchored = false
+		end
 		if options.SkipVelocityClear ~= true then
 			hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 			hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
@@ -111,7 +113,9 @@ local function setRootCFrame(character, hrp, cframe)
 	end
 
 	local ok = pcall(function()
-		hrp.Anchored = false
+		if Context.isInRound() then
+			hrp.Anchored = false
+		end
 		hrp.CFrame = cframe
 		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
