@@ -326,7 +326,7 @@ function Controller:SetGiftFarmEnabled(value)
 	end
 	self.GiftFarmEnabled = nextEnabled
 	self.ConfigChanged:Fire()
-	return true
+	return self:update()
 end
 
 function Controller:SetGiftFarmMode(value)
