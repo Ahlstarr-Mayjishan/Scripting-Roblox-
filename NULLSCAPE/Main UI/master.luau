@@ -181,6 +181,8 @@ pcall(function()
 			GrappleReelPullMultiplierSlider = 1.1,
 			GrappleSharkTailPullMultiplierSlider = 1.1,
 			GrappleJumpPadUsesBypassToggle = false,
+			GrappleVirtualNinjaBeltToggle = false,
+			GrappleVirtualSharkTailToggle = false,
 			GrappleDisableGroundReleaseToggle = false,
 			GrappleHookCastSpeedMultiplierSlider = 1,
 			GrappleMaxRangeSlider = 90,

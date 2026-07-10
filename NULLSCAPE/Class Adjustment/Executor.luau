@@ -12,6 +12,7 @@ local HookedStep = nil
 local HookedSharkTail = nil
 local HookedStart = nil
 local HookedEnd = nil
+local HookedMovementHasUpgrade = nil
 local AirControl = nil
 local ReelPull = nil
 local SharkTailPull = nil
@@ -62,6 +63,25 @@ local function getGrappleModule()
 	end
 
 	return grappleModule
+end
+
+local function getMovementModule()
+	local movement = ReplicatedStorage:FindFirstChild("Movement")
+	local movementCore = movement and movement:FindFirstChild("MovementCore")
+	if not (movementCore and movementCore:IsA("ModuleScript")) then
+		return nil
+	end
+
+	local success, movementModule = pcall(require, movementCore)
+	if
+		not success
+		or typeof(movementModule) ~= "table"
+		or typeof(movementModule.HasUpgrade) ~= "function"
+	then
+		return nil
+	end
+
+	return movementModule
 end
 
 local function packValues(...)
@@ -121,6 +141,27 @@ local function clearStaleHooks(grappleModule, globals)
 		globals.ClassAdjustmentOriginalCast = nil
 		globals.ClassAdjustmentHookedCast = nil
 	end
+end
+
+local function shouldSpoofGrapplerUpgrade(movement, upgradeName)
+	if not (movement and movement.ClassID == "class/Grappler") then
+		return false
+	end
+
+	local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+	if not Control then
+		return false
+	end
+
+	if upgradeName == "NinjaBelt" or upgradeName == "Ninja Belt" then
+		return Control.GrappleVirtualNinjaBelt == true
+	end
+
+	if upgradeName == "SharkTail" or upgradeName == "Shark Tail" or upgradeName == "SharkBelt" or upgradeName == "Shark Belt" then
+		return Control.GrappleVirtualSharkTail == true
+	end
+
+	return false
 end
 
 local function applyStepAdjustments(self, dt)
@@ -288,6 +329,35 @@ function Executor.enable()
 	loadAdjustmentModules()
 	local globals = getGlobals()
 	clearStaleHooks(grappleModule, globals)
+
+	local movementModule = getMovementModule()
+	if globals.ClassAdjustmentOriginalMovementHasUpgrade and movementModule then
+		if movementModule.HasUpgrade ~= globals.ClassAdjustmentOriginalMovementHasUpgrade then
+			movementModule.HasUpgrade = globals.ClassAdjustmentOriginalMovementHasUpgrade
+		end
+		globals.ClassAdjustmentOriginalMovementHasUpgrade = nil
+		HookedMovementHasUpgrade = nil
+	end
+
+	if
+		movementModule
+		and typeof(movementModule.HasUpgrade) == "function"
+		and not globals.ClassAdjustmentOriginalMovementHasUpgrade
+	then
+		local originalMovementHasUpgrade = movementModule.HasUpgrade
+		local wrappedMovementHasUpgrade
+		wrappedMovementHasUpgrade = function(self, upgradeName, ...)
+			if HooksActive and shouldSpoofGrapplerUpgrade(self, upgradeName) then
+				return true, 1
+			end
+
+			return originalMovementHasUpgrade(self, upgradeName, ...)
+		end
+
+		globals.ClassAdjustmentOriginalMovementHasUpgrade = originalMovementHasUpgrade
+		HookedMovementHasUpgrade = wrappedMovementHasUpgrade
+		movementModule.HasUpgrade = wrappedMovementHasUpgrade
+	end
 
 	if typeof(grappleModule.Step) == "function" and not globals.ClassAdjustmentOriginalStep then
 		local originalStep = grappleModule.Step
@@ -471,6 +541,16 @@ function Executor.restore()
 	Executor.disable()
 	local globals = getGlobals()
 	local grappleModule = getGrappleModule()
+	local movementModule = getMovementModule()
+	if
+		movementModule
+		and HookedMovementHasUpgrade
+		and movementModule.HasUpgrade == HookedMovementHasUpgrade
+	then
+		movementModule.HasUpgrade = globals.ClassAdjustmentOriginalMovementHasUpgrade
+		globals.ClassAdjustmentOriginalMovementHasUpgrade = nil
+		HookedMovementHasUpgrade = nil
+	end
 	if grappleModule and HookedStep and grappleModule.Step == HookedStep then
 		grappleModule.Step = globals.ClassAdjustmentOriginalStep
 		globals.ClassAdjustmentOriginalStep = nil
