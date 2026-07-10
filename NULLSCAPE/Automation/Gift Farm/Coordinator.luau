@@ -40,6 +40,7 @@ local SOFT_GC_INTERVAL = 1.5
 local enabled = false
 local configDirty = false
 local sessionToken = 0
+local characterSessionToken = 0
 local activeLease = nil
 local loopActive = false
 
@@ -401,6 +402,7 @@ local function observeCharacter(controller, gc)
 
 	local function resetCharacterState()
 		sessionToken += 1
+		characterSessionToken += 1
 		MovementLease.invalidateActive()
 		characterReady = false
 		characterReadyAt = math.huge
@@ -444,7 +446,7 @@ local function observeCharacter(controller, gc)
 			return
 		end
 		resetCharacterState()
-		local mySession = sessionToken
+		local myCharacterSession = characterSessionToken
 		task.spawn(function()
 			local hrp = character and character:WaitForChild("HumanoidRootPart", 6)
 			
@@ -455,7 +457,7 @@ local function observeCharacter(controller, gc)
 				end
 			end
 
-			if hrp and enabled and localPlayer.Character == character and mySession == sessionToken then
+			if hrp and enabled and localPlayer.Character == character and myCharacterSession == characterSessionToken then
 				if activeLease then
 					activeLease:release({ SkipVelocityClear = true, SkipStateChange = true })
 				end
@@ -463,7 +465,7 @@ local function observeCharacter(controller, gc)
 			for _ = 1, 8 do
 				RunService.Heartbeat:Wait()
 			end
-			if enabled and hrp and localPlayer.Character == character and mySession == sessionToken then
+			if enabled and hrp and localPlayer.Character == character and myCharacterSession == characterSessionToken then
 				characterReady = true
 				characterReadyAt = os.clock() + RESPAWN_READY_DELAY
 			end
@@ -715,6 +717,17 @@ local function runLoop(controller)
 			local candidates, scanInfo = Scanner.scan(controller, gch)
 			if not isSessionActive() then continue end
 
+			local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
+			if rawGolden > 0 then
+				if Beacon and typeof(Beacon.suppressUntilReturn) == "function" then
+					Beacon.suppressUntilReturn()
+				end
+			else
+				if Beacon and typeof(Beacon.restore) == "function" then
+					Beacon.restore(true)
+				end
+			end
+
 			if GoldenWait and typeof(GoldenWait.noteScan) == "function" then
 				GoldenWait.noteScan(scanInfo)
 			end
@@ -766,7 +779,7 @@ local function runLoop(controller)
 
 			-- Handle no candidates
 			if #candidates == 0 then
-				local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
+				rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
 				local rawNormal = scanInfo and (tonumber(scanInfo.RawNormal) or 0) or 0
 				if rawGolden > 0 or rawNormal > 0 then
 					lastGiftSeenAt = os.clock()

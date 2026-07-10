@@ -83,8 +83,11 @@ local function waitForArrival(hrp, targetPosition, lease, shouldAbort)
 	end
 
 	local start = os.clock()
-	local tolerance = 2.0
-	while os.clock() - start <= 0.15 do
+	local tolerance = 2.5
+	local ping = getPingSeconds() or 0.08
+	local timeout = math.clamp(ping * 1.5, 0.12, 0.25)
+
+	while os.clock() - start <= timeout do
 		if typeof(shouldAbort) == "function" and shouldAbort() then
 			return false
 		end
@@ -146,7 +149,7 @@ local function collectCluster(routeToken, cluster, currentPos, collectRange, col
 			and not item.rawObj.Destroyed
 			and not item.rawObj.Collected
 			and not item.rawObj.ClientCollected
-			and Distance.isWithinRange(item.pos, currentPos, collectRange)
+			and Distance.isWithinRange(item.pos, currentPos, collectRange + 4)
 		then
 			table.insert(attempted, item)
 			stats.Attempted += 1
@@ -288,7 +291,8 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 			end
 
 			local attempted = {}
-			if arrived and settleBeforeCollect(hrp, shouldAbort) then
+			local closeEnough = arrived or (hrp.Position - standingPosition).Magnitude <= 32
+			if closeEnough and settleBeforeCollect(hrp, shouldAbort) then
 				attempted = collectCluster(routeToken, cluster, hrp.Position, collectRange, collectedEvent, stats, lease)
 			end
 			if #attempted > 0 and not waitForCollectAcceptance(hrp, shouldAbort, attempted, #cluster) then

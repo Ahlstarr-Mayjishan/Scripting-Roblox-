@@ -31,7 +31,25 @@ function Distance.getRootPosition(targetPosition)
 		return targetPosition
 	end
 
-	return targetPosition + ROOT_OFFSET
+	local rootPos = targetPosition + ROOT_OFFSET
+
+	local beacon = workspace:FindFirstChild("Beacon")
+	if beacon and beacon:IsA("BasePart") then
+		local beaconPos = beacon.Position
+		local offset = rootPos - beaconPos
+		local flatOffset = Vector3.new(offset.X, 0, offset.Z)
+		local dist = flatOffset.Magnitude
+		local minSafeDistance = 15
+		if dist < minSafeDistance then
+			if dist > 0.1 then
+				rootPos = beaconPos + flatOffset.Unit * minSafeDistance + Vector3.new(0, offset.Y, 0)
+			else
+				rootPos = beaconPos + Vector3.new(minSafeDistance, offset.Y, 0)
+			end
+		end
+	end
+
+	return rootPos
 end
 
 function Distance.isWithinRange(giftPosition, rootPosition, range)
