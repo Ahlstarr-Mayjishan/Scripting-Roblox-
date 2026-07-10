@@ -21,8 +21,6 @@ local Control = {
 	GrappleSharkTailNoCooldown = false,
 	GrappleSharkTailWindow = 0.25,
 	GrappleJumpPadUsesBypassEnabled = false,
-	GrappleVirtualNinjaBelt = false,
-	GrappleVirtualSharkTail = false,
 	ChargerTripmineAssistEnabled = false,
 	ChargerTripmineMode = "Auto",
 	ChargerTripmineDistance = 15,
@@ -95,12 +93,6 @@ local function readSettings()
 		if decoded.GrappleJumpPadUsesBypassEnabled ~= nil then
 			Control.GrappleJumpPadUsesBypassEnabled = not not decoded.GrappleJumpPadUsesBypassEnabled
 		end
-		if decoded.GrappleVirtualNinjaBeltToggle ~= nil then
-			Control.GrappleVirtualNinjaBelt = not not decoded.GrappleVirtualNinjaBeltToggle
-		end
-		if decoded.GrappleVirtualSharkTailToggle ~= nil then
-			Control.GrappleVirtualSharkTail = not not decoded.GrappleVirtualSharkTailToggle
-		end
 		if decoded.ChargerTripmineAssistToggle ~= nil then
 			Control.ChargerTripmineAssistEnabled = not not decoded.ChargerTripmineAssistToggle
 		end
@@ -141,8 +133,6 @@ local function saveSettings()
 	data.GrappleSharkTailNoCooldown = Control.GrappleSharkTailNoCooldown
 	data.GrappleSharkTailWindowSlider = Control.GrappleSharkTailWindow
 	data.GrappleJumpPadUsesBypassEnabled = Control.GrappleJumpPadUsesBypassEnabled
-	data.GrappleVirtualNinjaBeltToggle = Control.GrappleVirtualNinjaBelt
-	data.GrappleVirtualSharkTailToggle = Control.GrappleVirtualSharkTail
 	data.ChargerTripmineAssistToggle = Control.ChargerTripmineAssistEnabled
 	data.ChargerTripmineModeDropdown = Control.ChargerTripmineMode
 	data.ChargerTripmineDistanceSlider = Control.ChargerTripmineDistance
@@ -271,16 +261,6 @@ end
 
 function Control:SetGrappleJumpPadUsesBypass(value)
 	self.GrappleJumpPadUsesBypassEnabled = value == true
-	saveSettings()
-end
-
-function Control:SetGrappleVirtualNinjaBelt(value)
-	self.GrappleVirtualNinjaBelt = value == true
-	saveSettings()
-end
-
-function Control:SetGrappleVirtualSharkTail(value)
-	self.GrappleVirtualSharkTail = value == true
 	saveSettings()
 end
 

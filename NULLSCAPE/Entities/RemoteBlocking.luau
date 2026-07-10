@@ -231,6 +231,19 @@ local function localPlayerHasStatus(statusName)
     return okStatusOnly and hasStatusOnly == true
 end
 
+local function isICBMClientReport(remote, args)
+    if not (
+        remote
+        and remote.ClassName == "RemoteEvent"
+        and remote.Name == "ClientEvent"
+        and (args[1] == "Kill" or args[1] == "Combust")
+    ) then
+        return false
+    end
+
+    local parent = remote.Parent
+    return parent and string.find(parent.Name, "ICBM", 1, true) ~= nil
+end
 -- Helper check xem remote có thuộc Model của thực thể mục tiêu không
 local function findEntityParent(obj, targetSubName)
     local current = obj.Parent
@@ -285,6 +298,14 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         return true
     end
 
+    if isICBMClientReport(remote, args) then
+        if args[1] == "Kill" then
+            return controller.ICBMImmune == true
+        end
+        if args[1] == "Combust" then
+            return controller.ICBMImmune == true or controller.ICBMBurnImmune == true
+        end
+    end
     if controller.inLobby then
         return false
     end

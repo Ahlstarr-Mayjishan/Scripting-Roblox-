@@ -45,8 +45,6 @@ local createControllerProxy = function(Client, Controller)
 		GrappleSharkTailNoCooldown = false,
 		GrappleSharkTailWindow = 0.25,
 		GrappleJumpPadUsesBypassEnabled = false,
-		GrappleVirtualNinjaBelt = false,
-		GrappleVirtualSharkTail = false,
 		ChargerTripmineAssistEnabled = false,
 		ChargerTripmineMode = "Auto",
 		ChargerTripmineDistance = 15,
@@ -120,26 +118,6 @@ return function(Client, Controller)
 		Flag = "GrappleJumpPadUsesBypassToggle",
 		Callback = function(Value)
 			Controller:SetGrappleJumpPadUsesBypass(Value)
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "Virtual Ninja Belt",
-		Info = "Makes Grappler native HasUpgrade checks treat Ninja Belt as owned without spoofing other classes.",
-		CurrentValue = Controller.GrappleVirtualNinjaBelt or false,
-		Flag = "GrappleVirtualNinjaBeltToggle",
-		Callback = function(Value)
-			Controller:SetGrappleVirtualNinjaBelt(Value)
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "Virtual Shark Tail",
-		Info = "Makes Grappler native HasUpgrade checks treat Shark Tail as owned without spoofing other classes.",
-		CurrentValue = Controller.GrappleVirtualSharkTail or false,
-		Flag = "GrappleVirtualSharkTailToggle",
-		Callback = function(Value)
-			Controller:SetGrappleVirtualSharkTail(Value)
 		end,
 	})
 

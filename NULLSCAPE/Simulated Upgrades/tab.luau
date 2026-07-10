@@ -326,4 +326,26 @@ return function(Client, Controller)
 			Controller:SetMiniatureHourglass(Value)
 		end,
 	})
+
+	Tab:CreateSection("Grappler Upgrades")
+
+	Tab:CreateToggle({
+		Name = "Simulate Ninja Belt",
+		Info = "Makes Grappler native HasUpgrade checks treat Ninja Belt as owned without spoofing other classes.",
+		CurrentValue = Controller.GrappleVirtualNinjaBelt or false,
+		Flag = "GrappleVirtualNinjaBeltToggle",
+		Callback = function(Value)
+			Controller:SetGrappleVirtualNinjaBelt(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Simulate Shark Tail",
+		Info = "Makes Grappler native HasUpgrade checks treat Shark Tail as owned without spoofing other classes.",
+		CurrentValue = Controller.GrappleVirtualSharkTail or false,
+		Flag = "GrappleVirtualSharkTailToggle",
+		Callback = function(Value)
+			Controller:SetGrappleVirtualSharkTail(Value)
+		end,
+	})
 end

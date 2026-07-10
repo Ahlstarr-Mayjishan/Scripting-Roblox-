@@ -53,6 +53,8 @@ local Controller = {
 	SpeedBuffSelections = {},
 	HelmetEnabled = false,
 	MiniatureHourglassEnabled = false,
+	GrappleVirtualNinjaBelt = false,
+	GrappleVirtualSharkTail = false,
 
 	TripmineBarrierEnabled = false,
 	TripmineBarrierMode = "Off",
@@ -159,6 +161,8 @@ local function hasUtilityWork()
 		or Controller.SpeedBuffsEnabled
 		or Controller.HelmetEnabled
 		or Controller.MiniatureHourglassEnabled
+		or Controller.GrappleVirtualNinjaBelt
+		or Controller.GrappleVirtualSharkTail
 end
 
 -- RenderStepped connection management
@@ -523,6 +527,18 @@ function Controller:SetMiniatureHourglass(value)
 		end
 	end
 	refreshUpgradeServerState()
+end
+
+function Controller:SetGrappleVirtualNinjaBelt(value)
+	self.GrappleVirtualNinjaBelt = value == true
+	refreshUpgradeServerState()
+	startUtilityLoop()
+end
+
+function Controller:SetGrappleVirtualSharkTail(value)
+	self.GrappleVirtualSharkTail = value == true
+	refreshUpgradeServerState()
+	startUtilityLoop()
 end
 
 function Controller:SetAutoCollectRange(value)
@@ -916,6 +932,8 @@ function Controller:CleanUp()
 		self.SpeedBuffsEnabled = false
 		self.HelmetEnabled = false
 		self.MiniatureHourglassEnabled = false
+		self.GrappleVirtualNinjaBelt = false
+		self.GrappleVirtualSharkTail = false
 	end
 
 	if finalCleanup and MatrixTetrahedron then
@@ -972,6 +990,9 @@ function Controller:CleanUp()
 
 	if finalCleanup then
 		pcall(restoreHooks)
+		if Executor and typeof(Executor.restoreUpgradeSimulationHook) == "function" then
+			pcall(Executor.restoreUpgradeSimulationHook)
+		end
 	end
 
 	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
@@ -991,6 +1012,8 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local isBetterJumpPad = false
 	local isHelmet = false
 	local isMiniatureHourglass = false
+	local isNinjaBelt = false
+	local isSharkTail = false
 	for _, v in ipairs(args) do
 		if v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
 			isTetrahedron = true
@@ -1004,6 +1027,10 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 			isHelmet = true
 		elseif v == "MiniatureHourglass" or v == "Miniature Hourglass" then
 			isMiniatureHourglass = true
+		elseif v == "NinjaBelt" or v == "Ninja Belt" then
+			isNinjaBelt = true
+		elseif v == "SharkTail" or v == "Shark Tail" or v == "SharkBelt" or v == "Shark Belt" then
+			isSharkTail = true
 		else
 			local shouldSpoof, result = Logic.shouldSpoofUpgradeEnabled(Controller, v)
 			if shouldSpoof then
@@ -1029,6 +1056,12 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	if isMiniatureHourglass and Controller.MiniatureHourglassEnabled then
 		return true, true
 	end
+	if isNinjaBelt and Controller.GrappleVirtualNinjaBelt then
+		return true, true
+	end
+	if isSharkTail and Controller.GrappleVirtualSharkTail then
+		return true, true
+	end
 	return false
 end
 
@@ -1040,6 +1073,8 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	local isBetterJumpPad = false
 	local isHelmet = false
 	local isMiniatureHourglass = false
+	local isNinjaBelt = false
+	local isSharkTail = false
 	for _, v in ipairs(args) do
 		if v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
 			isTetrahedron = true
@@ -1053,6 +1088,10 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 			isHelmet = true
 		elseif v == "MiniatureHourglass" or v == "Miniature Hourglass" then
 			isMiniatureHourglass = true
+		elseif v == "NinjaBelt" or v == "Ninja Belt" then
+			isNinjaBelt = true
+		elseif v == "SharkTail" or v == "Shark Tail" or v == "SharkBelt" or v == "Shark Belt" then
+			isSharkTail = true
 		else
 			local shouldSpoof, stack = Logic.shouldSpoofUpgradeStack(Controller, v)
 			if shouldSpoof then
@@ -1078,10 +1117,20 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	if isMiniatureHourglass and Controller.MiniatureHourglassEnabled then
 		return true, 1
 	end
+	if isNinjaBelt and Controller.GrappleVirtualNinjaBelt then
+		return true, 1
+	end
+	if isSharkTail and Controller.GrappleVirtualSharkTail then
+		return true, 1
+	end
 	return false
 end
 
 -- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
+if Executor and typeof(Executor.enableUpgradeSimulationHook) == "function" then
+	pcall(Executor.enableUpgradeSimulationHook)
+end
+
 getGlobals().activeUpgradeController = Controller
 
 -- Khởi tạo ban đầu khi nạp script
