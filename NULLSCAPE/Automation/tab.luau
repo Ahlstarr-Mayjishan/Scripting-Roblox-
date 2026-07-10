@@ -67,6 +67,17 @@ return function(Client, Controller)
 
 	Tab:CreateSection("Auto Farm")
 
+	Tab:CreateToggle({
+		Name = "Gift Farm",
+		CurrentValue = Controller and Controller.GiftFarmEnabled or false,
+		Flag = "AutomationGiftFarmToggle",
+		Callback = function(Value)
+			if Controller and typeof(Controller.SetGiftFarmEnabled) == "function" then
+				Controller:SetGiftFarmEnabled(Value)
+			end
+		end,
+	})
+
 	Tab:CreateDropdown({
 		Name = "Farm Modes",
 		Options = { "Normal (teleport)", "Pipelining (Network)" },
@@ -119,17 +130,6 @@ return function(Client, Controller)
 		Callback = function(Value)
 			if Controller and typeof(Controller.SetGiftFarmReturnToBeaconAfterGolden) == "function" then
 				Controller:SetGiftFarmReturnToBeaconAfterGolden(Value)
-			end
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "Gift Farm",
-		CurrentValue = Controller and Controller.GiftFarmEnabled or false,
-		Flag = "AutomationGiftFarmToggle",
-		Callback = function(Value)
-			if Controller and typeof(Controller.SetGiftFarmEnabled) == "function" then
-				Controller:SetGiftFarmEnabled(Value)
 			end
 		end,
 	})
