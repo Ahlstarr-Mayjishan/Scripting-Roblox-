@@ -92,9 +92,9 @@ function Context.releaseCharacterControl(options)
 			humanoid.Sit = false
 			humanoid.AutoRotate = true
 		end)
-		if options.SkipStateChange ~= true and humanoid.Health > 0 then
+		if options.SkipStateChange ~= true and options.State ~= nil and humanoid.Health > 0 then
 			pcall(function()
-				humanoid:ChangeState(options.State or Enum.HumanoidStateType.Running)
+				humanoid:ChangeState(options.State)
 			end)
 		end
 	end

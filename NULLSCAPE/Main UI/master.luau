@@ -10,6 +10,14 @@ local Game = game
 if getgenv().Client then
 	pcall(function()
 		local oldClient = getgenv().Client
+		if typeof(oldClient) == "table" and typeof(oldClient.ReleaseCharacterControl) == "function" then
+			pcall(function()
+				oldClient:ReleaseCharacterControl({
+					Reason = "Reload",
+					SkipVelocityClear = true,
+				})
+			end)
+		end
 		if typeof(oldClient) == "table" and typeof(oldClient.Destroy) == "function" then
 			oldClient:Destroy("Reload")
 		else
@@ -380,6 +388,109 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
+local function resumeCharacterAnimation(character)
+	if not character then
+		return
+	end
+
+	local animate = character:FindFirstChild("Animate")
+	if animate and animate:IsA("LocalScript") then
+		pcall(function()
+			animate.Disabled = false
+		end)
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
+	if animator then
+		pcall(function()
+			for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+				pcall(function()
+					track:AdjustSpeed(1)
+				end)
+			end
+		end)
+	end
+end
+
+function Client:ReleaseCharacterControl(options)
+	options = options or {}
+	local player = Players.LocalPlayer
+	local character = player and player.Character
+	if not character then
+		return false
+	end
+
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if hrp then
+		pcall(function()
+			hrp.Anchored = false
+			if options.SkipVelocityClear ~= true then
+				hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+				hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+			end
+		end)
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		pcall(function()
+			humanoid.PlatformStand = false
+			humanoid.Sit = false
+			humanoid.AutoRotate = true
+		end)
+
+		if options.SkipStateChange ~= true and humanoid.Health > 0 then
+			local state = humanoid:GetState()
+			if
+				state == Enum.HumanoidStateType.PlatformStanding
+				or state == Enum.HumanoidStateType.Physics
+				or state == Enum.HumanoidStateType.Seated
+			then
+				pcall(function()
+					humanoid:ChangeState(Enum.HumanoidStateType.Running)
+				end)
+			end
+		end
+	end
+
+	resumeCharacterAnimation(character)
+	return true
+end
+
+function Client:PrepareForRuntimeUpdate(reason)
+	getgenv()._NULLSCAPE_PendingCharacterRelease = true
+	self:ReleaseCharacterControl({
+		Reason = reason or "RuntimeUpdate",
+		SkipVelocityClear = true,
+	})
+	task.defer(function()
+		if self.Destroyed then
+			return
+		end
+		self:ReleaseCharacterControl({
+			Reason = reason or "RuntimeUpdateDeferred",
+			SkipVelocityClear = true,
+		})
+	end)
+	return true
+end
+
+if getgenv()._NULLSCAPE_PendingCharacterRelease == true then
+	task.defer(function()
+		Client:ReleaseCharacterControl({
+			Reason = "RuntimeUpdateBoot",
+			SkipVelocityClear = true,
+		})
+		task.wait(0.25)
+		Client:ReleaseCharacterControl({
+			Reason = "RuntimeUpdateBootDeferred",
+			SkipVelocityClear = true,
+		})
+		getgenv()._NULLSCAPE_PendingCharacterRelease = nil
+	end)
+end
+
 -- FPS & Ping Tracker
 local fps = 0
 local ping = 0
@@ -489,6 +600,11 @@ function Client:Destroy(reason)
 		return false
 	end
 
+	self:ReleaseCharacterControl({
+		Reason = reason or "Destroy",
+		SkipVelocityClear = true,
+	})
+
 	self.Destroying = true
 	self.Destroyed = true
 	self.DestroyReason = reason or "Unknown"
@@ -525,6 +641,13 @@ function Client:Destroy(reason)
 				end
 			end
 		end
+	end)
+
+	safeStep("release character after module cleanup", function()
+		self:ReleaseCharacterControl({
+			Reason = reason or "DestroyPostCleanup",
+			SkipVelocityClear = true,
+		})
 	end)
 
 	safeStep("destroy Rayfield", function()
@@ -618,6 +741,7 @@ function Client:HotRestart(reason)
 	end
 
 	task.defer(function()
+		Client:PrepareForRuntimeUpdate(reason or "HotRestart")
 		Client:Destroy(reason or "HotRestart")
 		task.wait(0.15)
 		local chunk, err = loadstring(source)

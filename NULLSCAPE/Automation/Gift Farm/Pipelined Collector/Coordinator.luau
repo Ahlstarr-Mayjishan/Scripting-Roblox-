@@ -89,6 +89,7 @@ local function releaseCurrentCharacterControl(options)
 
 	Context.releaseCharacterControl({
 		SkipVelocityClear = options.SkipVelocityClear == true,
+		SkipStateChange = options.SkipStateChange == true,
 		State = Enum.HumanoidStateType.Running,
 	})
 end
@@ -135,6 +136,7 @@ local function resetCharacterState(controller)
 	})
 	releaseCurrentCharacterControl({
 		SkipVelocityClear = true,
+		SkipStateChange = true,
 	})
 	resetPipelineModules()
 	if Beacon and typeof(Beacon.reset) == "function" then
@@ -215,6 +217,7 @@ local function observeCharacter(controller, gc)
 			then
 				releaseCurrentCharacterControl({
 					SkipVelocityClear = true,
+					SkipStateChange = true,
 				})
 			end
 			for _ = 1, 8 do

@@ -364,6 +364,11 @@ function Updater:restartAfterInstall(changes)
 	if client and typeof(client.InvalidateModulePrefix) == "function" then
 		client:InvalidateModulePrefix("NULLSCAPE/")
 	end
+	if client and typeof(client.PrepareForRuntimeUpdate) == "function" then
+		pcall(function()
+			client:PrepareForRuntimeUpdate("RuntimeUpdate")
+		end)
+	end
 	if client and typeof(client.HotRestart) == "function" then
 		client:HotRestart("RuntimeUpdate")
 	else

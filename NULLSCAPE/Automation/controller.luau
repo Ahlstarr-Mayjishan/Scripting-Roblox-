@@ -125,7 +125,7 @@ local function startAntiAnchor(controller)
 			if context and typeof(context.releaseCharacterControl) == "function" then
 				context.releaseCharacterControl({
 					SkipVelocityClear = true,
-					State = Enum.HumanoidStateType.Running,
+					SkipStateChange = true,
 				})
 			else
 				pcall(function()
@@ -159,7 +159,10 @@ local function startAntiAnchor(controller)
 			end))
 		end
 
-		if controller.GiftFarmEnabled then
+		if controller.GiftFarmEnabled and (
+			hrp.Anchored
+			or (humanoid and (humanoid.PlatformStand or humanoid.Sit))
+		) then
 			releaseIfGiftFarmActive()
 		end
 	end
