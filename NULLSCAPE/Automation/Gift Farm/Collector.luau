@@ -144,9 +144,9 @@ end
 
 local function waitForReplicationSync(precisionMode)
 	local ping = getPingSeconds() or 0.08
-	local targetWait = ping * 0.52
-	local minWait = precisionMode and PRECISION_SYNC_MIN or 0.01
-	local maxWait = math.max(precisionMode and PRECISION_SYNC_MAX or 0.04, ping * 0.7)
+	local targetWait = ping * 0.6 + 0.012
+	local minWait = precisionMode and PRECISION_SYNC_MIN or 0.025
+	local maxWait = math.max(precisionMode and PRECISION_SYNC_MAX or 0.065, ping * 0.8)
 	local waitTime = math.clamp(targetWait, minWait, maxWait)
 
 	local frames = precisionMode and 2 or 1
