@@ -1876,6 +1876,9 @@ local function initializeICBMHook()
 							local success, shouldBlock, modifiedArgs = pcall(dispatcher, self, ...)
 							if success and shouldBlock then
 								if modifiedArgs then
+									if typeof(setnamecallmethod) == "function" then
+										setnamecallmethod(method)
+									end
 									return oldNamecall(self, table.unpack(modifiedArgs))
 								end
 								if isRemoteFunction then
@@ -1884,6 +1887,9 @@ local function initializeICBMHook()
 								return -- Cháº·n Ä‘á»©ng FireServer
 							end
 						end
+					end
+					if typeof(setnamecallmethod) == "function" then
+						setnamecallmethod(method)
 					end
 					return oldNamecall(self, ...)
 				end)
