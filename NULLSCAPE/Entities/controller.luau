@@ -1,9 +1,9 @@
--- [[
+﻿-- [[
 --  NULLSCAPE - Entities Controller
---  Vai trò: Đảm nhiệm việc quan sát hiệu năng, phân tích tài nguyên và đưa ra các quyết định điều phối:
---  - Phát hiện trạng thái sảnh chờ/trận đấu (khi inLobby = false sẽ kích hoạt gọi quét scan).
---  - Giám sát trạng thái hoạt động của script, điều phối chế độ ngủ đông (hibernating) tối ưu CPU.
---  - Gửi kết nối đăng ký qua GC và phát lệnh dọn dẹp giải phóng tài nguyên.
+--  Vai trÃ²: Äáº£m nhiá»‡m viá»‡c quan sÃ¡t hiá»‡u nÄƒng, phÃ¢n tÃ­ch tÃ i nguyÃªn vÃ  Ä‘Æ°a ra cÃ¡c quyáº¿t Ä‘á»‹nh Ä‘iá»u phá»‘i:
+--  - PhÃ¡t hiá»‡n tráº¡ng thÃ¡i sáº£nh chá»/tráº­n Ä‘áº¥u (khi inLobby = false sáº½ kÃ­ch hoáº¡t gá»i quÃ©t scan).
+--  - GiÃ¡m sÃ¡t tráº¡ng thÃ¡i hoáº¡t Ä‘á»™ng cá»§a script, Ä‘iá»u phá»‘i cháº¿ Ä‘á»™ ngá»§ Ä‘Ã´ng (hibernating) tá»‘i Æ°u CPU.
+--  - Gá»­i káº¿t ná»‘i Ä‘Äƒng kÃ½ qua GC vÃ  phÃ¡t lá»‡nh dá»n dáº¹p giáº£i phÃ³ng tÃ i nguyÃªn.
 -- ]]
 
 local getgenv = getgenv
@@ -65,7 +65,7 @@ local BackTrick = getgenv().loadModule("NULLSCAPE/Entities/technique/BackTrick (
 local hookedTelefraggers = setmetatable({}, { __mode = "k" })
 
 local Controller = {
-	-- Trạng thái bật/tắt miễn nhiễm cho từng thực thể
+	-- Tráº¡ng thÃ¡i báº­t/táº¯t miá»…n nhiá»…m cho tá»«ng thá»±c thá»ƒ
 	BabyImmune = false,
 	BellImmune = false,
 	BellCurseImmune = false,
@@ -103,6 +103,7 @@ local Controller = {
 	nilMirageImmune = false,
 	SeamineImmune = false,
 	TelefraggerAutoDodge = false,
+	TelefraggerAutoDodgeRequested = false,
 	TelefraggerBackTrick = false,
 	TelefraggerBackTrickMode = "180",
 	TelefraggerDesyncDelay = 0.44,
@@ -125,7 +126,7 @@ local Controller = {
 }
 GC.Controller = Controller
 
--- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
+-- XÃ¡c minh kiá»ƒm tra tráº¡ng thÃ¡i game báº±ng ReplicatedStorage.InRound
 local function isInMatch()
 	local inRoundVal = ReplicatedStorage:FindFirstChild("InRound")
 	if inRoundVal and inRoundVal:IsA("BoolValue") then
@@ -141,7 +142,7 @@ local function isInMatch()
 end
 
 local function debugPrint(...)
-	-- Không in debug theo yêu cầu của người dùng
+	-- KhÃ´ng in debug theo yÃªu cáº§u cá»§a ngÆ°á»i dÃ¹ng
 	return select("#", ...)
 end
 
@@ -222,7 +223,7 @@ local function getAccessibilityController()
 	return nil
 end
 
-local inLobby = not isInMatch() -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
+local inLobby = not isInMatch() -- Äang á»Ÿ sáº£nh chá»/lá»±a chá»n (Khá»Ÿi táº¡o ban Ä‘áº§u)
 local function getStatusImmunity()
 	local globals = getgenv()._NULLSCAPE_Globals
 	return globals and globals.NullscapeStatusImmunity or nil
@@ -282,7 +283,7 @@ local function isNearBeacon(rootPart)
 	return flatDistance <= 32
 end
 
--- Ngắt các kết nối quan sát thư mục và workspace
+-- Ngáº¯t cÃ¡c káº¿t ná»‘i quan sÃ¡t thÆ° má»¥c vÃ  workspace
 local function disconnectFolderObservations()
 	table.clear(processedEntities)
 	for _, conn in ipairs(workspaceConnections) do
@@ -383,7 +384,8 @@ local function restoreHooks()
 end
 
 function Controller:SetTelefraggerAutoDodge(value)
-	self.TelefraggerAutoDodge = value
+	self.TelefraggerAutoDodge = false
+	self.TelefraggerAutoDodgeRequested = value == true
 	self:UpdateTelefraggerConnection()
 end
 
@@ -462,7 +464,7 @@ function Controller:UpdateTelefraggerConnection()
 		self.TelefraggerConnection = nil
 	end
 
-	-- Khôi phục trạng thái xoay khớp nếu BackTrick bị tắt
+	-- KhÃ´i phá»¥c tráº¡ng thÃ¡i xoay khá»›p náº¿u BackTrick bá»‹ táº¯t
 	if not self.TelefraggerBackTrick and self.WasRedirectingTelefragger then
 		BackTrick.revert(self)
 	end
@@ -473,7 +475,7 @@ function Controller:UpdateTelefraggerConnection()
 
 	local LocalPlayer = game.Players.LocalPlayer
 
-	-- Helper: Tính khoảng cách ngắn nhất từ điểm P đến đoạn thẳng AB
+	-- Helper: TÃ­nh khoáº£ng cÃ¡ch ngáº¯n nháº¥t tá»« Ä‘iá»ƒm P Ä‘áº¿n Ä‘oáº¡n tháº³ng AB
 	local function getDistanceToSegment(p, a, b)
 		local ab = b - a
 		local ap = p - a
@@ -487,7 +489,7 @@ function Controller:UpdateTelefraggerConnection()
 		return (p - closest).Magnitude, closest
 	end
 
-	-- Helper: Kiểm tra vị trí sàn an toàn để tránh né xuống vực
+	-- Helper: Kiá»ƒm tra vá»‹ trÃ­ sÃ n an toÃ n Ä‘á»ƒ trÃ¡nh nÃ© xuá»‘ng vá»±c
 	local function isFloorSafe(pos)
 		local raycastParams = RaycastParams.new()
 		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -512,7 +514,7 @@ function Controller:UpdateTelefraggerConnection()
 		local dangerSegment = nil
 		local minSegmentDist = math.huge
 
-		-- Quét tất cả các chỉ thị (Indicator) hoạt động của Telefragger ở cự ly gần
+		-- QuÃ©t táº¥t cáº£ cÃ¡c chá»‰ thá»‹ (Indicator) hoáº¡t Ä‘á»™ng cá»§a Telefragger á»Ÿ cá»± ly gáº§n
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if string.find(string.lower(enemy.Name), "telefragger") then
 				local indicatorPart = enemy:FindFirstChild("IndicatorPart", true)
@@ -523,7 +525,7 @@ function Controller:UpdateTelefraggerConnection()
 							table.insert(attachments, child)
 						end
 					end
-					-- Attachment và Attachment2 được sinh ra ở client biểu diễn vị trí bắt đầu và kết thúc của cú dash/teleport
+					-- Attachment vÃ  Attachment2 Ä‘Æ°á»£c sinh ra á»Ÿ client biá»ƒu diá»…n vá»‹ trÃ­ báº¯t Ä‘áº§u vÃ  káº¿t thÃºc cá»§a cÃº dash/teleport
 					if #attachments >= 2 then
 						local startPos = attachments[1].WorldPosition
 						local endPos = attachments[2].WorldPosition
@@ -537,7 +539,7 @@ function Controller:UpdateTelefraggerConnection()
 			end
 		end
 
-		-- 2. Xử lý cơ chế Auto-Dodge (Né tránh di chuyển tịnh tiến sang ngang ra khỏi đường dash đỏ)
+		-- 2. Xá»­ lÃ½ cÆ¡ cháº¿ Auto-Dodge (NÃ© trÃ¡nh di chuyá»ƒn tá»‹nh tiáº¿n sang ngang ra khá»i Ä‘Æ°á»ng dash Ä‘á»)
 		if self.TelefraggerAutoDodge and dangerSegment then
 			local startPos = dangerSegment.Start
 			local endPos = dangerSegment.End
@@ -559,24 +561,8 @@ function Controller:UpdateTelefraggerConnection()
 				end
 			end
 
-			-- Thực hiện di chuyển né tránh (Auto-Dodge) bằng cách tịnh tiến mượt mà CFrame sang ngang
-			local speed = 32 -- studs/giây (rất mượt mà như cú trượt chân nhẹ, không bị giật hoặc tele)
-			local nextPos = rootPart.Position + slideDir * (dt * speed)
-
-			if isFloorSafe(nextPos) then
-				rootPart.CFrame = rootPart.CFrame + slideDir * (dt * speed)
-			else
-				local altPos = rootPart.Position - slideDir * (dt * speed)
-				if isFloorSafe(altPos) then
-					rootPart.CFrame = rootPart.CFrame - slideDir * (dt * speed)
-				else
-					-- Dự phòng: Nếu hai bên đều là vực thẳm, di chuyển giật lùi dọc theo đường dash
-					local backPos = rootPart.Position - dir * (dt * speed)
-					if isFloorSafe(backPos) then
-						rootPart.CFrame = rootPart.CFrame - dir * (dt * speed)
-					end
-				end
-			end
+			self.TelefraggerSuggestedDodgeDirection = slideDir
+			self.TelefraggerSuggestedDodgeAt = os.clock()
 		end
 	end)
 end
@@ -586,7 +572,7 @@ function Controller:TriggerSilentBackTrick(enemy)
 		return
 	end
 
-	-- Hủy luồng chờ cũ của Telefragger này nếu có
+	-- Há»§y luá»“ng chá» cÅ© cá»§a Telefragger nÃ y náº¿u cÃ³
 	if self.TelefraggerActiveThreads[enemy] then
 		pcall(task.cancel, self.TelefraggerActiveThreads[enemy])
 		self.TelefraggerActiveThreads[enemy] = nil
@@ -595,7 +581,7 @@ function Controller:TriggerSilentBackTrick(enemy)
 	self.TelefraggerActiveThreads[enemy] = task.delay(self.TelefraggerDesyncDelay or 0.44, function()
 		self.TelefraggerActiveThreads[enemy] = nil
 
-		-- Thêm vào danh sách đang desync active
+		-- ThÃªm vÃ o danh sÃ¡ch Ä‘ang desync active
 		local wasEmpty = (next(self.TelefraggerActiveDesyncs) == nil)
 		self.TelefraggerActiveDesyncs[enemy] = true
 
@@ -610,17 +596,17 @@ function Controller:CancelSilentBackTrick(enemy)
 		return
 	end
 
-	-- Hủy luồng chờ nếu chưa kích hoạt desync
+	-- Há»§y luá»“ng chá» náº¿u chÆ°a kÃ­ch hoáº¡t desync
 	if self.TelefraggerActiveThreads[enemy] then
 		pcall(task.cancel, self.TelefraggerActiveThreads[enemy])
 		self.TelefraggerActiveThreads[enemy] = nil
 	end
 
-	-- Xóa khỏi danh sách active
+	-- XÃ³a khá»i danh sÃ¡ch active
 	if self.TelefraggerActiveDesyncs[enemy] then
 		self.TelefraggerActiveDesyncs[enemy] = nil
 
-		-- Nếu không còn thực thể nào đang desync thì khôi phục nhân vật
+		-- Náº¿u khÃ´ng cÃ²n thá»±c thá»ƒ nÃ o Ä‘ang desync thÃ¬ khÃ´i phá»¥c nhÃ¢n váº­t
 		if next(self.TelefraggerActiveDesyncs) == nil then
 			BackTrick.revert(self)
 		end
@@ -632,9 +618,9 @@ function Controller:CancelSilentBackTrick(enemy)
 	end
 end
 
--- Hàm dọn dẹp tài nguyên (Garbage Collection - GC) giải phóng bộ nhớ
+-- HÃ m dá»n dáº¹p tÃ i nguyÃªn (Garbage Collection - GC) giáº£i phÃ³ng bá»™ nhá»›
 function Controller:CleanUp()
-	-- Hủy tất cả các luồng chờ và dọn dẹp danh sách active
+	-- Há»§y táº¥t cáº£ cÃ¡c luá»“ng chá» vÃ  dá»n dáº¹p danh sÃ¡ch active
 	for enemy, thread in pairs(self.TelefraggerActiveThreads) do
 		pcall(task.cancel, thread)
 	end
@@ -693,7 +679,7 @@ function Controller:CleanUp()
 		self.CadenceUIFrame = nil
 	end
 
-	-- Nếu bị hủy hoàn toàn (Destroyed = true), giải phóng các kết nối vĩnh viễn
+	-- Náº¿u bá»‹ há»§y hoÃ n toÃ n (Destroyed = true), giáº£i phÃ³ng cÃ¡c káº¿t ná»‘i vÄ©nh viá»…n
 	if self.Destroyed and self.PermanentConnections then
 		for _, conn in ipairs(self.PermanentConnections) do
 			if conn then
@@ -799,7 +785,7 @@ local function disableShockwave(enemy, part)
 	}
 end
 
--- Thiết lập cấu hình miễn nhiễm và kích hoạt dọn dẹp tức thời
+-- Thiáº¿t láº­p cáº¥u hÃ¬nh miá»…n nhiá»…m vÃ  kÃ­ch hoáº¡t dá»n dáº¹p tá»©c thá»i
 function Controller:SetImmunity(entityName, value)
 	debugPrint("SetImmunity called for:", entityName, "| value:", value)
 	if entityName == "Baby" then
@@ -828,7 +814,7 @@ function Controller:SetImmunity(entityName, value)
 	elseif entityName == "Springer" then
 		self.SpringerImmune = value
 
-		-- Thông báo cho Accessibility controller cập nhật lại trạng thái Auto Jump
+		-- ThÃ´ng bÃ¡o cho Accessibility controller cáº­p nháº­t láº¡i tráº¡ng thÃ¡i Auto Jump
 		local accessibilityController = getAccessibilityController()
 		if accessibilityController and accessibilityController.updateSpringerAutoJumpState then
 			pcall(function()
@@ -856,14 +842,14 @@ function Controller:SetImmunity(entityName, value)
 		end
 	end
 
-	-- Áp dụng thay đổi tức thời cho thực thể đã tồn tại trong workspace
+	-- Ãp dá»¥ng thay Ä‘á»•i tá»©c thá»i cho thá»±c thá»ƒ Ä‘Ã£ tá»“n táº¡i trong workspace
 	if value then
 		local function applyImmunityToChild(child)
 			if not (child:IsA("Model") or child:IsA("BasePart")) then
 				return
 			end
 
-			-- Husk / Skinwalker dùng module HuskEvasion mới
+			-- Husk / Skinwalker dÃ¹ng module HuskEvasion má»›i
 			if entityName == "Skinwalker" then
 				local isHusk = (string.find(child.Name, "Skinwalker") or string.find(child.Name, "Husk"))
 					and child.Name ~= "Skinwalkers"
@@ -873,7 +859,7 @@ function Controller:SetImmunity(entityName, value)
 				return
 			end
 
-			-- Baby / Bell / Mart dùng module TouchInterest Types
+			-- Baby / Bell / Mart dÃ¹ng module TouchInterest Types
 			local isTarget = string.find(string.lower(child.Name), string.lower(entityName))
 			debugPrint("applyImmunityToChild check for target:", child.Name, "| isTarget:", isTarget ~= nil)
 			if isTarget then
@@ -950,12 +936,12 @@ function Controller:SetImmunity(entityName, value)
 	end
 end
 
--- Cấu hình Silent Lookat của Ponderer
+-- Cáº¥u hÃ¬nh Silent Lookat cá»§a Ponderer
 function Controller:SetPondererSilentLookat(enabled)
 	self.PondererSilentLookat = enabled == true
 end
 
--- Cấu hình miễn nhiễm knockback của Springer
+-- Cáº¥u hÃ¬nh miá»…n nhiá»…m knockback cá»§a Springer
 function Controller:SetSpringerKnockbackImmune(enabled)
 	self.SpringerKnockbackImmune = enabled == true
 	if enabled then
@@ -1014,50 +1000,7 @@ local function stopBellGongKnockbackGuard(controller)
 end
 
 local function startBellGongKnockbackGuard(controller)
-	if controller.BellGongKnockbackConnection then
-		return
-	end
-
-	controller.BellGongKnockbackConnection = RunService.Heartbeat:Connect(function()
-		if controller.Destroyed or not controller.BellKnockbackImmune then
-			stopBellGongKnockbackGuard(controller)
-			return
-		end
-
-		if time() - (controller.LastBellDebuffAt or 0) > 1.25 then
-			return
-		end
-
-		local rootPart = getCharacterRoot()
-		if not (rootPart and rootPart.Parent) then
-			return
-		end
-
-		local bellPosition = getNearestBellPosition(controller, rootPart)
-		if not bellPosition then
-			return
-		end
-
-		local offset = rootPart.Position - bellPosition
-		if offset.Magnitude <= 0.001 then
-			return
-		end
-
-		local away = offset.Unit
-		local velocity = rootPart.AssemblyLinearVelocity or rootPart.Velocity
-		local outwardSpeed = velocity:Dot(away)
-		if outwardSpeed <= 24 then
-			return
-		end
-
-		local corrected = velocity - away * outwardSpeed
-		pcall(function()
-			rootPart.AssemblyLinearVelocity = corrected
-		end)
-		pcall(function()
-			rootPart.Velocity = corrected
-		end)
-	end)
+	controller.BellKnockbackGuardRequested = true
 end
 
 function Controller:SetBellKnockbackImmune(enabled)
@@ -1092,7 +1035,7 @@ end
 
 function Controller:StartSkinwalkerEvasion() end
 
--- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
+-- Tá»‘i Æ°u hÃ³a xá»­ lÃ½ tá»«ng thá»±c thá»ƒ (Sá»­ dá»¥ng Event thay vÃ¬ Loop)
 local function findNativeEnemyESPTemplate()
 	local globals = getgenv()._NULLSCAPE_Globals
 	if globals and globals.EntitiesNativeEnemyESPTemplate and globals.EntitiesNativeEnemyESPTemplate.Parent then
@@ -1170,7 +1113,7 @@ local function getEnemyDisplayName(enemy)
 	return nameLower
 end
 
--- Tối ưu hóa xử lý từng thực thể (Sử dụng Event thay vì Loop)
+-- Tá»‘i Æ°u hÃ³a xá»­ lÃ½ tá»«ng thá»±c thá»ƒ (Sá»­ dá»¥ng Event thay vÃ¬ Loop)
 local function processEntity(enemy)
 	if not enemy or not (enemy:IsA("Model") or enemy:IsA("BasePart")) or enemy.Name == "Skinwalkers" then
 		return
@@ -1181,7 +1124,7 @@ local function processEntity(enemy)
 	processedEntities[enemy] = true
 
 	if enemy:IsA("Model") then
-		-- Tự động đổi Adornee của ESP / ESPCrayon sang PrimaryPart để tránh lỗi hiển thị khi Adornee là Model không có PrimaryPart từ server
+		-- Tá»± Ä‘á»™ng Ä‘á»•i Adornee cá»§a ESP / ESPCrayon sang PrimaryPart Ä‘á»ƒ trÃ¡nh lá»—i hiá»ƒn thá»‹ khi Adornee lÃ  Model khÃ´ng cÃ³ PrimaryPart tá»« server
 		local function onChildAdded(child)
 			if child.Name == "ESP" or child.Name == "ESPCrayon" then
 				if child:IsA("BillboardGui") then
@@ -1259,9 +1202,9 @@ local function processEntity(enemy)
 		end
 
 		task.spawn(function()
-			-- Tìm kiếm đệ quy phần đầu hoặc phần thân khả dụng của quái vật 3D một cách không đồng bộ
+			-- TÃ¬m kiáº¿m Ä‘á»‡ quy pháº§n Ä‘áº§u hoáº·c pháº§n thÃ¢n kháº£ dá»¥ng cá»§a quÃ¡i váº­t 3D má»™t cÃ¡ch khÃ´ng Ä‘á»“ng bá»™
 			local actualHead
-			for _ = 1, 30 do -- Thử tối đa 30 lần (30 * 0.05s = 1.5s) để khớp với nhịp tải phần tử của game
+			for _ = 1, 30 do -- Thá»­ tá»‘i Ä‘a 30 láº§n (30 * 0.05s = 1.5s) Ä‘á»ƒ khá»›p vá»›i nhá»‹p táº£i pháº§n tá»­ cá»§a game
 				if not enemy or not enemy.Parent then
 					break
 				end
@@ -1274,14 +1217,14 @@ local function processEntity(enemy)
 				if actualHead then
 					break
 				end
-				task.wait(0.05) -- Chờ một nhịp cực ngắn trước khi kiểm tra lại
+				task.wait(0.05) -- Chá» má»™t nhá»‹p cá»±c ngáº¯n trÆ°á»›c khi kiá»ƒm tra láº¡i
 			end
 
 			if not enemy or not enemy.Parent then
 				return
 			end
 
-			-- Gán PrimaryPart nếu model thiếu (Cực kỳ quan trọng để BillboardGui ESP của game gốc hiển thị)
+			-- GÃ¡n PrimaryPart náº¿u model thiáº¿u (Cá»±c ká»³ quan trá»ng Ä‘á»ƒ BillboardGui ESP cá»§a game gá»‘c hiá»ƒn thá»‹)
 			if not enemy.PrimaryPart then
 				local rootPart = actualHead
 				if rootPart and rootPart:IsA("BillboardGui") then
@@ -1297,7 +1240,7 @@ local function processEntity(enemy)
 				end
 			end
 
-			-- Tạo phần đầu giả lập "head" (chữ thường) dạng BillboardGui cho thực thể 3D để khớp kiểu dữ liệu UDim2.Size của game gốc
+			-- Táº¡o pháº§n Ä‘áº§u giáº£ láº­p "head" (chá»¯ thÆ°á»ng) dáº¡ng BillboardGui cho thá»±c thá»ƒ 3D Ä‘á»ƒ khá»›p kiá»ƒu dá»¯ liá»‡u UDim2.Size cá»§a game gá»‘c
 			if not enemy:FindFirstChild("head") then
 				local rootPart = actualHead
 				if rootPart and rootPart:IsA("BillboardGui") then
@@ -1313,10 +1256,10 @@ local function processEntity(enemy)
 				end
 			end
 
-			-- Chờ một chút để xem hệ thống gốc của game có tự động gắn ESP hay không
+			-- Chá» má»™t chÃºt Ä‘á»ƒ xem há»‡ thá»‘ng gá»‘c cá»§a game cÃ³ tá»± Ä‘á»™ng gáº¯n ESP hay khÃ´ng
 			task.wait(0.2)
 			if enemy.Parent and not (enemy:FindFirstChild("ESP") or enemy:FindFirstChild("ESPCrayon")) then
-				-- Nếu script gốc của game bỏ lỡ hoặc không kịp gắn, chúng ta tự gắn thủ công bằng template gốc
+				-- Náº¿u script gá»‘c cá»§a game bá» lá»¡ hoáº·c khÃ´ng ká»‹p gáº¯n, chÃºng ta tá»± gáº¯n thá»§ cÃ´ng báº±ng template gá»‘c
 				local template = findNativeEnemyESPTemplate()
 				if template then
 					local cloned = template:Clone()
@@ -1357,7 +1300,7 @@ local function processEntity(enemy)
 		end)
 	end
 
-	-- Hàm xử lý chính khi kiểm tra tên thực thể
+	-- HÃ m xá»­ lÃ½ chÃ­nh khi kiá»ƒm tra tÃªn thá»±c thá»ƒ
 	local function checkAndApply()
 		if not enemy or not enemy.Parent then
 			return
@@ -1365,7 +1308,7 @@ local function processEntity(enemy)
 		local name = enemy.Name
 		debugPrint("processEntity checkAndApply for:", name)
 
-		-- ── Thực thể dùng nguyên lý Xóa TouchInterest (Baby, Bell, Mart,...) ──
+		-- â”€â”€ Thá»±c thá»ƒ dÃ¹ng nguyÃªn lÃ½ XÃ³a TouchInterest (Baby, Bell, Mart,...) â”€â”€
 		if TouchInterest.isTargetEntity(name) then
 			local checkFunc = TouchInterest.getImmunityCheck(name, Controller)
 			debugPrint("checkAndApply TargetEntity:", name, "| checkFunc found:", checkFunc ~= nil)
@@ -1377,7 +1320,7 @@ local function processEntity(enemy)
 			end
 		end
 
-		-- ── Husk / Skinwalker (đổi tên + CanTouch) ─────────────────────────────
+		-- â”€â”€ Husk / Skinwalker (Ä‘á»•i tÃªn + CanTouch) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		if
 			HuskEvasion.isHuskEntity(name)
 			or (enemy:GetAttribute("OriginalName") and HuskEvasion.isHuskEntity(enemy:GetAttribute("OriginalName")))
@@ -1387,7 +1330,7 @@ local function processEntity(enemy)
 			end
 		end
 
-		-- ── Cadence Status UI Hook ─────────────────────────────
+		-- â”€â”€ Cadence Status UI Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		if string.find(name, "Cadence") then
 			createCadenceUI()
 			if Controller.CadenceStatusLabel then
@@ -1435,7 +1378,7 @@ local function processEntity(enemy)
 						end
 					elseif p1 == "Chase" then
 						if Controller.CadenceStatusLabel then
-							Controller.CadenceStatusLabel.Text = "⚠️ CHASE ACTIVE ⚠️"
+							Controller.CadenceStatusLabel.Text = "âš ï¸ CHASE ACTIVE âš ï¸"
 							Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
 							pcall(function()
 								local ts = game:GetService("TweenService")
@@ -1461,7 +1404,7 @@ local function processEntity(enemy)
 			end
 		end
 
-		-- ── Telefragger ClientEvent Hook ─────────────────────────────
+		-- â”€â”€ Telefragger ClientEvent Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		if string.find(string.lower(name), "telefragger") and not hookedTelefraggers[enemy] then
 			hookedTelefraggers[enemy] = true
 			task.spawn(function()
@@ -1480,14 +1423,14 @@ local function processEntity(enemy)
 		end
 	end
 
-	-- Đăng ký sự kiện lắng nghe đổi tên của thực thể (Phòng hờ game đổi tên trễ sau khi spawn)
+	-- ÄÄƒng kÃ½ sá»± kiá»‡n láº¯ng nghe Ä‘á»•i tÃªn cá»§a thá»±c thá»ƒ (PhÃ²ng há» game Ä‘á»•i tÃªn trá»… sau khi spawn)
 	local nameConn = enemy:GetPropertyChangedSignal("Name"):Connect(checkAndApply)
 	GC.registerEntityConnection(enemy, nameConn)
 
-	-- Chạy kiểm tra ngay lập tức
+	-- Cháº¡y kiá»ƒm tra ngay láº­p tá»©c
 	checkAndApply()
 
-	-- Lắng nghe bộ phận mới được thêm vào cho Husk/Skinwalker
+	-- Láº¯ng nghe bá»™ pháº­n má»›i Ä‘Æ°á»£c thÃªm vÃ o cho Husk/Skinwalker
 	local descConn = enemy.DescendantAdded:Connect(function(part)
 		local name = enemy.Name
 		if
@@ -1501,7 +1444,7 @@ local function processEntity(enemy)
 	end)
 	GC.registerEntityConnection(enemy, descConn)
 
-	-- Xử lý vô hiệu hóa shockwave cho Springer (Springer không có TouchInterest, chỉ có ClientEvent và ShockwaveEvent)
+	-- Xá»­ lÃ½ vÃ´ hiá»‡u hÃ³a shockwave cho Springer (Springer khÃ´ng cÃ³ TouchInterest, chá»‰ cÃ³ ClientEvent vÃ  ShockwaveEvent)
 	if string.find(enemy.Name, "Springer") then
 		local childAddedConn = enemy.ChildAdded:Connect(function(child)
 			if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
@@ -1522,7 +1465,7 @@ local function processEntity(enemy)
 	end
 end
 
--- Gỡ bỏ lắng nghe của thực thể khi nó bị xóa
+-- Gá»¡ bá» láº¯ng nghe cá»§a thá»±c thá»ƒ khi nÃ³ bá»‹ xÃ³a
 local function removeEntity(enemy)
 	processedEntities[enemy] = nil
 	GC.removeEntityConnections(enemy)
@@ -1544,18 +1487,18 @@ local function removeEntity(enemy)
 	end
 end
 
--- Hàm dọn dẹp tài nguyên riêng cho một thư mục cụ thể khi nó bị xóa khỏi Workspace
+-- HÃ m dá»n dáº¹p tÃ i nguyÃªn riÃªng cho má»™t thÆ° má»¥c cá»¥ thá»ƒ khi nÃ³ bá»‹ xÃ³a khá»i Workspace
 function Controller:CleanUpFolder(folder)
 	if not folder then
 		return
 	end
 
-	-- 1. Dọn dẹp các thực thể đang tồn tại trong thư mục này
+	-- 1. Dá»n dáº¹p cÃ¡c thá»±c thá»ƒ Ä‘ang tá»“n táº¡i trong thÆ° má»¥c nÃ y
 	for _, child in ipairs(folder:GetChildren()) do
 		removeEntity(child)
 	end
 
-	-- 2. Ngắt kết nối của riêng thư mục này
+	-- 2. Ngáº¯t káº¿t ná»‘i cá»§a riÃªng thÆ° má»¥c nÃ y
 	local conns = folderConnections[folder]
 	if conns then
 		for _, conn in ipairs(conns) do
@@ -1568,16 +1511,16 @@ function Controller:CleanUpFolder(folder)
 		folderConnections[folder] = nil
 	end
 
-	-- 3. Cập nhật biến tham chiếu EnemiesFolder nếu cần
+	-- 3. Cáº­p nháº­t biáº¿n tham chiáº¿u EnemiesFolder náº¿u cáº§n
 	if self.EnemiesFolder == folder then
 		self.EnemiesFolder = nil
 	end
 end
 
--- Thiết lập quan sát thư mục Enemies trong Workspace
+-- Thiáº¿t láº­p quan sÃ¡t thÆ° má»¥c Enemies trong Workspace
 function Controller:ObserveFolder(folder)
 	debugPrint("ObserveFolder called for:", folder:GetFullName())
-	-- Tránh đăng ký nhiều lần cho cùng một thư mục
+	-- TrÃ¡nh Ä‘Äƒng kÃ½ nhiá»u láº§n cho cÃ¹ng má»™t thÆ° má»¥c
 	if folderConnections[folder] then
 		debugPrint("Folder already observed, skipping:", folder.Name)
 		return
@@ -1589,30 +1532,30 @@ function Controller:ObserveFolder(folder)
 
 	local conns = {}
 
-	-- 1. Lắng nghe khi thực thể mới xuất hiện
+	-- 1. Láº¯ng nghe khi thá»±c thá»ƒ má»›i xuáº¥t hiá»‡n
 	local childAddedConn = folder.ChildAdded:Connect(function(child)
 		debugPrint("ObserveFolder: ChildAdded in:", folder.Name, "| Child Name:", child.Name)
 		processEntity(child)
 	end)
 	table.insert(conns, childAddedConn)
 
-	-- 2. Lắng nghe khi thực thể bị xóa khỏi game
+	-- 2. Láº¯ng nghe khi thá»±c thá»ƒ bá»‹ xÃ³a khá»i game
 	local childRemovedConn = folder.ChildRemoved:Connect(function(child)
 		removeEntity(child)
 	end)
 	table.insert(conns, childRemovedConn)
 
-	-- 3. Xử lý các thực thể đã có sẵn trong thư mục
+	-- 3. Xá»­ lÃ½ cÃ¡c thá»±c thá»ƒ Ä‘Ã£ cÃ³ sáºµn trong thÆ° má»¥c
 	debugPrint("ObserveFolder: Existing children in:", folder.Name, "| count:", #folder:GetChildren())
 	for _, child in ipairs(folder:GetChildren()) do
 		debugPrint("ObserveFolder: Processing existing child:", child.Name)
 		processEntity(child)
 	end
 
-	-- 4. Cơ chế tự động GC khi thư mục bị xóa/hủy khỏi Workspace
+	-- 4. CÆ¡ cháº¿ tá»± Ä‘á»™ng GC khi thÆ° má»¥c bá»‹ xÃ³a/há»§y khá»i Workspace
 	local destroyingConn = folder.AncestryChanged:Connect(function(_, parent)
 		if not parent then
-			-- Thư mục đã bị xóa hoàn toàn khỏi trò chơi
+			-- ThÆ° má»¥c Ä‘Ã£ bá»‹ xÃ³a hoÃ n toÃ n khá»i trÃ² chÆ¡i
 			self:CleanUpFolder(folder)
 		end
 	end)
@@ -1622,85 +1565,13 @@ function Controller:ObserveFolder(folder)
 end
 
 function Controller:UpdateTouchImmunityState()
-	local localPlayer = Players.LocalPlayer
-	if not localPlayer then
-		return
-	end
-
-	local char = localPlayer.Character
-	if not char then
-		restoreCharacterTouchStates()
-		return
-	end
-
-	local rootPart = char:FindFirstChild("HumanoidRootPart")
-	if not rootPart then
-		restoreCharacterTouchStates()
-		return
-	end
-
-	local beaconValue = localPlayer:FindFirstChild("Beacon")
-	if (beaconValue and beaconValue.Value == true) or isNearBeacon(rootPart) then
-		restoreCharacterTouchStates()
-		return
-	end
-
-	local nearBell = false
-	local nearSpringer = false
-
-	local enemiesFolder = workspace:FindFirstChild("Enemies")
-	if enemiesFolder then
-		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-			local name = enemy.Name
-			local enemyRoot
-			if enemy:IsA("BasePart") then
-				enemyRoot = enemy
-			elseif enemy:IsA("Model") then
-				enemyRoot = enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
-			else
-				enemyRoot = enemy:FindFirstChildWhichIsA("BasePart", true)
-			end
-			if enemyRoot then
-				local dist = (rootPart.Position - enemyRoot.Position).Magnitude
-				if string.find(name, "Bell") and dist < 16 then
-					nearBell = true
-				elseif string.find(name, "Springer") and dist < 42 then
-					nearSpringer = true
-				end
-			end
-		end
-	end
-
-	local shouldDisableTouch = (nearBell and self.BellImmune) or (nearSpringer and self.SpringerImmune)
-
-	for _, part in ipairs(char:GetDescendants()) do
-		if part:IsA("BasePart") then
-			if shouldDisableTouch then
-				if part.CanTouch then
-					if originalTouchStates[part] == nil then
-						originalTouchStates[part] = part.CanTouch
-					end
-					part.CanTouch = false
-				end
-			else
-				if originalTouchStates[part] ~= nil then
-					part.CanTouch = originalTouchStates[part]
-					originalTouchStates[part] = nil
-				end
-			end
-		end
-	end
+	restoreCharacterTouchStates()
 end
 
--- Quét tìm thư mục Enemies và Skinwalkers trong Workspace và lắng nghe sự thay đổi
+-- QuÃ©t tÃ¬m thÆ° má»¥c Enemies vÃ  Skinwalkers trong Workspace vÃ  láº¯ng nghe sá»± thay Ä‘á»•i
 local function startObservingFolders()
 	debugPrint("startObservingFolders called")
 	disconnectFolderObservations()
-
-	local touchImmConn = RunService.Heartbeat:Connect(function()
-		Controller:UpdateTouchImmunityState()
-	end)
-	table.insert(workspaceConnections, touchImmConn)
 
 	local function checkAndObserve(child)
 		if Controller.Destroyed then
@@ -1714,7 +1585,7 @@ local function startObservingFolders()
 	local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
 	table.insert(workspaceConnections, wsConn)
 
-	-- Xử lý các folder có sẵn
+	-- Xá»­ lÃ½ cÃ¡c folder cÃ³ sáºµn
 	for _, child in ipairs(workspace:GetChildren()) do
 		if (child.Name == "Enemies" or child.Name == "Skinwalkers") and child:IsA("Folder") then
 			Controller:ObserveFolder(child)
@@ -1722,7 +1593,7 @@ local function startObservingFolders()
 	end
 end
 
--- Hàm cập nhật trạng thái sảnh chờ và tự động dọn dẹp visual/connections
+-- HÃ m cáº­p nháº­t tráº¡ng thÃ¡i sáº£nh chá» vÃ  tá»± Ä‘á»™ng dá»n dáº¹p visual/connections
 local function setInLobby(val)
 	if inLobby == val then
 		return
@@ -1742,7 +1613,7 @@ local function setInLobby(val)
 	end
 end
 
--- Hook hệ thống trạng thái (Status Effects) để miễn nhiễm debuff và screen effect được chọn
+-- Hook há»‡ thá»‘ng tráº¡ng thÃ¡i (Status Effects) Ä‘á»ƒ miá»…n nhiá»…m debuff vÃ  screen effect Ä‘Æ°á»£c chá»n
 local function initializeStatusEffectHook()
 	local globals = getgenv()._NULLSCAPE_Globals
 	local StatusImmunity = getStatusImmunity() or getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
@@ -1806,7 +1677,7 @@ local function initializeStatusEffectHook()
 		end
 	end)
 
-	-- Khởi chạy vòng lặp ngầm để liên tục khử kích thước Blur và các hiệu ứng méo/đỏ màn hình
+	-- Khá»Ÿi cháº¡y vÃ²ng láº·p ngáº§m Ä‘á»ƒ liÃªn tá»¥c khá»­ kÃ­ch thÆ°á»›c Blur vÃ  cÃ¡c hiá»‡u á»©ng mÃ©o/Ä‘á» mÃ n hÃ¬nh
 	globals.StatusEffectHooked = true
 	local loopToken = {}
 	globals.StatusEffectLoopToken = loopToken
@@ -1844,7 +1715,7 @@ local function initializeStatusEffectHook()
 	end)
 end
 
--- Hook hiệu ứng mù khi ai đó gõ Chuông (Bell Blindness / Screen flash black/white)
+-- Hook hiá»‡u á»©ng mÃ¹ khi ai Ä‘Ã³ gÃµ ChuÃ´ng (Bell Blindness / Screen flash black/white)
 local function initializeBellBlindnessHook()
 	local globals = getgenv()._NULLSCAPE_Globals
 	globals.BellHookedFunctions = globals.BellHookedFunctions or {}
@@ -1863,7 +1734,7 @@ local function initializeBellBlindnessHook()
 		end
 	end
 
-	-- Hook _G.RingBell để tránh nhấp nháy/mù cục bộ khi ta tự gõ hoặc chạm chuông
+	-- Hook _G.RingBell Ä‘á»ƒ trÃ¡nh nháº¥p nhÃ¡y/mÃ¹ cá»¥c bá»™ khi ta tá»± gÃµ hoáº·c cháº¡m chuÃ´ng
 	task.spawn(function()
 		while not _G.RingBell do
 			task.wait(0.5)
@@ -1878,7 +1749,7 @@ local function initializeBellBlindnessHook()
 		_G.RingBell = makeRingBellWrapper(globals.OriginalRingBell)
 	end)
 
-	-- Hook OnClientEvent của Bell để tránh mù khi người chơi khác gõ chuông trong phòng
+	-- Hook OnClientEvent cá»§a Bell Ä‘á»ƒ trÃ¡nh mÃ¹ khi ngÆ°á»i chÆ¡i khÃ¡c gÃµ chuÃ´ng trong phÃ²ng
 	task.spawn(function()
 		local events = ReplicatedStorage:WaitForChild("Events", 15)
 		local bellEvent = events and events:WaitForChild("Bell", 15)
@@ -1905,10 +1776,10 @@ local function initializeBellBlindnessHook()
 					end
 				end
 
-				-- Hook các kết nối cũ đang hoạt động
+				-- Hook cÃ¡c káº¿t ná»‘i cÅ© Ä‘ang hoáº¡t Ä‘á»™ng
 				hookBellConnections()
 
-				-- Hook hàm Connect để tự động bọc các kết nối mới trong tương lai
+				-- Hook hÃ m Connect Ä‘á»ƒ tá»± Ä‘á»™ng bá»c cÃ¡c káº¿t ná»‘i má»›i trong tÆ°Æ¡ng lai
 				local oldConnect
 				oldConnect = hookfunction(bellEvent.OnClientEvent.Connect, function(self, callback)
 					if typeof(callback) == "function" and globals.OriginalRingBell and callback == globals.OriginalRingBell then
@@ -1921,50 +1792,9 @@ local function initializeBellBlindnessHook()
 	end)
 end
 
--- Hook AnimationManager để phục vụ tính năng BackTrick của Telefragger
-local function initializeMovementHook()
-	local success, err = pcall(function()
-		local ReplicatedStorage = game:GetService("ReplicatedStorage")
-		local movementFolder = ReplicatedStorage:WaitForChild("Movement", 15)
-		if movementFolder then
-			local animManagerScript = movementFolder:WaitForChild("AnimationManager", 15)
-			if animManagerScript and animManagerScript:IsA("ModuleScript") then
-				local AnimationManager = require(animManagerScript)
-				if typeof(AnimationManager) == "table" then
-					if AnimationManager.FaceMoveDirection and not getgenv()._NULLSCAPE_Globals.AnimManagerHooked then
-						local oldFaceMoveDirection = AnimationManager.FaceMoveDirection
-						AnimationManager.FaceMoveDirection = function(self, ...)
-							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-							if activeCtrl and activeCtrl.WasRedirectingTelefragger then
-								return
-							end
-							return oldFaceMoveDirection(self, ...)
-						end
-
-						local oldFaceDirection = AnimationManager.FaceDirection
-						AnimationManager.FaceDirection = function(self, ...)
-							local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-							if activeCtrl and activeCtrl.WasRedirectingTelefragger then
-								return
-							end
-							return oldFaceDirection(self, ...)
-						end
-
-						getgenv()._NULLSCAPE_Globals.AnimManagerHooked = true
-						debugPrint("Successfully hooked AnimationManager FaceMoveDirection & FaceDirection!")
-					end
-				end
-			end
-		end
-	end)
-	if not success then
-		warn("Failed to hook AnimationManager:", err)
-	end
-end
-
--- Hook để chặn RemoteEvent báo tử của thực thể Client-side (như ICBM và Springer) một cách an toàn
+-- Hook Ä‘á»ƒ cháº·n RemoteEvent bÃ¡o tá»­ cá»§a thá»±c thá»ƒ Client-side (nhÆ° ICBM vÃ  Springer) má»™t cÃ¡ch an toÃ n
 local function initializeICBMHook()
-	-- Xây dựng bảng tra cứu nhanh O(1) tên các RemoteEvent cần chặn
+	-- XÃ¢y dá»±ng báº£ng tra cá»©u nhanh O(1) tÃªn cÃ¡c RemoteEvent cáº§n cháº·n
 	local TargetRemoteNames = {
 		["ClientEvent"] = true,
 		["ShockwaveEvent"] = true,
@@ -1972,63 +1802,29 @@ local function initializeICBMHook()
 		["Died"] = true,
 		["OblivionEvent"] = true,
 		["BroSecureMethod"] = true,
-		["GrappleReplicator"] = true,
-		["UnreliableRemoteEvent"] = true,
 		["LookEvent"] = true,
 	}
 
 	local function handleRemoteCall(self, ...)
-		local firstArg = ...
+		local args = { ... }
 
-		-- Lấy activeController hiện tại từ globals
+		-- Láº¥y activeController hiá»‡n táº¡i tá»« globals
 		local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
 		if not activeCtrl then
 			return false
 		end
 
-		-- ── HOOK GỬI CAMERA GIẢ LẬP CHO NGƯỜI XEM (SPECTATOR FLICK) ──
-		if self.Name == "UnreliableRemoteEvent" and firstArg == 0 then
-			if activeCtrl.FlickFakeSpectatorEnabled and activeCtrl.CurrentFlickAngle then
-				local args = { ... }
-				local originalCFrame = args[3]
-				if typeof(originalCFrame) == "CFrame" then
-					-- Xoay CFrame camera gửi lên server (nhân bên TRÁI để tạo hiệu ứng xoay quỹ đạo quanh nhân vật)
-					args[3] = CFrame.Angles(0, activeCtrl.CurrentFlickAngle, 0) * originalCFrame
-					return true, args -- Chặn cuộc gọi gốc và trả về danh sách tham số mới
-				end
-			end
-			return false
-		end
 
-		-- Kiểm tra nhanh tên remote trước (O(1) lookup)
+		-- Kiá»ƒm tra nhanh tÃªn remote trÆ°á»›c (O(1) lookup)
 		if not TargetRemoteNames[self.Name] then
 			return false
 		end
 
-		-- Trì hoãn cuộc gọi CreateHook để đồng bộ hóa trạng thái vật lý lên server (tránh bị từ chối do độ trễ ping)
-		local namecallArgs = { ... }
-		if self.Name == "GrappleReplicator" and firstArg == "CreateHook" and namecallArgs[3] ~= "DelayedBypass" then
-			task.delay(0.06, function()
-				local originalFireServer = getgenv()._NULLSCAPE_Globals.OriginalFireServer
-				if originalFireServer then
-					pcall(originalFireServer, self, table.unpack(namecallArgs))
-				else
-					-- Dự phòng nếu không có hookfunction: tự gọi lại và gắn thêm tag nhận biết để tránh lặp đệ quy
-					namecallArgs[3] = "DelayedBypass"
-					pcall(function()
-						self:FireServer(table.unpack(namecallArgs))
-					end)
-				end
-			end)
+
+		-- Cháº¡y logic cháº·n RemoteEvent thá»‘ng nháº¥t tá»« RemoteBlocking.luau
+		if self.Name == "Died" and args[1] == "VoidImplosion" and activeCtrl.VoidImplosionImmune == true then
 			return true
 		end
-
-		-- Chạy logic chặn RemoteEvent thống nhất từ RemoteBlocking.luau
-		if self.Name == "Died" and firstArg == "VoidImplosion" and activeCtrl.VoidImplosionImmune == true then
-			return true
-		end
-
-		local args = { ... }
 
 		if activeCtrl.GuardianImmune == true and self.Name == "Died" and args[1] == "Guardian" then
 			return true
@@ -2048,10 +1844,10 @@ local function initializeICBMHook()
 		return false
 	end
 
-	-- Đăng ký dispatcher toàn cục
+	-- ÄÄƒng kÃ½ dispatcher toÃ n cá»¥c
 	getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall = handleRemoteCall
 
-	-- 1. Hook __namecall (Phương pháp chuẩn và mạnh nhất cho các cuộc gọi dạng Remote:FireServer(...) hoặc Remote:InvokeServer(...))
+	-- 1. Hook __namecall (PhÆ°Æ¡ng phÃ¡p chuáº©n vÃ  máº¡nh nháº¥t cho cÃ¡c cuá»™c gá»i dáº¡ng Remote:FireServer(...) hoáº·c Remote:InvokeServer(...))
 	local namecallSuccess = false
 	if typeof(hookmetamethod) == "function" then
 		if not getgenv()._NULLSCAPE_Globals.NamecallHooked then
@@ -2083,9 +1879,9 @@ local function initializeICBMHook()
 									return oldNamecall(self, table.unpack(modifiedArgs))
 								end
 								if isRemoteFunction then
-									return nil -- Chặn đứng InvokeServer và trả về nil
+									return nil -- Cháº·n Ä‘á»©ng InvokeServer vÃ  tráº£ vá» nil
 								end
-								return -- Chặn đứng FireServer
+								return -- Cháº·n Ä‘á»©ng FireServer
 							end
 						end
 					end
@@ -2100,7 +1896,7 @@ local function initializeICBMHook()
 		end
 	end
 
-	-- 2. Hook FireServer/InvokeServer prototype (Dự phòng)
+	-- 2. Hook FireServer/InvokeServer prototype (Dá»± phÃ²ng)
 	local prototypeSuccess = false
 	if typeof(hookfunction) == "function" then
 		if not getgenv()._NULLSCAPE_Globals.PrototypeHooked then
@@ -2115,7 +1911,7 @@ local function initializeICBMHook()
 							if modifiedArgs then
 								return oldFireServer(self, table.unpack(modifiedArgs))
 							end
-							return -- Chặn đứng cuộc gọi
+							return -- Cháº·n Ä‘á»©ng cuá»™c gá»i
 						end
 					end
 					return oldFireServer(self, ...)
@@ -2131,7 +1927,7 @@ local function initializeICBMHook()
 							if modifiedArgs then
 								return oldInvokeServer(self, table.unpack(modifiedArgs))
 							end
-							return nil -- Chặn đứng cuộc gọi và trả về nil
+							return nil -- Cháº·n Ä‘á»©ng cuá»™c gá»i vÃ  tráº£ vá» nil
 						end
 					end
 					return oldInvokeServer(self, ...)
@@ -2151,15 +1947,15 @@ local function initializeICBMHook()
 	end
 end
 
--- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
+-- ÄÄƒng kÃ½ active controller hiá»‡n táº¡i Ä‘á»ƒ tá»± Ä‘á»™ng dá»«ng cÃ¡c phiÃªn báº£n cÅ©
 getgenv()._NULLSCAPE_Globals.activeEntitiesController = Controller
 
--- Khởi tạo ban đầu khi nạp script
+-- Khá»Ÿi táº¡o ban Ä‘áº§u khi náº¡p script
 if not inLobby then
 	startObservingFolders()
 end
 
--- Lắng nghe sự kiện đổi trạng thái game thời gian thực
+-- Láº¯ng nghe sá»± kiá»‡n Ä‘á»•i tráº¡ng thÃ¡i game thá»i gian thá»±c
 task.spawn(function()
 	local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
 	if Controller.Destroyed or not Controller.PermanentConnections then
@@ -2202,7 +1998,7 @@ task.spawn(function()
 	end
 end)
 
--- Vòng lặp quan sát dự phòng (chỉ chạy khi không có InRound)
+-- VÃ²ng láº·p quan sÃ¡t dá»± phÃ²ng (chá»‰ cháº¡y khi khÃ´ng cÃ³ InRound)
 task.spawn(function()
 	while not Controller.Destroyed and not hasInRoundValue do
 		task.wait(3.0)
@@ -2219,7 +2015,6 @@ task.spawn(function()
 	end
 end)
 
-task.spawn(initializeMovementHook)
 task.spawn(initializeICBMHook)
 task.spawn(initializeStatusEffectHook)
 task.spawn(initializeBellBlindnessHook)

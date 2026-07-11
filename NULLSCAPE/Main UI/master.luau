@@ -10,26 +10,6 @@ local Game = game
 if getgenv().Client then
 	pcall(function()
 		local oldClient = getgenv().Client
-		if typeof(oldClient) == "table" and typeof(oldClient.ReleaseCharacterControl) == "function" then
-			local originalOldReleaseCharacterControl = oldClient.ReleaseCharacterControl
-			oldClient.ReleaseCharacterControl = function(self, options)
-				options = typeof(options) == "table" and table.clone(options) or {}
-				options.SkipVelocityClear = true
-				options.SkipTouchRestore = true
-				options.SkipStateChange = true
-				options.ForceStateRecovery = false
-				options.ForceTouchRestore = false
-				return originalOldReleaseCharacterControl(self, options)
-			end
-			pcall(function()
-				oldClient:ReleaseCharacterControl({
-					Reason = "Reload",
-					SkipVelocityClear = true,
-					SkipTouchRestore = true,
-					SkipStateChange = true,
-				})
-			end)
-		end
 		if typeof(oldClient) == "table" and typeof(oldClient.Destroy) == "function" then
 			oldClient:Destroy("Reload")
 		else
@@ -407,45 +387,6 @@ local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
-local function resumeCharacterAnimation(character)
-	if not character then
-		return
-	end
-
-	local animate = character:FindFirstChild("Animate")
-	if animate and animate:IsA("LocalScript") then
-		pcall(function()
-			animate.Disabled = false
-		end)
-	end
-
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local animator = humanoid and humanoid:FindFirstChildOfClass("Animator")
-	if animator then
-		pcall(function()
-			for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-				pcall(function()
-					track:AdjustSpeed(1)
-				end)
-			end
-		end)
-	end
-end
-
-local function restoreCharacterTouch(character)
-	if not character then
-		return
-	end
-
-	for _, descendant in ipairs(character:GetDescendants()) do
-		if descendant:IsA("BasePart") then
-			pcall(function()
-				descendant.CanTouch = true
-			end)
-		end
-	end
-end
-
 local function getCharacterControlSnapshot(character)
 	local snapshot = {
 		HasCharacter = character ~= nil,
@@ -642,195 +583,31 @@ local function startCelestialVisualLockGuard()
 	end)
 end
 
-local function startStaleAbilityGuard()
-	local staleSince = nil
-	local lastHumanoid = nil
-	local STALE_ABILITY_TIMEOUT = 5
-
-	task.spawn(function()
-		while not Client.Destroyed do
-			local character = LocalPlayer.Character
-			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-			if humanoid ~= lastHumanoid then
-				lastHumanoid = humanoid
-				staleSince = nil
-			end
-
-			local usingAbility = humanoid and humanoid:GetAttribute("UsingAbility") == true
-			local chargingCheck = character and character:GetAttribute("ChargingCheck") == true
-			if usingAbility and not chargingCheck then
-				staleSince = staleSince or os.clock()
-				if os.clock() - staleSince >= STALE_ABILITY_TIMEOUT then
-					pcall(function()
-						humanoid:SetAttribute("UsingAbility", false)
-					end)
-					local globals = getgenv()._NULLSCAPE_Globals
-					if typeof(globals) == "table" then
-						globals.LastStaleAbilityClearAt = os.clock()
-						globals.LastCharacterControlSnapshot = getCharacterControlSnapshot(character)
-					end
-					staleSince = nil
-				end
-			else
-				staleSince = nil
-			end
-
-			task.wait(0.25)
-		end
-	end)
-end
-
 function Client:GetCharacterControlSnapshot()
 	return getCharacterControlSnapshot(Players.LocalPlayer and Players.LocalPlayer.Character)
 end
 
 function Client:ReleaseCharacterControl(options)
-	options = options or {}
-	local player = Players.LocalPlayer
-	local character = player and player.Character
-	if not character then
-		return false
-	end
-
-	local hrp = character:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		pcall(function()
-			hrp.Anchored = false
-			if options.SkipVelocityClear ~= true then
-				hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-				hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-			end
-		end)
-	end
-
-	if options.ForceTouchRestore == true and options.SkipTouchRestore ~= true then
-		restoreCharacterTouch(character)
-	end
-
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid then
-		pcall(function()
-			humanoid.PlatformStand = false
-			humanoid.Sit = false
-			humanoid.AutoRotate = true
-		end)
-
-		if options.ForceStateRecovery == true and options.SkipStateChange ~= true and humanoid.Health > 0 then
-			local state = humanoid:GetState()
-			if
-				state == Enum.HumanoidStateType.PlatformStanding
-				or state == Enum.HumanoidStateType.Physics
-				or state == Enum.HumanoidStateType.Seated
-			then
-				pcall(function()
-					humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
-					humanoid:ChangeState(Enum.HumanoidStateType.Running)
-				end)
-			end
-		end
-	end
-
 	local globals = getgenv()._NULLSCAPE_Globals
 	if typeof(globals) == "table" then
-		globals.LastCharacterControlSnapshot = getCharacterControlSnapshot(character)
+		globals.LastCharacterControlReleaseRequest = {
+			Reason = typeof(options) == "table" and options.Reason or "Unknown",
+			At = os.clock(),
+		}
 	end
-
-	resumeCharacterAnimation(character)
 	return true
 end
 
 function Client:PrepareForRuntimeUpdate(reason)
 	getgenv()._NULLSCAPE_PendingCharacterRelease = true
-	self:ReleaseCharacterControl({
-		Reason = reason or "RuntimeUpdate",
-		SkipVelocityClear = true,
-	})
-	task.defer(function()
-		if self.Destroyed then
-			return
-		end
-		self:ReleaseCharacterControl({
-			Reason = reason or "RuntimeUpdateDeferred",
-			SkipVelocityClear = true,
-		})
-	end)
+	self:ReleaseCharacterControl({ Reason = reason or "RuntimeUpdate" })
 	return true
 end
 
-local function clearRespawnMovementCaches()
-	local globals = getgenv()._NULLSCAPE_Globals
-	if typeof(globals) ~= "table" then
-		return
-	end
-
-	globals.NullscapeStaminaMovement = nil
-	globals.NullscapeLastActiveSpecial = nil
-	globals.NullscapeRailLocalMovement = nil
-	globals.InfiniteAirJumpLastMovement = nil
-	globals.NullscapeLastGrapple = nil
-end
-
-function Client:RecoverCharacterAfterRespawn(character)
-	self.RespawnRecoveryToken = (self.RespawnRecoveryToken or 0) + 1
-	local token = self.RespawnRecoveryToken
-
-	clearRespawnMovementCaches()
-
-	task.spawn(function()
-		if character then
-			character:WaitForChild("Humanoid", 6)
-			character:WaitForChild("HumanoidRootPart", 6)
-			character:WaitForChild("Animate", 6)
-		end
-
-		local function recover(skipStateChange)
-			if self.Destroyed or token ~= self.RespawnRecoveryToken then
-				return
-			end
-			if character and LocalPlayer.Character ~= character then
-				return
-			end
-			self:ReleaseCharacterControl({
-				Reason = "RespawnRecovery",
-				SkipVelocityClear = true,
-				SkipStateChange = skipStateChange == true,
-				ForceStateRecovery = skipStateChange ~= true,
-				ForceTouchRestore = true,
-			})
-		end
-
-		recover(true)
-		task.wait(0.25)
-		recover(true)
-		task.wait(0.55)
-		recover(false)
-	end)
-end
-
-trackConnection(LocalPlayer.CharacterAdded:Connect(function(character)
-	Client:RecoverCharacterAfterRespawn(character)
-end))
-
-startStaleAbilityGuard()
 startCelestialVisualLockGuard()
 
 if getgenv()._NULLSCAPE_PendingCharacterRelease == true then
-	task.defer(function()
-		Client:ReleaseCharacterControl({
-			Reason = "RuntimeUpdateBoot",
-			SkipVelocityClear = true,
-			SkipTouchRestore = true,
-			SkipStateChange = true,
-		})
-		task.wait(0.25)
-		Client:ReleaseCharacterControl({
-			Reason = "RuntimeUpdateBootDeferred",
-			SkipVelocityClear = true,
-			SkipTouchRestore = true,
-			SkipStateChange = true,
-		})
-		getgenv()._NULLSCAPE_PendingCharacterRelease = nil
-	end)
+	getgenv()._NULLSCAPE_PendingCharacterRelease = nil
 end
 
 -- FPS & Ping Tracker
@@ -942,11 +719,6 @@ function Client:Destroy(reason)
 		return false
 	end
 
-	self:ReleaseCharacterControl({
-		Reason = reason or "Destroy",
-		SkipVelocityClear = true,
-	})
-
 	self.Destroying = true
 	self.Destroyed = true
 	self.DestroyReason = reason or "Unknown"
@@ -983,13 +755,6 @@ function Client:Destroy(reason)
 				end
 			end
 		end
-	end)
-
-	safeStep("release character after module cleanup", function()
-		self:ReleaseCharacterControl({
-			Reason = reason or "DestroyPostCleanup",
-			SkipVelocityClear = true,
-		})
 	end)
 
 	safeStep("destroy Rayfield", function()

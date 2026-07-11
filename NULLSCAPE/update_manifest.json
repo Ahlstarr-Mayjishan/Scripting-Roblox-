@@ -1,5 +1,5 @@
 {
-  "Version": "2026.07.11.1",
+  "Version": "2026.07.11.6",
   "MenuChanges": [
     "Settings",
     "Automation",
@@ -28,6 +28,13 @@
     },
     {
       "Path": "NULLSCAPE/Automation/Gift Farm/MovementLease.luau",
+      "Menu": [
+        "Automation",
+        "Gift Farm"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Context.luau",
       "Menu": [
         "Automation",
         "Gift Farm"
@@ -69,6 +76,18 @@
     },
     {
       "Path": "NULLSCAPE/Entities/RemoteBlocking.luau",
+      "Menu": [
+        "Entities"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/VerifiedImmunityStatus.luau",
+      "Menu": [
+        "Entities"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau",
       "Menu": [
         "Entities"
       ]

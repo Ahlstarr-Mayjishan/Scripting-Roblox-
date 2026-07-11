@@ -6,8 +6,13 @@ local Players = game:GetService("Players")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
 local beaconPartStates = nil
+local STREAM_REQUEST_TIMEOUT = 2.5
+local GROUND_WAIT_TIMEOUT = 1.25
+local GROUND_RAY_HEIGHT = 14
+local GROUND_RAY_DISTANCE = 96
 
 local function collectBeaconParts()
 	local beacon = workspace:FindFirstChild("Beacon")
@@ -61,6 +66,54 @@ function Context.getRootPart()
 	return character and character:FindFirstChild("HumanoidRootPart")
 end
 
+local function raycastCurrentRoomsFloor(position)
+	local currentRooms = Workspace:FindFirstChild("CurrentRooms")
+	if not currentRooms then
+		return nil
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Include
+	params.FilterDescendantsInstances = { currentRooms }
+	params.RespectCanCollide = true
+
+	return Workspace:Raycast(
+		position + Vector3.new(0, GROUND_RAY_HEIGHT, 0),
+		Vector3.new(0, -GROUND_RAY_DISTANCE, 0),
+		params
+	)
+end
+
+function Context.requestStreamAround(position, timeout)
+	if typeof(position) ~= "Vector3" then
+		return false
+	end
+
+	local ok = pcall(function()
+		Workspace:RequestStreamAroundAsync(position, timeout or STREAM_REQUEST_TIMEOUT)
+	end)
+	return ok == true
+end
+
+function Context.waitForStreamedGround(position, timeout)
+	if typeof(position) ~= "Vector3" then
+		return false
+	end
+
+	Context.requestStreamAround(position, STREAM_REQUEST_TIMEOUT)
+
+	local deadline = os.clock() + (timeout or GROUND_WAIT_TIMEOUT)
+	repeat
+		local result = raycastCurrentRoomsFloor(position)
+		if result and result.Instance then
+			return true
+		end
+		RunService.Heartbeat:Wait()
+	until os.clock() >= deadline
+
+	return false
+end
+
 function Context.releaseCharacterControl(options)
 	options = options or {}
 
@@ -93,6 +146,9 @@ function Context.releaseCharacterControl(options)
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		pcall(function()
+			if options.ForceAbilityClear == true then
+				humanoid:SetAttribute("UsingAbility", false)
+			end
 			humanoid.PlatformStand = false
 			humanoid.Sit = false
 			humanoid.AutoRotate = true
@@ -102,6 +158,12 @@ function Context.releaseCharacterControl(options)
 				humanoid:ChangeState(options.State)
 			end)
 		end
+	end
+
+	if options.ForceAbilityClear == true then
+		pcall(function()
+			character:SetAttribute("ChargingCheck", false)
+		end)
 	end
 
 	return true
@@ -129,6 +191,12 @@ function Context.moveCharacterTo(cframe)
 	if not (hrp and hrp.Parent) then
 		return false
 	end
+
+	local targetPos = cframe.Position
+	if Context.isInRound() and not Context.waitForStreamedGround(targetPos) then
+		return false
+	end
+
 	Context.releaseCharacterControl({
 		SkipVelocityClear = true,
 		SkipTouchRestore = true,
@@ -136,7 +204,6 @@ function Context.moveCharacterTo(cframe)
 	})
 
 	local startPos = hrp.Position
-	local targetPos = cframe.Position
 	local direction = (targetPos - startPos)
 	local distance = direction.Magnitude
 	local stepSize = 75

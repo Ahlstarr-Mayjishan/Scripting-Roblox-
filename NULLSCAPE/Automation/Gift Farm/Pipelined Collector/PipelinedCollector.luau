@@ -101,7 +101,9 @@ local function waitForArrival(hrp, targetPosition, lease, shouldAbort)
 			return true
 		end
 
-		lease:moveTo(CFrame.new(targetPosition))
+		if lease:moveTo(CFrame.new(targetPosition)) == false then
+			return false
+		end
 		RunService.Heartbeat:Wait()
 	end
 
@@ -280,9 +282,17 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 			local collectRange = planInfo and planInfo.SafeRange or range
 			local standingPosition = Distance.getRootPosition(targetPosition)
 
+			if Context.isInRound() and not Context.waitForStreamedGround(standingPosition, 0.85) then
+				stats.Failed += #cluster
+				continue
+			end
+
 			hrp.Anchored = false
 			lease:placeFoothold(standingPosition)
-			lease:moveTo(CFrame.new(standingPosition))
+			if lease:moveTo(CFrame.new(standingPosition)) == false then
+				stats.Failed += #cluster
+				continue
+			end
 			clearVelocity(hrp)
 
 			local arrived = waitForArrival(hrp, standingPosition, lease, shouldAbort)

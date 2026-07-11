@@ -41,158 +41,6 @@ local function disableAntiAfk()
 	end
 end
 
-local characterAddedConnection = nil
-local antiAnchorConnection = nil
-local antiControlConnections = {}
-local giftFarmContext = nil
-local SERVER_ANCHOR_PING_GRACE = 0.08
-
-local function getGiftFarmContext()
-	if giftFarmContext then
-		return giftFarmContext
-	end
-
-	local ok, result = pcall(function()
-		return getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
-	end)
-	if ok and typeof(result) == "table" then
-		giftFarmContext = result
-	end
-	return giftFarmContext
-end
-
-local function stopAntiAnchor()
-	if antiAnchorConnection then
-		pcall(function()
-			antiAnchorConnection:Disconnect()
-		end)
-		antiAnchorConnection = nil
-	end
-	if characterAddedConnection then
-		pcall(function()
-			characterAddedConnection:Disconnect()
-		end)
-		characterAddedConnection = nil
-	end
-	for _, conn in ipairs(antiControlConnections) do
-		if conn then
-			pcall(function()
-				conn:Disconnect()
-			end)
-		end
-	end
-	table.clear(antiControlConnections)
-end
-
-local function startAntiAnchor(controller)
-	if characterAddedConnection then
-		return
-	end
-
-	local localPlayer = Players.LocalPlayer
-	if not localPlayer then
-		return
-	end
-
-	local function setupHrp(character)
-		if not character then
-			return
-		end
-		local hrp = character:WaitForChild("HumanoidRootPart", 5)
-		if not hrp then
-			return
-		end
-
-		if antiAnchorConnection then
-			pcall(function()
-				antiAnchorConnection:Disconnect()
-			end)
-			antiAnchorConnection = nil
-		end
-		for _, conn in ipairs(antiControlConnections) do
-			if conn then
-				pcall(function()
-					conn:Disconnect()
-				end)
-			end
-		end
-		table.clear(antiControlConnections)
-
-		local function releaseIfGiftFarmActive()
-			local globals = getgenv()._NULLSCAPE_Globals
-			local movementLeaseActive = typeof(globals) == "table" and globals.GiftFarmMovementLeaseActive == true
-			if not controller.GiftFarmEnabled or not movementLeaseActive then
-				return
-			end
-			local context = getGiftFarmContext()
-			if context and typeof(context.releaseCharacterControl) == "function" then
-				context.releaseCharacterControl({
-					SkipVelocityClear = true,
-					SkipTouchRestore = true,
-					SkipStateChange = true,
-				})
-			else
-				pcall(function()
-					hrp.Anchored = false
-				end)
-			end
-		end
-
-		antiAnchorConnection = hrp:GetPropertyChangedSignal("Anchored"):Connect(function()
-			local context = getGiftFarmContext()
-			local inRound = not context or (typeof(context.isInRound) == "function" and context.isInRound() == true)
-
-			local deadVal = localPlayer and localPlayer:FindFirstChild("Dead")
-			local isDead = deadVal and deadVal.Value == true
-
-			local globals = getgenv()._NULLSCAPE_Globals
-			local movementLeaseActive = typeof(globals) == "table" and globals.GiftFarmMovementLeaseActive == true
-			if controller.GiftFarmEnabled and movementLeaseActive and hrp.Anchored and inRound and not isDead then
-				task.delay(SERVER_ANCHOR_PING_GRACE, function()
-					local latestGlobals = getgenv()._NULLSCAPE_Globals
-					local latestLeaseActive = typeof(latestGlobals) == "table" and latestGlobals.GiftFarmMovementLeaseActive == true
-					if controller.GiftFarmEnabled and latestLeaseActive and hrp and hrp.Parent and hrp.Anchored then
-						releaseIfGiftFarmActive()
-					end
-				end)
-			end
-		end)
-
-		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		if humanoid then
-			table.insert(antiControlConnections, humanoid:GetPropertyChangedSignal("PlatformStand"):Connect(function()
-				if controller.GiftFarmEnabled and humanoid.PlatformStand then
-					releaseIfGiftFarmActive()
-				end
-			end))
-			table.insert(antiControlConnections, humanoid:GetPropertyChangedSignal("Sit"):Connect(function()
-				if controller.GiftFarmEnabled and humanoid.Sit then
-					releaseIfGiftFarmActive()
-				end
-			end))
-			table.insert(antiControlConnections, humanoid:GetPropertyChangedSignal("AutoRotate"):Connect(function()
-				if controller.GiftFarmEnabled and not humanoid.AutoRotate then
-					releaseIfGiftFarmActive()
-				end
-			end))
-		end
-
-		local globals = getgenv()._NULLSCAPE_Globals
-		local movementLeaseActive = typeof(globals) == "table" and globals.GiftFarmMovementLeaseActive == true
-		if controller.GiftFarmEnabled and movementLeaseActive and (
-			hrp.Anchored
-			or (humanoid and (humanoid.PlatformStand or humanoid.Sit))
-		) then
-			releaseIfGiftFarmActive()
-		end
-	end
-
-	characterAddedConnection = localPlayer.CharacterAdded:Connect(setupHrp)
-	if localPlayer.Character then
-		task.spawn(setupHrp, localPlayer.Character)
-	end
-end
-
 local executorLoaded, Executor = pcall(function()
 	return getgenv().loadModule("NULLSCAPE/Automation/executor.luau")
 end)
@@ -329,10 +177,8 @@ function Controller:update()
 
 	if self.GiftFarmEnabled then
 		enableAntiAfk()
-		startAntiAnchor(self)
 	else
 		disableAntiAfk()
-		stopAntiAnchor()
 	end
 
 	return callExecutor("update", self, GC)
@@ -486,7 +332,6 @@ function Controller:CleanUp()
 
 	self.Destroyed = true
 	disableAntiAfk()
-	stopAntiAnchor()
 	callExecutor("disable", self, GC)
 	if GC and typeof(GC.cleanAll) == "function" then
 		GC.cleanAll()

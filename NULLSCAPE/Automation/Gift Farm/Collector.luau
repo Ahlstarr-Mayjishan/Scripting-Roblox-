@@ -223,7 +223,9 @@ local function jumpToWaypoint(hrp, targetPosition, lease)
 		return false
 	end
 
-	lease:moveTo(CFrame.new(targetPosition))
+	if lease:moveTo(CFrame.new(targetPosition)) == false then
+		return false
+	end
 	clearVelocity(hrp)
 	RunService.Heartbeat:Wait()
 	return true
@@ -380,9 +382,17 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			return
 		end
 
+		if Context.isInRound() and not Context.waitForStreamedGround(standingPosition, 0.85) then
+			result.Rejected = #cluster
+			return
+		end
+
 		hrp.Anchored = false
 		lease:placeFoothold(standingPosition)
-		jumpToWaypoint(hrp, standingPosition, lease)
+		if not jumpToWaypoint(hrp, standingPosition, lease) then
+			result.Rejected = #cluster
+			return
+		end
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end

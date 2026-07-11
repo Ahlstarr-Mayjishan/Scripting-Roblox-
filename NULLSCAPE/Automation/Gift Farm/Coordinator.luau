@@ -82,6 +82,42 @@ local function transitionTo(controller, status, detail, force)
 	end
 end
 
+local function recoverAfterStop(controller, detail)
+	sessionToken += 1
+	MovementLease.invalidateActive()
+
+	if activeLease then
+		activeLease:release({
+			SkipVelocityClear = true,
+			SkipStateChange = true,
+			ForceAbilityClear = true,
+		})
+		activeLease = nil
+	else
+		Context.releaseCharacterControl({
+			SkipVelocityClear = true,
+			SkipStateChange = true,
+			ForceAbilityClear = true,
+		})
+	end
+
+	if Beacon and typeof(Beacon.restore) == "function" then
+		Beacon.restore(true)
+	end
+
+	table.clear(retryQueue)
+	pendingGoldenReturnSince = nil
+	giftsStabilized = false
+	startWaitAt = nil
+	lastGiftCount = nil
+	lastGiftSeenAt = 0
+	if controller then
+		controller.GiftFarmGoldenComplete = false
+	end
+
+	transitionTo(controller, "Idle", detail or "Gift Farm stopped", true)
+end
+
 local function getGiftFarmRange(controller)
 	local r = DEFAULT_RANGE
 	if typeof(controller.GetGiftFarmRange) == "function" then
@@ -281,6 +317,12 @@ local function tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActiv
 
 	if not Context.isInRound() then
 		transitionTo(controller, "Recovering", "Waiting for round")
+		MovementLease.invalidateActive()
+		Context.releaseCharacterControl({
+			SkipVelocityClear = true,
+			ForceAbilityClear = true,
+			SkipStateChange = true,
+		})
 		return true
 	end
 
@@ -414,6 +456,7 @@ local function observeCharacter(controller, gc)
 
 		if activeLease then
 			activeLease:release({ SkipVelocityClear = true, SkipStateChange = true })
+			activeLease = nil
 		end
 
 		if Context and typeof(Context.resetGiftClientHandler) == "function" then
@@ -522,7 +565,13 @@ local function observeInRound(controller, gc)
 			end
 			if activeLease then
 				activeLease:release({ ForceRelease = true })
+				activeLease = nil
 			end
+			Context.releaseCharacterControl({
+				SkipVelocityClear = true,
+				ForceAbilityClear = true,
+				SkipStateChange = true,
+			})
 		end
 		if Scanner and typeof(Scanner.reset) == "function" then
 			Scanner.reset()
@@ -633,6 +682,21 @@ local function runLoop(controller)
 
 			if not inRound then
 				transitionTo(controller, "Recovering", "Waiting for round to start")
+				MovementLease.invalidateActive()
+				if activeLease then
+					activeLease:release({
+						SkipVelocityClear = true,
+						ForceAbilityClear = true,
+						SkipStateChange = true,
+					})
+					activeLease = nil
+				else
+					Context.releaseCharacterControl({
+						SkipVelocityClear = true,
+						ForceAbilityClear = true,
+						SkipStateChange = true,
+					})
+				end
 				task.wait(0.4)
 				continue
 			end
@@ -1005,8 +1069,7 @@ function Coordinator.disable(controller)
 	end
 
 	enabled = false
-	sessionToken += 1 -- Invalidates any running async task
-	MovementLease.invalidateActive()
+	recoverAfterStop(controller, "Gift Farm disabled")
 
 	if configChangedConn then
 		pcall(function()
@@ -1016,18 +1079,6 @@ function Coordinator.disable(controller)
 	end
 
 	disconnectObservers()
-
-	if activeLease then
-		activeLease:release()
-		activeLease = nil
-	end
-
-	if Beacon and typeof(Beacon.restore) == "function" then
-		Beacon.restore(true)
-	end
-
-	table.clear(retryQueue)
-	transitionTo(controller, "Idle", "Gift Farm disabled", true)
 	return true
 end
 
