@@ -41,6 +41,18 @@ local function setImmunity(Controller, entityName, value)
 	end
 end
 
+local function optionSelected(options, optionName)
+	if typeof(options) ~= "table" then
+		return false
+	end
+	for _, opt in ipairs(options) do
+		if opt == optionName then
+			return true
+		end
+	end
+	return options[optionName] == true
+end
+
 return function(Client, Controller)
 	Controller = resolveController(Client, Controller)
 	if not Controller then
@@ -237,15 +249,8 @@ return function(Client, Controller)
 		MultipleOptions = true,
 		Flag = "ICBMHackDropdown",
 		Callback = function(Options)
-			local hasImmunity = false
-			local hasBurnImmunity = false
-			for _, opt in ipairs(Options) do
-				if opt == "Immunity" then
-					hasImmunity = true
-				elseif opt == "Burn effect (Curse)" then
-					hasBurnImmunity = true
-				end
-			end
+			local hasImmunity = optionSelected(Options, "Immunity")
+			local hasBurnImmunity = optionSelected(Options, "Burn effect (Curse)")
 			local activeController = resolveController(nil, Controller)
 			if activeController then
 				if typeof(activeController.SetImmunity) == "function" then
