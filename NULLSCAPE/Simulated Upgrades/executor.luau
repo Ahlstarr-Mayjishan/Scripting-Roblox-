@@ -11,7 +11,9 @@ local missingWarnings = {}
 local VIRTUAL_GRAPPLER_UPGRADES = {
 	AdvancedGravityCoil = true,
 	BetterJumpPad = true,
+	Helmet = true,
 	MatrixTetrahedron = true,
+	MiniatureHourglass = true,
 	NinjaBelt = true,
 	SharkTail = true,
 }
@@ -43,7 +45,9 @@ function Executor.syncVirtualGrapplerUpgradeVisuals(controller)
 		ClientUpgradeInjector.sync({
 			AdvancedGravityCoil = controller and controller.AdvancedGravityCoilEnabled == true,
 			BetterJumpPad = controller and controller.BetterJumpPadEnabled == true,
+			Helmet = controller and controller.HelmetEnabled == true,
 			MatrixTetrahedron = controller and controller.MatrixTetrahedronEnabled == true,
+			MiniatureHourglass = controller and controller.MiniatureHourglassEnabled == true,
 			NinjaBelt = controller and controller.GrappleVirtualNinjaBelt == true,
 			SharkTail = controller and controller.GrappleVirtualSharkTail == true,
 		})

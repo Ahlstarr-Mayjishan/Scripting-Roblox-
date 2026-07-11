@@ -1,5 +1,5 @@
 {
-  "Version": "2026.07.11.10",
+  "Version": "2026.07.11.11",
   "MenuChanges": [
     "Settings",
     "Automation",
@@ -124,6 +124,18 @@
     },
     {
       "Path": "NULLSCAPE/Simulated Upgrades/Better Jump Pad.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Helmet.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Miniature Hourglass.luau",
       "Menu": [
         "Simulated Upgrades"
       ]

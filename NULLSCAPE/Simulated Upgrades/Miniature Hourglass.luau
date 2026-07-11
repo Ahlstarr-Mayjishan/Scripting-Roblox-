@@ -15,12 +15,22 @@ local Logic = {
 	Hooked = false,
 }
 
+local ClientUpgradeInjector = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau")
+
 function Logic.start(_controller, _gc)
+	if ClientUpgradeInjector then
+		ClientUpgradeInjector.set("MiniatureHourglass", true, 1)
+	end
+
 	Logic.Hooked = true
 	return true
 end
 
 function Logic.stop()
+	if ClientUpgradeInjector then
+		ClientUpgradeInjector.set("MiniatureHourglass", false, 0)
+	end
+
 	Logic.Hooked = false
 end
 

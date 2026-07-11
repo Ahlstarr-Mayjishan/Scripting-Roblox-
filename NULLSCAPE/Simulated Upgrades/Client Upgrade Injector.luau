@@ -48,28 +48,6 @@ local function setActiveUpgradeStack(upgradeName, stack)
 	return true
 end
 
-local function ensureInt(folder, upgradeName, stack)
-	if not folder then
-		return nil
-	end
-
-	local existing = folder:FindFirstChild(upgradeName)
-	if existing then
-		if existing:GetAttribute(SIM_ATTR) == true and existing:IsA("IntValue") then
-			existing.Value = stack
-			return existing
-		end
-		return existing
-	end
-
-	local value = Instance.new("IntValue")
-	value.Name = upgradeName
-	value.Value = stack
-	value:SetAttribute(SIM_ATTR, true)
-	value.Parent = folder
-	return value
-end
-
 local function removeInt(folder, upgradeName)
 	if not folder then
 		return
@@ -78,6 +56,24 @@ local function removeInt(folder, upgradeName)
 	local existing = folder:FindFirstChild(upgradeName)
 	if existing and existing:GetAttribute(SIM_ATTR) == true then
 		existing:Destroy()
+	end
+end
+
+local function cleanupVisualFolders(upgradeName)
+	removeInt(getFolder("ClientUpgrades"), upgradeName)
+	removeInt(getFolder("Upgrades"), upgradeName)
+end
+
+local function cleanupAllSimulatedVisuals()
+	for _, folderName in ipairs({ "ClientUpgrades", "Upgrades" }) do
+		local folder = getFolder(folderName)
+		if folder then
+			for _, child in ipairs(folder:GetChildren()) do
+				if child:GetAttribute(SIM_ATTR) == true then
+					child:Destroy()
+				end
+			end
+		end
 	end
 end
 
@@ -104,19 +100,6 @@ local function collectClientUpgradeState()
 		end
 	end
 
-	local folder = getFolder("ClientUpgrades")
-	if not folder then
-		return state
-	end
-
-	for _, child in ipairs(folder:GetChildren()) do
-		if child:IsA("IntValue") or child:IsA("NumberValue") then
-			state[child.Name] = child.Value
-		elseif child:IsA("BoolValue") then
-			state[child.Name] = child.Value and 1 or 0
-		end
-	end
-
 	return state
 end
 
@@ -138,13 +121,11 @@ function Injector.set(upgradeName, enabled, stack)
 
 	if enabled then
 		setActiveUpgradeStack(upgradeName, stack)
-		ensureInt(getFolder("ClientUpgrades"), upgradeName, stack)
-		ensureInt(getFolder("Upgrades"), upgradeName, stack)
+		cleanupVisualFolders(upgradeName)
 		fireCustomSignal(upgradeName, stack)
 	else
 		setActiveUpgradeStack(upgradeName, 0)
-		removeInt(getFolder("ClientUpgrades"), upgradeName)
-		removeInt(getFolder("Upgrades"), upgradeName)
+		cleanupVisualFolders(upgradeName)
 		fireCustomSignal(upgradeName, 0)
 	end
 
@@ -169,5 +150,7 @@ end
 function Injector.isSimulated(instance)
 	return instance and instance:GetAttribute(SIM_ATTR) == true
 end
+
+cleanupAllSimulatedVisuals()
 
 return Injector
