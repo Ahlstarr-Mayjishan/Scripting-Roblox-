@@ -4,7 +4,9 @@
     "Settings",
     "Automation",
     "Entities",
-    "Simulated Upgrades"
+    "Simulated Upgrades",
+    "Accessibility",
+    "Class Adjustment"
   ],
   "Files": [
     {
@@ -138,6 +140,378 @@
       "Path": "NULLSCAPE/Simulated Upgrades/Miniature Hourglass.luau",
       "Menu": [
         "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Anti Bonk.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Auto jump - Springer.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/controller.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Curse Visual Assist.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/executor.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/GC.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Infinite Air Jump.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Momentum Guard.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Rail Assist.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Stamina Assist.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/tab.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Adaptive Anchor Style.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Anchor Bias Profile.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Anchor Preference Profile.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Assist Confidence Gate.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Bad Anchor Memory.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Biome Tuning.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Cast Safety Check.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Deferred Aim Cast.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Entity Intent Context.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Fail Feedback Loop.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Grapple Assist.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Intent Resolver.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Intent Target Gate.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Landing Predictor.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Momentum Intent Bridge.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Pilot State.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Rail Snap Assist.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Reel Release Advisor.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Secondary Cast.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Targeting.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Technique Arbiter.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Map Context/Anchor Memory.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Map Context/Ray Sampler.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Map Context/Spatial Index.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Technique/Bell Contact Assist.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Technique/Grapple Dodge.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Technique/SharkVoid.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Technique/Reel Saver/init.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Technique/Reel Saver/Terrain Query.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Threat Context/Dodge Planner.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Threat Context/Enemy Memory.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Control.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Executor.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/GC.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/tab.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Charger/Tripmine Assist.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Grappler/Grapple Air Control.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Grappler/Grapple Hook Cast Speed.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Grappler/Grapple Recovery.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Grappler/Grapple Reel Pull.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Grappler/Grapple Void Cast Assist.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Grappler/SharkTail Cooldown.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Grappler/SharkTail Pull.luau",
+      "Menu": [
+        "Class Adjustment"
       ]
     }
   ]
