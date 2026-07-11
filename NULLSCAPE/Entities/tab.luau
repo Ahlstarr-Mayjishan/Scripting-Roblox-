@@ -344,12 +344,40 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	local currentCadenceOptions = {}
+	if getFlag(Controller, "CadenceImmune") then
+		table.insert(currentCadenceOptions, "Immunity")
+	end
+	if getFlag(Controller, "CadenceAutoCollectInstruments") then
+		table.insert(currentCadenceOptions, "Auto Collect Instruments")
+	end
+
+	Tab:CreateDropdown({
 		Name = "Cadence",
-		CurrentValue = getFlag(Controller, "CadenceImmune"),
-		Flag = "ImmunityCadenceToggle",
+		Options = { "Immunity", "Auto Collect Instruments" },
+		CurrentOption = currentCadenceOptions,
+		MultipleOptions = true,
+		Flag = "CadenceOptionsDropdown",
+		Callback = function(Options)
+			if typeof(Controller.SetCadenceOptions) == "function" then
+				Controller:SetCadenceOptions(Options)
+			else
+				setImmunity(Controller, "Cadence", table.find(Options, "Immunity") ~= nil)
+			end
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Cadence Instrument Range",
+		Range = { 0, 30 },
+		CurrentValue = Controller.CadenceInstrumentRange or 0,
+		Increment = 1,
+		ValueName = "Studs (0=Inf)",
+		Flag = "CadenceInstrumentRangeSlider",
 		Callback = function(Value)
-			setImmunity(Controller, "Cadence", Value)
+			if typeof(Controller.SetCadenceInstrumentRange) == "function" then
+				Controller:SetCadenceInstrumentRange(Value)
+			end
 		end,
 	})
 

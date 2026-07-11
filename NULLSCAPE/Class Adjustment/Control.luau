@@ -26,6 +26,10 @@ local Control = {
 	ChargerTripmineDistance = 15,
 	ChargerTripmineBatchDistance = 60,
 	ChargerTripmineJitter = 2,
+	GrappleInstantGroundCast = false,
+	GrappleWallGlide = false,
+	GrappleInstantMaxPull = false,
+	GrappleCatapultMultiplier = 1,
 	Destroyed = false,
 	PermanentConnections = {},
 }
@@ -93,6 +97,17 @@ local function readSettings()
 		if decoded.GrappleJumpPadUsesBypassEnabled ~= nil then
 			Control.GrappleJumpPadUsesBypassEnabled = not not decoded.GrappleJumpPadUsesBypassEnabled
 		end
+		if decoded.GrappleInstantGroundCast ~= nil then
+			Control.GrappleInstantGroundCast = not not decoded.GrappleInstantGroundCast
+		end
+		if decoded.GrappleWallGlide ~= nil then
+			Control.GrappleWallGlide = not not decoded.GrappleWallGlide
+		end
+		if decoded.GrappleInstantMaxPull ~= nil then
+			Control.GrappleInstantMaxPull = not not decoded.GrappleInstantMaxPull
+		end
+		Control.GrappleCatapultMultiplier =
+			math.clamp(tonumber(decoded.GrappleCatapultMultiplierSlider) or Control.GrappleCatapultMultiplier, 1, 3)
 		if decoded.ChargerTripmineAssistToggle ~= nil then
 			Control.ChargerTripmineAssistEnabled = not not decoded.ChargerTripmineAssistToggle
 		end
@@ -133,6 +148,10 @@ local function saveSettings()
 	data.GrappleSharkTailNoCooldown = Control.GrappleSharkTailNoCooldown
 	data.GrappleSharkTailWindowSlider = Control.GrappleSharkTailWindow
 	data.GrappleJumpPadUsesBypassEnabled = Control.GrappleJumpPadUsesBypassEnabled
+	data.GrappleInstantGroundCast = Control.GrappleInstantGroundCast
+	data.GrappleWallGlide = Control.GrappleWallGlide
+	data.GrappleInstantMaxPull = Control.GrappleInstantMaxPull
+	data.GrappleCatapultMultiplierSlider = Control.GrappleCatapultMultiplier
 	data.ChargerTripmineAssistToggle = Control.ChargerTripmineAssistEnabled
 	data.ChargerTripmineModeDropdown = Control.ChargerTripmineMode
 	data.ChargerTripmineDistanceSlider = Control.ChargerTripmineDistance
@@ -296,6 +315,26 @@ end
 
 function Control:SetChargerTripmineJitter(value)
 	self.ChargerTripmineJitter = math.clamp(tonumber(value) or 2, 0, 10)
+	saveSettings()
+end
+
+function Control:SetGrappleInstantGroundCast(value)
+	self.GrappleInstantGroundCast = value == true
+	saveSettings()
+end
+
+function Control:SetGrappleWallGlide(value)
+	self.GrappleWallGlide = value == true
+	saveSettings()
+end
+
+function Control:SetGrappleInstantMaxPull(value)
+	self.GrappleInstantMaxPull = value == true
+	saveSettings()
+end
+
+function Control:SetGrappleCatapultMultiplier(value)
+	self.GrappleCatapultMultiplier = math.clamp(tonumber(value) or 1, 1, 3)
 	saveSettings()
 end
 

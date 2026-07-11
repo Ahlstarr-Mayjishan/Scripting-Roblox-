@@ -45,12 +45,16 @@ local DEFAULTS = {
 	GrappleVoidRescueHeight = 45,
 	GrappleVoidRescueReelHoldTime = 0.12,
 	GrappleDodgeEnabled = false,
+	GrappleDodgeTechniqueEnabled = false,
 	GrappleDodgeThreatRange = 42,
 	GrappleDodgeDangerRadius = 10,
 	GrappleDodgeHorizon = 0.45,
 	GrappleDodgeRange = 92,
 	GrappleDodgeStrength = 1,
 	GrappleDodgeRailBonus = 34,
+	GrappleSharkEscapeEnabled = false,
+	GrappleSharkEscapeRange = 26,
+	GrappleSharkEscapeReelHoldTime = 0.12,
 	GrappleReelSaverEnabled = false,
 	GrappleReelSaverKeybind = "E",
 	GrappleReelSaverSideRange = 26,
@@ -143,8 +147,12 @@ local function getSelectedGrapplerTechniques(Controller)
 		table.insert(selected, "Reel Saver")
 	end
 
-	if Controller.GrappleDodgeEnabled == true then
+	if Controller.GrappleDodgeTechniqueEnabled == true then
 		table.insert(selected, "Grapple Dodge")
+	end
+
+	if Controller.GrappleSharkEscapeEnabled == true then
+		table.insert(selected, "SharkEscape")
 	end
 
 	return selected
@@ -555,8 +563,8 @@ return function(Client, Controller)
 
 	Tab:CreateDropdown({
 		Name = "Grappler Techniques",
-		Info = "Choose which grappler techniques are enabled. SharkVoid and Grapple Dodge run automatically; Reel Saver runs from its keybind.",
-		Options = { "SharkVoid", "Grapple Dodge", "Reel Saver" },
+		Info = "Choose which grappler techniques are enabled. SharkVoid, Grapple Dodge, and SharkEscape run automatically; Reel Saver runs from its keybind.",
+		Options = { "SharkVoid", "Grapple Dodge", "SharkEscape", "Reel Saver" },
 		CurrentOption = getSelectedGrapplerTechniques(Controller),
 		MultipleOptions = true,
 		Flag = "GrappleTechniqueDropdown",
@@ -736,6 +744,42 @@ return function(Client, Controller)
 		Flag = "GrappleDodgeStrengthSlider",
 		Callback = function(Value)
 			Controller:SetGrappleDodgeStrength(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "SharkEscape",
+		Info = "When an enemy blocks your front path, cast to nearby terrain, reel briefly, and trigger SharkTail upward.",
+		CurrentValue = Controller.GrappleSharkEscapeEnabled == true,
+		Flag = "GrappleSharkEscapeToggle",
+		Callback = function(Value)
+			Controller:SetGrappleSharkEscape(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "SharkEscape Range",
+		Info = "Front-facing enemy reaction distance for SharkEscape.",
+		Range = { 10, 50 },
+		Increment = 1,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleSharkEscapeRange or 26,
+		Flag = "GrappleSharkEscapeRangeSlider",
+		Callback = function(Value)
+			Controller:SetGrappleSharkEscapeRange(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "SharkEscape Reel Hold",
+		Info = "How long SharkEscape reels before releasing into SharkTail.",
+		Range = { 0.05, 0.22 },
+		Increment = 0.01,
+		Suffix = "s",
+		CurrentValue = Controller.GrappleSharkEscapeReelHoldTime or 0.12,
+		Flag = "GrappleSharkEscapeReelHoldSlider",
+		Callback = function(Value)
+			Controller:SetGrappleSharkEscapeReelHoldTime(Value)
 		end,
 	})
 

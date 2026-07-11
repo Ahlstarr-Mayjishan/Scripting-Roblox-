@@ -181,6 +181,9 @@ pcall(function()
 			GrappleDodgeDangerRadiusSlider = 10,
 			GrappleDodgeRangeSlider = 92,
 			GrappleDodgeStrengthSlider = 1,
+			GrappleSharkEscapeToggle = false,
+			GrappleSharkEscapeRangeSlider = 26,
+			GrappleSharkEscapeReelHoldSlider = 0.12,
 			RailAssistSuiteToggle = false,
 			RailAutoToggle = false,
 			RailSpeedMultiplierSlider = 1.1,
@@ -195,6 +198,7 @@ pcall(function()
 			GrappleDisableGroundReleaseToggle = false,
 			GrappleHookCastSpeedMultiplierSlider = 1,
 			GrappleMaxRangeSlider = 90,
+			GrappleCatapultMultiplierSlider = 1,
 			GrappleEasierVoidCastToggle = false,
 			MatrixTetrahedronToggle = false,
 			MomentumReductionSlider = 100, -- Mặc định là 100% giảm quán tính

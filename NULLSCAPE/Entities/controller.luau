@@ -10,6 +10,7 @@ local getgenv = getgenv
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
 local activeCallbacks = {}
 
 local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
@@ -120,6 +121,8 @@ local Controller = {
 	VoidbreakerImmune = false,
 	RazorbloomImmune = false,
 	CadenceImmune = false,
+	CadenceAutoCollectInstruments = false,
+	CadenceInstrumentRange = 0,
 	PondererImmune = false,
 	PondererSilentLookat = false,
 	VoidImplosionImmune = false,
@@ -153,6 +156,7 @@ local Controller = {
 	CadenceUI = nil,
 	CadenceStatusLabel = nil,
 	CadenceUIFrame = nil,
+	CadenceAutoCollectLoopActive = false,
 }
 GC.Controller = Controller
 
@@ -996,6 +1000,33 @@ function Controller:SetImmunity(entityName, value)
 end
 
 -- Cáº¥u hÃ¬nh Silent Lookat cá»§a Ponderer
+function Controller:SetCadenceAutoCollectInstruments(value)
+	self.CadenceAutoCollectInstruments = value == true
+	if self.CadenceAutoCollectInstruments and self.inLobby ~= true then
+		startCadenceAutoCollectLoop()
+	end
+end
+
+function Controller:SetCadenceInstrumentRange(value)
+	self.CadenceInstrumentRange = math.clamp(tonumber(value) or 0, 0, 30)
+end
+
+function Controller:SetCadenceOptions(options)
+	local immune = false
+	local autoCollect = false
+
+	for _, option in ipairs(typeof(options) == "table" and options or {}) do
+		if option == "Immunity" then
+			immune = true
+		elseif option == "Auto Collect Instruments" then
+			autoCollect = true
+		end
+	end
+
+	self:SetImmunity("Cadence", immune)
+	self:SetCadenceAutoCollectInstruments(autoCollect)
+end
+
 function Controller:SetPondererSilentLookat(enabled)
 	self.PondererSilentLookat = enabled == true
 end
@@ -1627,6 +1658,57 @@ function Controller:UpdateTouchImmunityState()
 	restoreCharacterTouchStates()
 end
 
+local function collectCadenceInstruments(controller)
+	if not (controller and controller.CadenceAutoCollectInstruments == true) then
+		return
+	end
+	if controller.inLobby == true then
+		return
+	end
+	if typeof(firetouchinterest) ~= "function" then
+		return
+	end
+
+	local character = Players.LocalPlayer and Players.LocalPlayer.Character
+	local hrp = character and character:FindFirstChild("HumanoidRootPart")
+	if not hrp then
+		return
+	end
+
+	local hrpPos = hrp.Position
+	local instrumentRange = tonumber(controller.CadenceInstrumentRange) or 0
+	for _, orb in ipairs(CollectionService:GetTagged("CadenceOrb")) do
+		if orb:IsA("BasePart") and orb.Parent then
+			local dist = (orb.Position - hrpPos).Magnitude
+			if instrumentRange == 0 or dist <= instrumentRange then
+				pcall(function()
+					firetouchinterest(orb, hrp, 0)
+					task.wait()
+					firetouchinterest(orb, hrp, 1)
+				end)
+			end
+		end
+	end
+end
+
+local function startCadenceAutoCollectLoop()
+	if Controller.CadenceAutoCollectLoopActive then
+		return
+	end
+	Controller.CadenceAutoCollectLoopActive = true
+	task.spawn(function()
+		while
+			not Controller.Destroyed
+			and Controller.CadenceAutoCollectInstruments == true
+			and Controller.inLobby ~= true
+		do
+			pcall(collectCadenceInstruments, Controller)
+			task.wait(0.15)
+		end
+		Controller.CadenceAutoCollectLoopActive = false
+	end)
+end
+
 -- QuÃ©t tÃ¬m thÆ° má»¥c Enemies vÃ  Skinwalkers trong Workspace vÃ  láº¯ng nghe sá»± thay Ä‘á»•i
 local function startObservingFolders()
 	debugPrint("startObservingFolders called")
@@ -1669,6 +1751,9 @@ local function setInLobby(val)
 		Controller:CleanUp()
 	else
 		startObservingFolders()
+		if Controller.CadenceAutoCollectInstruments == true then
+			startCadenceAutoCollectLoop()
+		end
 		if Controller.KolonaAutoQTEEnabled == true and typeof(Controller.SetKolonaAutoQTE) == "function" then
 			Controller:SetKolonaAutoQTE(true)
 		end

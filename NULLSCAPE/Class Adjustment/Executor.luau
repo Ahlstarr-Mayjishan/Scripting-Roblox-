@@ -21,6 +21,7 @@ local GrappleRecovery = nil
 local GrappleRange = nil
 local HookCastSpeed = nil
 local ChargerTripmineAssist = nil
+local CatapultBoost = nil
 local SharkTailWindowState = setmetatable({}, { __mode = "k" })
 local SharkTailEndTokens = setmetatable({}, { __mode = "k" })
 
@@ -33,6 +34,7 @@ local MODULE_PATHS = {
 	GrappleRange = "NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau",
 	HookCastSpeed = "NULLSCAPE/Class Adjustment/Grappler/Grapple Hook Cast Speed.luau",
 	ChargerTripmineAssist = "NULLSCAPE/Class Adjustment/Charger/Tripmine Assist.luau",
+	CatapultBoost = "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",
 }
 
 local function getGlobals()
@@ -99,6 +101,7 @@ local function loadAdjustmentModules()
 	GrappleRange = GrappleRange or getgenv().loadModule(MODULE_PATHS.GrappleRange)
 	HookCastSpeed = HookCastSpeed or getgenv().loadModule(MODULE_PATHS.HookCastSpeed)
 	ChargerTripmineAssist = ChargerTripmineAssist or getgenv().loadModule(MODULE_PATHS.ChargerTripmineAssist)
+	CatapultBoost = CatapultBoost or getgenv().loadModule(MODULE_PATHS.CatapultBoost)
 end
 
 local function clearStaleHooks(grappleModule, globals)
@@ -146,8 +149,11 @@ local function clearStaleHooks(grappleModule, globals)
 		if grappleModule.Cast ~= globals.ClassAdjustmentOriginalCast then
 			grappleModule.Cast = globals.ClassAdjustmentOriginalCast
 		end
-		globals.ClassAdjustmentOriginalCast = nil
-		globals.ClassAdjustmentHookedCast = nil
+	end
+
+	if globals.ClassAdjustmentOriginalShapecast and typeof(hookfunction) == "function" then
+		pcall(hookfunction, workspace.Shapecast, globals.ClassAdjustmentOriginalShapecast)
+		globals.ClassAdjustmentOriginalShapecast = nil
 	end
 end
 
@@ -342,6 +348,18 @@ function Executor.enable()
 	local globals = getGlobals()
 	clearStaleHooks(grappleModule, globals)
 
+	if typeof(hookfunction) == "function" and not globals.ClassAdjustmentOriginalShapecast then
+		local originalShapecast
+		originalShapecast = hookfunction(workspace.Shapecast, function(self, ...)
+			local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+			if getgenv()._NULLSCAPE_InGrappleStep == true and Control and Control.GrappleWallGlide == true then
+				return nil
+			end
+			return originalShapecast(self, ...)
+		end)
+		globals.ClassAdjustmentOriginalShapecast = originalShapecast
+	end
+
 	local movementModule = getMovementModule()
 	if globals.ClassAdjustmentOriginalMovementHasUpgrade and movementModule then
 		if movementModule.HasUpgrade ~= globals.ClassAdjustmentOriginalMovementHasUpgrade then
@@ -372,7 +390,24 @@ function Executor.enable()
 			end
 
 			local beforeTime = self and self.Time
+			local originalReelStart = nil
+			if
+				Control
+				and Control.GrappleInstantMaxPull
+				and self
+				and self.jumpPadReel
+			then
+				originalReelStart = self.reelStart
+				self.reelStart = time() - 2.0
+			end
+
+			getgenv()._NULLSCAPE_InGrappleStep = true
 			local stepResults = packValues(pcall(originalStep, self, dt, ...))
+			getgenv()._NULLSCAPE_InGrappleStep = false
+
+			if originalReelStart then
+				self.reelStart = originalReelStart
+			end
 
 			if altered and self and self.grappleParams then
 				self.grappleParams.FilterDescendantsInstances = originalFilter
@@ -422,6 +457,9 @@ function Executor.enable()
 		local originalEnd = grappleModule.End
 		local wrappedEnd
 		wrappedEnd = function(self, wasCancelled, ...)
+			local yBefore = self and self.RootPart and self.RootPart.Velocity.Y
+			local yVelBelowMinBefore = self and self.yVelBelowMin
+
 			local results = packValues(pcall(originalEnd, self, wasCancelled, ...))
 			if not results[1] then
 				error(results[2], 0)
@@ -431,6 +469,10 @@ function Executor.enable()
 				closeSharkTailWindow(self)
 			elseif wasCancelled == false then
 				scheduleSharkTailEndCleanup(self)
+			end
+
+			if CatapultBoost and typeof(CatapultBoost.apply) == "function" then
+				pcall(CatapultBoost.apply, self, yBefore, yVelBelowMinBefore)
 			end
 
 			return table.unpack(results, 2, results.n)
@@ -477,6 +519,14 @@ function Executor.enable()
 			if HookCastSpeed and typeof(HookCastSpeed.beforeStart) == "function" then
 				local ok, enabled = pcall(HookCastSpeed.beforeStart, self, p2)
 				speedWindow = ok and enabled == true
+			end
+
+			if Control and Control.GrappleInstantGroundCast == true and self and self.Humanoid then
+				if self.Humanoid:GetState() == Enum.HumanoidStateType.Running then
+					pcall(function()
+						self.Humanoid:ChangeState(Enum.HumanoidStateType.Freefall)
+					end)
+				end
 			end
 
 			local results = packValues(pcall(originalStart, self, p2, ...))
@@ -588,6 +638,11 @@ function Executor.restore()
 	end
 	if HookCastSpeed and typeof(HookCastSpeed.restore) == "function" then
 		pcall(HookCastSpeed.restore)
+	end
+
+	if globals.ClassAdjustmentOriginalShapecast and typeof(hookfunction) == "function" then
+		pcall(hookfunction, workspace.Shapecast, globals.ClassAdjustmentOriginalShapecast)
+		globals.ClassAdjustmentOriginalShapecast = nil
 	end
 end
 

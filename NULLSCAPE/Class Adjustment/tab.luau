@@ -45,6 +45,10 @@ local createControllerProxy = function(Client, Controller)
 		GrappleSharkTailNoCooldown = false,
 		GrappleSharkTailWindow = 0.25,
 		GrappleJumpPadUsesBypassEnabled = false,
+		GrappleInstantGroundCast = false,
+		GrappleWallGlide = false,
+		GrappleInstantMaxPull = false,
+		GrappleCatapultMultiplier = 1,
 		ChargerTripmineAssistEnabled = false,
 		ChargerTripmineMode = "Auto",
 		ChargerTripmineDistance = 15,
@@ -192,6 +196,45 @@ return function(Client, Controller)
 		Flag = "GrappleEasierVoidCastToggle",
 		Callback = function(Value)
 			Controller:SetGrappleEasierVoidCast(Value)
+		end,
+	})
+	Tab:CreateToggle({
+		Name = "Instant Ground Grapple",
+		Info = "Allows shooting the grapple directly from the ground without jumping.",
+		CurrentValue = Controller.GrappleInstantGroundCast or false,
+		Flag = "GrappleInstantGroundCastToggle",
+		Callback = function(Value)
+			Controller:SetGrappleInstantGroundCast(Value)
+		end,
+	})
+	Tab:CreateToggle({
+		Name = "Wall-Glide",
+		Info = "Prevents wall collisions from detaching your grapple constraint.",
+		CurrentValue = Controller.GrappleWallGlide or false,
+		Flag = "GrappleWallGlideToggle",
+		Callback = function(Value)
+			Controller:SetGrappleWallGlide(Value)
+		end,
+	})
+	Tab:CreateToggle({
+		Name = "Instant Max Pull Speed",
+		Info = "Forces maximum reel coiling speed instantly without ramp-up delay.",
+		CurrentValue = Controller.GrappleInstantMaxPull or false,
+		Flag = "GrappleInstantMaxPullToggle",
+		Callback = function(Value)
+			Controller:SetGrappleInstantMaxPull(Value)
+		end,
+	})
+	Tab:CreateSlider({
+		Name = "Slider Catapult Boost Multiplier",
+		Info = "Multiplies the native vertical catapult boost when releasing upward from a grapple.",
+		Range = { 1, 3 },
+		Increment = 0.1,
+		Suffix = "x",
+		CurrentValue = Controller.GrappleCatapultMultiplier or 1,
+		Flag = "GrappleCatapultMultiplierSlider",
+		Callback = function(Value)
+			Controller:SetGrappleCatapultMultiplier(Value)
 		end,
 	})
 

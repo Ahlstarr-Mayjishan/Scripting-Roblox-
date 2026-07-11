@@ -13,18 +13,28 @@ local RailMemory =
 local TerrainMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
+local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
 
 local Logic = {
 	LastCastAt = -1000,
+	LastSharkTailAt = -1000,
 	LastThreat = nil,
+	ActiveLift = nil,
+	PendingLiftEndAt = nil,
+	PendingSharkTailUntil = nil,
 }
 
 local CAST_COOLDOWN = 0.42
+local SHARKTAIL_COOLDOWN = 0.9
+local EMERGENCY_LIFT_WINDOW = 0.7
+local SHARKTAIL_WINDOW = 0.3
 local DEFAULT_RANGE = 92
 local DEFAULT_THREAT_RANGE = 42
 local DEFAULT_DANGER_RADIUS = 10
 local DEFAULT_HORIZON = 0.45
 local DEFAULT_STRENGTH = 1
+local DEFAULT_SHARK_ESCAPE_RANGE = 26
+local DEFAULT_LIFT_REEL_HOLD = 0.12
 local MAX_TERRAIN_CANDIDATES = 80
 
 local function getNumber(value, fallback, minimum, maximum)
@@ -111,6 +121,63 @@ local function canCast(grapple, controller, now)
 	return true
 end
 
+local function canSharkEscape(grapple, controller, now)
+	if not (controller and controller.GrappleSharkEscapeEnabled == true) then
+		return false
+	end
+
+	if now - (Logic.LastSharkTailAt or -1000) < SHARKTAIL_COOLDOWN then
+		return false
+	end
+
+	local movement = grapple and grapple.Movement
+	return UpgradeGate and UpgradeGate.hasAll(movement, { "NinjaBelt", "SharkBelt" })
+end
+
+local function getSharkEscapeThreat(grapple, controller)
+	local rootPart = grapple and grapple.RootPart
+	if not rootPart then
+		return nil
+	end
+
+	local range = getNumber(controller.GrappleSharkEscapeRange, DEFAULT_SHARK_ESCAPE_RANGE, 10, 50)
+	local horizon = getNumber(controller.GrappleDodgeHorizon, DEFAULT_HORIZON, 0.15, 0.9)
+	local rootPosition = rootPart.Position
+	local rootVelocity = getRootVelocity(rootPart)
+	local forward = getIntentDirection(grapple)
+	local bestThreat = nil
+	local bestScore = 0
+	local bestAway = nil
+
+	for _, threat in ipairs(EnemyMemory.getNearbyThreats(rootPosition, range)) do
+		local toThreat = threat.Position - rootPosition
+		local flatToThreat = flatten(toThreat)
+		if flatToThreat.Magnitude <= 0.05 then
+			continue
+		end
+
+		local frontDot = forward:Dot(flatToThreat.Unit)
+		if frontDot < 0.35 then
+			continue
+		end
+
+		local futureRoot = rootPosition + rootVelocity * horizon
+		local futureEnemy = threat.Position + (threat.Velocity or Vector3.zero) * horizon
+		local futureOffset = futureRoot - futureEnemy
+		local futureDistance = futureOffset.Magnitude
+		local sizeBonus = math.max(threat.Size.X, threat.Size.Y, threat.Size.Z) * 0.25
+		local score = frontDot * 2 + math.max(0, range + sizeBonus - futureDistance) / math.max(range, 1)
+
+		if score > bestScore then
+			bestThreat = threat
+			bestScore = score
+			bestAway = safeUnit(futureOffset, rootPosition - threat.Position)
+		end
+	end
+
+	return bestThreat, bestScore, bestAway
+end
+
 local function getThreat(grapple, controller)
 	local rootPart = grapple and grapple.RootPart
 	if not rootPart then
@@ -155,6 +222,22 @@ local function getCandidatePart(candidate)
 	return typeof(candidate) == "table" and candidate.Part or candidate
 end
 
+local function getCandidateKind(candidate)
+	if typeof(candidate) ~= "table" then
+		return "Terrain"
+	end
+
+	if candidate.Priority then
+		return "Special"
+	end
+
+	if candidate.CFrame or candidate.Size then
+		return "Terrain"
+	end
+
+	return "Rail"
+end
+
 local function getCandidateBonus(part, controller)
 	if AnchorMemory and typeof(AnchorMemory.isSpecialAnchor) == "function" and AnchorMemory.isSpecialAnchor(part) then
 		local entry = AnchorMemory.remember(part, "grapple-dodge", controller)
@@ -168,6 +251,17 @@ local function getCandidateBonus(part, controller)
 	return 0
 end
 
+local function getSharkEscapeBonus(candidate)
+	local kind = getCandidateKind(candidate)
+	if kind == "Terrain" then
+		return 120
+	end
+	if kind == "Special" then
+		return 35
+	end
+	return 12
+end
+
 local function canUseHit(hit, part)
 	if not (hit and part) then
 		return false
@@ -177,7 +271,7 @@ local function canUseHit(hit, part)
 	return instance == part or instance:IsDescendantOf(part) or part:IsDescendantOf(instance)
 end
 
-local function scoreCandidate(grapple, controller, candidate, intentDirection, awayDirection)
+local function scoreCandidate(grapple, controller, candidate, intentDirection, awayDirection, sharkEscape)
 	local rootPart = grapple.RootPart
 	local part = getCandidatePart(candidate)
 	if not (part and part:IsA("BasePart") and part.Parent) then
@@ -199,6 +293,8 @@ local function scoreCandidate(grapple, controller, candidate, intentDirection, a
 		return nil, -math.huge
 	end
 
+	local verticalLift = math.clamp((part.Position.Y - origin.Y) / 22, -1, 2)
+
 	local hit = Workspace:Raycast(origin, direction * distance, grapple.grappleParams)
 	if not canUseHit(hit, part) then
 		return nil, -math.huge
@@ -206,22 +302,16 @@ local function scoreCandidate(grapple, controller, candidate, intentDirection, a
 
 	local strength = getNumber(controller.GrappleDodgeStrength, DEFAULT_STRENGTH, 0.25, 3)
 	local score = intentDot * 70 * strength + awayDot * 60 + getCandidateBonus(part, controller) - distance * 0.22
+	if sharkEscape then
+		score += getSharkEscapeBonus(candidate) + verticalLift * 38
+	end
 
 	return hit, score
 end
 
-local function collectCandidates(origin, controller)
+local function collectCandidates(origin, controller, sharkEscape)
 	local range = getNumber(controller.GrappleDodgeRange, DEFAULT_RANGE, 30, 150)
 	local candidates = {}
-
-	AnchorMemory.refreshBudgeted(nil, controller)
-	for _, entry in ipairs(AnchorMemory.getNearbyAnchors(origin, range, controller)) do
-		table.insert(candidates, entry)
-	end
-
-	for _, entry in ipairs(RailMemory.getNearbyRails(origin, range)) do
-		table.insert(candidates, entry)
-	end
 
 	local terrainCount = 0
 	for _, entry in ipairs(TerrainMemory.getNearbySurfaces(origin, range)) do
@@ -232,10 +322,25 @@ local function collectCandidates(origin, controller)
 		table.insert(candidates, entry)
 	end
 
+	AnchorMemory.refreshBudgeted(nil, controller)
+	for _, entry in ipairs(AnchorMemory.getNearbyAnchors(origin, range, controller)) do
+		table.insert(candidates, entry)
+	end
+
+	for _, entry in ipairs(RailMemory.getNearbyRails(origin, range)) do
+		table.insert(candidates, entry)
+	end
+
+	if not sharkEscape then
+		table.sort(candidates, function(a, b)
+			return (a.Distance or math.huge) < (b.Distance or math.huge)
+		end)
+	end
+
 	return candidates
 end
 
-local function findBestHit(grapple, controller, awayDirection)
+local function findBestHit(grapple, controller, awayDirection, sharkEscape)
 	local rootPart = grapple and grapple.RootPart
 	if not (rootPart and grapple.grappleParams) then
 		return nil
@@ -245,8 +350,8 @@ local function findBestHit(grapple, controller, awayDirection)
 	local bestHit = nil
 	local bestScore = -math.huge
 
-	for _, candidate in ipairs(collectCandidates(rootPart.Position, controller)) do
-		local hit, score = scoreCandidate(grapple, controller, candidate, intentDirection, awayDirection)
+	for _, candidate in ipairs(collectCandidates(rootPart.Position, controller, sharkEscape)) do
+		local hit, score = scoreCandidate(grapple, controller, candidate, intentDirection, awayDirection, sharkEscape)
 		if hit and score > bestScore then
 			bestHit = hit
 			bestScore = score
@@ -256,19 +361,135 @@ local function findBestHit(grapple, controller, awayDirection)
 	return bestHit
 end
 
+local function playReelSound(grapple)
+	local sfx = grapple and (grapple.SFX or grapple.Movement and grapple.Movement.SFX)
+	if sfx and typeof(sfx.PlaySound) == "function" then
+		pcall(function()
+			sfx:PlaySound("GrapplerReel")
+		end)
+	end
+end
+
+local function startSharkEscapeReel(grapple, controller, now)
+	local movement = grapple and grapple.Movement
+	if not (movement and movement.grappling == true) then
+		return false
+	end
+
+	if grapple.jumpPadReel or grapple.grappleReel or grapple.reelCooldown or grapple.sharkTailDisable then
+		return false
+	end
+
+	if not (UpgradeGate and UpgradeGate.hasAll(movement, { "NinjaBelt", "SharkBelt" })) then
+		return false
+	end
+
+	grapple.jumpPadReel = true
+	grapple.reelStart = now
+	grapple.grappleReel = true
+	Logic.PendingLiftEndAt = now
+		+ getNumber(controller.GrappleSharkEscapeReelHoldTime, DEFAULT_LIFT_REEL_HOLD, 0.05, 0.22)
+	if MomentumMemory and typeof(MomentumMemory.record) == "function" then
+		pcall(MomentumMemory.record, grapple.RootPart, "SharkEscapeReel")
+	end
+	playReelSound(grapple)
+	return true
+end
+
+local function trySharkEscapeTail(grapple, now)
+	if not Logic.PendingSharkTailUntil then
+		return false
+	end
+
+	if now > Logic.PendingSharkTailUntil then
+		Logic.PendingSharkTailUntil = nil
+		Logic.ActiveLift = nil
+		return false
+	end
+
+	if
+		grapple
+		and grapple.allowSharkTail == true
+		and grapple.sharkTailDisable ~= true
+		and typeof(grapple.SharkTail) == "function"
+	then
+		local success = pcall(function()
+			grapple:SharkTail()
+		end)
+		if success then
+			Logic.LastSharkTailAt = now
+			Logic.PendingSharkTailUntil = nil
+			Logic.ActiveLift = nil
+			if MomentumMemory and typeof(MomentumMemory.record) == "function" then
+				pcall(MomentumMemory.record, grapple.RootPart, "SharkEscape")
+			end
+			return true
+		end
+	end
+
+	return false
+end
+
+local function serviceSharkEscape(grapple, controller, now)
+	if not Logic.ActiveLift and not Logic.PendingSharkTailUntil then
+		return false
+	end
+
+	if trySharkEscapeTail(grapple, now) then
+		return true
+	end
+
+	if Logic.ActiveLift and now - (Logic.ActiveLift.StartedAt or now) > EMERGENCY_LIFT_WINDOW then
+		Logic.ActiveLift = nil
+		Logic.PendingLiftEndAt = nil
+		return false
+	end
+
+	startSharkEscapeReel(grapple, controller, now)
+
+	if Logic.PendingLiftEndAt and now >= Logic.PendingLiftEndAt and grapple and typeof(grapple.End) == "function" then
+		local success = pcall(function()
+			grapple:End()
+		end)
+		if success then
+			Logic.PendingLiftEndAt = nil
+			Logic.PendingSharkTailUntil = now + SHARKTAIL_WINDOW
+			return true
+		end
+	end
+
+	return Logic.ActiveLift ~= nil or Logic.PendingSharkTailUntil ~= nil
+end
+
 function Logic.step(grapple, _dt, controller)
 	local now = time()
+	if serviceSharkEscape(grapple, controller, now) then
+		return true
+	end
+
 	if not canCast(grapple, controller, now) then
 		return false
 	end
 
+	local sharkThreat, sharkScore, sharkAway = nil, 0, nil
+	if canSharkEscape(grapple, controller, now) then
+		sharkThreat, sharkScore, sharkAway = getSharkEscapeThreat(grapple, controller)
+	end
+
 	local threat, score, awayDirection = getThreat(grapple, controller)
+	if sharkThreat and sharkScore > 0 then
+		threat = sharkThreat
+		score = math.max(score, sharkScore)
+		awayDirection = sharkAway or awayDirection
+	end
+
 	if not threat or score <= 0 then
 		Logic.LastThreat = nil
 		return false
 	end
 
-	local hit = findBestHit(grapple, controller, awayDirection)
+	local sharkEscape = sharkThreat ~= nil and sharkScore > 0
+	local hit = findBestHit(grapple, controller, awayDirection, sharkEscape)
 	if not hit then
 		return false
 	end
@@ -284,6 +505,14 @@ function Logic.step(grapple, _dt, controller)
 	if success then
 		Logic.LastCastAt = now
 		Logic.LastThreat = threat
+		if sharkEscape then
+			Logic.ActiveLift = {
+				StartedAt = now,
+				Hit = hit,
+			}
+			Logic.PendingLiftEndAt = nil
+			Logic.PendingSharkTailUntil = nil
+		end
 	end
 
 	return success == true
@@ -291,7 +520,11 @@ end
 
 function Logic.reset()
 	Logic.LastCastAt = -1000
+	Logic.LastSharkTailAt = -1000
 	Logic.LastThreat = nil
+	Logic.ActiveLift = nil
+	Logic.PendingLiftEndAt = nil
+	Logic.PendingSharkTailUntil = nil
 end
 
 return Logic

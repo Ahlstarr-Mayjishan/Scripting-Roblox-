@@ -1,5 +1,5 @@
 {
-  "Version": "2026.07.12.07",
+  "Version": "2026.07.12.10",
   "MenuChanges": [
     "Settings",
     "Automation",
@@ -724,6 +724,12 @@
       "Path": "NULLSCAPE/Simulated Upgrades/tab.luau",
       "Menu": [
         "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",
+      "Menu": [
+        "Class Adjustment"
       ]
     }
   ]

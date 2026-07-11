@@ -1,14 +1,13 @@
 --!nocheck
 -- [[
---  NULLSCAPE - Gift and Instrument Magnet / Auto Collect
---  Handles multi-target collection (Gifts, Instruments) with range filters and safety checks.
+--  NULLSCAPE - Gift Magnet / Auto Collect
+--  Handles gift collection with range filters and safety checks.
 --  (Medal collection has been moved to manual blink-teleport keybind by user request)
 -- ]]
 
 local Magnet = {}
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local CollectionService = game:GetService("CollectionService")
 
 local COLLECT_DELAY = 0.35
 
@@ -137,7 +136,6 @@ function Magnet.update(controller, hrp)
 
 	local targets = controller.AutoCollectTargets or {}
 	local hasGiftTarget = table.find(targets, "Gift/GoldenGift") ~= nil
-	local hasInstrumentTarget = table.find(targets, "Instrument (Cadence)") ~= nil
 
 	local mode = controller.AutoCollectMode or "Legit"
 	local hrpPos = hrp.Position
@@ -181,25 +179,6 @@ function Magnet.update(controller, hrp)
 					for _, item in ipairs(validGifts) do
 						collectGift(item.rawObj, collectedEvent)
 					end
-				end
-			end
-		end
-	end
-
-	-- 2. CADENCE ORB / INSTRUMENT COLLECTION
-	if hasInstrumentTarget then
-		local instrumentRange = controller.AutoCollectInstrumentRange or 0
-		for _, orb in ipairs(CollectionService:GetTagged("CadenceOrb")) do
-			if orb:IsA("BasePart") and orb.Parent then
-				local dist = (orb.Position - hrpPos).Magnitude
-				if instrumentRange == 0 or dist <= instrumentRange then
-					pcall(function()
-						if typeof(firetouchinterest) == "function" then
-							firetouchinterest(orb, hrp, 0)
-							task.wait()
-							firetouchinterest(orb, hrp, 1)
-						end
-					end)
 				end
 			end
 		end
