@@ -167,6 +167,11 @@ end
 
 local CELESTIAL_CLIENT_BLOCKLIST = {
     kill = true,
+    deathbeam = true,
+    celestial = true,
+    realitybreak = true,
+    ["reality break"] = true,
+    realitybreaker = true,
 }
 
 local CELESTIAL_DIED_REASONS = {
@@ -206,7 +211,21 @@ local function isCelestialKillReport(remote, args)
         return CELESTIAL_DIED_REASONS[lowerFirstArg] == true
     end
 
-    if remoteName ~= "ClientEvent" or not CELESTIAL_CLIENT_BLOCKLIST[lowerFirstArg] then
+    if remoteName ~= "ClientEvent" then
+        return false
+    end
+
+    local hasCelestialKillKeyword = CELESTIAL_CLIENT_BLOCKLIST[lowerFirstArg] == true
+    if not hasCelestialKillKeyword then
+        for _, arg in ipairs(args or {}) do
+            if typeof(arg) == "string" and CELESTIAL_CLIENT_BLOCKLIST[string.lower(arg)] == true then
+                hasCelestialKillKeyword = true
+                break
+            end
+        end
+    end
+
+    if not hasCelestialKillKeyword then
         return false
     end
 

@@ -1,124 +1,31 @@
 --!nocheck
 -- [[
---  NULLSCAPE - Better Jump Pad Simulation
---  Ref logic:
---    - JumpPad sets RootPart.Velocity.Y to 100 by default
---    - WeakJumpPads outside current rooms can reduce it to 60
---  This module keeps the original JumpPad behavior, then raises the vertical launch up to the configured value.
+--  NULLSCAPE - Better Jump Pad client-upgrade bridge
+--  Keeps the native upgrade flag visible without patching MovementCore.OnHitboxTouch.
 -- ]]
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-
-local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
-
-local function packValues(...)
-	local values = { ... }
-	values.n = select("#", ...)
-	return values
-end
+local Injector = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau")
 
 local MIN_JUMP_PAD_POWER = 100
 local MAX_JUMP_PAD_POWER = 200
 
 local Logic = {
 	JumpPadPower = MIN_JUMP_PAD_POWER,
-	OriginalOnHitboxTouch = nil,
 	Hooked = false,
 }
 
-local function getMovementCore()
-	local movement = ReplicatedStorage:FindFirstChild("Movement")
-	if not movement then
-		return nil
+function Logic.start(controller, _gc)
+	local enabled = controller and controller.BetterJumpPadEnabled == true
+	if Injector then
+		Injector.set("BetterJumpPad", enabled, 1)
 	end
-	return movement:FindFirstChild("MovementCore")
-end
-
-local function applyJumpPadPower(controller, movement)
-	if not controller.BetterJumpPadEnabled then
-		return
-	end
-	if not movement or not movement.RootPart then
-		return
-	end
-
-	local power = math.clamp(
-		tonumber(controller.BetterJumpPadPower) or Logic.JumpPadPower,
-		MIN_JUMP_PAD_POWER,
-		MAX_JUMP_PAD_POWER
-	)
-	local velocity = movement.RootPart.Velocity
-	if velocity.Y < power then
-		local nextVelocity = Vector3.new(velocity.X, power, velocity.Z)
-		movement.RootPart.Velocity = nextVelocity
-		MomentumMemory.noteImpulse(
-			movement.RootPart,
-			"BetterJumpPad",
-			velocity,
-			nextVelocity,
-			nextVelocity - velocity,
-			{
-				Power = power,
-			}
-		)
-	end
-end
-
-function Logic.start(controller, gc)
-	local MovementCoreModule = getMovementCore()
-	if not MovementCoreModule then
-		return
-	end
-
-	local success, MovementCore = pcall(require, MovementCoreModule)
-	if not success or not MovementCore or type(MovementCore) ~= "table" then
-		return
-	end
-
-	if not MovementCore.__NULLSCAPE_original_OnHitboxTouch then
-		MovementCore.__NULLSCAPE_original_OnHitboxTouch = MovementCore.OnHitboxTouch
-	end
-	Logic.OriginalOnHitboxTouch = MovementCore.__NULLSCAPE_original_OnHitboxTouch
-
-	if Logic.Hooked or MovementCore.__NULLSCAPE_better_jump_pad_hooked then
-		return
-	end
-
-	MovementCore.OnHitboxTouch = function(self, part)
-		if controller.BetterJumpPadEnabled and part and part.Name == "JumpPad" then
-			task.defer(function()
-				applyJumpPadPower(controller, self)
-			end)
-		end
-
-		local results = packValues(Logic.OriginalOnHitboxTouch(self, part))
-		return table.unpack(results, 1, results.n)
-	end
-
-	MovementCore.__NULLSCAPE_better_jump_pad_hooked = true
-	Logic.Hooked = true
+	Logic.Hooked = enabled
 end
 
 function Logic.stop()
-	if not Logic.Hooked then
-		return
+	if Injector then
+		Injector.set("BetterJumpPad", false, 0)
 	end
-
-	local MovementCoreModule = getMovementCore()
-	if MovementCoreModule then
-		local success, MovementCore = pcall(require, MovementCoreModule)
-		if
-			success
-			and MovementCore
-			and type(MovementCore) == "table"
-			and MovementCore.__NULLSCAPE_original_OnHitboxTouch
-		then
-			MovementCore.OnHitboxTouch = MovementCore.__NULLSCAPE_original_OnHitboxTouch
-			MovementCore.__NULLSCAPE_better_jump_pad_hooked = false
-		end
-	end
-
-	Logic.OriginalOnHitboxTouch = nil
 	Logic.Hooked = false
 end
 

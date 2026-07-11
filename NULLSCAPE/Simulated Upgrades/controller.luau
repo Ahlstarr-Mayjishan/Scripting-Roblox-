@@ -250,9 +250,7 @@ local function startUtilityLoop()
 					pcall(function()
 						local reduction = Controller.MomentumReduction or 1.0
 						MatrixTetrahedron.setReduction(reduction)
-						if reduction > 0 then
-							MatrixTetrahedron.start(Controller, GC)
-						end
+						MatrixTetrahedron.start(Controller, GC)
 					end)
 				end
 				if Controller.GraceWingsEnabled and GraceWings and not GraceWings.Hooked then
@@ -381,14 +379,12 @@ end
 
 -- Bật/tắt mô phỏng nâng cấp Matrix Tetrahedron
 function Controller:SetMatrixTetrahedron(value)
-	self.MatrixTetrahedronEnabled = value
+	self.MatrixTetrahedronEnabled = value == true
 	if MatrixTetrahedron then
-		if value then
+		if self.MatrixTetrahedronEnabled then
 			local reduction = self.MomentumReduction or 1.0
 			MatrixTetrahedron.setReduction(reduction)
-			if reduction > 0 then
-				MatrixTetrahedron.start(self, GC)
-			end
+			MatrixTetrahedron.start(self, GC)
 		else
 			MatrixTetrahedron.stop()
 		end
@@ -406,10 +402,8 @@ function Controller:SetMomentumReduction(value)
 	self.MomentumReduction = val
 	if MatrixTetrahedron then
 		MatrixTetrahedron.setReduction(val)
-		if self.MatrixTetrahedronEnabled and val > 0 then
+		if self.MatrixTetrahedronEnabled then
 			MatrixTetrahedron.start(self, GC)
-		elseif val == 0 then
-			MatrixTetrahedron.stop()
 		end
 	end
 end
@@ -1063,6 +1057,14 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 			isHelmet = true
 		elseif v == "MiniatureHourglass" or v == "Miniature Hourglass" then
 			isMiniatureHourglass = true
+		elseif v == "NinjaBelt" or v == "Ninja Belt" then
+			if Controller.GrappleVirtualNinjaBelt then
+				return true, true
+			end
+		elseif v == "SharkTail" or v == "Shark Tail" or v == "SharkBelt" or v == "Shark Belt" then
+			if Controller.GrappleVirtualSharkTail then
+				return true, true
+			end
 		else
 			local shouldSpoof, result = Logic.shouldSpoofUpgradeEnabled(Controller, v)
 			if shouldSpoof then
@@ -1070,7 +1072,7 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 			end
 		end
 	end
-	if isTetrahedron and Controller.MatrixTetrahedronEnabled and (Controller.MomentumReduction or 0) >= 0.6 then
+	if isTetrahedron and Controller.MatrixTetrahedronEnabled then
 		return true, true
 	end
 	if isGraceWings and Controller.GraceWingsEnabled then
@@ -1112,6 +1114,14 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 			isHelmet = true
 		elseif v == "MiniatureHourglass" or v == "Miniature Hourglass" then
 			isMiniatureHourglass = true
+		elseif v == "NinjaBelt" or v == "Ninja Belt" then
+			if Controller.GrappleVirtualNinjaBelt then
+				return true, 1
+			end
+		elseif v == "SharkTail" or v == "Shark Tail" or v == "SharkBelt" or v == "Shark Belt" then
+			if Controller.GrappleVirtualSharkTail then
+				return true, 1
+			end
 		else
 			local shouldSpoof, stack = Logic.shouldSpoofUpgradeStack(Controller, v)
 			if shouldSpoof then
@@ -1119,7 +1129,7 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 			end
 		end
 	end
-	if isTetrahedron and Controller.MatrixTetrahedronEnabled and (Controller.MomentumReduction or 0) >= 0.6 then
+	if isTetrahedron and Controller.MatrixTetrahedronEnabled then
 		return true, 1
 	end
 	if isGraceWings and Controller.GraceWingsEnabled then

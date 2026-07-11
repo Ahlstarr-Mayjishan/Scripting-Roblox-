@@ -846,6 +846,9 @@ function Client:HotRestart(reason)
 	if not source then
 		return false
 	end
+	if typeof(source) == "string" and string.sub(source, 1, 3) == "\239\187\191" then
+		source = string.sub(source, 4)
+	end
 
 	task.defer(function()
 		Client:PrepareForRuntimeUpdate(reason or "HotRestart")
@@ -992,6 +995,9 @@ local function loadModule(path)
 	end
 
 	local source = sourceResult
+	if typeof(source) == "string" and string.sub(source, 1, 3) == "\239\187\191" then
+		source = string.sub(source, 4)
+	end
 
 	local chunk, compileErr = loadstring(source)
 	if not chunk then

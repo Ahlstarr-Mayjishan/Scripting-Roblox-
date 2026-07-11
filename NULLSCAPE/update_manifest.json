@@ -1,5 +1,5 @@
 {
-  "Version": "2026.07.11.6",
+  "Version": "2026.07.11.10",
   "MenuChanges": [
     "Settings",
     "Automation",
@@ -94,6 +94,36 @@
     },
     {
       "Path": "NULLSCAPE/Simulated Upgrades/controller.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/executor.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Matrix Tetrahedron.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Advanced Gravity Coil.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Better Jump Pad.luau",
       "Menu": [
         "Simulated Upgrades"
       ]

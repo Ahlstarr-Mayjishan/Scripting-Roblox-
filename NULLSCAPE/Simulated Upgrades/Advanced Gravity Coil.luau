@@ -1,98 +1,32 @@
 --!nocheck
 -- [[
---  NULLSCAPE - Advanced Gravity Coil Simulation
---  Ref logic:
---    - Base JumpPower = 35
---    - AdvancedGravityCoil reduces it to 35 * 0.8 = 28
---    - MovementCore adds an upward assist task on Jumping while the upgrade is enabled
+--  NULLSCAPE - Advanced Gravity Coil client-upgrade bridge
+--  Uses the native UpgradeHandler/MovementCore upgrade path instead of forcing
+--  Humanoid.JumpPower every frame.
 -- ]]
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
+local Injector = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau")
 
-local LocalPlayer = Players.LocalPlayer
-local BASE_JUMP_POWER = 35
 local MIN_JUMP_POWER = 28
 local MAX_JUMP_POWER = 100
 
 local Logic = {
 	JumpPower = MIN_JUMP_POWER,
-	Connection = nil,
-	CharacterConnection = nil,
-	OriginalJumpPowerByHumanoid = setmetatable({}, { __mode = "k" }),
 	Hooked = false,
 }
 
-local function getHumanoid()
-	local character = LocalPlayer and LocalPlayer.Character
-	return character and character:FindFirstChildOfClass("Humanoid") or nil
-end
-
-local function applyJumpPower(controller)
-	local humanoid = getHumanoid()
-	if not humanoid then
-		return
+function Logic.start(controller, _gc)
+	local enabled = controller and controller.AdvancedGravityCoilEnabled == true
+	if Injector then
+		Injector.set("AdvancedGravityCoil", enabled, 1)
 	end
-	if Logic.OriginalJumpPowerByHumanoid[humanoid] == nil then
-		Logic.OriginalJumpPowerByHumanoid[humanoid] = humanoid.JumpPower
-	end
-
-	local jumpPower =
-		math.clamp(tonumber(controller.AdvancedGravityCoilJumpPower) or Logic.JumpPower, MIN_JUMP_POWER, MAX_JUMP_POWER)
-	humanoid.JumpPower = jumpPower
-end
-
-local function restoreJumpPower()
-	local humanoid = getHumanoid()
-	if humanoid then
-		humanoid.JumpPower = Logic.OriginalJumpPowerByHumanoid[humanoid] or BASE_JUMP_POWER
-		Logic.OriginalJumpPowerByHumanoid[humanoid] = nil
-	end
-end
-
-function Logic.start(controller, gc)
-	Logic.JumpPower =
-		math.clamp(tonumber(controller.AdvancedGravityCoilJumpPower) or Logic.JumpPower, MIN_JUMP_POWER, MAX_JUMP_POWER)
-	applyJumpPower(controller)
-
-	if not Logic.CharacterConnection and LocalPlayer then
-		Logic.CharacterConnection = LocalPlayer.CharacterAdded:Connect(function()
-			task.defer(function()
-				if controller.AdvancedGravityCoilEnabled then
-					applyJumpPower(controller)
-				end
-			end)
-		end)
-	end
-
-	if Logic.Connection then
-		Logic.Hooked = true
-		return
-	end
-
-	Logic.Connection = RunService.Heartbeat:Connect(function()
-		if not controller.AdvancedGravityCoilEnabled then
-			return
-		end
-
-		applyJumpPower(controller)
-	end)
-	Logic.Hooked = true
+	Logic.Hooked = enabled
 end
 
 function Logic.stop()
-	if Logic.Connection then
-		Logic.Connection:Disconnect()
-		Logic.Connection = nil
+	if Injector then
+		Injector.set("AdvancedGravityCoil", false, 0)
 	end
-
-	if Logic.CharacterConnection then
-		Logic.CharacterConnection:Disconnect()
-		Logic.CharacterConnection = nil
-	end
-
-	restoreJumpPower()
-	Logic.OriginalJumpPowerByHumanoid = setmetatable({}, { __mode = "k" })
 	Logic.Hooked = false
 end
 
