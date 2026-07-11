@@ -1,4 +1,4 @@
-﻿-- [[
+-- [[
 --  NULLSCAPE - Entities Controller
 --  Vai trÃ²: Äáº£m nhiá»‡m viá»‡c quan sÃ¡t hiá»‡u nÄƒng, phÃ¢n tÃ­ch tÃ i nguyÃªn vÃ  Ä‘Æ°a ra cÃ¡c quyáº¿t Ä‘á»‹nh Ä‘iá»u phá»‘i:
 --  - PhÃ¡t hiá»‡n tráº¡ng thÃ¡i sáº£nh chá»/tráº­n Ä‘áº¥u (khi inLobby = false sáº½ kÃ­ch hoáº¡t gá»i quÃ©t scan).
