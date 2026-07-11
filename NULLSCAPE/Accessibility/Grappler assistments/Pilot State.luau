@@ -5,6 +5,7 @@
 ]]
 
 local PilotState = {}
+local AbilityIntent = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Ability Intent Context.luau")
 
 local function hasMoveInput(grapple)
 	local humanoid = grapple and grapple.Humanoid
@@ -29,6 +30,24 @@ function PilotState.resolve(grapple, intent, context)
 
 	if context and context.ManualCast == true then
 		return "Manual"
+	end
+
+	if AbilityIntent and typeof(AbilityIntent.resolve) == "function" then
+		local success, state = pcall(function()
+			return AbilityIntent.resolve(grapple, intent, context)
+		end)
+		if success and state then
+			if state.Mode == "EmergencyPilot" then
+				return "Emergency"
+			end
+			if state.Mode == "Pilot" then
+				return "Pilot"
+			end
+			if state.Mode == "Technique" then
+				return "Technique"
+			end
+			return "Manual"
+		end
 	end
 
 	if intent and intent.Name == "VoidRescue" then

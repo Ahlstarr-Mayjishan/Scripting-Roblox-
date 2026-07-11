@@ -7,6 +7,7 @@
 local Players = game:GetService("Players")
 
 local Context = {}
+local GameState = getgenv().loadModule("NULLSCAPE/Core/Game State Context.luau")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -82,7 +83,15 @@ function Context.getRazorbloom(character)
 end
 
 function Context.isRazorbloomActive(character)
-	return Context.getRazorbloom(character) ~= nil
+	if Context.getRazorbloom(character) ~= nil then
+		return true
+	end
+
+	return GameState and typeof(GameState.isRazorbloomActive) == "function" and GameState.isRazorbloomActive(character)
+end
+
+function Context.isKolonaActive()
+	return GameState and typeof(GameState.isKolonaActive) == "function" and GameState.isKolonaActive()
 end
 
 return Context

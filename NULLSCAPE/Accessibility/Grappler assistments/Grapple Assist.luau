@@ -11,23 +11,28 @@ local SecondaryCast = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler ass
 local VoidRescue = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/SharkVoid.luau")
 local BellContact =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/Bell Contact Assist.luau")
+local GrappleDodge = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/Grapple Dodge.luau")
 local ReelSaver = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/Reel Saver/init.luau")
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
 local FailFeedback = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Fail Feedback Loop.luau")
 local DeferredAim = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Deferred Aim Cast.luau")
 local Arbiter = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique Arbiter.luau")
 local EntityContext = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Entity Intent Context.luau")
+local Decision = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique Decision Layer.luau")
 
-local HOOK_VERSION = 13
+local HOOK_VERSION = 14
 
-local PRIORITY = {
-	SharkVoid = 100,
-	ReelSaver = 82,
-	ReleaseTiming = 76,
-	SecondaryCast = 72,
-	DeferredAim = 45,
-	Feedback = 10,
-}
+local PRIORITY = Decision and Decision.Priority
+	or {
+		SharkVoid = 100,
+		RazorbloomEscape = 94,
+		GrappleDodge = 88,
+		ReelSaver = 82,
+		ReleaseTiming = 76,
+		SecondaryCast = 72,
+		DeferredAim = 45,
+		Feedback = 10,
+	}
 
 local Logic = {
 	Controller = nil,
@@ -133,6 +138,34 @@ local function packValues(...)
 		n = select("#", ...),
 		...,
 	}
+end
+
+local function canRunTechnique(grapple, name, intent, options)
+	if Decision and typeof(Decision.canRun) == "function" then
+		local ok, allowed, state = pcall(function()
+			return Decision.canRun(grapple, name, intent, options)
+		end)
+		if ok then
+			return allowed == true, state
+		end
+	end
+
+	if Arbiter and Arbiter.isBlocked and Arbiter.isBlocked(grapple, name, PRIORITY[name] or 0) then
+		return false
+	end
+	return true
+end
+
+local function claimTechnique(grapple, name, holdTime)
+	if Decision and typeof(Decision.claim) == "function" then
+		pcall(function()
+			Decision.claim(grapple, name, holdTime)
+		end)
+	elseif Arbiter and typeof(Arbiter.claim) == "function" then
+		pcall(function()
+			Arbiter.claim(grapple, name, PRIORITY[name] or 0, holdTime)
+		end)
+	end
 end
 
 local function installCastHook(grappleModule, globals)
@@ -254,34 +287,50 @@ local function installStepHook(grappleModule, globals)
 		local activeTechnique = nil
 
 		if VoidRescue and typeof(VoidRescue.step) == "function" then
-			local success, handled = pcall(function()
-				return VoidRescue.step(self, dt, getController(), Targeting)
-			end)
-			if success and handled then
-				activeTechnique = "SharkVoid"
-				if Arbiter and typeof(Arbiter.claim) == "function" then
-					pcall(function()
-						Arbiter.claim(self, "SharkVoid", PRIORITY.SharkVoid, 0.45)
-					end)
+			local allowed = canRunTechnique(self, "SharkVoid", {
+				Name = "VoidRescue",
+			})
+			if allowed then
+				local success, handled = pcall(function()
+					return VoidRescue.step(self, dt, getController(), Targeting)
+				end)
+				if success and handled then
+					activeTechnique = "SharkVoid"
+					claimTechnique(self, "SharkVoid", 0.45)
 				end
 			end
 		end
 
-		if
-			not activeTechnique
-			and ReelSaver
-			and typeof(ReelSaver.step) == "function"
-			and not (Arbiter and Arbiter.isBlocked and Arbiter.isBlocked(self, "ReelSaver", PRIORITY.ReelSaver))
-		then
-			local success, handled = pcall(function()
-				return ReelSaver.step(self, dt, controller)
-			end)
-			if success and handled then
-				activeTechnique = "ReelSaver"
-				if Arbiter and typeof(Arbiter.claim) == "function" then
-					pcall(function()
-						Arbiter.claim(self, "ReelSaver", PRIORITY.ReelSaver, 0.35)
-					end)
+		if not activeTechnique and GrappleDodge and typeof(GrappleDodge.step) == "function" then
+			local allowed = canRunTechnique(self, "GrappleDodge", {
+				Name = "ThreatDodge",
+			}, {
+				AllowWhileMoving = true,
+			})
+			if allowed then
+				local success, handled = pcall(function()
+					return GrappleDodge.step(self, dt, controller)
+				end)
+				if success and handled then
+					activeTechnique = "GrappleDodge"
+					claimTechnique(self, "GrappleDodge", 0.42)
+				end
+			end
+		end
+
+		if not activeTechnique and ReelSaver and typeof(ReelSaver.step) == "function" then
+			local allowed = canRunTechnique(self, "ReelSaver", {
+				Name = "ReelSaver",
+			}, {
+				Technique = "ReelSaver",
+			})
+			if allowed then
+				local success, handled = pcall(function()
+					return ReelSaver.step(self, dt, controller)
+				end)
+				if success and handled then
+					activeTechnique = "ReelSaver"
+					claimTechnique(self, "ReelSaver", 0.35)
 				end
 			end
 		end
@@ -292,39 +341,40 @@ local function installStepHook(grappleModule, globals)
 			and time() <= Logic.PendingReelSaverUntil
 			and ReelSaver
 			and typeof(ReelSaver.trigger) == "function"
-			and not (Arbiter and Arbiter.isBlocked and Arbiter.isBlocked(self, "ReelSaver", PRIORITY.ReelSaver))
 		then
-			local success, triggered = pcall(function()
-				return ReelSaver.trigger(self, controller, Targeting)
-			end)
-			if success and triggered then
-				Logic.PendingReelSaverUntil = nil
-				activeTechnique = "ReelSaver"
-				if Arbiter and typeof(Arbiter.claim) == "function" then
-					pcall(function()
-						Arbiter.claim(self, "ReelSaver", PRIORITY.ReelSaver, 0.55)
-					end)
+			local allowed = canRunTechnique(self, "ReelSaver", {
+				Name = "ReelSaver",
+			}, {
+				Technique = "ReelSaver",
+			})
+			if allowed then
+				local success, triggered = pcall(function()
+					return ReelSaver.trigger(self, controller, Targeting)
+				end)
+				if success and triggered then
+					Logic.PendingReelSaverUntil = nil
+					activeTechnique = "ReelSaver"
+					claimTechnique(self, "ReelSaver", 0.55)
 				end
 			end
 		elseif Logic.PendingReelSaverUntil and time() > Logic.PendingReelSaverUntil then
 			Logic.PendingReelSaverUntil = nil
 		end
 
-		if
-			not activeTechnique
-			and DeferredAim
-			and typeof(DeferredAim.step) == "function"
-			and not (Arbiter and Arbiter.isBlocked and Arbiter.isBlocked(self, "DeferredAim", PRIORITY.DeferredAim))
-		then
-			local success, handled = pcall(function()
-				return DeferredAim.step(self, controller)
-			end)
-			if success and handled then
-				activeTechnique = "DeferredAim"
-				if Arbiter and typeof(Arbiter.claim) == "function" then
-					pcall(function()
-						Arbiter.claim(self, "DeferredAim", PRIORITY.DeferredAim, 0.25)
-					end)
+		if not activeTechnique and DeferredAim and typeof(DeferredAim.step) == "function" then
+			local allowed = canRunTechnique(self, "DeferredAim", {
+				Name = "AnchorAssist",
+			}, {
+				AllowDuringManual = true,
+				AllowWhileMoving = true,
+			})
+			if allowed then
+				local success, handled = pcall(function()
+					return DeferredAim.step(self, controller)
+				end)
+				if success and handled then
+					activeTechnique = "DeferredAim"
+					claimTechnique(self, "DeferredAim", 0.25)
 				end
 			end
 		end
@@ -335,17 +385,19 @@ local function installStepHook(grappleModule, globals)
 			local releaseName = reason == "SharkVoid" and "SharkVoid"
 				or reason == "ReelSaver" and "ReelSaver"
 				or "ReleaseTiming"
-			local releasePriority = releaseName == "SharkVoid" and PRIORITY.SharkVoid
-				or releaseName == "ReelSaver" and PRIORITY.ReelSaver
-				or PRIORITY.ReleaseTiming
-			if not (Arbiter and Arbiter.isBlocked and Arbiter.isBlocked(self, releaseName, releasePriority)) then
+			if
+				canRunTechnique(self, releaseName, {
+					Name = releaseName,
+				}, {
+					Technique = releaseName,
+					AllowDuringManual = true,
+				})
+			then
 				local success, handled = pcall(function()
 					return ReleaseTiming.step(self)
 				end)
-				if success and handled and Arbiter and typeof(Arbiter.claim) == "function" then
-					pcall(function()
-						Arbiter.claim(self, releaseName, releasePriority, 0.12)
-					end)
+				if success and handled then
+					claimTechnique(self, releaseName, 0.12)
 				end
 			end
 		end
@@ -405,8 +457,8 @@ function Logic.triggerSecondaryCast(controller)
 	end
 
 	local triggered = SecondaryCast.cast(Logic.LastGrapple, getController(), Targeting)
-	if triggered and Arbiter and typeof(Arbiter.claim) == "function" then
-		Arbiter.claim(Logic.LastGrapple, "SecondaryCast", PRIORITY.SecondaryCast, 0.35)
+	if triggered then
+		claimTechnique(Logic.LastGrapple, "SecondaryCast", 0.35)
 	end
 	return triggered
 end
@@ -438,8 +490,8 @@ function Logic.triggerReelSaver(controller)
 	local triggered = ReelSaver.trigger(Logic.LastGrapple, getController(), Targeting)
 	if not triggered then
 		Logic.PendingReelSaverUntil = time() + 0.35
-	elseif Arbiter and typeof(Arbiter.claim) == "function" then
-		Arbiter.claim(Logic.LastGrapple, "ReelSaver", PRIORITY.ReelSaver, 0.55)
+	else
+		claimTechnique(Logic.LastGrapple, "ReelSaver", 0.55)
 	end
 	return triggered
 end
@@ -455,6 +507,11 @@ function Logic.resetRespawnState()
 	if ReelSaver and typeof(ReelSaver.reset) == "function" then
 		pcall(function()
 			ReelSaver.reset()
+		end)
+	end
+	if GrappleDodge and typeof(GrappleDodge.reset) == "function" then
+		pcall(function()
+			GrappleDodge.reset()
 		end)
 	end
 	if DeferredAim and typeof(DeferredAim.reset) == "function" then

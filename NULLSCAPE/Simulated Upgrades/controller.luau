@@ -24,6 +24,7 @@ local BetterJumpPad = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Better 
 local SpeedBuffs = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Speed Buffs.luau")
 local Helmet = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Helmet.luau")
 local MiniatureHourglass = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Miniature Hourglass.luau")
+local AirJumps = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Air Jumps.luau")
 
 local Controller = {
 	RadarEnabled = false,
@@ -52,6 +53,9 @@ local Controller = {
 	BetterJumpPadPower = 100,
 	SpeedBuffsEnabled = false,
 	SpeedBuffSelections = {},
+	AirJumpSimulationEnabled = false,
+	AirJumpSelections = {},
+	AirJumpSelectionMap = {},
 	HelmetEnabled = false,
 	MiniatureHourglassEnabled = false,
 	GrappleVirtualNinjaBelt = false,
@@ -160,6 +164,7 @@ local function hasUtilityWork()
 		or Controller.AdvancedGravityCoilEnabled
 		or Controller.BetterJumpPadEnabled
 		or Controller.SpeedBuffsEnabled
+		or Controller.AirJumpSimulationEnabled
 		or Controller.HelmetEnabled
 		or Controller.MiniatureHourglassEnabled
 		or Controller.GrappleVirtualNinjaBelt
@@ -172,6 +177,10 @@ local function syncVirtualGrapplerVisuals()
 			Executor.syncVirtualGrapplerUpgradeVisuals(Controller)
 		end)
 	end
+end
+
+local function hasAirJumpSelection(option)
+	return typeof(Controller.AirJumpSelectionMap) == "table" and Controller.AirJumpSelectionMap[option] == true
 end
 
 -- RenderStepped connection management
@@ -275,6 +284,11 @@ local function startUtilityLoop()
 					pcall(function()
 						SpeedBuffs.setSelectedBuffs(Controller.SpeedBuffSelections or {})
 						SpeedBuffs.start(Controller, GC)
+					end)
+				end
+				if Controller.AirJumpSimulationEnabled and AirJumps and not AirJumps.Hooked then
+					pcall(function()
+						AirJumps.start(Controller, GC)
 					end)
 				end
 				if Controller.HelmetEnabled and Helmet and not Helmet.Hooked then
@@ -525,6 +539,39 @@ function Controller:SetSpeedBuffSelections(selectedOptions)
 		end
 	end
 
+	refreshUpgradeServerState()
+end
+
+function Controller:SetAirJumpSelections(selectedOptions)
+	if typeof(selectedOptions) ~= "table" then
+		selectedOptions = {}
+	end
+
+	local validOptions = AirJumps and AirJumps.getOptions and AirJumps.getOptions() or { "DoubleJump", "PocketBell" }
+	local normalized = {}
+	local selectionMap = {}
+	for _, option in ipairs(selectedOptions) do
+		if table.find(validOptions, option) and not table.find(normalized, option) then
+			table.insert(normalized, option)
+			selectionMap[option] = true
+		end
+	end
+
+	self.AirJumpSelections = normalized
+	self.AirJumpSelectionMap = selectionMap
+	self.AirJumpSimulationEnabled = #normalized > 0
+
+	if AirJumps then
+		AirJumps.setSelections(normalized)
+		if self.AirJumpSimulationEnabled then
+			AirJumps.start(self, GC)
+		else
+			AirJumps.stop()
+		end
+	end
+
+	syncVirtualGrapplerVisuals()
+	startUtilityLoop()
 	refreshUpgradeServerState()
 end
 
@@ -863,6 +910,11 @@ function Controller:ReapplyRespawnFeatures()
 				SpeedBuffs.start(self, GC)
 			end)
 		end
+		if self.AirJumpSimulationEnabled and AirJumps then
+			pcall(function()
+				AirJumps.start(self, GC)
+			end)
+		end
 		if self.HelmetEnabled and Helmet then
 			pcall(function()
 				Helmet.start(self, GC)
@@ -959,6 +1011,9 @@ function Controller:CleanUp()
 		self.AdvancedGravityCoilEnabled = false
 		self.BetterJumpPadEnabled = false
 		self.SpeedBuffsEnabled = false
+		self.AirJumpSimulationEnabled = false
+		self.AirJumpSelections = {}
+		self.AirJumpSelectionMap = {}
 		self.HelmetEnabled = false
 		self.MiniatureHourglassEnabled = false
 		self.GrappleVirtualNinjaBelt = false
@@ -991,6 +1046,11 @@ function Controller:CleanUp()
 	if finalCleanup and SpeedBuffs then
 		pcall(function()
 			SpeedBuffs.stop()
+		end)
+	end
+	if finalCleanup and AirJumps then
+		pcall(function()
+			AirJumps.stop()
 		end)
 	end
 	if finalCleanup and Helmet then
@@ -1044,6 +1104,8 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local isBetterJumpPad = false
 	local isHelmet = false
 	local isMiniatureHourglass = false
+	local isDoubleJump = false
+	local isPocketBell = false
 	for _, v in ipairs(args) do
 		if v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
 			isTetrahedron = true
@@ -1057,6 +1119,10 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 			isHelmet = true
 		elseif v == "MiniatureHourglass" or v == "Miniature Hourglass" then
 			isMiniatureHourglass = true
+		elseif v == "DoubleJump" or v == "Double Jump" then
+			isDoubleJump = true
+		elseif v == "PocketBell" or v == "Pocket Bell" then
+			isPocketBell = true
 		elseif v == "NinjaBelt" or v == "Ninja Belt" then
 			if Controller.GrappleVirtualNinjaBelt then
 				return true, true
@@ -1090,6 +1156,12 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	if isMiniatureHourglass and Controller.MiniatureHourglassEnabled then
 		return true, true
 	end
+	if isDoubleJump and hasAirJumpSelection("DoubleJump") then
+		return true, true
+	end
+	if isPocketBell and hasAirJumpSelection("PocketBell") then
+		return true, true
+	end
 	return false
 end
 
@@ -1101,6 +1173,8 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	local isBetterJumpPad = false
 	local isHelmet = false
 	local isMiniatureHourglass = false
+	local isDoubleJump = false
+	local isPocketBell = false
 	for _, v in ipairs(args) do
 		if v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
 			isTetrahedron = true
@@ -1114,6 +1188,10 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 			isHelmet = true
 		elseif v == "MiniatureHourglass" or v == "Miniature Hourglass" then
 			isMiniatureHourglass = true
+		elseif v == "DoubleJump" or v == "Double Jump" then
+			isDoubleJump = true
+		elseif v == "PocketBell" or v == "Pocket Bell" then
+			isPocketBell = true
 		elseif v == "NinjaBelt" or v == "Ninja Belt" then
 			if Controller.GrappleVirtualNinjaBelt then
 				return true, 1
@@ -1145,6 +1223,12 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 		return true, 1
 	end
 	if isMiniatureHourglass and Controller.MiniatureHourglassEnabled then
+		return true, 1
+	end
+	if isDoubleJump and hasAirJumpSelection("DoubleJump") then
+		return true, 1
+	end
+	if isPocketBell and hasAirJumpSelection("PocketBell") then
 		return true, 1
 	end
 	return false

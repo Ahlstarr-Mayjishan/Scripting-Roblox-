@@ -1,5 +1,5 @@
 {
-  "Version": "2026.07.11.11",
+  "Version": "2026.07.12.07",
   "MenuChanges": [
     "Settings",
     "Automation",
@@ -17,6 +17,18 @@
     },
     {
       "Path": "NULLSCAPE/Main UI/Updater.luau",
+      "Menu": [
+        "Settings"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Core/Remote Registry.luau",
+      "Menu": [
+        "Settings"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Core/Game State Context.luau",
       "Menu": [
         "Settings"
       ]
@@ -71,6 +83,14 @@
       ]
     },
     {
+      "Path": "NULLSCAPE/Entities/Kolona Auto QTE.luau",
+      "Menu": [
+        "Entities",
+        "Kolona",
+        "Auto QTE"
+      ]
+    },
+    {
       "Path": "NULLSCAPE/Entities/controller.luau",
       "Menu": [
         "Entities"
@@ -78,6 +98,12 @@
     },
     {
       "Path": "NULLSCAPE/Entities/RemoteBlocking.luau",
+      "Menu": [
+        "Entities"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/tab.luau",
       "Menu": [
         "Entities"
       ]
@@ -215,6 +241,12 @@
       ]
     },
     {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Ability Intent Context.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
       "Path": "NULLSCAPE/Accessibility/Grappler assistments/Anchor Bias Profile.luau",
       "Menu": [
         "Accessibility"
@@ -342,6 +374,12 @@
     },
     {
       "Path": "NULLSCAPE/Accessibility/Grappler assistments/Technique Arbiter.luau",
+      "Menu": [
+        "Accessibility"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Accessibility/Grappler assistments/Technique Decision Layer.luau",
       "Menu": [
         "Accessibility"
       ]
@@ -512,6 +550,180 @@
       "Path": "NULLSCAPE/Class Adjustment/Grappler/SharkTail Pull.luau",
       "Menu": [
         "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Auto Choose Things.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/executor.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/GC.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Pylon Activator.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/tab.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Altar.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Cluster Planner.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Collapse.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Distance.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Golden Wait.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Medal.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Mode Isolation.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Progress.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/Gift Farm/Scanner.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/executor.luau",
+      "Menu": [
+        "Entities"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/GC.luau",
+      "Menu": [
+        "Entities"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/HuskEvasion.luau",
+      "Menu": [
+        "Entities"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/SpecialImmunity.luau",
+      "Menu": [
+        "Entities"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/StatusImmunity.luau",
+      "Menu": [
+        "Entities"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/TouchInterest.luau",
+      "Menu": [
+        "Entities"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Defuse Kits.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/GC.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Grace Wings.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Magnet logic.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Radar logic.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Speed Buffs.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/Air Jumps.luau",
+      "Menu": [
+        "Simulated Upgrades"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/tab.luau",
+      "Menu": [
+        "Simulated Upgrades"
       ]
     }
   ]

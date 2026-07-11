@@ -37,21 +37,6 @@ return function(Client, Controller)
 	end
 
 	local Tab = Client.Window:CreateTab("Automation", 4483362458)
-	Tab:CreateSection("Automation")
-
-	Tab:CreateDropdown({
-		Name = "Automation - multi select",
-		Options = { "Auto Complete - Kolóna" },
-		CurrentOption = Controller and Controller.AutomationSelections or {},
-		MultipleOptions = true,
-		Flag = "AutomationMultiSelectDropdown",
-		Callback = function(Options)
-			if Controller and typeof(Controller.SetAutomationSelections) == "function" then
-				Controller:SetAutomationSelections(Options)
-			end
-		end,
-	})
-
 	Tab:CreateSection("Auto Choose Things")
 
 	Tab:CreateToggle({

@@ -30,6 +30,11 @@ local RETRY_COOLDOWN = 1.2
 local MOVE_SETTLE = 0.08
 local CONTINUE_COOLDOWN = 1.5
 local CONTINUE_AFTER_PRIMARY_GRACE = 1.25
+local PRIORITY_UPGRADES = {
+	fannypack = 1,
+	businesslicense = 2,
+	paycheck = 3,
+}
 
 local enabled = false
 local running = false
@@ -119,6 +124,14 @@ end
 
 local function textContains(value, needle)
 	return string.find(string.lower(tostring(value or "")), needle, 1, true) ~= nil
+end
+
+local function normalizeUpgradeName(value)
+	return string.lower(tostring(value or "")):gsub("[%s%p_]+", "")
+end
+
+local function getUpgradeBuyPriority(choiceName)
+	return PRIORITY_UPGRADES[normalizeUpgradeName(choiceName)] or 999
 end
 
 local function isContinuePromptRoot(root, prompt)
@@ -306,6 +319,7 @@ local function addCandidate(candidates, seen, root, selected, priority, hrp)
 		Category = category,
 		ChoiceName = choiceName,
 		Cost = tonumber(prompt:GetAttribute("Cost")) or 0,
+		UpgradeBuyPriority = category == "Upgrades" and getUpgradeBuyPriority(choiceName) or 999,
 		Priority = priority[category] or 999,
 		Distance = (part.Position - hrp.Position).Magnitude,
 		Key = key,
@@ -398,8 +412,13 @@ local function collectTarget(controller, hrp)
 	end
 
 	table.sort(candidates, function(a, b)
-		if a.Category == "Upgrades" and b.Category == "Upgrades" and a.Cost ~= b.Cost then
-			return a.Cost > b.Cost
+		if a.Category == "Upgrades" and b.Category == "Upgrades" then
+			if a.UpgradeBuyPriority ~= b.UpgradeBuyPriority then
+				return a.UpgradeBuyPriority < b.UpgradeBuyPriority
+			end
+			if a.Cost ~= b.Cost then
+				return a.Cost > b.Cost
+			end
 		end
 		return a.Priority == b.Priority and a.Distance < b.Distance or a.Priority < b.Priority
 	end)

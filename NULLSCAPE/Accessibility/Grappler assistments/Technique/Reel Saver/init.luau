@@ -39,7 +39,11 @@ local function isAirborne(grapple)
 	return state ~= Enum.HumanoidStateType.Running and state ~= Enum.HumanoidStateType.Landed
 end
 
-local function canStart(grapple, controller, now)
+local function hasNinjaBelt(movement)
+	return UpgradeGate and UpgradeGate.has(movement, "NinjaBelt")
+end
+
+local function canStartCast(grapple, controller, now)
 	if not (controller and controller.GrappleReelSaverEnabled == true) then
 		return false
 	end
@@ -62,10 +66,7 @@ local function canStart(grapple, controller, now)
 		return false
 	end
 
-	return UpgradeGate
-		and UpgradeGate.has(movement, "NinjaBelt")
-		and isAirborne(grapple)
-		and typeof(grapple.Start) == "function"
+	return hasNinjaBelt(movement) and isAirborne(grapple) and typeof(grapple.Start) == "function"
 end
 
 local function castToTarget(grapple, controller, target, now)
@@ -194,7 +195,21 @@ end
 
 function Logic.trigger(grapple, controller, targeting)
 	local now = time()
-	if not canStart(grapple, controller, now) then
+
+	if not (controller and controller.GrappleReelSaverEnabled == true) then
+		return false
+	end
+
+	local movement = grapple and grapple.Movement
+	if movement and movement.grappling == true then
+		if grapple.grappleReel == true or grapple.jumpPadReel == true then
+			return true
+		end
+
+		return startReel(grapple, controller, now)
+	end
+
+	if not canStartCast(grapple, controller, now) then
 		return false
 	end
 

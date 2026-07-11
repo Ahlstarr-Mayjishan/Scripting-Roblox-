@@ -303,6 +303,36 @@ return function(Client, Controller)
 		end,
 	})
 
+	local AirJumpOptions = { "DoubleJump", "PocketBell" }
+	local AirJumpSelection
+	local isSettingAirJumps = false
+
+	Tab:CreateSection("Air Jumps")
+
+	AirJumpSelection = Tab:CreateDropdown({
+		Name = "Air Jumps",
+		Info = "Multi-select native air-jump names, then uses the infinite air-jump module to simulate them.",
+		Options = AirJumpOptions,
+		CurrentOption = Controller.AirJumpSelections or {},
+		MultipleOptions = true,
+		Flag = "AirJumpSelectionsDropdown",
+		Callback = function(SelectedOptions)
+			if typeof(SelectedOptions) ~= "table" then
+				SelectedOptions = {}
+			end
+
+			Controller:SetAirJumpSelections(SelectedOptions)
+
+			if not isSettingAirJumps and AirJumpSelection then
+				isSettingAirJumps = true
+				pcall(function()
+					AirJumpSelection:Set(SelectedOptions)
+				end)
+				isSettingAirJumps = false
+			end
+		end,
+	})
+
 	Tab:CreateSection("Helmet")
 
 	Tab:CreateToggle({

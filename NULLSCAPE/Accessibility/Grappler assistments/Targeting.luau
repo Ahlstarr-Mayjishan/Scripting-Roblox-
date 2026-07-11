@@ -20,6 +20,8 @@ local IntentTargetGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler 
 local ConfidenceGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Assist Confidence Gate.luau")
 local PilotState = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Pilot State.luau")
 local AdaptiveStyle = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Adaptive Anchor Style.luau")
+local CastSafety = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Safety Check.luau")
+local AnchorBias = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Anchor Bias Profile.luau")
 
 local Targeting = {}
 
@@ -439,6 +441,41 @@ local function scoreOptimalHit(hit, part, origin, distance, dot, controller, int
 	return score
 end
 
+local function applySafety(grapple, hit, part, controller, intent)
+	if controller and controller.GrappleAssistSafetyEnabled == false then
+		return true, 0
+	end
+
+	if not (CastSafety and typeof(CastSafety.evaluate) == "function") then
+		return true, 0
+	end
+
+	local success, result = pcall(function()
+		return CastSafety.evaluate(grapple, hit, part, controller, intent)
+	end)
+	if not (success and result) then
+		return true, 0
+	end
+
+	return result.Accept ~= false, tonumber(result.Penalty) or 0
+end
+
+local function getBiasScore(grapple, hit, part, origin, aimDirection, controller, intent)
+	if controller and controller.GrappleAssistAnchorBiasEnabled == false then
+		return 0
+	end
+
+	if not (AnchorBias and typeof(AnchorBias.score) == "function") then
+		return 0
+	end
+
+	local success, score = pcall(function()
+		return AnchorBias.score(grapple, hit, part, origin, aimDirection, controller, intent)
+	end)
+
+	return success and tonumber(score) or 0
+end
+
 local function getIntent(grapple, controller, aimDirection, context)
 	context = context or {}
 	context.AimDirection = context.AimDirection or aimDirection
@@ -537,13 +574,18 @@ function Targeting.findOptimalHit(grapple, controller, context)
 					and canUseOptimalHit(hit, part)
 					and not isVoidProtectedHit(grapple, hit, part, origin, effectiveController)
 				then
-					local score = scoreOptimalHit(hit, part, origin, distance, dot, effectiveController, intent)
-					if score > bestScore then
-						secondScore = bestScore
-						bestScore = score
-						bestHit = hit
-					elseif score > secondScore then
-						secondScore = score
+					local safe, safetyPenalty = applySafety(grapple, hit, part, effectiveController, intent)
+					if safe then
+						local score = scoreOptimalHit(hit, part, origin, distance, dot, effectiveController, intent)
+							+ getBiasScore(grapple, hit, part, origin, aimDirection, effectiveController, intent)
+							- safetyPenalty
+						if score > bestScore then
+							secondScore = bestScore
+							bestScore = score
+							bestHit = hit
+						elseif score > secondScore then
+							secondScore = score
+						end
 					end
 				end
 			end

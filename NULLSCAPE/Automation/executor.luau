@@ -7,7 +7,6 @@
 local Executor = {}
 local GiftFarm = nil
 local PylonActivator = nil
-local KolonaAutoComplete = nil
 local AutoChooseThings = nil
 
 local function loadGiftFarm()
@@ -44,23 +43,6 @@ local function loadPylonActivator()
 	return nil
 end
 
-local function loadKolonaAutoComplete()
-	if KolonaAutoComplete then
-		return KolonaAutoComplete
-	end
-
-	local ok, result = pcall(function()
-		return getgenv().loadModule("NULLSCAPE/Automation/Auto Complete/Kolona.luau")
-	end)
-	if ok and typeof(result) == "table" then
-		KolonaAutoComplete = result
-		return result
-	end
-
-	warn("[NULLSCAPE] Automation Kolona auto complete failed to load: " .. tostring(result))
-	return nil
-end
-
 local function loadAutoChooseThings()
 	if AutoChooseThings then
 		return AutoChooseThings
@@ -87,10 +69,6 @@ function Executor.enable(controller, gc)
 	if pylonActivator and typeof(pylonActivator.update) == "function" then
 		pylonActivator.update(controller, gc)
 	end
-	local kolona = loadKolonaAutoComplete()
-	if kolona and typeof(kolona.update) == "function" then
-		kolona.update(controller, gc)
-	end
 	local chooser = loadAutoChooseThings()
 	if chooser and typeof(chooser.update) == "function" then
 		chooser.update(controller, gc)
@@ -106,10 +84,6 @@ function Executor.disable(controller, gc)
 	local pylonActivator = loadPylonActivator()
 	if pylonActivator and typeof(pylonActivator.disable) == "function" then
 		pylonActivator.disable(controller)
-	end
-	local kolona = loadKolonaAutoComplete()
-	if kolona and typeof(kolona.disable) == "function" then
-		kolona.disable(controller)
 	end
 	local chooser = loadAutoChooseThings()
 	if chooser and typeof(chooser.disable) == "function" then
@@ -130,10 +104,6 @@ function Executor.update(controller, gc)
 	local pylonActivator = loadPylonActivator()
 	if pylonActivator and typeof(pylonActivator.update) == "function" then
 		ok = pylonActivator.update(controller, gc) ~= false and ok
-	end
-	local kolona = loadKolonaAutoComplete()
-	if kolona and typeof(kolona.update) == "function" then
-		ok = kolona.update(controller, gc) ~= false and ok
 	end
 	local chooser = loadAutoChooseThings()
 	if chooser and typeof(chooser.update) == "function" then

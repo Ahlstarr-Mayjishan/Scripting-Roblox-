@@ -21,6 +21,8 @@ local DEFAULTS = {
 	RazorbloomEscapeAnchorBoost = 360,
 	RazorbloomEscapeOtherSpecialPenalty = -80,
 	RazorbloomEscapeTerrainBoost = 25,
+	QTEAssistSpecialBoost = 26,
+	QTEAssistTerrainBoost = 14,
 }
 
 local function getNumber(value, fallback, minimum, maximum)
@@ -121,6 +123,25 @@ function Profile.getIntentBonus(part, intent, controller)
 
 	if name == "ReelSaver" and kind == "Terrain" then
 		return getNumber(controller and controller.GrappleIntentReelTerrainBoost, DEFAULTS.ReelSaverTerrainBoost, 0, 80)
+	end
+
+	if name == "QTEAssist" then
+		if kind == "Special" then
+			return getNumber(
+				controller and controller.GrappleIntentQTESpecialBoost,
+				DEFAULTS.QTEAssistSpecialBoost,
+				0,
+				120
+			)
+		end
+		if kind == "Terrain" then
+			return getNumber(
+				controller and controller.GrappleIntentQTETerrainBoost,
+				DEFAULTS.QTEAssistTerrainBoost,
+				0,
+				80
+			)
+		end
 	end
 
 	if name == "RailCapture" and kind == "Rail" then

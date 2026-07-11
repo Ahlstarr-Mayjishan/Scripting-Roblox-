@@ -182,9 +182,6 @@ local function getBlockingFeatures(client, menus)
 		if controller.AutoChooseThingsEnabled == true and menuMatches(menus, { "Automation", "Auto Choose" }) then
 			addUnique(blockers, "Auto Choose Things")
 		end
-		if controller.AutoCompleteKolonaEnabled == true and menuMatches(menus, { "Automation", "Kolona", "Auto Complete" }) then
-			addUnique(blockers, "Auto Complete - Kolona")
-		end
 	end
 
 	local accessibility = client and client.Modules and client.Modules.AccessibilityController
@@ -198,9 +195,12 @@ local function getBlockingFeatures(client, menus)
 	end
 
 	local entities = client and client.Modules and client.Modules.EntitiesController
-	if entities and menuMatches(menus, { "Entities", "Immunity" }) then
+	if entities and menuMatches(menus, { "Entities", "Immunity", "Kolona", "Auto QTE" }) then
 		if entities.StatusImmunityEnabled == true or entities.ImmunityEnabled == true then
 			addUnique(blockers, "Entities/Immunity")
+		end
+		if entities.KolonaAutoQTEEnabled == true and menuMatches(menus, { "Kolona", "Auto QTE" }) then
+			addUnique(blockers, "Kolona Auto QTE")
 		end
 	end
 

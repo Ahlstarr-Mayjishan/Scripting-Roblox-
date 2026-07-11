@@ -61,8 +61,34 @@ local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
 local RemoteBlocking = getgenv().loadModule("NULLSCAPE/Entities/RemoteBlocking.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 local BackTrick = getgenv().loadModule("NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau")
+local KolonaAutoQTE = nil
+
+local function getKolonaAutoQTE()
+	if KolonaAutoQTE then
+		return KolonaAutoQTE
+	end
+
+	local ok, result = pcall(function()
+		return getgenv().loadModule("NULLSCAPE/Entities/Kolona Auto QTE.luau")
+	end)
+	if ok and typeof(result) == "table" then
+		KolonaAutoQTE = result
+		return result
+	end
+
+	warn("[NULLSCAPE] Kolona Auto QTE failed to load: " .. tostring(result))
+	return nil
+end
 
 local hookedTelefraggers = setmetatable({}, { __mode = "k" })
+
+local function shouldBlockWithShieldPolicy(controller, allowShieldBait)
+	if RemoteBlocking and typeof(RemoteBlocking.shouldBlockWithShieldPolicy) == "function" then
+		return RemoteBlocking.shouldBlockWithShieldPolicy(controller, allowShieldBait)
+	end
+
+	return true
+end
 
 local Controller = {
 	-- Tráº¡ng thÃ¡i báº­t/táº¯t miá»…n nhiá»…m cho tá»«ng thá»±c thá»ƒ
@@ -85,6 +111,7 @@ local Controller = {
 	SpringerKnockbackImmune = false,
 	SkinwalkerImmune = false,
 	KolonaImmune = false,
+	KolonaAutoQTEEnabled = false,
 	OblivionImmune = false,
 	ShadowBabyImmune = false,
 	QuartzImmune = false,
@@ -102,6 +129,9 @@ local Controller = {
 	nilEnemyImmune = false,
 	nilMirageImmune = false,
 	SeamineImmune = false,
+	ShieldBaitEnabled = false,
+	ShieldBaitChance = 0,
+	LastShieldBaitAt = 0,
 	TelefraggerAutoDodge = false,
 	TelefraggerAutoDodgeRequested = false,
 	TelefraggerBackTrick = false,
@@ -406,8 +436,31 @@ function Controller:SetSeamineImmune(value)
 	self.SeamineImmune = value
 end
 
+function Controller:SetShieldBaitEnabled(value)
+	self.ShieldBaitEnabled = value == true
+end
+
+function Controller:SetShieldBaitChance(value)
+	self.ShieldBaitChance = math.clamp(tonumber(value) or 0, 0, 100)
+end
+
 function Controller:SetICBMBurnImmune(value)
-	self.ICBMBurnImmune = value
+	self.ICBMBurnImmune = value == true
+end
+
+function Controller:SetKolonaAutoQTE(value)
+	self.KolonaAutoQTEEnabled = value == true
+
+	if self.KolonaAutoQTEEnabled then
+		local kolona = getKolonaAutoQTE()
+		if kolona and typeof(kolona.update) == "function" then
+			return kolona.update(self)
+		end
+	elseif KolonaAutoQTE and typeof(KolonaAutoQTE.disable) == "function" then
+		return KolonaAutoQTE.disable(self)
+	end
+
+	return true
 end
 
 function Controller:SetBellCurseImmune(value)
@@ -643,6 +696,12 @@ function Controller:CleanUp()
 	disconnectFolderObservations()
 	pcall(function()
 		Executor.disableSpecialImmunity()
+	end)
+	pcall(function()
+		local kolona = KolonaAutoQTE
+		if kolona and typeof(kolona.disable) == "function" then
+			kolona.disable(self)
+		end
 	end)
 
 	if self.TelefraggerRedirectConnection then
@@ -1610,6 +1669,9 @@ local function setInLobby(val)
 		Controller:CleanUp()
 	else
 		startObservingFolders()
+		if Controller.KolonaAutoQTEEnabled == true and typeof(Controller.SetKolonaAutoQTE) == "function" then
+			Controller:SetKolonaAutoQTE(true)
+		end
 	end
 end
 
@@ -1823,17 +1885,17 @@ local function initializeICBMHook()
 
 		-- Cháº¡y logic cháº·n RemoteEvent thá»‘ng nháº¥t tá»« RemoteBlocking.luau
 		if self.Name == "Died" and args[1] == "VoidImplosion" and activeCtrl.VoidImplosionImmune == true then
-			return true
+			return shouldBlockWithShieldPolicy(activeCtrl, false)
 		end
 
 		if activeCtrl.GuardianImmune == true and self.Name == "Died" and args[1] == "Guardian" then
-			return true
+			return shouldBlockWithShieldPolicy(activeCtrl)
 		end
 		local firstStringArg = typeof(args[1]) == "string" and string.lower(args[1]) or ""
 		if activeCtrl.KolonaImmune == true
 			and (self.Name == "DiedFunc" or self.Name == "Died")
 			and firstStringArg == "kolona" then
-			return true
+			return shouldBlockWithShieldPolicy(activeCtrl)
 		end
 
 		local block, modifiedArgs = RemoteBlocking.shouldBlockRemoteCall(self, args, activeCtrl)

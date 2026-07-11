@@ -38,8 +38,14 @@ local function setStatus(text)
 end
 
 local function shouldJump()
-	local controller = getGlobals().activeAccessibilityController
-	return controller and controller.InfiniteAirJumpEnabled == true
+	local globals = getGlobals()
+	local accessibilityController = globals.activeAccessibilityController
+	if accessibilityController and accessibilityController.InfiniteAirJumpEnabled == true then
+		return true
+	end
+
+	local upgradeController = globals.activeUpgradeController
+	return upgradeController and upgradeController.AirJumpSimulationEnabled == true
 end
 
 local function isMovementAlive(movement)

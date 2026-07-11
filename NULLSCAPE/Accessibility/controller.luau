@@ -63,6 +63,9 @@ local Controller = {
 	GrappleAssistConfidenceMargin = 5,
 	GrappleAssistBiomeTuningEnabled = true,
 	GrappleAssistFailFeedbackEnabled = true,
+	GrappleAssistSafetyEnabled = true,
+	GrappleAssistSafetyRejectPenalty = 74,
+	GrappleAssistAnchorBiasEnabled = true,
 	GrappleAssistSpecialPointPriority = true,
 	GrappleAnchorTargetingStyle = "Auto",
 	GrappleAssistSecondaryCastEnabled = false,
@@ -82,6 +85,13 @@ local Controller = {
 	GrappleVoidRescueAutoSharkTail = true,
 	GrappleVoidRescueHeight = 45,
 	GrappleVoidRescueReelHoldTime = 0.12,
+	GrappleDodgeEnabled = false,
+	GrappleDodgeThreatRange = 42,
+	GrappleDodgeDangerRadius = 10,
+	GrappleDodgeHorizon = 0.45,
+	GrappleDodgeRange = 92,
+	GrappleDodgeStrength = 1,
+	GrappleDodgeRailBonus = 34,
 	GrappleReelSaverEnabled = false,
 	GrappleReelSaverKeybind = "E",
 	GrappleReelSaverSideRange = 26,
@@ -517,6 +527,18 @@ function Controller:SetGrappleAssistFailFeedback(value)
 	self.GrappleAssistFailFeedbackEnabled = value == true
 end
 
+function Controller:SetGrappleAssistSafety(value)
+	self.GrappleAssistSafetyEnabled = value == true
+end
+
+function Controller:SetGrappleAssistSafetyRejectPenalty(value)
+	self.GrappleAssistSafetyRejectPenalty = math.clamp(tonumber(value) or 74, 20, 140)
+end
+
+function Controller:SetGrappleAssistAnchorBias(value)
+	self.GrappleAssistAnchorBiasEnabled = value == true
+end
+
 function Controller:SetGrappleAssistSpecialPointPriority(value)
 	self.GrappleAssistSpecialPointPriority = value == true
 end
@@ -610,17 +632,21 @@ end
 function Controller:SetGrapplerTechniqueSelection(options)
 	local sharkVoid = false
 	local reelSaver = false
+	local grappleDodge = false
 
 	if typeof(options) == "table" then
-		if options.SharkVoid ~= nil or options.ReelSaver ~= nil then
+		if options.SharkVoid ~= nil or options.ReelSaver ~= nil or options.GrappleDodge ~= nil then
 			sharkVoid = options.SharkVoid == true
 			reelSaver = options.ReelSaver == true
+			grappleDodge = options.GrappleDodge == true
 		else
 			for _, option in ipairs(options) do
 				if option == "SharkVoid" then
 					sharkVoid = true
 				elseif option == "Reel Saver" or option == "ReelSaver" then
 					reelSaver = true
+				elseif option == "Grapple Dodge" or option == "GrappleDodge" then
+					grappleDodge = true
 				end
 			end
 		end
@@ -628,8 +654,9 @@ function Controller:SetGrapplerTechniqueSelection(options)
 
 	self.GrappleVoidRescueEnabled = sharkVoid
 	self.GrappleReelSaverEnabled = reelSaver
+	self.GrappleDodgeEnabled = grappleDodge
 
-	if sharkVoid or reelSaver then
+	if sharkVoid or reelSaver or grappleDodge then
 		self:SetGrappleAssist(true)
 	end
 end
@@ -648,6 +675,38 @@ end
 
 function Controller:SetGrappleVoidRescueReelHoldTime(value)
 	self.GrappleVoidRescueReelHoldTime = math.clamp(tonumber(value) or 0.12, 0.05, 0.25)
+end
+
+function Controller:SetGrappleDodge(value)
+	self.GrappleDodgeEnabled = value == true
+
+	if self.GrappleDodgeEnabled then
+		self:SetGrappleAssist(true)
+	end
+end
+
+function Controller:SetGrappleDodgeThreatRange(value)
+	self.GrappleDodgeThreatRange = math.clamp(tonumber(value) or 42, 16, 90)
+end
+
+function Controller:SetGrappleDodgeDangerRadius(value)
+	self.GrappleDodgeDangerRadius = math.clamp(tonumber(value) or 10, 4, 24)
+end
+
+function Controller:SetGrappleDodgeHorizon(value)
+	self.GrappleDodgeHorizon = math.clamp(tonumber(value) or 0.45, 0.15, 0.9)
+end
+
+function Controller:SetGrappleDodgeRange(value)
+	self.GrappleDodgeRange = math.clamp(tonumber(value) or 92, 30, 150)
+end
+
+function Controller:SetGrappleDodgeStrength(value)
+	self.GrappleDodgeStrength = math.clamp(tonumber(value) or 1, 0.25, 3)
+end
+
+function Controller:SetGrappleDodgeRailBonus(value)
+	self.GrappleDodgeRailBonus = math.clamp(tonumber(value) or 34, 0, 120)
 end
 
 function Controller:SetGrappleReelSaver(value)

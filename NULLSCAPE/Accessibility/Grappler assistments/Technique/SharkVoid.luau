@@ -6,6 +6,7 @@ local TerrainMemory =
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
 local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
+local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
 
 local DEFAULT_HEIGHT = 45
 local DEFAULT_REEL_HOLD = 0.12
@@ -44,6 +45,22 @@ local function getKillVoidY()
 	local killVoid = Workspace:FindFirstChild("KillVoid", true)
 	if killVoid and killVoid:IsA("BasePart") then
 		return killVoid.Position.Y
+	end
+
+	return nil
+end
+
+local function getKillVoidPart()
+	if TerrainMemory and typeof(TerrainMemory.getVoidInfo) == "function" then
+		local voidInfo = TerrainMemory.getVoidInfo()
+		if voidInfo and voidInfo.Part and voidInfo.Part.Parent then
+			return voidInfo.Part
+		end
+	end
+
+	local killVoid = Workspace:FindFirstChild("KillVoid", true)
+	if killVoid and killVoid:IsA("BasePart") then
+		return killVoid
 	end
 
 	return nil
@@ -99,7 +116,7 @@ local function isDangerousFall(grapple, controller)
 end
 
 local function isVoidHit(hitResult)
-	if typeof(hitResult) ~= "table" then
+	if not hitResult then
 		return false
 	end
 
@@ -108,6 +125,60 @@ local function isVoidHit(hitResult)
 	end
 
 	return isVoidPoint(hitResult.Position)
+end
+
+local function getEffectiveRange(controller)
+	if GrappleRange and typeof(GrappleRange.getEffectiveRange) == "function" then
+		local success, range = pcall(GrappleRange.getEffectiveRange)
+		if success and tonumber(range) then
+			return math.clamp(tonumber(range), 30, 5000)
+		end
+	end
+
+	return math.clamp(tonumber(controller and controller.GrappleAssistRange) or 90, 30, 500)
+end
+
+local function makeVoidHit(part, position, origin)
+	return {
+		Instance = part,
+		Position = position,
+		Distance = (position - origin).Magnitude,
+		Normal = part.CFrame.UpVector,
+		Material = part.Material,
+	}
+end
+
+local function findEmergencyVoidHit(grapple, controller)
+	local rootPart = grapple and grapple.RootPart
+	local killVoid = getKillVoidPart()
+	if not (rootPart and rootPart.Parent and killVoid) then
+		return nil
+	end
+
+	local origin = rootPart.Position
+	local localOrigin = killVoid.CFrame:PointToObjectSpace(origin)
+	local halfSize = killVoid.Size * 0.5
+	local localHit = Vector3.new(
+		math.clamp(localOrigin.X, -halfSize.X, halfSize.X),
+		halfSize.Y,
+		math.clamp(localOrigin.Z, -halfSize.Z, halfSize.Z)
+	)
+	local hitPosition = killVoid.CFrame:PointToWorldSpace(localHit)
+	local offset = hitPosition - origin
+	local distance = offset.Magnitude
+
+	if distance <= 3 or distance > getEffectiveRange(controller) then
+		return nil
+	end
+
+	if grapple.grappleParams and offset.Magnitude > 0.001 then
+		local rayHit = Workspace:Raycast(origin, offset.Unit * math.max(distance - 1, 1), grapple.grappleParams)
+		if rayHit and not isKillVoidPart(rayHit.Instance) then
+			return nil
+		end
+	end
+
+	return makeVoidHit(killVoid, hitPosition, origin)
 end
 
 local function playReelSound(grapple)
@@ -153,13 +224,16 @@ local function autoCast(grapple, targeting, now)
 		return false
 	end
 
-	local hitResult
+	local controller = Logic.Controller
+	local hitResult = findEmergencyVoidHit(grapple, controller)
 	if typeof(grapple.Cast) == "function" then
-		local success, result = pcall(function()
-			return grapple:Cast(true)
-		end)
-		if success then
-			hitResult = result
+		if not hitResult then
+			local success, result = pcall(function()
+				return grapple:Cast(true)
+			end)
+			if success then
+				hitResult = result
+			end
 		end
 	end
 
@@ -330,6 +404,8 @@ local function autoSharkTail(grapple, controller, now)
 end
 
 function Logic.step(grapple, _dt, controller, targeting)
+	Logic.Controller = controller
+
 	if not (controller and controller.GrappleVoidRescueEnabled == true) then
 		Logic.PendingEndAt = nil
 		return false

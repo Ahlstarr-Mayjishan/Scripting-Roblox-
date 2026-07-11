@@ -11,12 +11,18 @@ local missingWarnings = {}
 local VIRTUAL_GRAPPLER_UPGRADES = {
 	AdvancedGravityCoil = true,
 	BetterJumpPad = true,
+	DoubleJump = true,
 	Helmet = true,
 	MatrixTetrahedron = true,
 	MiniatureHourglass = true,
 	NinjaBelt = true,
+	PocketBell = true,
 	SharkTail = true,
 }
+
+local function hasSelectedOption(options, option)
+	return typeof(options) == "table" and table.find(options, option) ~= nil
+end
 
 local function getCallable(module, methodName, label)
 	if module and typeof(module[methodName]) == "function" then
@@ -45,10 +51,12 @@ function Executor.syncVirtualGrapplerUpgradeVisuals(controller)
 		ClientUpgradeInjector.sync({
 			AdvancedGravityCoil = controller and controller.AdvancedGravityCoilEnabled == true,
 			BetterJumpPad = controller and controller.BetterJumpPadEnabled == true,
+			DoubleJump = controller and hasSelectedOption(controller.AirJumpSelections, "DoubleJump"),
 			Helmet = controller and controller.HelmetEnabled == true,
 			MatrixTetrahedron = controller and controller.MatrixTetrahedronEnabled == true,
 			MiniatureHourglass = controller and controller.MiniatureHourglassEnabled == true,
 			NinjaBelt = controller and controller.GrappleVirtualNinjaBelt == true,
+			PocketBell = controller and hasSelectedOption(controller.AirJumpSelections, "PocketBell"),
 			SharkTail = controller and controller.GrappleVirtualSharkTail == true,
 		})
 	end

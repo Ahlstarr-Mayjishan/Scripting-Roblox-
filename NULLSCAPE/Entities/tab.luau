@@ -41,6 +41,24 @@ local function setImmunity(Controller, entityName, value)
 	end
 end
 
+local function setShieldBaitEnabled(Controller, value)
+	local activeController = resolveController(nil, Controller)
+	if activeController and typeof(activeController.SetShieldBaitEnabled) == "function" then
+		activeController:SetShieldBaitEnabled(value)
+	else
+		warn("[NULLSCAPE] Entities controller is not ready; ignored shield bait toggle")
+	end
+end
+
+local function setShieldBaitChance(Controller, value)
+	local activeController = resolveController(nil, Controller)
+	if activeController and typeof(activeController.SetShieldBaitChance) == "function" then
+		activeController:SetShieldBaitChance(value)
+	else
+		warn("[NULLSCAPE] Entities controller is not ready; ignored shield bait chance")
+	end
+end
+
 local function optionSelected(options, optionName)
 	if typeof(options) ~= "table" then
 		return false
@@ -52,6 +70,9 @@ local function optionSelected(options, optionName)
 	end
 	return options[optionName] == true
 end
+
+local ICBM_SCORCHED_EARTH_OPTION = "Immune Scorched Earth"
+local ICBM_SCORCHED_EARTH_LEGACY_OPTION = "Burn effect (Curse)"
 
 return function(Client, Controller)
 	Controller = resolveController(Client, Controller)
@@ -239,18 +260,19 @@ return function(Client, Controller)
 		table.insert(currentICBMOptions, "Immunity")
 	end
 	if getFlag(Controller, "ICBMBurnImmune") then
-		table.insert(currentICBMOptions, "Burn effect (Curse)")
+		table.insert(currentICBMOptions, ICBM_SCORCHED_EARTH_OPTION)
 	end
 
 	Tab:CreateDropdown({
 		Name = "ICBM Hack Mode",
-		Options = { "Immunity", "Burn effect (Curse)" },
+		Options = { "Immunity", ICBM_SCORCHED_EARTH_OPTION },
 		CurrentOption = currentICBMOptions,
 		MultipleOptions = true,
 		Flag = "ICBMHackDropdown",
 		Callback = function(Options)
 			local hasImmunity = optionSelected(Options, "Immunity")
-			local hasBurnImmunity = optionSelected(Options, "Burn effect (Curse)")
+			local hasBurnImmunity = optionSelected(Options, ICBM_SCORCHED_EARTH_OPTION)
+				or optionSelected(Options, ICBM_SCORCHED_EARTH_LEGACY_OPTION)
 			local activeController = resolveController(nil, Controller)
 			if activeController then
 				if typeof(activeController.SetImmunity) == "function" then
@@ -417,12 +439,34 @@ return function(Client, Controller)
 
 	Tab:CreateSection("Entities - Special Immunity")
 
-	Tab:CreateToggle({
-		Name = "Kolona",
-		CurrentValue = getFlag(Controller, "KolonaImmune"),
-		Flag = "ImmunityKolonaToggle",
-		Callback = function(Value)
-			setImmunity(Controller, "Kolona", Value)
+	local currentKolonaOptions = {}
+	if getFlag(Controller, "KolonaImmune") then
+		table.insert(currentKolonaOptions, "Immunity")
+	end
+	if getFlag(Controller, "KolonaAutoQTEEnabled") then
+		table.insert(currentKolonaOptions, "Auto QTE")
+	end
+
+	Tab:CreateDropdown({
+		Name = "Kolona Hack Mode",
+		Options = { "Immunity", "Auto QTE" },
+		CurrentOption = currentKolonaOptions,
+		MultipleOptions = true,
+		Flag = "KolonaHackDropdown",
+		Callback = function(Options)
+			local hasImmunity = optionSelected(Options, "Immunity")
+			local hasAutoQTE = optionSelected(Options, "Auto QTE")
+			local activeController = resolveController(nil, Controller)
+			if activeController then
+				if typeof(activeController.SetImmunity) == "function" then
+					activeController:SetImmunity("Kolona", hasImmunity)
+				end
+				if typeof(activeController.SetKolonaAutoQTE) == "function" then
+					activeController:SetKolonaAutoQTE(hasAutoQTE)
+				end
+			else
+				warn("[NULLSCAPE] Entities controller is not ready; ignored Kolona Hack Mode change")
+			end
 		end,
 	})
 
@@ -510,6 +554,27 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateSection("Settings")
+
+	Tab:CreateToggle({
+		Name = "Use Shield / Barrier",
+		CurrentValue = getFlag(Controller, "ShieldBaitEnabled"),
+		Flag = "EntityShieldBaitToggle",
+		Callback = function(Value)
+			setShieldBaitEnabled(Controller, Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Barrier Chance",
+		Range = { 0, 100 },
+		Increment = 1,
+		Suffix = "%",
+		CurrentValue = tonumber(Controller.ShieldBaitChance) or 0,
+		Flag = "EntityShieldBaitChanceSlider",
+		Callback = function(Value)
+			setShieldBaitChance(Controller, Value)
+		end,
+	})
 
 	local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
 

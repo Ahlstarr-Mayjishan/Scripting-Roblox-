@@ -24,6 +24,9 @@ local DEFAULTS = {
 	GrappleAssistConfidenceMargin = 5,
 	GrappleAssistBiomeTuningEnabled = true,
 	GrappleAssistFailFeedbackEnabled = true,
+	GrappleAssistSafetyEnabled = true,
+	GrappleAssistSafetyRejectPenalty = 74,
+	GrappleAssistAnchorBiasEnabled = true,
 	GrappleAssistSpecialPointPriority = true,
 	GrappleAnchorTargetingStyle = "Auto",
 	GrappleAssistSecondaryCastEnabled = false,
@@ -41,6 +44,13 @@ local DEFAULTS = {
 	GrappleVoidRescueAutoSharkTail = true,
 	GrappleVoidRescueHeight = 45,
 	GrappleVoidRescueReelHoldTime = 0.12,
+	GrappleDodgeEnabled = false,
+	GrappleDodgeThreatRange = 42,
+	GrappleDodgeDangerRadius = 10,
+	GrappleDodgeHorizon = 0.45,
+	GrappleDodgeRange = 92,
+	GrappleDodgeStrength = 1,
+	GrappleDodgeRailBonus = 34,
 	GrappleReelSaverEnabled = false,
 	GrappleReelSaverKeybind = "E",
 	GrappleReelSaverSideRange = 26,
@@ -131,6 +141,10 @@ local function getSelectedGrapplerTechniques(Controller)
 
 	if Controller.GrappleReelSaverEnabled == true then
 		table.insert(selected, "Reel Saver")
+	end
+
+	if Controller.GrappleDodgeEnabled == true then
+		table.insert(selected, "Grapple Dodge")
 	end
 
 	return selected
@@ -427,6 +441,39 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateToggle({
+		Name = "Cast Safety Check",
+		Info = "Rejects or penalizes assisted grapple targets that are too close, under ceilings, against strong momentum, or near void.",
+		CurrentValue = Controller.GrappleAssistSafetyEnabled ~= false,
+		Flag = "GrappleAssistSafetyToggle",
+		Callback = function(Value)
+			Controller:SetGrappleAssistSafety(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Safety Reject Penalty",
+		Info = "How much accumulated danger is required before an assisted target is rejected.",
+		Range = { 20, 140 },
+		Increment = 2,
+		Suffix = " penalty",
+		CurrentValue = Controller.GrappleAssistSafetyRejectPenalty or 74,
+		Flag = "GrappleAssistSafetyRejectPenaltySlider",
+		Callback = function(Value)
+			Controller:SetGrappleAssistSafetyRejectPenalty(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Anchor Physics Bias",
+		Info = "Uses landing prediction, rail snap, momentum bridge, and biome tuning to rank assisted grapple targets.",
+		CurrentValue = Controller.GrappleAssistAnchorBiasEnabled ~= false,
+		Flag = "GrappleAssistAnchorBiasToggle",
+		Callback = function(Value)
+			Controller:SetGrappleAssistAnchorBias(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
 		Name = "Named Anchor Assist",
 		Info = "Lets Grapple Assist use JumpPad, GrapplePoint, Bell, and TriaOrb anchors when they match your aim.",
 		CurrentValue = Controller.GrappleAssistSpecialPointPriority ~= false,
@@ -508,8 +555,8 @@ return function(Client, Controller)
 
 	Tab:CreateDropdown({
 		Name = "Grappler Techniques",
-		Info = "Choose which grappler techniques are enabled. SharkVoid auto-runs near void; Reel Saver runs from its keybind.",
-		Options = { "SharkVoid", "Reel Saver" },
+		Info = "Choose which grappler techniques are enabled. SharkVoid and Grapple Dodge run automatically; Reel Saver runs from its keybind.",
+		Options = { "SharkVoid", "Grapple Dodge", "Reel Saver" },
 		CurrentOption = getSelectedGrapplerTechniques(Controller),
 		MultipleOptions = true,
 		Flag = "GrappleTechniqueDropdown",
@@ -637,6 +684,58 @@ return function(Client, Controller)
 		Flag = "GrappleVoidRescueReelHoldSlider",
 		Callback = function(Value)
 			Controller:SetGrappleVoidRescueReelHoldTime(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Dodge Threat Range",
+		Info = "Enemy scan distance for automatic grapple dodges.",
+		Range = { 16, 90 },
+		Increment = 1,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleDodgeThreatRange or 42,
+		Flag = "GrappleDodgeThreatRangeSlider",
+		Callback = function(Value)
+			Controller:SetGrappleDodgeThreatRange(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Dodge Danger Radius",
+		Info = "How close a predicted enemy path must be before Grapple Dodge takes over.",
+		Range = { 4, 24 },
+		Increment = 1,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleDodgeDangerRadius or 10,
+		Flag = "GrappleDodgeDangerRadiusSlider",
+		Callback = function(Value)
+			Controller:SetGrappleDodgeDangerRadius(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Dodge Cast Range",
+		Info = "Maximum grapple distance Grapple Dodge can use for escape anchors.",
+		Range = { 30, 150 },
+		Increment = 5,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleDodgeRange or 92,
+		Flag = "GrappleDodgeRangeSlider",
+		Callback = function(Value)
+			Controller:SetGrappleDodgeRange(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Dodge Strength",
+		Info = "How strongly Grapple Dodge favors anchors that preserve your travel direction.",
+		Range = { 0.25, 3 },
+		Increment = 0.05,
+		Suffix = "x",
+		CurrentValue = Controller.GrappleDodgeStrength or 1,
+		Flag = "GrappleDodgeStrengthSlider",
+		Callback = function(Value)
+			Controller:SetGrappleDodgeStrength(Value)
 		end,
 	})
 

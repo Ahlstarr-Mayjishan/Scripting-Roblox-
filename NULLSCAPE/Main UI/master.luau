@@ -110,8 +110,10 @@ pcall(function()
 			ImmunityGuardianToggle = false,
 			SpringerHackDropdown = {},
 			StatusImmunityDropdownV2 = {},
+			EntityShieldBaitToggle = false,
+			EntityShieldBaitChanceSlider = 0,
 			ImmunitySkinwalkerToggle = false,
-			ImmunityKolonaToggle = false,
+			KolonaHackDropdown = {},
 			ImmunityOblivionToggle = false,
 			ImmunityShadowBabyToggle = false,
 			ImmunityQuartzToggle = false,
@@ -149,6 +151,9 @@ pcall(function()
 			GrappleAssistConfidenceMarginSlider = 5,
 			GrappleAssistBiomeTuningToggle = true,
 			GrappleAssistFailFeedbackToggle = true,
+			GrappleAssistSafetyToggle = true,
+			GrappleAssistSafetyRejectPenaltySlider = 74,
+			GrappleAssistAnchorBiasToggle = true,
 			GrappleAssistSpecialPriorityToggle = true,
 			GrappleAnchorTargetingStyleDropdown = "Auto",
 			GrappleAnchorPriorityGrapplePointSlider = 700,
@@ -172,6 +177,10 @@ pcall(function()
 			GrappleVoidRescueAutoSharkTailToggle = true,
 			GrappleVoidRescueHeightSlider = 45,
 			GrappleVoidRescueReelHoldSlider = 0.12,
+			GrappleDodgeThreatRangeSlider = 42,
+			GrappleDodgeDangerRadiusSlider = 10,
+			GrappleDodgeRangeSlider = 92,
+			GrappleDodgeStrengthSlider = 1,
 			RailAssistSuiteToggle = false,
 			RailAutoToggle = false,
 			RailSpeedMultiplierSlider = 1.1,
@@ -190,10 +199,10 @@ pcall(function()
 			MatrixTetrahedronToggle = false,
 			MomentumReductionSlider = 100, -- Mặc định là 100% giảm quán tính
 			SpeedBuffSelectionsDropdown = {},
+			AirJumpSelectionsDropdown = {},
 			HelmetToggle = false,
 			MiniatureHourglassToggle = false,
 			AutoCollectGiftsToggle = false,
-			AutomationMultiSelectDropdown = {},
 			AutoCollectTargetsDropdown = { "Gift/GoldenGift", "Instrument (Cadence)" },
 			AutoCollectRangeSlider = 20,
 			AutoCollectInstrumentRangeSlider = 0,
@@ -258,6 +267,18 @@ pcall(function()
 		end
 		if currentSettings.ICBMHackDropdown == nil and currentSettings.ImmunityICBMToggle == true then
 			currentSettings.ICBMHackDropdown = { "Immunity" }
+			updated = true
+		end
+		if type(currentSettings.ICBMHackDropdown) == "table" then
+			for index, option in pairs(currentSettings.ICBMHackDropdown) do
+				if option == "Burn effect (Curse)" then
+					currentSettings.ICBMHackDropdown[index] = "Immune Scorched Earth"
+					updated = true
+				end
+			end
+		end
+		if type(currentSettings.KolonaHackDropdown) ~= "table" then
+			currentSettings.KolonaHackDropdown = {}
 			updated = true
 		end
 		for k, v in pairs(defaultSettings) do

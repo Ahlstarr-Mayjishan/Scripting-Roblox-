@@ -70,6 +70,15 @@ local STYLE_OVERRIDES = {
 		Terrain = 150,
 		Rail = 520,
 	},
+	QTEAssist = {
+		ManualAngle = 28,
+		GrapplePoint = 740,
+		JumpPad = 720,
+		TriaOrb = 620,
+		Bell = 540,
+		Terrain = 170,
+		Rail = 560,
+	},
 }
 
 local function isAuto(controller)
@@ -88,6 +97,9 @@ local function getMode(intent)
 	end
 	if name == "RazorbloomEscape" then
 		return "RazorbloomEscape"
+	end
+	if name == "QTEAssist" then
+		return "QTEAssist"
 	end
 	if name == "RailCapture" then
 		return "RailCapture"
