@@ -1335,4 +1335,10 @@ if not success4 then
 end
 
 -- Tải cấu hình lưu trữ của Rayfield
+getgenv()._NULLSCAPE_Booting = true
 Rayfield:LoadConfiguration()
+task.delay(2, function()
+	if getgenv().Client == Client then
+		getgenv()._NULLSCAPE_Booting = false
+	end
+end)

@@ -57,7 +57,7 @@ Logic.Config = {
     },
     ["Kolona"] = {
         ControllerFlag = "KolonaImmune",
-        Remotes = { "DiedFunc" },
+        Remotes = { "DiedFunc", "Died" },
         Keywords = { "Kolona" },
         LegitKeywords = { "Kolona" }
     },
@@ -264,6 +264,20 @@ local function isICBMClientReport(remote, args)
     return false
 end
 -- Helper check xem remote có thuộc Model của thực thể mục tiêu không
+local function isKolonaKillReport(remote, args)
+    if typeof(remote) ~= "Instance" then
+        return false
+    end
+
+    local remoteName = remote.Name
+    if remoteName ~= "DiedFunc" and remoteName ~= "Died" then
+        return false
+    end
+
+    local firstArg = typeof(args and args[1]) == "string" and string.lower(args[1]) or ""
+    return firstArg == "kolona"
+end
+
 local function findEntityParent(obj, targetSubName)
     local current = obj.Parent
     local depth = 0
@@ -326,6 +340,11 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
             return controller.ICBMImmune == true or controller.ICBMBurnImmune == true
         end
     end
+
+    if controller.KolonaImmune == true and isKolonaKillReport(remote, args) then
+        return true
+    end
+
     if controller.inLobby then
         return false
     end
@@ -384,10 +403,7 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
         end
     end
 
-    if controller.KolonaImmune == true
-        and remote.ClassName == "RemoteFunction"
-        and remote.Name == "DiedFunc"
-        and args[1] == "Kolona" then
+    if controller.KolonaImmune == true and isKolonaKillReport(remote, args) then
         return true
     end
 

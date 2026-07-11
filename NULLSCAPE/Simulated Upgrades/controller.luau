@@ -358,9 +358,11 @@ end
 function Controller:SetAutoCollectEnabled(value)
 	if self.GiftMagnetBlocked == true then
 		self.AutoCollectEnabled = false
-		if value == true and getgenv().Rayfield and typeof(getgenv().Rayfield.Notify) == "function" then
+		local globals = getgenv()
+		local suppressBootNotice = globals._NULLSCAPE_Booting == true
+		if value == true and not suppressBootNotice and globals.Rayfield and typeof(globals.Rayfield.Notify) == "function" then
 			pcall(function()
-				getgenv().Rayfield:Notify({
+				globals.Rayfield:Notify({
 					Title = "Gift Magnet Disabled",
 					Content = "Gift Magnet is isolated from Gift Farm and will not run.",
 					Duration = 3,

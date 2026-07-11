@@ -119,7 +119,9 @@ local function startAntiAnchor(controller)
 		table.clear(antiControlConnections)
 
 		local function releaseIfGiftFarmActive()
-			if not controller.GiftFarmEnabled then
+			local globals = getgenv()._NULLSCAPE_Globals
+			local movementLeaseActive = typeof(globals) == "table" and globals.GiftFarmMovementLeaseActive == true
+			if not controller.GiftFarmEnabled or not movementLeaseActive then
 				return
 			end
 			local context = getGiftFarmContext()
@@ -143,9 +145,13 @@ local function startAntiAnchor(controller)
 			local deadVal = localPlayer and localPlayer:FindFirstChild("Dead")
 			local isDead = deadVal and deadVal.Value == true
 
-			if controller.GiftFarmEnabled and hrp.Anchored and inRound and not isDead then
+			local globals = getgenv()._NULLSCAPE_Globals
+			local movementLeaseActive = typeof(globals) == "table" and globals.GiftFarmMovementLeaseActive == true
+			if controller.GiftFarmEnabled and movementLeaseActive and hrp.Anchored and inRound and not isDead then
 				task.delay(SERVER_ANCHOR_PING_GRACE, function()
-					if controller.GiftFarmEnabled and hrp and hrp.Parent and hrp.Anchored then
+					local latestGlobals = getgenv()._NULLSCAPE_Globals
+					local latestLeaseActive = typeof(latestGlobals) == "table" and latestGlobals.GiftFarmMovementLeaseActive == true
+					if controller.GiftFarmEnabled and latestLeaseActive and hrp and hrp.Parent and hrp.Anchored then
 						releaseIfGiftFarmActive()
 					end
 				end)
@@ -171,7 +177,9 @@ local function startAntiAnchor(controller)
 			end))
 		end
 
-		if controller.GiftFarmEnabled and (
+		local globals = getgenv()._NULLSCAPE_Globals
+		local movementLeaseActive = typeof(globals) == "table" and globals.GiftFarmMovementLeaseActive == true
+		if controller.GiftFarmEnabled and movementLeaseActive and (
 			hrp.Anchored
 			or (humanoid and (humanoid.PlatformStand or humanoid.Sit))
 		) then

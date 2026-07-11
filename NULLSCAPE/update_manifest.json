@@ -1,8 +1,10 @@
 {
-  "Version": "2026.07.06.1",
+  "Version": "2026.07.11.1",
   "MenuChanges": [
     "Settings",
-    "Automation"
+    "Automation",
+    "Entities",
+    "Simulated Upgrades"
   ],
   "Files": [
     {
@@ -51,6 +53,30 @@
         "Automation",
         "Gift Farm",
         "Pipelining"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Automation/controller.luau",
+      "Menu": [
+        "Automation"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/controller.luau",
+      "Menu": [
+        "Entities"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/RemoteBlocking.luau",
+      "Menu": [
+        "Entities"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Simulated Upgrades/controller.luau",
+      "Menu": [
+        "Simulated Upgrades"
       ]
     }
   ]

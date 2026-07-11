@@ -2033,7 +2033,10 @@ local function initializeICBMHook()
 		if activeCtrl.GuardianImmune == true and self.Name == "Died" and args[1] == "Guardian" then
 			return true
 		end
-		if activeCtrl.KolonaImmune == true and self.Name == "DiedFunc" and args[1] == "Kolona" then
+		local firstStringArg = typeof(args[1]) == "string" and string.lower(args[1]) or ""
+		if activeCtrl.KolonaImmune == true
+			and (self.Name == "DiedFunc" or self.Name == "Died")
+			and firstStringArg == "kolona" then
 			return true
 		end
 

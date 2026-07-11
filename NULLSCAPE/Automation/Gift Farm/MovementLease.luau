@@ -17,8 +17,38 @@ local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
 local SAFETY_FOOTHOLD_DURATION = 2.5
 local FLOOR_RAY_DISTANCE = 20
 
-local function getGroundContainer()
-	return Workspace:FindFirstChild("CurrentRooms") or Workspace
+local function setActiveLeaseState(leaseToken, ownerName)
+	local globals = getgenv()._NULLSCAPE_Globals
+	if typeof(globals) ~= "table" then
+		return
+	end
+
+	globals.GiftFarmMovementLeaseActive = leaseToken ~= nil
+	globals.GiftFarmMovementLeaseToken = leaseToken
+	globals.GiftFarmMovementLeaseOwner = ownerName
+end
+
+local function clearActiveLeaseState(leaseToken)
+	local globals = getgenv()._NULLSCAPE_Globals
+	if typeof(globals) ~= "table" then
+		return
+	end
+
+	if leaseToken == nil or globals.GiftFarmMovementLeaseToken == leaseToken then
+		globals.GiftFarmMovementLeaseActive = false
+		globals.GiftFarmMovementLeaseToken = nil
+		globals.GiftFarmMovementLeaseOwner = nil
+	end
+end
+
+local function getRuntimeContainer()
+	local container = Workspace:FindFirstChild("NULLSCAPE_Runtime")
+	if not container then
+		container = Instance.new("Folder")
+		container.Name = "NULLSCAPE_Runtime"
+		container.Parent = Workspace
+	end
+	return container
 end
 
 -- Creates or retrieves the single foothold part
@@ -37,7 +67,7 @@ local function getFootholdPart()
 	activeFootholdPart.Material = Enum.Material.SmoothPlastic
 	activeFootholdPart.Transparency = 1
 	activeFootholdPart.Size = FOOTHOLD_SIZE
-	activeFootholdPart.Parent = getGroundContainer()
+	activeFootholdPart.Parent = getRuntimeContainer()
 	return activeFootholdPart
 end
 
@@ -62,7 +92,7 @@ local function hasGroundBelow(hrp)
 		params.FilterDescendantsInstances = { currentRooms }
 	else
 		params.FilterType = Enum.RaycastFilterType.Exclude
-		params.FilterDescendantsInstances = { hrp.Parent }
+		params.FilterDescendantsInstances = { hrp.Parent, getRuntimeContainer() }
 	end
 	params.RespectCanCollide = true
 
@@ -73,6 +103,7 @@ end
 function MovementLease.acquire(ownerName)
 	activeLeaseToken += 1
 	local leaseToken = activeLeaseToken
+	setActiveLeaseState(leaseToken, ownerName)
 
 	-- Create lease object
 	local lease = {}
@@ -97,7 +128,7 @@ function MovementLease.acquire(ownerName)
 		end
 		activeFootholdToken += 1
 		local part = getFootholdPart()
-		part.Parent = getGroundContainer()
+		part.Parent = getRuntimeContainer()
 		part.CFrame = CFrame.new(position + FOOTHOLD_OFFSET)
 		return part
 	end
@@ -106,6 +137,7 @@ function MovementLease.acquire(ownerName)
 		if not self:isValid() then
 			return
 		end
+		clearActiveLeaseState(leaseToken)
 		options = options or {}
 		local hrp = Context.getRootPart()
 		local hasGround = false
@@ -151,6 +183,7 @@ end
 
 function MovementLease.invalidateActive()
 	activeLeaseToken += 1
+	clearActiveLeaseState()
 	cleanUpFootholdPart()
 end
 
