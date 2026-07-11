@@ -4,7 +4,7 @@ local Planner = {}
 local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.luau")
 
 local RANGE_BUFFER = 3.5
-local MAX_ROUTE_POINTS = 12
+local MAX_ROUTE_POINTS = 36
 local MAX_TAIL_ROUTE_POINTS = 32
 local MAX_SEED_CANDIDATES = 32
 local MAX_CENTER_ITEMS = 12

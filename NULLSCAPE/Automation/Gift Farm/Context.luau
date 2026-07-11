@@ -77,11 +77,27 @@ local function raycastCurrentRoomsFloor(position)
 	params.FilterDescendantsInstances = { currentRooms }
 	params.RespectCanCollide = true
 
-	return Workspace:Raycast(
-		position + Vector3.new(0, GROUND_RAY_HEIGHT, 0),
-		Vector3.new(0, -GROUND_RAY_DISTANCE, 0),
-		params
-	)
+	-- Check center and 4 horizontal offsets (cross pattern) to handle edges/gaps robustly
+	local offsets = {
+		Vector3.new(0, 0, 0),
+		Vector3.new(4.5, 0, 0),
+		Vector3.new(-4.5, 0, 0),
+		Vector3.new(0, 0, 4.5),
+		Vector3.new(0, 0, -4.5)
+	}
+
+	for _, offset in ipairs(offsets) do
+		local result = Workspace:Raycast(
+			position + offset + Vector3.new(0, GROUND_RAY_HEIGHT, 0),
+			Vector3.new(0, -GROUND_RAY_DISTANCE, 0),
+			params
+		)
+		if result and result.Instance then
+			return result
+		end
+	end
+
+	return nil
 end
 
 function Context.requestStreamAround(position, timeout)
@@ -193,9 +209,6 @@ function Context.moveCharacterTo(cframe)
 	end
 
 	local targetPos = cframe.Position
-	if Context.isInRound() and not Context.waitForStreamedGround(targetPos) then
-		return false
-	end
 
 	Context.releaseCharacterControl({
 		SkipVelocityClear = true,
@@ -206,7 +219,7 @@ function Context.moveCharacterTo(cframe)
 	local startPos = hrp.Position
 	local direction = (targetPos - startPos)
 	local distance = direction.Magnitude
-	local stepSize = 75
+	local stepSize = 92
 
 	if distance > stepSize then
 		local steps = math.ceil(distance / stepSize)

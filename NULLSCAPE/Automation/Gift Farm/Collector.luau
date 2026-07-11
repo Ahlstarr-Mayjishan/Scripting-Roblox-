@@ -144,16 +144,21 @@ end
 
 local function waitForReplicationSync(precisionMode)
 	local ping = getPingSeconds() or 0.08
-	local targetWait = ping * 0.55
-	local minWait = precisionMode and PRECISION_SYNC_MIN or SYNC_MIN
-	local maxWait = math.max(precisionMode and PRECISION_SYNC_MAX or SYNC_MAX, ping * 0.8)
+	local targetWait = ping * 0.52
+	local minWait = precisionMode and PRECISION_SYNC_MIN or 0.01
+	local maxWait = math.max(precisionMode and PRECISION_SYNC_MAX or 0.04, ping * 0.7)
 	local waitTime = math.clamp(targetWait, minWait, maxWait)
 
 	local frames = precisionMode and 2 or 1
+	local start = os.clock()
 	for _ = 1, frames do
 		RunService.Heartbeat:Wait()
 	end
-	waitIfPositive(waitTime)
+	local elapsed = os.clock() - start
+	local remaining = waitTime - elapsed
+	if remaining > 0 then
+		task.wait(remaining)
+	end
 end
 
 local function getValidationWait(_controller, precisionMode)
@@ -367,6 +372,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 	local precisionMode = tailMode or options.PrecisionMode == true or #cluster <= 2
 	local targetPosition = options.TargetPosition or cluster.TargetPosition or cluster[1].pos
 	local collectRange = options.SafeRange or cluster.SafeRange or range
+	local clientCollectRange = collectRange + 3.0 -- Allow a slight client buffer to prevent skipping edge gifts
 	local standingPosition = Distance.getRootPosition(targetPosition)
 	local collectedEvent = Context.getCollectedGiftEvent()
 	local result = {
@@ -382,9 +388,9 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			return
 		end
 
-		if Context.isInRound() and not Context.waitForStreamedGround(standingPosition, 0.85) then
-			result.Rejected = #cluster
-			return
+		local streamTimeout = tailMode and 0.5 or 0.02
+		if Context.isInRound() then
+			Context.waitForStreamedGround(standingPosition, streamTimeout)
 		end
 
 		hrp.Anchored = false
@@ -417,19 +423,23 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			comboCount = 0
 		end
 
-		collectItems(cluster, currentPos, collectRange, collectedEvent, attemptedGifts)
+		collectItems(cluster, currentPos, clientCollectRange, collectedEvent, attemptedGifts)
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
-		task.wait(getValidationWait(controller, precisionMode))
 
-		local retryPasses = precisionMode and MAX_PRECISION_RETRY_PASSES or MAX_RETRY_PASSES
+		local needsValidation = tailMode
+		if needsValidation then
+			task.wait(getValidationWait(controller, precisionMode))
+		end
+
+		local retryPasses = needsValidation and (precisionMode and MAX_PRECISION_RETRY_PASSES or MAX_RETRY_PASSES) or 0
 		for _ = 1, retryPasses do
 			if isAborted(options, lease, currentSessionToken) then
 				return
 			end
 			currentPos = hrp.Position
-			local rejected = getRejectedItems(cluster, currentPos, collectRange)
+			local rejected = getRejectedItems(cluster, currentPos, clientCollectRange)
 			if #rejected == 0 then
 				break
 			end
@@ -446,16 +456,16 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 				return
 			end
 			currentPos = hrp.Position
-			collectItems(rejected, currentPos, collectRange, collectedEvent, attemptedGifts)
+			collectItems(rejected, currentPos, clientCollectRange, collectedEvent, attemptedGifts)
 			task.wait(getValidationWait(controller, true))
 		end
 
-		if precisionMode and not isAborted(options, lease, currentSessionToken) then
+		if precisionMode and needsValidation and not isAborted(options, lease, currentSessionToken) then
 			local cleanupRejects, cleanupPulses = runPrecisionCleanup(
 				hrp,
 				cluster,
 				standingPosition,
-				collectRange,
+				clientCollectRange,
 				collectedEvent,
 				attemptedGifts,
 				options,

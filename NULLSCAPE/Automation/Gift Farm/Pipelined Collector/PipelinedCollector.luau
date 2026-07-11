@@ -282,9 +282,8 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 			local collectRange = planInfo and planInfo.SafeRange or range
 			local standingPosition = Distance.getRootPosition(targetPosition)
 
-			if Context.isInRound() and not Context.waitForStreamedGround(standingPosition, 0.85) then
-				stats.Failed += #cluster
-				continue
+			if Context.isInRound() then
+				Context.waitForStreamedGround(standingPosition, 0.02)
 			end
 
 			hrp.Anchored = false
