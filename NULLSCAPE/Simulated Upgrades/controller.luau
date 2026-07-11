@@ -32,7 +32,7 @@ local Controller = {
 	inLobby = true,
 
 	AutoCollectEnabled = false,
-	GiftMagnetBlocked = true,
+	GiftMagnetBlocked = false,
 	AutoCollectRange = 20,
 	AutoCollectGiftRange = 20,
 	AutoCollectInstrumentRange = 0,
@@ -1156,6 +1156,10 @@ if Executor and typeof(Executor.enableUpgradeSimulationHook) == "function" then
 end
 
 getGlobals().activeUpgradeController = Controller
+
+-- Khởi tạo trạng thái chặn Gift Magnet dựa trên Gift Farm hiện tại
+local autoCtrl = getGlobals().activeAutomationController
+Controller.GiftMagnetBlocked = autoCtrl and autoCtrl.GiftFarmEnabled == true or false
 
 -- Khởi tạo ban đầu khi nạp script
 Logic.syncSimulatedUpgradeHud(Controller)

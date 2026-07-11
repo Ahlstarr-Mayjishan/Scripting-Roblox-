@@ -190,6 +190,22 @@ function Controller:SetGiftFarmEnabled(value)
 		self.GiftFarmRangeRevision = (tonumber(self.GiftFarmRangeRevision) or 0) + 1
 	end
 	self.GiftFarmEnabled = nextEnabled
+
+	-- Đồng bộ với cờ GiftMagnetBlocked của Simulated Upgrades
+	local upgradeController = getUpgradeController(true)
+	if upgradeController then
+		upgradeController.GiftMagnetBlocked = nextEnabled
+		if nextEnabled then
+			if typeof(upgradeController.SetAutoCollectEnabled) == "function" then
+				pcall(function()
+					upgradeController:SetAutoCollectEnabled(false)
+				end)
+			else
+				upgradeController.AutoCollectEnabled = false
+			end
+		end
+	end
+
 	self.ConfigChanged:Fire()
 	return self:update()
 end
