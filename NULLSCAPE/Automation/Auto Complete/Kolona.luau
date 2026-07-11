@@ -21,6 +21,7 @@ local currentTick = nil
 local pulsedThisCycle = false
 local pulseActive = false
 local lastPulseAt = -1000
+local pulseHumanoid = nil
 local tickSoundStates = setmetatable({}, { __mode = "k" })
 
 local function getCharacter()
@@ -160,6 +161,7 @@ local function pulseAbility(humanoid)
 	end
 
 	pulseActive = true
+	pulseHumanoid = humanoid
 	lastPulseAt = time()
 	pcall(function()
 		humanoid:SetAttribute("UsingAbility", true)
@@ -172,21 +174,25 @@ local function pulseAbility(humanoid)
 			end)
 		end
 		pulseActive = false
+		if pulseHumanoid == humanoid then
+			pulseHumanoid = nil
+		end
 	end)
 
 	return true
 end
 
 local function stopPulse()
-	if pulseActive then
-		local humanoid = getHumanoid()
-		if humanoid and humanoid.Parent then
-			pcall(function()
+	local humanoid = pulseHumanoid or getHumanoid()
+	if humanoid and humanoid.Parent then
+		pcall(function()
+			if pulseActive or humanoid:GetAttribute("UsingAbility") == true then
 				humanoid:SetAttribute("UsingAbility", false)
-			end)
-		end
+			end
+		end)
 	end
 	pulseActive = false
+	pulseHumanoid = nil
 end
 
 local function completeWindow(controller, humanoid, main)
@@ -220,18 +226,9 @@ local function completeWindow(controller, humanoid, main)
 end
 
 local function restoreUsingAbility()
-	if pulseActive then
-		local humanoid = getHumanoid()
-		if humanoid and humanoid.Parent then
-			pcall(function()
-				humanoid:SetAttribute("UsingAbility", false)
-			end)
-		end
-	else
-		pcall(function()
-			stopPulse()
-		end)
-	end
+	pcall(function()
+		stopPulse()
+	end)
 end
 
 local function run(controller)

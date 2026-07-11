@@ -45,6 +45,7 @@ local characterAddedConnection = nil
 local antiAnchorConnection = nil
 local antiControlConnections = {}
 local giftFarmContext = nil
+local SERVER_ANCHOR_PING_GRACE = 0.08
 
 local function getGiftFarmContext()
 	if giftFarmContext then
@@ -143,7 +144,11 @@ local function startAntiAnchor(controller)
 			local isDead = deadVal and deadVal.Value == true
 
 			if controller.GiftFarmEnabled and hrp.Anchored and inRound and not isDead then
-				releaseIfGiftFarmActive()
+				task.delay(SERVER_ANCHOR_PING_GRACE, function()
+					if controller.GiftFarmEnabled and hrp and hrp.Parent and hrp.Anchored then
+						releaseIfGiftFarmActive()
+					end
+				end)
 			end
 		end)
 

@@ -403,6 +403,8 @@ end
 -- Dịch vụ Roblox phổ biến
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 local function resumeCharacterAnimation(character)
@@ -454,7 +456,12 @@ local function getCharacterControlSnapshot(character)
 		PlatformStand = nil,
 		Sit = nil,
 		AutoRotate = nil,
+		UsingAbility = nil,
+		ChargingCheck = nil,
 		AnimateDisabled = nil,
+		DomaspControllingMouse = nil,
+		MothGuiEnabled = nil,
+		MothGuiCameraCloneCount = 0,
 		DisabledTouchParts = {},
 	}
 
@@ -475,12 +482,28 @@ local function getCharacterControlSnapshot(character)
 		snapshot.PlatformStand = humanoid.PlatformStand
 		snapshot.Sit = humanoid.Sit
 		snapshot.AutoRotate = humanoid.AutoRotate
+		snapshot.UsingAbility = humanoid:GetAttribute("UsingAbility")
 	end
+	snapshot.ChargingCheck = character:GetAttribute("ChargingCheck")
 
 	local animate = character:FindFirstChild("Animate")
 	if animate and animate:IsA("LocalScript") then
 		snapshot.AnimateDisabled = animate.Disabled
 	end
+
+	snapshot.DomaspControllingMouse = shared.DomaspControllingMouse == true
+	pcall(function()
+		local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+		local mothGui = playerGui and playerGui:FindFirstChild("MothGui")
+		snapshot.MothGuiEnabled = mothGui and mothGui.Enabled or false
+		if mothGui then
+			for _, child in ipairs(mothGui:GetChildren()) do
+				if child:IsA("Camera") then
+					snapshot.MothGuiCameraCloneCount += 1
+				end
+			end
+		end
+	end)
 
 	for _, descendant in ipairs(character:GetDescendants()) do
 		if descendant:IsA("BasePart") and descendant.CanTouch == false then
@@ -492,6 +515,169 @@ local function getCharacterControlSnapshot(character)
 	end
 
 	return snapshot
+end
+
+local function isCelestialImmunityActive()
+	local globals = getgenv()._NULLSCAPE_Globals
+	local controller = globals and globals.activeEntitiesController
+	return typeof(controller) == "table" and controller.CelestialImmune == true
+end
+
+local function recoverCelestialVisualLocks(reason)
+	local didRecover = false
+
+	pcall(function()
+		RunService:UnbindFromRenderStep("MCRender")
+	end)
+
+	if shared.DomaspControllingMouse == true then
+		shared.DomaspControllingMouse = false
+		didRecover = true
+	end
+
+	pcall(function()
+		UserInputService.MouseIconEnabled = true
+	end)
+	pcall(function()
+		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Chat, true)
+	end)
+
+	pcall(function()
+		local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+		local mothGui = playerGui and playerGui:FindFirstChild("MothGui")
+		local memory = mothGui and mothGui:FindFirstChild("Memory")
+		local canvas = memory and memory:FindFirstChild("CanvasGroup")
+		local playerViewport = canvas and canvas:FindFirstChild("Player")
+		if playerViewport and playerViewport:IsA("ViewportFrame") and playerViewport.CurrentCamera then
+			playerViewport.CurrentCamera = nil
+			didRecover = true
+		end
+	end)
+
+	pcall(function()
+		local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+		local mothGui = playerGui and playerGui:FindFirstChild("MothGui")
+		if not mothGui then
+			return
+		end
+
+		for _, child in ipairs(mothGui:GetChildren()) do
+			if child:IsA("Camera") then
+				child:Destroy()
+				didRecover = true
+			end
+		end
+
+		local memory = mothGui:FindFirstChild("Memory")
+		local canvas = memory and memory:FindFirstChild("CanvasGroup")
+		if canvas then
+			canvas.GroupTransparency = 1
+			canvas.BackgroundTransparency = 1
+		end
+
+		local ending = mothGui:FindFirstChild("Ending")
+		if ending then
+			local frame = ending:FindFirstChild("Frame")
+			if frame and frame:IsA("GuiObject") then
+				frame.BackgroundTransparency = 1
+			end
+			local image = ending:FindFirstChild("Image")
+			if image and image:IsA("ImageLabel") then
+				image.ImageTransparency = 1
+			end
+		end
+
+		if mothGui.Enabled then
+			mothGui.Enabled = false
+			didRecover = true
+		end
+	end)
+
+	if didRecover then
+		local globals = getgenv()._NULLSCAPE_Globals
+		if typeof(globals) == "table" then
+			globals.LastCelestialVisualLockRecoveryAt = os.clock()
+			globals.LastCelestialVisualLockRecoveryReason = reason or "Unknown"
+			globals.LastCharacterControlSnapshot = getCharacterControlSnapshot(LocalPlayer.Character)
+		end
+	end
+
+	return didRecover
+end
+
+local function startCelestialVisualLockGuard()
+	local lockSince = nil
+	local STALE_VISUAL_LOCK_TIMEOUT = 1.5
+
+	task.spawn(function()
+		while not Client.Destroyed do
+			local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+			local mothGui = playerGui and playerGui:FindFirstChild("MothGui")
+			local celestialActive = isCelestialImmunityActive()
+			local hasMothLock = mothGui and mothGui.Enabled == true
+			local hasMouseLock = shared.DomaspControllingMouse == true
+			local hasCameraClone = false
+
+			if mothGui then
+				for _, child in ipairs(mothGui:GetChildren()) do
+					if child:IsA("Camera") then
+						hasCameraClone = true
+						break
+					end
+				end
+			end
+
+			if hasMouseLock or hasCameraClone or (celestialActive and hasMothLock) then
+				lockSince = lockSince or os.clock()
+				if celestialActive or os.clock() - lockSince >= STALE_VISUAL_LOCK_TIMEOUT then
+					recoverCelestialVisualLocks(celestialActive and "CelestialImmune" or "StaleCutsceneLock")
+					lockSince = nil
+				end
+			else
+				lockSince = nil
+			end
+
+			task.wait(0.2)
+		end
+	end)
+end
+
+local function startStaleAbilityGuard()
+	local staleSince = nil
+	local lastHumanoid = nil
+	local STALE_ABILITY_TIMEOUT = 5
+
+	task.spawn(function()
+		while not Client.Destroyed do
+			local character = LocalPlayer.Character
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if humanoid ~= lastHumanoid then
+				lastHumanoid = humanoid
+				staleSince = nil
+			end
+
+			local usingAbility = humanoid and humanoid:GetAttribute("UsingAbility") == true
+			local chargingCheck = character and character:GetAttribute("ChargingCheck") == true
+			if usingAbility and not chargingCheck then
+				staleSince = staleSince or os.clock()
+				if os.clock() - staleSince >= STALE_ABILITY_TIMEOUT then
+					pcall(function()
+						humanoid:SetAttribute("UsingAbility", false)
+					end)
+					local globals = getgenv()._NULLSCAPE_Globals
+					if typeof(globals) == "table" then
+						globals.LastStaleAbilityClearAt = os.clock()
+						globals.LastCharacterControlSnapshot = getCharacterControlSnapshot(character)
+					end
+					staleSince = nil
+				end
+			else
+				staleSince = nil
+			end
+
+			task.wait(0.25)
+		end
+	end)
 end
 
 function Client:GetCharacterControlSnapshot()
@@ -624,6 +810,9 @@ end
 trackConnection(LocalPlayer.CharacterAdded:Connect(function(character)
 	Client:RecoverCharacterAfterRespawn(character)
 end))
+
+startStaleAbilityGuard()
+startCelestialVisualLockGuard()
 
 if getgenv()._NULLSCAPE_PendingCharacterRelease == true then
 	task.defer(function()

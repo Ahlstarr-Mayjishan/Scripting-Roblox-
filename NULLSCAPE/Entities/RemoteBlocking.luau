@@ -166,7 +166,14 @@ for _, data in pairs(Logic.Config) do
 end
 
 local CELESTIAL_CLIENT_BLOCKLIST = {
-    Kill = true,
+    kill = true,
+}
+
+local CELESTIAL_DIED_REASONS = {
+    celestial = true,
+    realitybreak = true,
+    ["reality break"] = true,
+    realitybreaker = true,
 }
 
 local function hasAncestorName(instance, targetSubName)
@@ -193,15 +200,13 @@ local function isCelestialKillReport(remote, args)
 
     local remoteName = remote.Name
     local firstArg = tostring(args and args[1] or "")
+    local lowerFirstArg = string.lower(firstArg)
 
     if remoteName == "Died" then
-        return firstArg == "Celestial"
-            or firstArg == "RealityBreak"
-            or firstArg == "Reality Break"
-            or firstArg == "RealityBreaker"
+        return CELESTIAL_DIED_REASONS[lowerFirstArg] == true
     end
 
-    if remoteName ~= "ClientEvent" or not CELESTIAL_CLIENT_BLOCKLIST[firstArg] then
+    if remoteName ~= "ClientEvent" or not CELESTIAL_CLIENT_BLOCKLIST[lowerFirstArg] then
         return false
     end
 

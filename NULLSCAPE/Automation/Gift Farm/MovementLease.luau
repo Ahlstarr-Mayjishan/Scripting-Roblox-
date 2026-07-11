@@ -15,6 +15,11 @@ local activeFootholdPart = nil
 local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
 local SAFETY_FOOTHOLD_DURATION = 2.5
+local FLOOR_RAY_DISTANCE = 20
+
+local function getGroundContainer()
+	return Workspace:FindFirstChild("CurrentRooms") or Workspace
+end
 
 -- Creates or retrieves the single foothold part
 local function getFootholdPart()
@@ -27,12 +32,12 @@ local function getFootholdPart()
 	activeFootholdPart.Anchored = true
 	activeFootholdPart.CanCollide = true
 	activeFootholdPart.CanTouch = false
-	activeFootholdPart.CanQuery = false
+	activeFootholdPart.CanQuery = true
 	activeFootholdPart.CastShadow = false
 	activeFootholdPart.Material = Enum.Material.SmoothPlastic
 	activeFootholdPart.Transparency = 1
 	activeFootholdPart.Size = FOOTHOLD_SIZE
-	activeFootholdPart.Parent = Workspace
+	activeFootholdPart.Parent = getGroundContainer()
 	return activeFootholdPart
 end
 
@@ -51,15 +56,17 @@ local function hasGroundBelow(hrp)
 	end
 
 	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	
-	local filter = { hrp.Parent }
-	if activeFootholdPart then
-		table.insert(filter, activeFootholdPart)
+	local currentRooms = Workspace:FindFirstChild("CurrentRooms")
+	if currentRooms then
+		params.FilterType = Enum.RaycastFilterType.Include
+		params.FilterDescendantsInstances = { currentRooms }
+	else
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { hrp.Parent }
 	end
-	params.FilterDescendantsInstances = filter
+	params.RespectCanCollide = true
 
-	local result = Workspace:Raycast(hrp.Position, Vector3.new(0, -8, 0), params)
+	local result = Workspace:Raycast(hrp.Position, Vector3.new(0, -FLOOR_RAY_DISTANCE, 0), params)
 	return result ~= nil
 end
 
@@ -90,6 +97,7 @@ function MovementLease.acquire(ownerName)
 		end
 		activeFootholdToken += 1
 		local part = getFootholdPart()
+		part.Parent = getGroundContainer()
 		part.CFrame = CFrame.new(position + FOOTHOLD_OFFSET)
 		return part
 	end
