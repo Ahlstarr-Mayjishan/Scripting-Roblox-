@@ -6,6 +6,7 @@
 -- Tự động dọn dẹp phiên chạy cũ trước khi chạy phiên mới
 local getgenv = getgenv
 local Game = game
+local HttpService = Game:GetService("HttpService")
 
 if getgenv().Client then
 	pcall(function()
@@ -84,7 +85,6 @@ end
 
 -- Tạo hoặc tự động cập nhật file cấu hình mặc định để ngăn Rayfield in cảnh báo console
 pcall(function()
-	local HttpService = game:GetService("HttpService")
 	if makefolder and writefile and readfile and isfile then
 		local folder = "NULLSCAPE"
 		local file = folder .. "/master_settings.json"
@@ -736,8 +736,11 @@ end)
 
 local moduleCache = {}
 local moduleLoading = {}
+local remoteSourceCache = {}
+local remoteSourceFetches = {}
 local NIL_MODULE = {}
 local GITHUB_RAW_ROOT = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
+local REMOTE_PREFETCH_CONCURRENCY = 4
 
 function Client:Destroy(reason)
 	if self.Destroying or self.Destroyed then
@@ -801,6 +804,12 @@ function Client:Destroy(reason)
 		end
 		if moduleLoading then
 			table.clear(moduleLoading)
+		end
+		if remoteSourceCache then
+			table.clear(remoteSourceCache)
+		end
+		if remoteSourceFetches then
+			table.clear(remoteSourceFetches)
 		end
 	end)
 
@@ -946,6 +955,96 @@ SettingsTab:CreateButton({
 	end,
 })
 
+local function fetchRemoteSource(path)
+	local cached = remoteSourceCache[path]
+	if cached then
+		return cached
+	end
+
+	local fetch = remoteSourceFetches[path]
+	if fetch then
+		repeat
+			task.wait()
+		until fetch.Done
+		if fetch.Source then
+			return fetch.Source
+		end
+		error(fetch.Error or ("Failed to download " .. tostring(path)))
+	end
+
+	fetch = { Done = false }
+	remoteSourceFetches[path] = fetch
+	local success, source = pcall(function()
+		return Game:HttpGet((GITHUB_RAW_ROOT .. path):gsub(" ", "%%20"))
+	end)
+
+	if Client.Destroyed then
+		fetch.Error = "Client destroyed"
+	elseif success and typeof(source) == "string" and #source > 0 then
+		fetch.Source = source
+		remoteSourceCache[path] = source
+	else
+		fetch.Error = tostring(source)
+	end
+	fetch.Done = true
+	remoteSourceFetches[path] = nil
+
+	if fetch.Source then
+		return fetch.Source
+	end
+	error(fetch.Error or ("Failed to download " .. tostring(path)))
+end
+
+local function prefetchRemoteSources()
+	task.spawn(function()
+		local manifestSuccess, manifestSource = pcall(function()
+			return Game:HttpGet((GITHUB_RAW_ROOT .. "NULLSCAPE/update_manifest.json"):gsub(" ", "%%20"))
+		end)
+		if not manifestSuccess or typeof(manifestSource) ~= "string" then
+			return
+		end
+
+		local decodedSuccess, manifest = pcall(function()
+			return HttpService:JSONDecode(manifestSource)
+		end)
+		local files = decodedSuccess and manifest and manifest.Files
+		if typeof(files) ~= "table" then
+			return
+		end
+
+		local queue = {}
+		for _, entry in ipairs(files) do
+			local path = entry and entry.Path
+			if typeof(path) == "string" and path ~= "NULLSCAPE/Main UI/master.luau" then
+				local isLocal = isfile and readfile and isfile(path)
+				if not isLocal then
+					table.insert(queue, path)
+				end
+			end
+		end
+
+		local nextIndex = 1
+		local function worker()
+			while true do
+				if Client.Destroyed then
+					return
+				end
+				local index = nextIndex
+				nextIndex = index + 1
+				local path = queue[index]
+				if not path then
+					return
+				end
+				pcall(fetchRemoteSource, path)
+			end
+		end
+
+		for _ = 1, math.min(REMOTE_PREFETCH_CONCURRENCY, #queue) do
+			task.spawn(worker)
+		end
+	end)
+end
+
 local function loadModule(path)
 	if moduleCache[path] ~= nil then
 		local cached = moduleCache[path]
@@ -989,8 +1088,7 @@ local function loadModule(path)
 				warn("[NULLSCAPE] Local file " .. tostring(path) .. " is empty or invalid, falling back to GitHub!")
 			end
 		end
-		local url = (GITHUB_RAW_ROOT .. path):gsub(" ", "%%20")
-		return Game:HttpGet(url)
+		return fetchRemoteSource(path)
 	end)
 	if not sourceSuccess then
 		moduleLoading[path] = nil
@@ -1030,6 +1128,8 @@ local function loadModule(path)
 	return result
 end
 getgenv().loadModule = loadModule
+
+prefetchRemoteSources()
 
 local updaterLoaded, updaterResult = pcall(function()
 	return loadModule("NULLSCAPE/Main UI/Updater.luau")
