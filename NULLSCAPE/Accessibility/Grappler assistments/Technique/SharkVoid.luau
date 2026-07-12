@@ -7,8 +7,10 @@ local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Co
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
 local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
 local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
+local VoidCastAssist = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Void Cast Assist.luau")
 local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
 local ReleasePolicy = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Policy.luau")
+local SharkTailWindow = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/SharkTail Window.luau")
 
 local DEFAULT_HEIGHT = 45
 local DEFAULT_REEL_HOLD = 0.12
@@ -21,8 +23,6 @@ local Logic = {
 	LastAutoReelAt = 0,
 	LastSharkTailAt = 0,
 	LastVoidAnchorAt = 0,
-	SharkTailWindowGrapple = nil,
-	SharkTailWindowConsumed = false,
 }
 
 local function getNumber(value, fallback, minimum, maximum)
@@ -156,6 +156,13 @@ local function findEmergencyVoidHit(grapple, controller)
 	if not (rootPart and rootPart.Parent and killVoid) then
 		return nil
 	end
+	local effectiveRange = getEffectiveRange(controller)
+	if VoidCastAssist and typeof(VoidCastAssist.findEmergency) == "function" then
+		local success, voidHit = pcall(VoidCastAssist.findEmergency, grapple, effectiveRange)
+		if success and voidHit then
+			return voidHit
+		end
+	end
 
 	local origin = rootPart.Position
 	local localOrigin = killVoid.CFrame:PointToObjectSpace(origin)
@@ -169,7 +176,7 @@ local function findEmergencyVoidHit(grapple, controller)
 	local offset = hitPosition - origin
 	local distance = offset.Magnitude
 
-	if distance <= 3 or distance > getEffectiveRange(controller) then
+	if distance <= 3 or distance > effectiveRange then
 		return nil
 	end
 
@@ -358,6 +365,11 @@ local function autoEnd(grapple, now)
 			ReleaseTiming.cancel(grapple)
 		end
 		recordMomentum(grapple, "SharkVoidAutoEnd")
+		-- Native End(false) opens allowSharkTail synchronously for 0.25 seconds.
+		-- Keep this rescue-owned window alive even if the fall-state check changes.
+		if SharkTailWindow and typeof(SharkTailWindow.arm) == "function" then
+			SharkTailWindow.arm(grapple, "SharkVoid", now)
+		end
 	end
 
 	return success
@@ -365,21 +377,16 @@ end
 
 local function autoSharkTail(grapple, controller, now)
 	if controller.GrappleVoidRescueAutoSharkTail == false then
-		return false
-	end
-
-	if not (grapple and grapple.allowSharkTail == true) then
-		if Logic.SharkTailWindowGrapple == grapple then
-			Logic.SharkTailWindowGrapple = nil
-			Logic.SharkTailWindowConsumed = false
+		if SharkTailWindow and typeof(SharkTailWindow.cancel) == "function" then
+			SharkTailWindow.cancel(grapple, "SharkVoid")
 		end
 		return false
 	end
 
-	if Logic.SharkTailWindowGrapple ~= grapple then
-		Logic.SharkTailWindowGrapple = grapple
-		Logic.SharkTailWindowConsumed = false
-	elseif Logic.SharkTailWindowConsumed == true then
+	if not (SharkTailWindow and typeof(SharkTailWindow.isArmed) == "function") then
+		return false
+	end
+	if not SharkTailWindow.isArmed(grapple, "SharkVoid", now) then
 		return false
 	end
 
@@ -395,18 +402,11 @@ local function autoSharkTail(grapple, controller, now)
 		return false
 	end
 
-	if typeof(grapple.SharkTail) ~= "function" then
-		return false
-	end
-
-	local success = pcall(function()
-		grapple:SharkTail()
-	end)
+	local success = SharkTailWindow.trigger(grapple, "SharkVoid", now)
 
 	if success then
 		recordMomentum(grapple, "SharkVoidAutoSharkTail")
 		Logic.LastSharkTailAt = now
-		Logic.SharkTailWindowConsumed = true
 	end
 
 	return success
@@ -418,17 +418,21 @@ function Logic.step(grapple, _dt, controller, targeting)
 	if not (controller and controller.GrappleVoidRescueEnabled == true) then
 		Logic.PendingEndAt = nil
 		Logic.LastVoidAnchorAt = 0
-		Logic.SharkTailWindowGrapple = nil
-		Logic.SharkTailWindowConsumed = false
+		if SharkTailWindow and typeof(SharkTailWindow.cancel) == "function" then
+			SharkTailWindow.cancel(grapple, "SharkVoid")
+		end
 		if ReleaseTiming and typeof(ReleaseTiming.cancelReason) == "function" then
 			ReleaseTiming.cancelReason(grapple, "SharkVoid")
 		end
 		return false
 	end
 
+	local now = time()
+	local sharkTailTriggered = autoSharkTail(grapple, controller, now)
+
 	if not isDangerousFall(grapple, controller) then
 		Logic.PendingEndAt = nil
-		return false
+		return sharkTailTriggered
 	end
 
 	if not hasRequiredUpgrades(grapple) then
@@ -436,7 +440,6 @@ function Logic.step(grapple, _dt, controller, targeting)
 		return false
 	end
 
-	local now = time()
 	autoCast(grapple, targeting, now)
 	autoEnd(grapple, now)
 	autoSharkTail(grapple, controller, now)
@@ -450,8 +453,9 @@ function Logic.reset()
 	Logic.LastAutoReelAt = 0
 	Logic.LastSharkTailAt = 0
 	Logic.LastVoidAnchorAt = 0
-	Logic.SharkTailWindowGrapple = nil
-	Logic.SharkTailWindowConsumed = false
+	if SharkTailWindow and typeof(SharkTailWindow.reset) == "function" then
+		SharkTailWindow.reset("SharkVoid")
+	end
 	if ReleaseTiming and typeof(ReleaseTiming.cancel) == "function" then
 		ReleaseTiming.cancel()
 	end

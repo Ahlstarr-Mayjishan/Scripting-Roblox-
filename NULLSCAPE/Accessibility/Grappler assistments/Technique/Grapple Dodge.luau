@@ -17,6 +17,7 @@ local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assis
 local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
 local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 local ReleasePolicy = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Policy.luau")
+local SharkTailWindow = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/SharkTail Window.luau")
 
 local Logic = {
 	LastCastAt = -1000,
@@ -24,7 +25,6 @@ local Logic = {
 	LastThreat = nil,
 	ActiveLift = nil,
 	PendingLiftEndAt = nil,
-	PendingSharkTailUntil = nil,
 }
 
 local CAST_COOLDOWN = 0.42
@@ -39,6 +39,9 @@ local DEFAULT_STRENGTH = 1
 local DEFAULT_SHARK_ESCAPE_RANGE = 26
 local DEFAULT_LIFT_REEL_HOLD = 0.12
 local MAX_TERRAIN_CANDIDATES = 80
+local SHARK_ESCAPE_FRONT_DOT = 0.72
+local SHARK_ESCAPE_MIN_CLOSING_SPEED = 7
+local SHARK_ESCAPE_MAX_IMPACT_TIME = 0.55
 
 local function getNumber(value, fallback, minimum, maximum)
 	local numberValue = tonumber(value) or fallback
@@ -149,37 +152,64 @@ local function getSharkEscapeThreat(grapple, controller)
 	end
 
 	local range = getNumber(controller.GrappleSharkEscapeRange, DEFAULT_SHARK_ESCAPE_RANGE, 10, 50)
-	local horizon = getNumber(controller.GrappleDodgeHorizon, DEFAULT_HORIZON, 0.15, 0.9)
+	local horizon =
+		math.min(getNumber(controller.GrappleDodgeHorizon, DEFAULT_HORIZON, 0.15, 0.9), SHARK_ESCAPE_MAX_IMPACT_TIME)
 	local rootPosition = rootPart.Position
-	local rootVelocity = getRootVelocity(rootPart)
+	local rootVelocity = flatten(getRootVelocity(rootPart))
 	local forward = getIntentDirection(grapple)
 	local bestThreat = nil
 	local bestScore = 0
 	local bestAway = nil
 
 	for _, threat in ipairs(EnemyMemory.getNearbyThreats(rootPosition, range)) do
-		local toThreat = threat.Position - rootPosition
-		local flatToThreat = flatten(toThreat)
+		local flatToThreat = flatten(threat.Position - rootPosition)
 		if flatToThreat.Magnitude <= 0.05 then
 			continue
 		end
 
 		local frontDot = forward:Dot(flatToThreat.Unit)
-		if frontDot < 0.35 then
+		if frontDot < SHARK_ESCAPE_FRONT_DOT then
 			continue
 		end
 
-		local futureRoot = rootPosition + rootVelocity * horizon
-		local futureEnemy = threat.Position + (threat.Velocity or Vector3.zero) * horizon
-		local futureOffset = futureRoot - futureEnemy
-		local futureDistance = futureOffset.Magnitude
-		local sizeBonus = math.max(threat.Size.X, threat.Size.Y, threat.Size.Z) * 0.25
-		local score = frontDot * 2 + math.max(0, range + sizeBonus - futureDistance) / math.max(range, 1)
+		local forwardDistance = flatToThreat:Dot(forward)
+		local lateralOffset = (flatToThreat - forward * forwardDistance).Magnitude
+		local enemyRadius = math.max(threat.Size.X, threat.Size.Z) * 0.5
+		local corridorRadius = math.max(4.5, enemyRadius + 3)
+		if lateralOffset > corridorRadius then
+			continue
+		end
+
+		local relativeVelocity = flatten(threat.Velocity or Vector3.zero) - rootVelocity
+		local relativeSpeedSquared = relativeVelocity:Dot(relativeVelocity)
+		if relativeSpeedSquared <= 0.01 then
+			continue
+		end
+
+		local closingSpeed = -flatToThreat.Unit:Dot(relativeVelocity)
+		if closingSpeed < SHARK_ESCAPE_MIN_CLOSING_SPEED then
+			continue
+		end
+
+		local impactTime = math.clamp(-flatToThreat:Dot(relativeVelocity) / relativeSpeedSquared, 0, horizon)
+		if impactTime <= 0 or impactTime > horizon then
+			continue
+		end
+
+		local impactOffset = flatToThreat + relativeVelocity * impactTime
+		local impactRadius = math.max(5.5, enemyRadius + 3.5)
+		if impactOffset.Magnitude > impactRadius then
+			continue
+		end
+
+		local score = frontDot * 3
+			+ math.max(0, impactRadius - impactOffset.Magnitude) / impactRadius * 2
+			+ math.max(0, horizon - impactTime) / horizon
 
 		if score > bestScore then
 			bestThreat = threat
 			bestScore = score
-			bestAway = safeUnit(futureOffset, rootPosition - threat.Position)
+			bestAway = safeUnit(-impactOffset, rootPosition - threat.Position)
 		end
 	end
 
@@ -411,41 +441,32 @@ local function startSharkEscapeReel(grapple, controller, now)
 end
 
 local function trySharkEscapeTail(grapple, now)
-	if not Logic.PendingSharkTailUntil then
+	if not (SharkTailWindow and typeof(SharkTailWindow.isArmed) == "function") then
 		return false
 	end
-
-	if now > Logic.PendingSharkTailUntil then
-		Logic.PendingSharkTailUntil = nil
+	if not SharkTailWindow.isArmed(grapple, "SharkEscape", now) then
 		Logic.ActiveLift = nil
 		return false
 	end
 
-	if
-		grapple
-		and grapple.allowSharkTail == true
-		and grapple.sharkTailDisable ~= true
-		and typeof(grapple.SharkTail) == "function"
-	then
-		local success = pcall(function()
-			grapple:SharkTail()
-		end)
-		if success then
-			Logic.LastSharkTailAt = now
-			Logic.PendingSharkTailUntil = nil
-			Logic.ActiveLift = nil
-			if MomentumMemory and typeof(MomentumMemory.record) == "function" then
-				pcall(MomentumMemory.record, grapple.RootPart, "SharkEscape")
-			end
-			return true
+	local success = SharkTailWindow.trigger(grapple, "SharkEscape", now)
+	if success then
+		Logic.LastSharkTailAt = now
+		Logic.ActiveLift = nil
+		if MomentumMemory and typeof(MomentumMemory.record) == "function" then
+			pcall(MomentumMemory.record, grapple.RootPart, "SharkEscape")
 		end
+		return true
 	end
 
 	return false
 end
 
 local function serviceSharkEscape(grapple, controller, now)
-	if not Logic.ActiveLift and not Logic.PendingSharkTailUntil then
+	local tailArmed = SharkTailWindow
+		and typeof(SharkTailWindow.isArmed) == "function"
+		and SharkTailWindow.isArmed(grapple, "SharkEscape", now)
+	if not Logic.ActiveLift and not tailArmed then
 		return false
 	end
 
@@ -469,24 +490,33 @@ local function serviceSharkEscape(grapple, controller, now)
 			})
 		if success then
 			Logic.PendingLiftEndAt = nil
-			Logic.PendingSharkTailUntil = now + SHARKTAIL_WINDOW
+			if SharkTailWindow and typeof(SharkTailWindow.arm) == "function" then
+				SharkTailWindow.arm(grapple, "SharkEscape", now, SHARKTAIL_WINDOW)
+			end
 			return true
 		end
 	end
 
-	return Logic.ActiveLift ~= nil or Logic.PendingSharkTailUntil ~= nil
+	return Logic.ActiveLift ~= nil
+		or (
+			SharkTailWindow
+			and typeof(SharkTailWindow.isArmed) == "function"
+			and SharkTailWindow.isArmed(grapple, "SharkEscape", now)
+		)
 end
 
-local function cancelSharkEscape()
+local function cancelSharkEscape(grapple)
 	Logic.ActiveLift = nil
 	Logic.PendingLiftEndAt = nil
-	Logic.PendingSharkTailUntil = nil
+	if SharkTailWindow and typeof(SharkTailWindow.cancel) == "function" then
+		SharkTailWindow.cancel(grapple, "SharkEscape")
+	end
 end
 
 function Logic.step(grapple, _dt, controller)
 	local now = time()
 	if not (controller and controller.GrappleSharkEscapeEnabled == true) then
-		cancelSharkEscape()
+		cancelSharkEscape(grapple)
 	end
 	if serviceSharkEscape(grapple, controller, now) then
 		return true
@@ -544,7 +574,9 @@ function Logic.step(grapple, _dt, controller)
 				Hit = hit,
 			}
 			Logic.PendingLiftEndAt = nil
-			Logic.PendingSharkTailUntil = nil
+			if SharkTailWindow and typeof(SharkTailWindow.cancel) == "function" then
+				SharkTailWindow.cancel(grapple, "SharkEscape")
+			end
 		end
 	end
 
@@ -557,7 +589,9 @@ function Logic.reset()
 	Logic.LastThreat = nil
 	Logic.ActiveLift = nil
 	Logic.PendingLiftEndAt = nil
-	Logic.PendingSharkTailUntil = nil
+	if SharkTailWindow and typeof(SharkTailWindow.reset) == "function" then
+		SharkTailWindow.reset("SharkEscape")
+	end
 end
 
 return Logic

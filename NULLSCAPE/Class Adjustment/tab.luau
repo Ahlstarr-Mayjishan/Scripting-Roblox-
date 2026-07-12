@@ -197,7 +197,7 @@ return function(Client, Controller)
 	})
 	Tab:CreateToggle({
 		Name = "Easier Void Cast",
-		Info = "Widens only close KillVoid casts. Normal misses still return nil.",
+		Info = "Widens KillVoid acquisition up to 120 studs and shares the same void target with SharkVoid.",
 		CurrentValue = Controller.GrappleEasierVoidCast or false,
 		Flag = "GrappleEasierVoidCastToggle",
 		Callback = function(Value)

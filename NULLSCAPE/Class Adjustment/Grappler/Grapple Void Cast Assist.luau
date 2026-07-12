@@ -8,9 +8,8 @@ local Workspace = game:GetService("Workspace")
 
 local VoidCastAssist = {}
 
-local ASSIST_EASE_STUDS = 32
-local MIN_DOWNWARD_DOT = -0.02
-local MAX_VOID_CAST_DISTANCE = 48
+local ASSIST_EASE_STUDS = 64
+local MAX_VOID_CAST_DISTANCE = 120
 
 local function getControl()
 	return getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
@@ -25,11 +24,15 @@ local function getEase()
 end
 
 local function getKillVoid()
-	local killVoid = Workspace:FindFirstChild("KillVoid")
+	local killVoid = Workspace:FindFirstChild("KillVoid", true)
 	if killVoid and killVoid:IsA("BasePart") then
 		return killVoid
 	end
 	return nil
+end
+
+function VoidCastAssist.isEnabled()
+	return getEase() > 0
 end
 
 local function clamp(value, minValue, maxValue)
@@ -58,10 +61,6 @@ function VoidCastAssist.find(grapple, direction, maxRange)
 	end
 
 	direction = direction.Unit
-	if direction.Y > MIN_DOWNWARD_DOT then
-		return nil
-	end
-
 	local killVoid = getKillVoid()
 	if not killVoid then
 		return nil
@@ -90,6 +89,37 @@ function VoidCastAssist.find(grapple, direction, maxRange)
 
 	local snappedLocal = Vector3.new(clamp(localHit.X, -halfX, halfX), topY, clamp(localHit.Z, -halfZ, halfZ))
 	local snappedWorld = killVoid.CFrame:PointToWorldSpace(snappedLocal)
+	return makeHit(killVoid, snappedWorld, origin)
+end
+
+-- Used by emergency systems after the player is already falling toward KillVoid.
+-- It deliberately does not require a camera ray to strike the non-collidable void part.
+function VoidCastAssist.findEmergency(grapple, maxRange)
+	if getEase() <= 0 then
+		return nil
+	end
+
+	local rootPart = grapple and grapple.RootPart
+	local killVoid = getKillVoid()
+	if not (rootPart and rootPart.Parent and killVoid) then
+		return nil
+	end
+
+	local origin = rootPart.Position
+	local localOrigin = killVoid.CFrame:PointToObjectSpace(origin)
+	local halfSize = killVoid.Size * 0.5
+	local snappedLocal = Vector3.new(
+		clamp(localOrigin.X, -halfSize.X, halfSize.X),
+		halfSize.Y,
+		clamp(localOrigin.Z, -halfSize.Z, halfSize.Z)
+	)
+	local snappedWorld = killVoid.CFrame:PointToWorldSpace(snappedLocal)
+	local distance = (snappedWorld - origin).Magnitude
+	local distanceLimit = math.min(tonumber(maxRange) or 90, MAX_VOID_CAST_DISTANCE)
+	if distance <= 3 or distance > distanceLimit then
+		return nil
+	end
+
 	return makeHit(killVoid, snappedWorld, origin)
 end
 
