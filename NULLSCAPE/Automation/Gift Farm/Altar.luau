@@ -113,10 +113,6 @@ local function hookState(root, tagged)
 		bind(tagged:GetAttributeChangedSignal("AltarUsed"))
 	end
 	bind(root.AncestryChanged)
-	bind(CollectionService:GetInstanceAddedSignal("Voting"))
-	bind(CollectionService:GetInstanceRemovedSignal("Voting"))
-	bind(CollectionService:GetInstanceAddedSignal("Host"))
-	bind(CollectionService:GetInstanceRemovedSignal("Host"))
 	local solo = ReplicatedStorage:FindFirstChild("Solo")
 	if solo and solo:IsA("BoolValue") then
 		bind(solo.Changed)
@@ -228,7 +224,7 @@ local function buildSelectionPriority(controller)
 		return selected, priority
 	end
 
-	for index, altarName in ipairs(selections) do
+	for _, altarName in ipairs(selections) do
 		if typeof(altarName) == "string" and altarName ~= "" then
 			selected[altarName] = true
 			if not table.find(orderedSelections, altarName) then
@@ -403,6 +399,17 @@ function Altar.tryStep(controller, hrp, lease, _currentSessionToken)
 		return false
 	end
 
+	if currentTarget and currentTarget.Root then
+		local confirmedState = refreshState(currentTarget.Root, currentTarget.Tagged)
+		if confirmedState and confirmedState.Used == true then
+			local confirmedTarget = currentTarget
+			activatedThisRound[confirmedTarget.Root] = true
+			currentTarget = nil
+			currentTargetStartedAt = 0
+			return true, "AltarActivated", confirmedTarget.Name .. " | Confirmed", true
+		end
+	end
+
 	local target = findBestTarget(controller, hrp)
 	if not target then
 		return false
@@ -441,12 +448,9 @@ function Altar.tryStep(controller, hrp, lease, _currentSessionToken)
 		if not triggerPrompt(target.Prompt) then
 			touch(target.Hitbox, hrp)
 		end
-		activatedThisRound[target.Root] = true
-		currentTarget = nil
-		currentTargetStartedAt = 0
 	end
 
-	return true, "ActivatingAltar", getStateDetail(target, state)
+	return true, "ActivatingAltar", getStateDetail(target, state), false
 end
 
 function Altar.reset()

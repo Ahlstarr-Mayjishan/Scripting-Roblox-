@@ -180,7 +180,13 @@ local function run(controller)
 			savedCFrame = savedCFrame or hrp.CFrame
 			controller.PylonActivatorHolding = true
 
-			while enabled and controller and not controller.Destroyed and isInRound() and getLevel() >= TARGET_LEVEL do
+			while enabled
+				and controller
+				and not controller.Destroyed
+				and isInRound()
+				and getLevel() >= TARGET_LEVEL
+				and controller.GiftFarmGoldenComplete == true
+			do
 				if isCompleted(target.Model) then
 					break
 				end

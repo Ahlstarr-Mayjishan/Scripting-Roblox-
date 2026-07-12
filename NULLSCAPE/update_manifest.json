@@ -1,5 +1,5 @@
-﻿{
-    "Version":  "2026.07.12.31",
+{
+    "Version":  "2026.07.13.1",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "8a21ba8e00f89763734fc7b036846429ae0a881af6dd581dbece0f92f9a35999"
+                      "Sha256":  "7471fc88c8036964876aa8925abdfc5980b2b81e1a678d61b6da19986d648bee"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/MovementLease.luau",
@@ -74,7 +74,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "143c1d72e5ac126d7f294ddafe72af57815cabc6b5a44447720c503a8b161b55"
+                      "Sha256":  "c2502f8811acd71c6aeaa7691df229cc3055cbf8471f084ec0127046855752de"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Beacon.luau",
@@ -91,7 +91,7 @@
                                    "Gift Farm",
                                    "Pipelining"
                                ],
-                      "Sha256":  "36528d1bffe12bccd3bfcec995df22452a18b99f240250e74106c2bac1d37234"
+                      "Sha256":  "2dc017ffc45e896b8d024d26368ecb6b24ef27457eb7fcc2e48e28435de15d38"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/controller.luau",
@@ -685,7 +685,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "c3f8234151b5f69cbb380706c64173ff80733120ca71ef43d6f3da2afad0aed2"
+                      "Sha256":  "9e104b43adb29f25142cf672a6e32e6ffc0cf7b683ddc4bef10e4f3989318c27"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/tab.luau",
@@ -699,7 +699,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "e194c5a7764ac5e1b8779015630f7d996649f3041dfd5aa4234cfc966482db6c"
+                      "Sha256":  "736d32826db7cf32255809bdbfc15ff2787a6c470b6f5c4e4719286ec26ad4b5"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Cluster Planner.luau",

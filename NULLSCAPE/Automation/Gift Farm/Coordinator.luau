@@ -55,8 +55,6 @@ local characterReadyAt = 0
 local lastGiftSeenAt = 0
 local pendingGoldenReturnSince = nil
 local retryQueue = {}
-local lastGiftCount = nil
-local lastGiftCountChangedAt = 0
 local giftsStabilized = false
 local startWaitAt = nil
 local currentStatus = "Idle"
@@ -107,7 +105,6 @@ local function recoverAfterStop(controller, detail)
 	pendingGoldenReturnSince = nil
 	giftsStabilized = false
 	startWaitAt = nil
-	lastGiftCount = nil
 	lastGiftSeenAt = 0
 	if controller then
 		controller.GiftFarmGoldenComplete = false
@@ -530,7 +527,6 @@ local function observeInRound(controller, gc)
 		sessionToken += 1
 		MovementLease.invalidateActive()
 		pendingGoldenReturnSince = nil
-		lastGiftCount = nil
 		giftsStabilized = false
 		startWaitAt = nil
 		lastGiftSeenAt = 0
@@ -711,8 +707,8 @@ local function runLoop(controller)
 				local elapsed = os.clock() - startWaitAt
 
 				if giftCount == 0 then
-					if elapsed < 6 then
-						transitionTo(controller, "Scanning", string.format("Waiting for gifts to spawn (%.1fs/6.0s)...", elapsed))
+					if elapsed < 1 then
+						transitionTo(controller, "Scanning", string.format("Waiting for gifts to spawn (%.1fs/1.0s)...", elapsed))
 						task.wait(0.2)
 						continue
 					else
@@ -721,18 +717,6 @@ local function runLoop(controller)
 						startWaitAt = nil
 					end
 				else
-					if not lastGiftCount or lastGiftCount ~= giftCount then
-						lastGiftCount = giftCount
-						lastGiftCountChangedAt = os.clock()
-					end
-
-					local stableDuration = os.clock() - lastGiftCountChangedAt
-					if stableDuration < 3 then
-						transitionTo(controller, "Scanning", string.format("Waiting for gifts to stabilize (%.1fs/3.0s)", stableDuration))
-						task.wait(0.15)
-						continue
-					end
-
 					giftsStabilized = true
 					lastGiftSeenAt = os.clock()
 					startWaitAt = nil
@@ -769,6 +753,8 @@ local function runLoop(controller)
 
 			local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
 			if rawGolden > 0 then
+				controller.GiftFarmGoldenComplete = false
+				pendingGoldenReturnSince = nil
 				if Beacon and typeof(Beacon.suppressUntilReturn) == "function" then
 					Beacon.suppressUntilReturn()
 				end
@@ -789,11 +775,16 @@ local function runLoop(controller)
 			if not passageGoldenPriority and Altar and typeof(Altar.tryStep) == "function" then
 				local lease = MovementLease.acquire("AltarStep")
 				transitionTo(controller, "Collecting", "Attempting Altar activation")
-				local handledAltar, altarStatus, altarDetail = Altar.tryStep(controller, hrp, lease, mySessionToken)
+				local handledAltar, altarStatus, altarDetail, altarConfirmed = Altar.tryStep(controller, hrp, lease, mySessionToken)
 				lease:release()
 				if not isSessionActive() then continue end
 				if handledAltar then
-					if typeof(altarDetail) == "string"
+					if typeof(altarDetail) == "string" and string.find(altarDetail, "Passage", 1, true) then
+						controller.GiftFarmGoldenComplete = false
+						pendingGoldenReturnSince = nil
+					end
+					if altarConfirmed == true
+						and typeof(altarDetail) == "string"
 						and string.find(altarDetail, "Passage", 1, true)
 						and GoldenWait
 						and typeof(GoldenWait.startPassageWindow) == "function"

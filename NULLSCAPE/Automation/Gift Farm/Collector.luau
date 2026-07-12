@@ -9,8 +9,6 @@ local Stats = game:GetService("Stats")
 local Collector = {}
 local COLLECT_SETTLE = 0
 local PRECISION_COLLECT_SETTLE = 0.05
-local SYNC_MIN = 0.02
-local SYNC_MAX = 0.055
 local PRECISION_SYNC_MIN = 0.025
 local PRECISION_SYNC_MAX = 0.08
 local BASE_VALIDATION_WAIT = 0.06
@@ -142,17 +140,11 @@ local function getPingSeconds()
 	return ok and normalizePingSeconds(result) or nil
 end
 
-local function waitForReplicationSync(precisionMode, distance)
+local function waitForReplicationSync(precisionMode)
 	local ping = getPingSeconds() or 0.08
 	local targetWait = ping * 0.6 + 0.012
-	if typeof(distance) == "number" and distance > 50 then
-		targetWait += math.min(0.12, (distance - 50) * 0.0004)
-	end
 	local minWait = precisionMode and PRECISION_SYNC_MIN or 0.025
 	local maxWait = math.max(precisionMode and PRECISION_SYNC_MAX or 0.065, ping * 0.8)
-	if typeof(distance) == "number" and distance > 50 then
-		maxWait += 0.12
-	end
 	local waitTime = math.clamp(targetWait, minWait, maxWait)
 
 	local frames = precisionMode and 2 or 1
@@ -399,7 +391,6 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			Context.waitForStreamedGround(standingPosition, streamTimeout)
 		end
 
-		local startPos = hrp.Position
 		hrp.Anchored = false
 		lease:placeFoothold(standingPosition)
 		if not jumpToWaypoint(hrp, standingPosition, lease) then
@@ -418,8 +409,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
-		local teleportDistance = (startPos - standingPosition).Magnitude
-		waitForReplicationSync(precisionMode, teleportDistance)
+		waitForReplicationSync(precisionMode)
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end

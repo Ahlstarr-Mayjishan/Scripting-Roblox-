@@ -72,9 +72,9 @@ local function getPingSeconds()
 	return ok and normalizePingSeconds(result) or nil
 end
 
-local function getOneWayLatency()
+local function getAcceptanceLatency()
 	local ping = getPingSeconds() or 0.08
-	return math.clamp(ping * 0.5, 0.03, 0.12)
+	return math.clamp(ping * 1.05, 0.04, 0.18)
 end
 
 local function waitForArrival(hrp, targetPosition, lease, shouldAbort)
@@ -175,8 +175,11 @@ local function waitForCollectAcceptance(hrp, shouldAbort, attempted, clusterSize
 		return true
 	end
 
-	local tailMultiplier = clusterSize <= TAIL_CLUSTER_SIZE and TAIL_HOLD_MULTIPLIER or 1
-	local waitTime = getOneWayLatency() * acceptanceMultiplier * tailMultiplier
+	if clusterSize > TAIL_CLUSTER_SIZE then
+		return true
+	end
+
+	local waitTime = getAcceptanceLatency() * acceptanceMultiplier * TAIL_HOLD_MULTIPLIER
 	local start = os.clock()
 	while os.clock() - start < waitTime do
 		if typeof(shouldAbort) == "function" and shouldAbort() then
