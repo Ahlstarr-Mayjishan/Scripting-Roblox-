@@ -118,11 +118,12 @@ local nextRailId = 0
 
 local RailMemory = {
 	Index = SpatialIndex.new(BUCKET_SIZE),
-	ScanCursor = 1,
 	LastRefreshAt = -1000,
-	ScanList = {},
-	ScanListBuiltAt = -1000,
+	LastPruneAt = -1000,
+	ObservedRoots = {},
 }
+
+local OBSERVER_PRUNE_INTERVAL = 2
 
 local function isAlive(instance)
 	return instance and instance.Parent ~= nil and instance:IsDescendantOf(Workspace)
@@ -185,6 +186,11 @@ local function rememberRail(part)
 end
 
 local function pruneDead()
+	local now = time()
+	if now - RailMemory.LastPruneAt < OBSERVER_PRUNE_INTERVAL then
+		return
+	end
+	RailMemory.LastPruneAt = now
 	for id, entry in pairs(RailMemory.Index.Entries) do
 		if not isAlive(entry.Part) then
 			SpatialIndex.remove(RailMemory.Index, id)
@@ -192,31 +198,77 @@ local function pruneDead()
 	end
 end
 
-local function refreshScanList(now)
-	if now - RailMemory.ScanListBuiltAt < 4 and #RailMemory.ScanList > 0 then
-		return RailMemory.ScanList
+local function removeRail(part)
+	local id = railIds[part]
+	if id then
+		SpatialIndex.remove(RailMemory.Index, id)
+	end
+end
+
+local function disconnectRoot(root)
+	local observer = RailMemory.ObservedRoots[root]
+	if not observer then
+		return
 	end
 
-	table.clear(RailMemory.ScanList)
-	for _, root in ipairs(getRailRoots()) do
-		if isRailPart(root) then
-			table.insert(RailMemory.ScanList, root)
-		end
+	for _, connection in ipairs(observer.Connections) do
+		pcall(function()
+			connection:Disconnect()
+		end)
+	end
+	RailMemory.ObservedRoots[root] = nil
+end
 
-		for _, descendant in ipairs(root:GetDescendants()) do
-			table.insert(RailMemory.ScanList, descendant)
+local function observeRoot(root)
+	if not (root and not RailMemory.ObservedRoots[root]) then
+		return
+	end
+
+	local observer = {
+		Connections = {},
+	}
+	RailMemory.ObservedRoots[root] = observer
+
+	local function consider(instance)
+		if isRailPart(instance) then
+			rememberRail(instance)
 		end
 	end
-	RailMemory.ScanListBuiltAt = now
-	RailMemory.ScanCursor = 1
-	return RailMemory.ScanList
+
+	consider(root)
+	for _, descendant in ipairs(root:GetDescendants()) do
+		consider(descendant)
+	end
+
+	table.insert(observer.Connections, root.DescendantAdded:Connect(consider))
+	table.insert(observer.Connections, root.DescendantRemoving:Connect(removeRail))
+	table.insert(
+		observer.Connections,
+		root.AncestryChanged:Connect(function(_, parent)
+			if not parent then
+				disconnectRoot(root)
+			end
+		end)
+	)
+end
+
+local function observeRoots(roots)
+	for root in pairs(RailMemory.ObservedRoots) do
+		if not root.Parent then
+			disconnectRoot(root)
+		end
+	end
+
+	for _, root in ipairs(roots) do
+		observeRoot(root)
+	end
 end
 
 function RailMemory.isRailPart(part)
 	return isRailPart(part)
 end
 
-function RailMemory.refreshBudgeted(scanBudget)
+function RailMemory.refreshBudgeted(_scanBudget)
 	local now = time()
 	if now - RailMemory.LastRefreshAt < RESCAN_COOLDOWN then
 		return
@@ -224,30 +276,7 @@ function RailMemory.refreshBudgeted(scanBudget)
 	RailMemory.LastRefreshAt = now
 	pruneDead()
 
-	local descendants = refreshScanList(now)
-	if #descendants == 0 then
-		RailMemory.ScanCursor = 1
-		return
-	end
-
-	local runtimeBudget = PerformanceBudget and typeof(PerformanceBudget.get) == "function" and PerformanceBudget.get()
-		or nil
-	local budget = math.clamp(
-		tonumber(scanBudget) or tonumber(runtimeBudget and runtimeBudget.AnchorScanBudget) or DEFAULT_SCAN_BUDGET,
-		50,
-		1800
-	)
-	for _ = 1, math.min(budget, #descendants) do
-		if RailMemory.ScanCursor > #descendants then
-			RailMemory.ScanCursor = 1
-		end
-
-		local descendant = descendants[RailMemory.ScanCursor]
-		RailMemory.ScanCursor += 1
-		if isRailPart(descendant) then
-			rememberRail(descendant)
-		end
-	end
+	observeRoots(getRailRoots())
 end
 
 function RailMemory.getNearbyRails(origin, radius)
@@ -270,11 +299,12 @@ function RailMemory.getNearbyRails(origin, radius)
 end
 
 function RailMemory.clear()
+	for root in pairs(RailMemory.ObservedRoots) do
+		disconnectRoot(root)
+	end
 	SpatialIndex.clear(RailMemory.Index)
-	RailMemory.ScanCursor = 1
 	RailMemory.LastRefreshAt = -1000
-	table.clear(RailMemory.ScanList)
-	RailMemory.ScanListBuiltAt = -1000
+	RailMemory.LastPruneAt = -1000
 end
 
 return RailMemory

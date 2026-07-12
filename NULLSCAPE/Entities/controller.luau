@@ -11,7 +11,6 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
-local activeCallbacks = {}
 
 local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
 local SpecialImmunity = getgenv().loadModule("NULLSCAPE/Entities/SpecialImmunity.luau")
@@ -60,6 +59,8 @@ local Executor = {
 }
 local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
 local RemoteBlocking = getgenv().loadModule("NULLSCAPE/Entities/RemoteBlocking.luau")
+local CelestialImmunity = getgenv().loadModule("NULLSCAPE/Entities/Celestial Immunity.luau")
+local VoidImplosionImmunity = getgenv().loadModule("NULLSCAPE/Entities/Void Implosion Immunity.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 local BackTrick = getgenv().loadModule("NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau")
 local KolonaAutoQTE = nil
@@ -127,6 +128,7 @@ local Controller = {
 	PondererSilentLookat = false,
 	VoidImplosionImmune = false,
 	CelestialImmune = false,
+	RealityBreakImmune = false,
 	ScrapmawImmune = false,
 	CatalystImmune = false,
 	nilEnemyImmune = false,
@@ -274,12 +276,6 @@ local restoreShockwave
 local isAnySpecialImmunityEnabled
 local startCadenceAutoCollectLoop
 
-local function getCharacterRoot()
-	local localPlayer = Players.LocalPlayer
-	local character = localPlayer and localPlayer.Character
-	return character and character:FindFirstChild("HumanoidRootPart") or nil
-end
-
 local function restoreCharacterTouchStates()
 	for part, state in pairs(originalTouchStates) do
 		if part and part.Parent then
@@ -289,33 +285,6 @@ local function restoreCharacterTouchStates()
 		end
 		originalTouchStates[part] = nil
 	end
-end
-
-local function getBeaconPart()
-	local beacon = workspace:FindFirstChild("Beacon")
-	if not beacon then
-		return nil
-	end
-
-	if beacon:IsA("BasePart") then
-		return beacon
-	end
-
-	if beacon:IsA("Model") then
-		return beacon.PrimaryPart or beacon:FindFirstChildWhichIsA("BasePart", true)
-	end
-
-	return beacon:FindFirstChildWhichIsA("BasePart", true)
-end
-
-local function isNearBeacon(rootPart)
-	local beaconPart = getBeaconPart()
-	if not (rootPart and beaconPart) then
-		return false
-	end
-
-	local flatDistance = ((rootPart.Position - beaconPart.Position) * Vector3.new(1, 0, 1)).Magnitude
-	return flatDistance <= 32
 end
 
 -- Ngáº¯t cÃ¡c káº¿t ná»‘i quan sÃ¡t thÆ° má»¥c vÃ  workspace
@@ -367,31 +336,10 @@ local function restoreHooks()
 	end
 	globals.handleEntitiesRemoteCall = nil
 
-	if globals.OriginalRingBell and typeof(_G.RingBell) == "function" then
-		_G.RingBell = globals.OriginalRingBell
-		globals.OriginalRingBell = nil
-	end
-
 	-- Restore StatusEffect connection hook
 	-- WARNING: DO NOT call hookfunction on OnClientEvent.Connect prototype.
 	if globals.StatusEffectHooked then
-		globals.StatusEffectHooked = nil
 		globals.StatusEffectLoopToken = nil
-		globals.OriginalOnClientEventConnect = nil
-
-		-- Restore StatusEffectHandler.HasStatus (safe Lua table assignment)
-		if globals.OriginalHasStatus then
-			local ReplicatedFirst = game:GetService("ReplicatedFirst")
-			local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
-			local handlerModule = clientModules and clientModules:FindFirstChild("StatusEffectHandler")
-			if handlerModule and handlerModule:IsA("ModuleScript") then
-				local success, StatusEffectHandler = pcall(require, handlerModule)
-				if success and typeof(StatusEffectHandler) == "table" then
-					StatusEffectHandler.HasStatus = globals.OriginalHasStatus
-				end
-			end
-			globals.OriginalHasStatus = nil
-		end
 	end
 
 	-- Restore SettingsHandler hooks
@@ -493,8 +441,21 @@ function Controller:SetFleshScreenEffectImmune(value)
 	self.FleshScreenEffectImmune = value == true
 end
 
+local function updateSourceEventImmunity(controller)
+	CelestialImmunity.disable()
+	if controller.inLobby ~= true and (controller.CelestialImmune == true or controller.RealityBreakImmune == true) then
+		CelestialImmunity.enable()
+	end
+end
+
 function Controller:ReconcileImmunityState()
 	Executor.reconcile(GC)
+	updateSourceEventImmunity(self)
+	if self.VoidImplosionImmune == true and self.inLobby ~= true then
+		VoidImplosionImmunity.enable()
+	else
+		VoidImplosionImmunity.disable()
+	end
 
 	if not self.BellImmune and not self.SpringerImmune then
 		restoreCharacterTouchStates()
@@ -548,15 +509,7 @@ function Controller:UpdateTelefraggerConnection()
 	end
 
 	-- Helper: Kiá»ƒm tra vá»‹ trÃ­ sÃ n an toÃ n Ä‘á»ƒ trÃ¡nh nÃ© xuá»‘ng vá»±c
-	local function isFloorSafe(pos)
-		local raycastParams = RaycastParams.new()
-		raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-		raycastParams.FilterDescendantsInstances = { LocalPlayer.Character }
-		local rayResult = workspace:Raycast(pos + Vector3.new(0, 2, 0), Vector3.new(0, -15, 0), raycastParams)
-		return rayResult ~= nil
-	end
-
-	self.TelefraggerConnection = RunService.Heartbeat:Connect(function(dt)
+	self.TelefraggerConnection = RunService.Heartbeat:Connect(function()
 		local char = LocalPlayer.Character
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
 		local rootPart = char and char:FindFirstChild("HumanoidRootPart")
@@ -679,7 +632,7 @@ end
 -- HÃ m dá»n dáº¹p tÃ i nguyÃªn (Garbage Collection - GC) giáº£i phÃ³ng bá»™ nhá»›
 function Controller:CleanUp()
 	-- Há»§y táº¥t cáº£ cÃ¡c luá»“ng chá» vÃ  dá»n dáº¹p danh sÃ¡ch active
-	for enemy, thread in pairs(self.TelefraggerActiveThreads) do
+	for _, thread in pairs(self.TelefraggerActiveThreads) do
 		pcall(task.cancel, thread)
 	end
 	table.clear(self.TelefraggerActiveThreads)
@@ -701,6 +654,12 @@ function Controller:CleanUp()
 	disconnectFolderObservations()
 	pcall(function()
 		Executor.disableSpecialImmunity()
+	end)
+	pcall(function()
+		CelestialImmunity.disable()
+	end)
+	pcall(function()
+		VoidImplosionImmunity.disable()
 	end)
 	pcall(function()
 		local kolona = KolonaAutoQTE
@@ -775,7 +734,6 @@ local SPECIAL_IMMUNITY_FLAGS = {
 	Slicer = "SlicerImmune",
 	Voidbreaker = "VoidbreakerImmune",
 	Razorbloom = "RazorbloomImmune",
-	VoidImplosion = "VoidImplosionImmune",
 }
 
 local function isSpecialImmunityEntity(entityName)
@@ -890,11 +848,24 @@ function Controller:SetImmunity(entityName, value)
 	elseif entityName == "Ponderer" then
 		self.PondererImmune = value
 	elseif entityName == "Celestial" then
-		self.CelestialImmune = value
+		self.CelestialImmune = value == true
+		updateSourceEventImmunity(self)
+	elseif entityName == "RealityBreak" then
+		self.RealityBreakImmune = value == true
+		updateSourceEventImmunity(self)
+	elseif entityName == "VoidImplosion" then
+		self.VoidImplosionImmune = value == true
+		if self.VoidImplosionImmune and self.inLobby ~= true then
+			VoidImplosionImmunity.enable()
+		else
+			VoidImplosionImmunity.disable()
+		end
 	elseif entityName == "Scrapmaw" then
 		self.ScrapmawImmune = value
 	elseif entityName == "Catalyst" then
 		self.CatalystImmune = value
+	elseif entityName == "Seamine" then
+		self.SeamineImmune = value == true
 	elseif entityName == "nilEnemy" then
 		self.nilEnemyImmune = value
 	elseif entityName == "nilMirage" then
@@ -1055,32 +1026,6 @@ function Controller:SetSpringerKnockbackImmune(enabled)
 	Executor.reconcile(GC)
 end
 
-local function getNearestBellPosition(controller, rootPart)
-	if not (controller and controller.EnemiesFolder and rootPart) then
-		return nil
-	end
-
-	local nearestPosition = nil
-	local nearestDistance = math.huge
-	for _, enemy in ipairs(controller.EnemiesFolder:GetChildren()) do
-		if string.find(enemy.Name, "Bell") then
-			local bellPart = enemy:IsA("BasePart") and enemy or enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart", true)
-			if bellPart then
-				local distance = (rootPart.Position - bellPart.Position).Magnitude
-				if distance < nearestDistance then
-					nearestDistance = distance
-					nearestPosition = bellPart.Position
-				end
-			end
-		end
-	end
-
-	if nearestDistance <= 60 then
-		return nearestPosition
-	end
-	return nil
-end
-
 local function stopBellGongKnockbackGuard(controller)
 	if controller.BellGongKnockbackConnection then
 		pcall(function()
@@ -1236,7 +1181,8 @@ local function processEntity(enemy)
 							for _, desc in ipairs(child:GetDescendants()) do
 								formatSquare(desc)
 							end
-							child.DescendantAdded:Connect(formatSquare)
+							local descendantConn = child.DescendantAdded:Connect(formatSquare)
+							GC.registerEntityConnection(enemy, descendantConn)
 						end)
 					end
 
@@ -1274,9 +1220,11 @@ local function processEntity(enemy)
 
 							updateVisibility()
 							local posConn = rootPart:GetPropertyChangedSignal("Position"):Connect(updateVisibility)
-							child.Destroying:Connect(function()
+							local destroyingConn = child.Destroying:Connect(function()
 								posConn:Disconnect()
 							end)
+							GC.registerEntityConnection(enemy, posConn)
+							GC.registerEntityConnection(enemy, destroyingConn)
 						end
 					end)
 				end
@@ -1501,7 +1449,7 @@ local function processEntity(enemy)
 			task.spawn(function()
 				local clientEvent = enemy:WaitForChild("ClientEvent", 5)
 				if clientEvent and clientEvent:IsA("RemoteEvent") then
-					local telefraggerConn = clientEvent.OnClientEvent:Connect(function(actionName, p2)
+					local telefraggerConn = clientEvent.OnClientEvent:Connect(function(actionName)
 						if actionName == "SetTeleport" then
 							Controller:TriggerSilentBackTrick(enemy)
 						elseif actionName == "Indicator" then
@@ -1752,6 +1700,10 @@ local function setInLobby(val)
 		Controller:CleanUp()
 	else
 		startObservingFolders()
+		updateSourceEventImmunity(Controller)
+		if Controller.VoidImplosionImmune == true then
+			VoidImplosionImmunity.enable()
+		end
 		if Controller.CadenceAutoCollectInstruments == true then
 			startCadenceAutoCollectLoop()
 		end
@@ -1866,7 +1818,11 @@ end
 -- Hook hiá»‡u á»©ng mÃ¹ khi ai Ä‘Ã³ gÃµ ChuÃ´ng (Bell Blindness / Screen flash black/white)
 local function initializeBellBlindnessHook()
 	local globals = getgenv()._NULLSCAPE_Globals
-	globals.BellHookedFunctions = globals.BellHookedFunctions or {}
+	if globals.BellBlindnessHookInstalled or globals.BellBlindnessHookPending or globals.OriginalRingBell then
+		return
+	end
+	globals.BellBlindnessHookPending = true
+	globals.BellHookedFunctions = globals.BellHookedFunctions or setmetatable({}, { __mode = "k" })
 
 	local function shouldBlockRingBell()
 		local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
@@ -1884,25 +1840,42 @@ local function initializeBellBlindnessHook()
 
 	-- Hook _G.RingBell Ä‘á»ƒ trÃ¡nh nháº¥p nhÃ¡y/mÃ¹ cá»¥c bá»™ khi ta tá»± gÃµ hoáº·c cháº¡m chuÃ´ng
 	task.spawn(function()
-		while not _G.RingBell do
-			task.wait(0.5)
-		end
-		local originalRingBell = _G.RingBell
+		local originalRingBell
+		local deadline = time() + 30
+		repeat
+			originalRingBell = _G.RingBell
+			if typeof(originalRingBell) == "function" then
+				break
+			end
+			task.wait(0.25)
+		until time() >= deadline
+
 		if typeof(originalRingBell) ~= "function" then
+			globals.BellBlindnessHookPending = nil
 			return
 		end
-		if not globals.OriginalRingBell then
-			globals.OriginalRingBell = originalRingBell
-		end
+
+		globals.OriginalRingBell = originalRingBell
 		_G.RingBell = makeRingBellWrapper(globals.OriginalRingBell)
 	end)
 
 	-- Hook OnClientEvent cá»§a Bell Ä‘á»ƒ trÃ¡nh mÃ¹ khi ngÆ°á»i chÆ¡i khÃ¡c gÃµ chuÃ´ng trong phÃ²ng
 	task.spawn(function()
+		while globals.BellBlindnessHookPending and not globals.OriginalRingBell do
+			task.wait(0.25)
+		end
+		if not globals.OriginalRingBell then
+			return
+		end
+
 		local events = ReplicatedStorage:WaitForChild("Events", 15)
 		local bellEvent = events and events:WaitForChild("Bell", 15)
-		if bellEvent and bellEvent:IsA("RemoteEvent") then
-			if typeof(getconnections) == "function" and typeof(hookfunction) == "function" then
+		if not (bellEvent and bellEvent:IsA("RemoteEvent")) then
+			globals.BellBlindnessHookPending = nil
+			return
+		end
+
+		if typeof(getconnections) == "function" and typeof(hookfunction) == "function" then
 				local function hookBellConnections()
 					for _, connection in ipairs(getconnections(bellEvent.OnClientEvent)) do
 						local originalFunction = connection.Function
@@ -1935,8 +1908,9 @@ local function initializeBellBlindnessHook()
 					end
 					return oldConnect(self, callback)
 				end)
-			end
 		end
+		globals.BellBlindnessHookInstalled = true
+		globals.BellBlindnessHookPending = nil
 	end)
 end
 
@@ -1970,10 +1944,6 @@ local function initializeICBMHook()
 
 
 		-- Cháº¡y logic cháº·n RemoteEvent thá»‘ng nháº¥t tá»« RemoteBlocking.luau
-		if self.Name == "Died" and args[1] == "VoidImplosion" and activeCtrl.VoidImplosionImmune == true then
-			return shouldBlockWithShieldPolicy(activeCtrl, false)
-		end
-
 		if activeCtrl.GuardianImmune == true and self.Name == "Died" and args[1] == "Guardian" then
 			return shouldBlockWithShieldPolicy(activeCtrl)
 		end

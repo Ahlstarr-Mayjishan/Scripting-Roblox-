@@ -7,14 +7,12 @@
 local Workspace = game:GetService("Workspace")
 
 local MomentumMemory = {
-	Samples = {},
-	Impulses = {},
+	Samples = setmetatable({}, { __mode = "k" }),
+	Impulses = setmetatable({}, { __mode = "k" }),
 }
 
 local SAMPLE_TTL = 1.25
 local IMPULSE_TTL = 1.5
-local partIds = setmetatable({}, { __mode = "k" })
-local nextPartId = 0
 
 local function now()
 	return time()
@@ -22,22 +20,6 @@ end
 
 local function isAlive(instance)
 	return instance and instance.Parent ~= nil and instance:IsDescendantOf(Workspace)
-end
-
-local function getPartId(part)
-	if not part then
-		return nil
-	end
-
-	local existing = partIds[part]
-	if existing then
-		return existing
-	end
-
-	nextPartId += 1
-	local id = "part:" .. tostring(nextPartId)
-	partIds[part] = id
-	return id
 end
 
 local function flatten(vector)
@@ -48,8 +30,8 @@ local function getVelocity(rootPart)
 	return rootPart.AssemblyLinearVelocity or rootPart.Velocity
 end
 
-local function pruneStale(id, currentTime)
-	local samples = MomentumMemory.Samples[id]
+local function pruneStale(rootPart, currentTime)
+	local samples = MomentumMemory.Samples[rootPart]
 	if samples then
 		for i = #samples, 1, -1 do
 			if currentTime - samples[i].At > SAMPLE_TTL then
@@ -57,11 +39,11 @@ local function pruneStale(id, currentTime)
 			end
 		end
 		if #samples == 0 then
-			MomentumMemory.Samples[id] = nil
+			MomentumMemory.Samples[rootPart] = nil
 		end
 	end
 
-	local impulses = MomentumMemory.Impulses[id]
+	local impulses = MomentumMemory.Impulses[rootPart]
 	if impulses then
 		for i = #impulses, 1, -1 do
 			if currentTime - impulses[i].At > IMPULSE_TTL then
@@ -69,7 +51,7 @@ local function pruneStale(id, currentTime)
 			end
 		end
 		if #impulses == 0 then
-			MomentumMemory.Impulses[id] = nil
+			MomentumMemory.Impulses[rootPart] = nil
 		end
 	end
 end
@@ -80,10 +62,9 @@ function MomentumMemory.record(rootPart, source)
 	end
 
 	local currentTime = now()
-	local id = getPartId(rootPart)
 	local velocity = getVelocity(rootPart)
-	local samples = MomentumMemory.Samples[id] or {}
-	MomentumMemory.Samples[id] = samples
+	local samples = MomentumMemory.Samples[rootPart] or {}
+	MomentumMemory.Samples[rootPart] = samples
 
 	table.insert(samples, {
 		At = currentTime,
@@ -93,7 +74,7 @@ function MomentumMemory.record(rootPart, source)
 		VerticalSpeed = math.abs(velocity.Y),
 	})
 
-	pruneStale(id, currentTime)
+	pruneStale(rootPart, currentTime)
 	return samples[#samples]
 end
 
@@ -106,9 +87,8 @@ function MomentumMemory.noteImpulse(rootPart, source, beforeVelocity, afterVeloc
 	end
 
 	local currentTime = now()
-	local id = getPartId(rootPart)
-	local impulses = MomentumMemory.Impulses[id] or {}
-	MomentumMemory.Impulses[id] = impulses
+	local impulses = MomentumMemory.Impulses[rootPart] or {}
+	MomentumMemory.Impulses[rootPart] = impulses
 
 	local delta = typeof(appliedDelta) == "Vector3" and appliedDelta or afterVelocity - beforeVelocity
 	local impulse = {
@@ -123,7 +103,7 @@ function MomentumMemory.noteImpulse(rootPart, source, beforeVelocity, afterVeloc
 	}
 
 	table.insert(impulses, impulse)
-	pruneStale(id, currentTime)
+	pruneStale(rootPart, currentTime)
 	return impulse
 end
 
@@ -133,11 +113,10 @@ function MomentumMemory.getState(rootPart, impulseWindow)
 	end
 
 	local currentTime = now()
-	local id = getPartId(rootPart)
-	pruneStale(id, currentTime)
+	pruneStale(rootPart, currentTime)
 
 	local velocity = getVelocity(rootPart)
-	local samples = MomentumMemory.Samples[id] or {}
+	local samples = MomentumMemory.Samples[rootPart] or {}
 	local previous = samples[#samples]
 	local acceleration = Vector3.zero
 	if previous and previous.At and currentTime > previous.At then
@@ -148,7 +127,7 @@ function MomentumMemory.getState(rootPart, impulseWindow)
 	local recentVerticalImpulse = 0
 	local recentSources = {}
 	local window = tonumber(impulseWindow) or 0.35
-	for _, impulse in ipairs(MomentumMemory.Impulses[id] or {}) do
+	for _, impulse in ipairs(MomentumMemory.Impulses[rootPart] or {}) do
 		if currentTime - impulse.At <= window then
 			recentHorizontalImpulse += impulse.HorizontalDelta or 0
 			recentVerticalImpulse += impulse.VerticalDelta or 0
@@ -168,7 +147,13 @@ function MomentumMemory.getState(rootPart, impulseWindow)
 	}
 end
 
-function MomentumMemory.clear()
+function MomentumMemory.clear(rootPart)
+	if rootPart then
+		MomentumMemory.Samples[rootPart] = nil
+		MomentumMemory.Impulses[rootPart] = nil
+		return
+	end
+
 	table.clear(MomentumMemory.Samples)
 	table.clear(MomentumMemory.Impulses)
 end

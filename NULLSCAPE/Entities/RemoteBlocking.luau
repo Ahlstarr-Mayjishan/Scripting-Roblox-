@@ -107,30 +107,6 @@ Logic.Config = {
 		Keywords = { "Fail" },
 		LegitKeywords = { "Fail" },
 	},
-	["VoidImplosion"] = {
-		ControllerFlag = "VoidImplosionImmune",
-		Remotes = { "Died" },
-		Keywords = { "VoidImplosion" },
-		LegitKeywords = { "VoidImplosion" },
-	},
-	["Celestial"] = {
-		ControllerFlag = "CelestialImmune",
-		Remotes = { "ClientEvent", "Died" },
-		Keywords = { "Kill", "Celestial" },
-		LegitKeywords = { "Kill", "Celestial" },
-	},
-	["RealityBreak"] = {
-		ControllerFlag = "CelestialImmune",
-		Remotes = { "ClientEvent" },
-		Keywords = { "Kill" },
-		LegitKeywords = { "Kill" },
-	},
-	["RealityBreaker"] = {
-		ControllerFlag = "CelestialImmune",
-		Remotes = { "ClientEvent" },
-		Keywords = { "Kill" },
-		LegitKeywords = { "Kill" },
-	},
 	["Scrapmaw"] = {
 		ControllerFlag = "ScrapmawImmune",
 		Remotes = { "Died" },
@@ -170,17 +146,14 @@ end
 local CELESTIAL_CLIENT_BLOCKLIST = {
 	kill = true,
 	deathbeam = true,
-	celestial = true,
-	realitybreak = true,
-	["reality break"] = true,
-	realitybreaker = true,
 }
 
 local CELESTIAL_DIED_REASONS = {
 	celestial = true,
-	realitybreak = true,
-	["reality break"] = true,
-	realitybreaker = true,
+}
+
+local REALITY_BREAK_CLIENT_BLOCKLIST = {
+	kill = true,
 }
 
 local function hasAncestorName(instance, targetSubName)
@@ -231,7 +204,13 @@ local function isCelestialKillReport(remote, args)
 		return false
 	end
 
-	return hasAncestorName(remote, "Celestial") or hasAncestorName(remote, "Reality")
+	return hasAncestorName(remote, "Celestial")
+end
+
+local function isRealityBreakKillReport(remote, args)
+	return remote.Name == "ClientEvent"
+		and REALITY_BREAK_CLIENT_BLOCKLIST[string.lower(tostring(args and args[1] or ""))] == true
+		and hasAncestorName(remote, "RealityBreak")
 end
 
 local function localPlayerHasStatus(statusName)
@@ -535,6 +514,10 @@ local function isKolonaKillReport(remote, args)
 	return firstArg == "kolona"
 end
 
+local function isVoidImplosionDeathReport(remote, args)
+	return remote.Name == "Died" and args[1] == "VoidImplosion"
+end
+
 local function findEntityParent(obj, targetSubName)
 	local current = obj.Parent
 	local depth = 0
@@ -592,6 +575,10 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 		return Logic.shouldBlockWithShieldPolicy(controller)
 	end
 
+	if controller.RealityBreakImmune == true and isRealityBreakKillReport(remote, args) then
+		return Logic.shouldBlockWithShieldPolicy(controller)
+	end
+
 	if isICBMClientReport(remote, args) then
 		local firstArg = string.lower(args[1])
 		if firstArg == "kill" then
@@ -604,6 +591,10 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 
 	if controller.KolonaImmune == true and isKolonaKillReport(remote, args) then
 		return Logic.shouldBlockWithShieldPolicy(controller)
+	end
+
+	if controller.VoidImplosionImmune == true and isVoidImplosionDeathReport(remote, args) then
+		return Logic.shouldBlockWithShieldPolicy(controller, false)
 	end
 
 	if controller.inLobby then
@@ -641,26 +632,6 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 	end
 
 	-- Chặn riêng biệt hiệu ứng cháy (Burn curse) của ICBM nếu tùy chọn được bật
-	if
-		remote:IsA("RemoteEvent")
-		and remote.Name == "ClientEvent"
-		and typeof(args[1]) == "string"
-		and string.lower(args[1]) == "combust"
-	then
-		local parent = remote.Parent
-		if parent then
-			local parentName = string.lower(parent.Name)
-			if
-				string.find(parentName, "icbm", 1, true)
-				or string.find(parentName, "nuclear", 1, true)
-				or parent:FindFirstChild("ICBM_ClientAI")
-				or parent:FindFirstChild("ICBM_AI")
-			then
-				return controller.ICBMBurnImmune == true and Logic.shouldBlockWithShieldPolicy(controller)
-			end
-		end
-	end
-
 	-- Operator is entirely client-driven and reports its kill through the BroSecureMethod RemoteEvent or DiedFunc.
 	if controller.OperatorImmune == true then
 		if
@@ -671,23 +642,8 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 		end
 	end
 
-	if controller.KolonaImmune == true and isKolonaKillReport(remote, args) then
-		return Logic.shouldBlockWithShieldPolicy(controller)
-	end
-
 	if remote.ClassName ~= "RemoteEvent" and remote.ClassName ~= "RemoteFunction" then
 		return false
-	end
-
-	remoteName = remote.Name
-	if controller.CelestialImmune == true then
-		if isCelestialKillReport(remote, args) then
-			return Logic.shouldBlockWithShieldPolicy(controller)
-		end
-	end
-
-	if remoteName == "Died" and args[1] == "VoidImplosion" and controller.VoidImplosionImmune == true then
-		return Logic.shouldBlockWithShieldPolicy(controller, "TripShield")
 	end
 
 	if not Logic.TargetRemotes[remoteName] then

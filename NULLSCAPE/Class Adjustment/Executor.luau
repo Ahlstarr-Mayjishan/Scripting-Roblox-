@@ -22,6 +22,7 @@ local GrappleRange = nil
 local HookCastSpeed = nil
 local ChargerTripmineAssist = nil
 local CatapultBoost = nil
+local MomentumTransfer = nil
 local SharkTailWindowState = setmetatable({}, { __mode = "k" })
 local SharkTailEndTokens = setmetatable({}, { __mode = "k" })
 
@@ -35,6 +36,7 @@ local MODULE_PATHS = {
 	HookCastSpeed = "NULLSCAPE/Class Adjustment/Grappler/Grapple Hook Cast Speed.luau",
 	ChargerTripmineAssist = "NULLSCAPE/Class Adjustment/Charger/Tripmine Assist.luau",
 	CatapultBoost = "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",
+	MomentumTransfer = "NULLSCAPE/Class Adjustment/Grappler/Grapple Momentum Transfer.luau",
 }
 
 local function getGlobals()
@@ -102,6 +104,7 @@ local function loadAdjustmentModules()
 	HookCastSpeed = HookCastSpeed or getgenv().loadModule(MODULE_PATHS.HookCastSpeed)
 	ChargerTripmineAssist = ChargerTripmineAssist or getgenv().loadModule(MODULE_PATHS.ChargerTripmineAssist)
 	CatapultBoost = CatapultBoost or getgenv().loadModule(MODULE_PATHS.CatapultBoost)
+	MomentumTransfer = MomentumTransfer or getgenv().loadModule(MODULE_PATHS.MomentumTransfer)
 end
 
 local function clearStaleHooks(grappleModule, globals)
@@ -401,12 +404,21 @@ function Executor.enable()
 				self.reelStart = time() - 2.0
 			end
 
+			local wasRopeEnabled = self and self.rope and self.rope.Enabled
+
 			getgenv()._NULLSCAPE_InGrappleStep = true
 			local stepResults = packValues(pcall(originalStep, self, dt, ...))
 			getgenv()._NULLSCAPE_InGrappleStep = false
 
 			if originalReelStart then
 				self.reelStart = originalReelStart
+			end
+
+			local isRopeEnabled = self and self.rope and self.rope.Enabled
+			if not wasRopeEnabled and isRopeEnabled then
+				if MomentumTransfer and typeof(MomentumTransfer.apply) == "function" then
+					pcall(MomentumTransfer.apply, self)
+				end
 			end
 
 			if altered and self and self.grappleParams then
@@ -459,6 +471,12 @@ function Executor.enable()
 		wrappedEnd = function(self, wasCancelled, ...)
 			local yBefore = self and self.RootPart and self.RootPart.Velocity.Y
 			local yVelBelowMinBefore = self and self.yVelBelowMin
+
+			local releaseSpeed = self and self.RootPart and self.RootPart.Velocity.Magnitude
+			if releaseSpeed then
+				globals.GrappleLastReleaseSpeed = releaseSpeed
+				globals.GrappleLastReleaseAt = time()
+			end
 
 			local results = packValues(pcall(originalEnd, self, wasCancelled, ...))
 			if not results[1] then

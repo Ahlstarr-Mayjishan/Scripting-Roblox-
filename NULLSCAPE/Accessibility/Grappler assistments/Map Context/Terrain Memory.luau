@@ -114,15 +114,15 @@ sharedGlobals.MapContextSpatialIndex = SpatialIndex
 
 local BUCKET_SIZE = 128
 local DEFAULT_QUERY_RADIUS = 96
-local RESCAN_COOLDOWN = 3
 local partIds = setmetatable({}, { __mode = "k" })
 local nextPartId = 0
+local OBSERVER_PRUNE_INTERVAL = 2
 
 local TerrainMemory = {
 	Index = SpatialIndex.new(BUCKET_SIZE),
 	Scanned = false,
-	LastScanAt = -1000,
-	LastRootSignature = "",
+	ObservedRoots = {},
+	LastPruneAt = -1000,
 	SurfaceCount = 0,
 }
 
@@ -168,22 +168,6 @@ local function getMapRoots()
 	return roots
 end
 
-local function makeRootSignature(roots)
-	local chunks = {}
-	for _, root in ipairs(roots) do
-		local count = 0
-		local success, descendants = pcall(function()
-			return root:GetDescendants()
-		end)
-		if success then
-			count = #descendants
-		end
-		table.insert(chunks, root:GetFullName() .. "#" .. tostring(count))
-	end
-
-	return table.concat(chunks, "|")
-end
-
 local function getPartId(part)
 	if not part then
 		return nil
@@ -204,6 +188,8 @@ local function rememberPart(part)
 	if not isQueryable(part) then
 		return
 	end
+	local id = getPartId(part)
+	local wasKnown = TerrainMemory.Index.Entries[id] ~= nil
 
 	local entry = {
 		Part = part,
@@ -214,16 +200,102 @@ local function rememberPart(part)
 		LastSeen = time(),
 	}
 
-	SpatialIndex.insert(TerrainMemory.Index, getPartId(part), entry, part.Position)
-	TerrainMemory.SurfaceCount += 1
+	SpatialIndex.insert(TerrainMemory.Index, id, entry, part.Position)
+	if not wasKnown then
+		TerrainMemory.SurfaceCount += 1
+	end
+end
+
+local function removePart(part)
+	local id = partIds[part]
+	if id and TerrainMemory.Index.Entries[id] then
+		SpatialIndex.remove(TerrainMemory.Index, id)
+		TerrainMemory.SurfaceCount = math.max(0, TerrainMemory.SurfaceCount - 1)
+	end
 end
 
 local function pruneDead()
+	local now = time()
+	if now - TerrainMemory.LastPruneAt < OBSERVER_PRUNE_INTERVAL then
+		return
+	end
+	TerrainMemory.LastPruneAt = now
 	for id, entry in pairs(TerrainMemory.Index.Entries) do
 		if not isAlive(entry.Part) then
 			SpatialIndex.remove(TerrainMemory.Index, id)
+			TerrainMemory.SurfaceCount = math.max(0, TerrainMemory.SurfaceCount - 1)
 		end
 	end
+end
+
+local function disconnectRoot(root)
+	local observer = TerrainMemory.ObservedRoots[root]
+	if not observer then
+		return
+	end
+
+	for _, connection in ipairs(observer.Connections) do
+		pcall(function()
+			connection:Disconnect()
+		end)
+	end
+	TerrainMemory.ObservedRoots[root] = nil
+end
+
+local function rootsChanged(roots)
+	local count = 0
+	for root in pairs(TerrainMemory.ObservedRoots) do
+		if not root.Parent then
+			return true
+		end
+		count += 1
+	end
+	if count ~= #roots then
+		return true
+	end
+	for _, root in ipairs(roots) do
+		if not TerrainMemory.ObservedRoots[root] then
+			return true
+		end
+	end
+	return false
+end
+
+local function observeRoot(root)
+	local observer = {
+		Connections = {},
+	}
+	TerrainMemory.ObservedRoots[root] = observer
+
+	local function consider(instance)
+		if isQueryable(instance) then
+			rememberPart(instance)
+		end
+	end
+
+	consider(root)
+	for _, descendant in ipairs(root:GetDescendants()) do
+		consider(descendant)
+	end
+
+	table.insert(observer.Connections, root.DescendantAdded:Connect(consider))
+	table.insert(observer.Connections, root.DescendantRemoving:Connect(removePart))
+	table.insert(
+		observer.Connections,
+		root.AncestryChanged:Connect(function(_, parent)
+			if not parent then
+				disconnectRoot(root)
+			end
+		end)
+	)
+end
+
+local function resetObservedRoots()
+	for root in pairs(TerrainMemory.ObservedRoots) do
+		disconnectRoot(root)
+	end
+	SpatialIndex.clear(TerrainMemory.Index)
+	TerrainMemory.SurfaceCount = 0
 end
 
 function TerrainMemory.getMapRoots()
@@ -245,50 +317,21 @@ function TerrainMemory.getVoidInfo()
 end
 
 function TerrainMemory.ensureScanned(force)
-	local now = time()
-	local runtimeBudget = PerformanceBudget and typeof(PerformanceBudget.get) == "function" and PerformanceBudget.get()
-		or nil
-	local cooldown =
-		math.max(RESCAN_COOLDOWN, tonumber(runtimeBudget and runtimeBudget.CandidateCacheTTL) or RESCAN_COOLDOWN)
-
-	if not force and TerrainMemory.Scanned and now - TerrainMemory.LastScanAt < cooldown then
-		pruneDead()
-		return true
-	end
-
 	local roots = getMapRoots()
-	local signature = makeRootSignature(roots)
-
-	if not force and TerrainMemory.Scanned and signature == TerrainMemory.LastRootSignature then
-		TerrainMemory.LastScanAt = now
-		pruneDead()
-		return true
+	if force or not TerrainMemory.Scanned or rootsChanged(roots) then
+		resetObservedRoots()
+		for _, root in ipairs(roots) do
+			observeRoot(root)
+		end
+		TerrainMemory.Scanned = true
 	end
 
-	SpatialIndex.clear(TerrainMemory.Index)
-	TerrainMemory.SurfaceCount = 0
-
-	for _, root in ipairs(roots) do
-		if isQueryable(root) then
-			rememberPart(root)
-		end
-
-		for _, descendant in ipairs(root:GetDescendants()) do
-			if isQueryable(descendant) then
-				rememberPart(descendant)
-			end
-		end
-	end
-
-	TerrainMemory.Scanned = true
-	TerrainMemory.LastScanAt = now
-	TerrainMemory.LastRootSignature = signature
+	pruneDead()
 	return true
 end
 
 function TerrainMemory.getNearbySurfaces(position, radius)
 	TerrainMemory.ensureScanned(false)
-	pruneDead()
 	return SpatialIndex.query(TerrainMemory.Index, position, tonumber(radius) or DEFAULT_QUERY_RADIUS)
 end
 
@@ -298,11 +341,9 @@ function TerrainMemory.getClosestSurface(position, radius)
 end
 
 function TerrainMemory.clear()
-	SpatialIndex.clear(TerrainMemory.Index)
+	resetObservedRoots()
 	TerrainMemory.Scanned = false
-	TerrainMemory.LastScanAt = -1000
-	TerrainMemory.LastRootSignature = ""
-	TerrainMemory.SurfaceCount = 0
+	TerrainMemory.LastPruneAt = -1000
 end
 
 return TerrainMemory

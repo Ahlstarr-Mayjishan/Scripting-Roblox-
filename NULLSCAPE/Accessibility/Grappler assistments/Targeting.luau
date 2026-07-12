@@ -26,6 +26,9 @@ local AdaptiveStyle = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler ass
 local AnchorBias = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Anchor Bias Profile.luau")
 local DecisionGateway = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Decision Gateway.luau")
 local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
+local AimLock = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Aim Target Lock.luau")
+local NativeContext = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Native Context Sync.luau")
+local PlayerIntent = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Player Intent State.luau")
 
 local Targeting = {}
 
@@ -40,6 +43,7 @@ local HIT_OVERSHOOT = 2
 local CandidateCache = {
 	UpdatedAt = -1000,
 	Origin = nil,
+	Revision = -1,
 	Candidates = {},
 }
 
@@ -321,9 +325,13 @@ end
 local function refreshCandidateCache(origin, maxRange, budget)
 	local now = time()
 	local cacheTTL = tonumber(budget and budget.CandidateCacheTTL) or 3
+	local runtime = NativeContext and typeof(NativeContext.getSnapshot) == "function" and NativeContext.getSnapshot()
+		or nil
+	local revision = tonumber(runtime and runtime.Revision) or -1
 	if
 		now - CandidateCache.UpdatedAt < cacheTTL
 		and CandidateCache.Origin
+		and CandidateCache.Revision == revision
 		and (CandidateCache.Origin - origin).Magnitude <= 64
 	then
 		return CandidateCache.Candidates
@@ -370,6 +378,7 @@ local function refreshCandidateCache(origin, maxRange, budget)
 
 	CandidateCache.UpdatedAt = now
 	CandidateCache.Origin = origin
+	CandidateCache.Revision = revision
 	CandidateCache.Candidates = candidates
 	return candidates
 end
@@ -484,6 +493,19 @@ end
 local function getIntent(grapple, controller, aimDirection, context)
 	context = context or {}
 	context.AimDirection = context.AimDirection or aimDirection
+	local playerState = PlayerIntent
+		and typeof(PlayerIntent.observe) == "function"
+		and PlayerIntent.observe(grapple, aimDirection)
+
+	local function enrich(intent)
+		intent = intent or {}
+		if playerState then
+			intent.PlayerState = playerState.Mode
+			intent.PlayerIntentConfidence = playerState.Confidence
+			intent.PlayerCommitment = playerState.IsUserCommitting == true
+		end
+		return intent
+	end
 
 	if IntentResolver and typeof(IntentResolver.resolve) == "function" then
 		local success, intent = pcall(function()
@@ -493,7 +515,7 @@ local function getIntent(grapple, controller, aimDirection, context)
 			if PilotState and typeof(PilotState.resolve) == "function" then
 				intent.PilotMode = PilotState.resolve(grapple, intent, context)
 			end
-			return intent
+			return enrich(intent)
 		end
 	end
 
@@ -506,7 +528,7 @@ local function getIntent(grapple, controller, aimDirection, context)
 		fallbackIntent.PilotMode = PilotState.resolve(grapple, fallbackIntent, context)
 	end
 
-	return fallbackIntent
+	return enrich(fallbackIntent)
 end
 
 local function isManualIntent(intent)
@@ -560,6 +582,25 @@ function Targeting.findOptimalHit(grapple, controller, context)
 	local bestHit = nil
 	local bestScore = -math.huge
 	local secondScore = -math.huge
+	local lockedHit = AimLock and typeof(AimLock.resolve) == "function" and AimLock.resolve(grapple, aimDirection)
+	if lockedHit and canUseOptimalHit(lockedHit, lockedHit.Instance) then
+		local lockedPart = lockedHit.Instance
+		local lockedOffset = lockedHit.Position - origin
+		local lockedDirection = lockedOffset.Magnitude > 0.001 and lockedOffset.Unit or nil
+		local lockedSpecial = getSpecialTargetName(lockedPart)
+		local acceptedByIntent = not IntentTargetGate
+			or IntentTargetGate.accept(grapple, lockedHit, lockedPart, origin, lockedDirection, intent, lockedSpecial)
+		if
+			lockedDirection
+			and acceptedByIntent
+			and not isVoidProtectedHit(grapple, lockedHit, lockedPart, origin, effectiveController)
+		then
+			local safe = applySafety(grapple, lockedHit, lockedPart, effectiveController, intent, context)
+			if safe then
+				return lockedHit
+			end
+		end
+	end
 
 	for _, part in ipairs(getOptimalCandidates(origin, maxRange, budget)) do
 		local targetPoint = getSurfaceTargetPoint(part, origin)
@@ -601,6 +642,9 @@ function Targeting.findOptimalHit(grapple, controller, context)
 	if ConfidenceGate and not ConfidenceGate.accept(bestHit, bestScore, secondScore, controller, intent) then
 		return nil
 	end
+	if bestHit and AimLock and typeof(AimLock.remember) == "function" then
+		AimLock.remember(grapple, bestHit)
+	end
 
 	return bestHit
 end
@@ -619,6 +663,9 @@ local function validateFallbackHit(grapple, hit, controller, aimDirection)
 		ManualCast = true,
 		AssistiveManual = true,
 	})
+	if safe and AimLock and typeof(AimLock.remember) == "function" then
+		AimLock.remember(grapple, hit)
+	end
 	return safe and hit or nil, aimDirection, safe ~= true
 end
 
@@ -674,6 +721,13 @@ end
 
 function Targeting.findBestAssistHit(grapple, controller, context)
 	return Targeting.findOptimalHit(grapple, controller, context)
+end
+
+function Targeting.resetCache()
+	CandidateCache.UpdatedAt = -1000
+	CandidateCache.Origin = nil
+	CandidateCache.Revision = -1
+	table.clear(CandidateCache.Candidates)
 end
 
 return Targeting

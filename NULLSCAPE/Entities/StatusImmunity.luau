@@ -6,22 +6,29 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
+local getgenv = getgenv
 
 local StatusImmunity = {
 	ActiveImmunities = {},
-	ActiveCallbacks = {},
+	ActiveCallbacks = setmetatable({}, { __mode = "k" }),
 	Hooked = false,
 }
 
 getgenv()._NULLSCAPE_Globals = getgenv()._NULLSCAPE_Globals or {}
-local globals = getgenv()._NULLSCAPE_Globals
-if globals then
-	globals.NullscapeStatusImmunity = StatusImmunity
+local runtimeGlobals = getgenv()._NULLSCAPE_Globals
+if runtimeGlobals then
+	runtimeGlobals.NullscapeStatusImmunity = StatusImmunity
 end
 
 local function getController()
-	local globals = getgenv()._NULLSCAPE_Globals
-	return globals and globals.activeEntitiesController
+	local sharedState = getgenv()._NULLSCAPE_Globals
+	return sharedState and sharedState.activeEntitiesController
+end
+
+local function rememberCallback(callback)
+	if typeof(callback) == "function" then
+		StatusImmunity.ActiveCallbacks[callback] = true
+	end
 end
 
 function StatusImmunity.isImmune(statusName)
@@ -51,7 +58,7 @@ end
 function StatusImmunity.RefreshActiveEffects()
 	for _, debuffName in ipairs({ "Flesh", "Panic", "Concussion", "Fire", "Insanity", "Overtuned" }) do
 		if StatusImmunity.isImmune(debuffName) then
-			for _, callback in ipairs(StatusImmunity.ActiveCallbacks) do
+			for callback in pairs(StatusImmunity.ActiveCallbacks) do
 				pcall(callback, debuffName, false)
 			end
 		end
@@ -64,10 +71,7 @@ function StatusImmunity.RefreshActiveEffects()
 end
 
 function StatusImmunity.SetActiveImmunities(options)
-	local previous = {}
-	for k, v in pairs(StatusImmunity.ActiveImmunities) do
-		previous[k] = v
-	end
+	local previous = table.clone(StatusImmunity.ActiveImmunities)
 
 	table.clear(StatusImmunity.ActiveImmunities)
 	for _, opt in ipairs(options) do
@@ -84,7 +88,7 @@ function StatusImmunity.SetActiveImmunities(options)
 	-- Immediately remove active debuffs if newly immune
 	for _, debuffName in ipairs({ "Flesh", "Panic", "Concussion", "Fire", "Insanity", "Overtuned" }) do
 		if StatusImmunity.ActiveImmunities[debuffName] and not previous[debuffName] then
-			for _, callback in ipairs(StatusImmunity.ActiveCallbacks) do
+			for callback in pairs(StatusImmunity.ActiveCallbacks) do
 				pcall(callback, debuffName, false)
 			end
 		end
@@ -103,11 +107,11 @@ function StatusImmunity.SetActiveImmunities(options)
 end
 
 function StatusImmunity.initialize()
-	local globals = getgenv()._NULLSCAPE_Globals or {}
-	getgenv()._NULLSCAPE_Globals = globals
-	globals.NullscapeStatusImmunity = StatusImmunity
+	local sharedState = getgenv()._NULLSCAPE_Globals or {}
+	getgenv()._NULLSCAPE_Globals = sharedState
+	sharedState.NullscapeStatusImmunity = StatusImmunity
 
-	if globals.StatusEffectHooked or StatusImmunity.Hooked then
+	if sharedState.StatusEffectHooked or StatusImmunity.Hooked then
 		return
 	end
 
@@ -124,9 +128,7 @@ function StatusImmunity.initialize()
 					end)
 
 					if isTarget then
-						if not table.find(StatusImmunity.ActiveCallbacks, callback) then
-							table.insert(StatusImmunity.ActiveCallbacks, callback)
-						end
+						rememberCallback(callback)
 						local newCallback = function(statusName, isActive, ...)
 							if StatusImmunity.isImmune(statusName) then
 								return
@@ -137,7 +139,7 @@ function StatusImmunity.initialize()
 					end
 					return oldConnect(self, callback)
 				end)
-				globals.OriginalOnClientEventConnect = oldConnect
+				sharedState.OriginalOnClientEventConnect = oldConnect
 			end
 		end)
 
@@ -147,9 +149,7 @@ function StatusImmunity.initialize()
 				for _, connection in ipairs(getconnections(StatusEffectChanged.OnClientEvent)) do
 					local originalFunction = connection.Function
 					if typeof(originalFunction) == "function" then
-						if not table.find(StatusImmunity.ActiveCallbacks, originalFunction) then
-							table.insert(StatusImmunity.ActiveCallbacks, originalFunction)
-						end
+						rememberCallback(originalFunction)
 						local oldFunc
 						oldFunc = hookfunction(originalFunction, function(statusName, isActive, ...)
 							if StatusImmunity.isImmune(statusName) then
@@ -177,10 +177,10 @@ function StatusImmunity.initialize()
 						end
 						return oldHasStatus(statusName, ...)
 					end)
-					globals.OriginalHasStatus = oldHasStatus
+					sharedState.OriginalHasStatus = oldHasStatus
 				else
 					local oldHasStatus = StatusEffectHandler.HasStatus
-					globals.OriginalHasStatus = oldHasStatus
+					sharedState.OriginalHasStatus = oldHasStatus
 					StatusEffectHandler.HasStatus = function(statusName, ...)
 						if StatusImmunity.isImmune(statusName) then
 							return false
@@ -192,7 +192,7 @@ function StatusImmunity.initialize()
 		end
 	end)
 
-	globals.StatusEffectHooked = true
+	sharedState.StatusEffectHooked = true
 	StatusImmunity.Hooked = true
 end
 
@@ -206,7 +206,7 @@ function StatusImmunity.removeAllStatuses()
 		end
 	end
 	for _, debuffName in ipairs({ "Flesh", "Panic", "Concussion", "Fire", "Insanity", "Overtuned" }) do
-		for _, callback in ipairs(StatusImmunity.ActiveCallbacks) do
+		for callback in pairs(StatusImmunity.ActiveCallbacks) do
 			pcall(callback, debuffName, false)
 		end
 	end

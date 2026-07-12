@@ -136,28 +136,6 @@ local function createControllerProxy(Client, Controller)
 	})
 end
 
-local function getSelectedGrapplerTechniques(Controller)
-	local selected = {}
-
-	if Controller.GrappleVoidRescueEnabled == true then
-		table.insert(selected, "SharkVoid")
-	end
-
-	if Controller.GrappleReelSaverEnabled == true then
-		table.insert(selected, "Reel Saver")
-	end
-
-	if Controller.GrappleDodgeTechniqueEnabled == true then
-		table.insert(selected, "Grapple Dodge")
-	end
-
-	if Controller.GrappleSharkEscapeEnabled == true then
-		table.insert(selected, "SharkEscape")
-	end
-
-	return selected
-end
-
 return function(Client, Controller)
 	Controller = createControllerProxy(Client, Controller)
 	local Tab = Client.Window:CreateTab("Accessibility", 4483362458)
@@ -329,6 +307,7 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateSection("Grappler Assistments")
+	Tab:CreateDivider()
 
 	Tab:CreateToggle({
 		Name = "Grapple Assist",
@@ -394,7 +373,7 @@ return function(Client, Controller)
 
 	Tab:CreateToggle({
 		Name = "Assist Confidence Gate",
-		Info = "Prevents assisted snapping when the best target is too weak or too close to the runner-up.",
+		Info = "Keeps uncertain fallback casts from firing. Recommended to leave enabled.",
 		CurrentValue = Controller.GrappleAssistConfidenceGateEnabled ~= false,
 		Flag = "GrappleAssistConfidenceGateToggle",
 		Callback = function(Value)
@@ -402,31 +381,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateSlider({
-		Name = "Assist Min Score",
-		Info = "Minimum target score required before Grapple Assist can snap to a fallback target.",
-		Range = { -100, 80 },
-		Increment = 5,
-		Suffix = " score",
-		CurrentValue = Controller.GrappleAssistMinConfidenceScore or -35,
-		Flag = "GrappleAssistMinConfidenceScoreSlider",
-		Callback = function(Value)
-			Controller:SetGrappleAssistMinConfidenceScore(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Assist Margin",
-		Info = "Required score gap between the best and second-best fallback target.",
-		Range = { 0, 50 },
-		Increment = 1,
-		Suffix = " score",
-		CurrentValue = Controller.GrappleAssistConfidenceMargin or 5,
-		Flag = "GrappleAssistConfidenceMarginSlider",
-		Callback = function(Value)
-			Controller:SetGrappleAssistConfidenceMargin(Value)
-		end,
-	})
+	Tab:CreateDivider()
 
 	Tab:CreateToggle({
 		Name = "Biome Tuning",
@@ -455,19 +410,6 @@ return function(Client, Controller)
 		Flag = "GrappleAssistSafetyToggle",
 		Callback = function(Value)
 			Controller:SetGrappleAssistSafety(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Safety Reject Penalty",
-		Info = "How much accumulated danger is required before an assisted target is rejected.",
-		Range = { 20, 140 },
-		Increment = 2,
-		Suffix = " penalty",
-		CurrentValue = Controller.GrappleAssistSafetyRejectPenalty or 74,
-		Flag = "GrappleAssistSafetyRejectPenaltySlider",
-		Callback = function(Value)
-			Controller:SetGrappleAssistSafetyRejectPenalty(Value)
 		end,
 	})
 
@@ -525,6 +467,8 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateDivider()
+
 	Tab:CreateToggle({
 		Name = "Void Protection",
 		Info = "Prevents Grapple Assist from selecting ordinary anchors that would pull you into KillVoid during dangerous falls.",
@@ -561,15 +505,73 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateDropdown({
-		Name = "Grappler Techniques",
-		Info = "Choose which grappler techniques are enabled. SharkVoid, Grapple Dodge, and SharkEscape run automatically; Reel Saver runs from its keybind.",
-		Options = { "SharkVoid", "Grapple Dodge", "SharkEscape", "Reel Saver" },
-		CurrentOption = getSelectedGrapplerTechniques(Controller),
-		MultipleOptions = true,
-		Flag = "GrappleTechniqueDropdown",
-		Callback = function(Options)
-			Controller:SetGrapplerTechniqueSelection(Options)
+	Tab:CreateDivider()
+
+	Tab:CreateToggle({
+		Name = "SharkVoid",
+		Info = "Automatically casts a void anchor only during a confirmed dangerous fall.",
+		CurrentValue = Controller.GrappleVoidRescueEnabled == true,
+		Flag = "GrappleVoidRescueToggle",
+		Callback = function(Value)
+			Controller:SetGrappleVoidRescue(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "SharkVoid Auto Reel",
+		Info = "Reels briefly after SharkVoid attaches, preparing the rescue release.",
+		CurrentValue = Controller.GrappleVoidRescueAutoReel ~= false,
+		Flag = "GrappleVoidRescueAutoReelToggle",
+		Callback = function(Value)
+			Controller:SetGrappleVoidRescueAutoReel(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "SharkVoid Auto SharkTail",
+		Info = "Uses SharkTail after the rescue release while danger remains.",
+		CurrentValue = Controller.GrappleVoidRescueAutoSharkTail ~= false,
+		Flag = "GrappleVoidRescueAutoSharkTailToggle",
+		Callback = function(Value)
+			Controller:SetGrappleVoidRescueAutoSharkTail(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "SharkVoid Rescue Height",
+		Info = "Starts rescue this many studs above KillVoid.",
+		Range = { 10, 160 },
+		Increment = 5,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleVoidRescueHeight or 45,
+		Flag = "GrappleVoidRescueHeightSlider",
+		Callback = function(Value)
+			Controller:SetGrappleVoidRescueHeight(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "SharkVoid Cast Window",
+		Info = "How long the rescue reel holds before its voluntary release.",
+		Range = { 0.05, 0.25 },
+		Increment = 0.01,
+		Suffix = "s",
+		CurrentValue = Controller.GrappleVoidRescueReelHoldTime or 0.12,
+		Flag = "GrappleVoidRescueReelHoldSlider",
+		Callback = function(Value)
+			Controller:SetGrappleVoidRescueReelHoldTime(Value)
+		end,
+	})
+
+	Tab:CreateDivider()
+
+	Tab:CreateToggle({
+		Name = "Reel Saver",
+		Info = "Enables the manual recovery technique on its keybind.",
+		CurrentValue = Controller.GrappleReelSaverEnabled == true,
+		Flag = "GrappleReelSaverToggle",
+		Callback = function(Value)
+			Controller:SetGrappleReelSaver(Value)
 		end,
 	})
 
@@ -649,49 +651,15 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
-		Name = "SharkVoid Auto Reel",
-		Info = "When already grappling during a dangerous fall, starts the NinjaBelt reel and schedules a short release.",
-		CurrentValue = Controller.GrappleVoidRescueAutoReel ~= false,
-		Flag = "GrappleVoidRescueAutoReelToggle",
-		Callback = function(Value)
-			Controller:SetGrappleVoidRescueAutoReel(Value)
-		end,
-	})
+	Tab:CreateDivider()
 
 	Tab:CreateToggle({
-		Name = "SharkVoid Auto SharkTail",
-		Info = "Automatically spends the 0.25 second SharkTail window after release while still in danger.",
-		CurrentValue = Controller.GrappleVoidRescueAutoSharkTail ~= false,
-		Flag = "GrappleVoidRescueAutoSharkTailToggle",
+		Name = "Grapple Dodge",
+		Info = "Automatically selects a safe nearby anchor when an enemy is about to intercept you.",
+		CurrentValue = Controller.GrappleDodgeTechniqueEnabled == true,
+		Flag = "GrappleDodgeToggle",
 		Callback = function(Value)
-			Controller:SetGrappleVoidRescueAutoSharkTail(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "SharkVoid Height",
-		Info = "Starts rescue behavior this many studs above KillVoid when KillVoid exists.",
-		Range = { 10, 160 },
-		Increment = 5,
-		Suffix = " studs",
-		CurrentValue = Controller.GrappleVoidRescueHeight or 45,
-		Flag = "GrappleVoidRescueHeightSlider",
-		Callback = function(Value)
-			Controller:SetGrappleVoidRescueHeight(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "SharkVoid Reel Hold",
-		Info = "How long Auto Reel holds before release, matching the tiny timing gap of the rescue technique.",
-		Range = { 0.05, 0.25 },
-		Increment = 0.01,
-		Suffix = "s",
-		CurrentValue = Controller.GrappleVoidRescueReelHoldTime or 0.12,
-		Flag = "GrappleVoidRescueReelHoldSlider",
-		Callback = function(Value)
-			Controller:SetGrappleVoidRescueReelHoldTime(Value)
+			Controller:SetGrappleDodge(Value)
 		end,
 	})
 
@@ -746,6 +714,8 @@ return function(Client, Controller)
 			Controller:SetGrappleDodgeStrength(Value)
 		end,
 	})
+
+	Tab:CreateDivider()
 
 	Tab:CreateToggle({
 		Name = "SharkEscape",

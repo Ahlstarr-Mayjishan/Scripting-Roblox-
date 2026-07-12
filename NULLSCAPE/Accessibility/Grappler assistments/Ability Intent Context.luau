@@ -5,6 +5,7 @@
 ]]
 
 local GameState = getgenv().loadModule("NULLSCAPE/Core/Game State Context.luau")
+local PlayerIntent = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Player Intent State.luau")
 
 local Context = {}
 
@@ -49,6 +50,15 @@ function Context.resolve(grapple, intent, options)
 			Mode = "UserControlled",
 			CanAutomate = options.AllowDuringManual == true,
 			Reason = "UsingAbility",
+		}
+	end
+
+	local playerState = PlayerIntent and typeof(PlayerIntent.get) == "function" and PlayerIntent.get(grapple)
+	if playerState and playerState.IsUserCommitting == true then
+		return {
+			Mode = "UserSteering",
+			CanAutomate = options.AllowDuringManual == true,
+			Reason = "CommittedAim",
 		}
 	end
 

@@ -1,5 +1,5 @@
 {
-  "Version": "2026.07.12.10",
+  "Version": "2026.07.12.12",
   "MenuChanges": [
     "Settings",
     "Automation",
@@ -88,6 +88,20 @@
         "Entities",
         "Kolona",
         "Auto QTE"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/Celestial Immunity.luau",
+      "Menu": [
+        "Entities",
+        "Celestial"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Entities/Void Implosion Immunity.luau",
+      "Menu": [
+        "Entities",
+        "Void Implosion"
       ]
     },
     {
@@ -728,6 +742,12 @@
     },
     {
       "Path": "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",
+      "Menu": [
+        "Class Adjustment"
+      ]
+    },
+    {
+      "Path": "NULLSCAPE/Class Adjustment/Grappler/Grapple Momentum Transfer.luau",
       "Menu": [
         "Class Adjustment"
       ]

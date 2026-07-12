@@ -11,6 +11,7 @@ local Workspace = game:GetService("Workspace")
 local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
 local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
 local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
+local PlayerIntent = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Player Intent State.luau")
 
 local LocalPlayer = Players.LocalPlayer
 local DeferredAim = {}
@@ -19,6 +20,7 @@ local PENDING_TTL = 1.15
 local MAX_EXTRA_RANGE = 220
 local MIN_OUT_OF_RANGE = 4
 local START_COOLDOWN = 0.08
+local COMMIT_AIM_DOT = math.cos(math.rad(14))
 
 local Pending = nil
 
@@ -127,6 +129,12 @@ function DeferredAim.note(grapple, controller)
 	if not aimRay then
 		return false
 	end
+	local playerState = PlayerIntent
+		and typeof(PlayerIntent.noteCastIntent) == "function"
+		and PlayerIntent.noteCastIntent(grapple, aimRay.Direction)
+	if not (playerState and playerState.AllowsDeferredCast == true) then
+		return false
+	end
 
 	syncGrappleFilter(grapple)
 
@@ -147,6 +155,7 @@ function DeferredAim.note(grapple, controller)
 		CreatedAt = time(),
 		ExpiresAt = time() + PENDING_TTL,
 		MaxRange = maxRange,
+		AimDirection = aimRay.Direction,
 	}
 
 	return true
@@ -177,6 +186,18 @@ function DeferredAim.step(grapple, controller)
 
 	if not canUseGrapple(grapple) then
 		Pending = nil
+		return false
+	end
+
+	local aimRay = getAimRay(grapple)
+	if not (aimRay and Pending.AimDirection and aimRay.Direction:Dot(Pending.AimDirection) >= COMMIT_AIM_DOT) then
+		Pending = nil
+		return false
+	end
+	local playerState = PlayerIntent
+		and typeof(PlayerIntent.observe) == "function"
+		and PlayerIntent.observe(grapple, aimRay.Direction)
+	if not (playerState and playerState.AllowsDeferredCast == true) then
 		return false
 	end
 

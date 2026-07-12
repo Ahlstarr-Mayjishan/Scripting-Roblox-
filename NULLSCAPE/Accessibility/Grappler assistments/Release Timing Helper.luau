@@ -9,6 +9,7 @@ local Helper = {
 }
 
 local ReleaseAdvisor = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Reel Release Advisor.luau")
+local ReleasePolicy = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Policy.luau")
 
 local function getNumber(value, fallback, minimum, maximum)
 	return math.clamp(tonumber(value) or fallback, minimum, maximum)
@@ -61,18 +62,12 @@ function Helper.step(grapple)
 		return false
 	end
 
-	if typeof(grapple.End) ~= "function" then
+	if not (ReleasePolicy and typeof(ReleasePolicy.release) == "function") then
 		return false
 	end
 
 	local metadata = pending.Metadata or {}
-	return pcall(function()
-		if metadata.EndWasCancelled ~= nil then
-			grapple:End(metadata.EndWasCancelled == true)
-		else
-			grapple:End()
-		end
-	end)
+	return ReleasePolicy.release(grapple, pending.Reason, metadata)
 end
 
 function Helper.reset()

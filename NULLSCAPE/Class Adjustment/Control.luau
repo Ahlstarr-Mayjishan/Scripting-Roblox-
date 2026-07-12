@@ -30,6 +30,7 @@ local Control = {
 	GrappleWallGlide = false,
 	GrappleInstantMaxPull = false,
 	GrappleCatapultMultiplier = 1,
+	GrappleMomentumTransferPercent = 0,
 	Destroyed = false,
 	PermanentConnections = {},
 }
@@ -108,6 +109,8 @@ local function readSettings()
 		end
 		Control.GrappleCatapultMultiplier =
 			math.clamp(tonumber(decoded.GrappleCatapultMultiplierSlider) or Control.GrappleCatapultMultiplier, 1, 3)
+		Control.GrappleMomentumTransferPercent = tonumber(decoded.GrappleMomentumTransferSlider)
+			or Control.GrappleMomentumTransferPercent
 		if decoded.ChargerTripmineAssistToggle ~= nil then
 			Control.ChargerTripmineAssistEnabled = not not decoded.ChargerTripmineAssistToggle
 		end
@@ -152,6 +155,7 @@ local function saveSettings()
 	data.GrappleWallGlide = Control.GrappleWallGlide
 	data.GrappleInstantMaxPull = Control.GrappleInstantMaxPull
 	data.GrappleCatapultMultiplierSlider = Control.GrappleCatapultMultiplier
+	data.GrappleMomentumTransferSlider = Control.GrappleMomentumTransferPercent
 	data.ChargerTripmineAssistToggle = Control.ChargerTripmineAssistEnabled
 	data.ChargerTripmineModeDropdown = Control.ChargerTripmineMode
 	data.ChargerTripmineDistanceSlider = Control.ChargerTripmineDistance
@@ -335,6 +339,11 @@ end
 
 function Control:SetGrappleCatapultMultiplier(value)
 	self.GrappleCatapultMultiplier = math.clamp(tonumber(value) or 1, 1, 3)
+	saveSettings()
+end
+
+function Control:SetGrappleMomentumTransferPercent(value)
+	self.GrappleMomentumTransferPercent = math.clamp(tonumber(value) or 0, 0, 100)
 	saveSettings()
 end
 

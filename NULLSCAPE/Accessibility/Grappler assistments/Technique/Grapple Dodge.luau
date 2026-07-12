@@ -16,6 +16,7 @@ local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Co
 local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
 local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
 local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
+local ReleasePolicy = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Policy.luau")
 
 local Logic = {
 	LastCastAt = -1000,
@@ -455,10 +456,12 @@ local function serviceSharkEscape(grapple, controller, now)
 
 	startSharkEscapeReel(grapple, controller, now)
 
-	if Logic.PendingLiftEndAt and now >= Logic.PendingLiftEndAt and grapple and typeof(grapple.End) == "function" then
-		local success = pcall(function()
-			grapple:End()
-		end)
+	if Logic.PendingLiftEndAt and now >= Logic.PendingLiftEndAt and grapple then
+		local success = ReleasePolicy
+			and typeof(ReleasePolicy.release) == "function"
+			and ReleasePolicy.release(grapple, "SharkEscape", {
+				EndWasCancelled = false,
+			})
 		if success then
 			Logic.PendingLiftEndAt = nil
 			Logic.PendingSharkTailUntil = now + SHARKTAIL_WINDOW

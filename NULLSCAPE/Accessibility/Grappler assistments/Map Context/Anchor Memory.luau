@@ -16,10 +16,10 @@ local BUCKET_SIZE = 96
 
 local anchors = {}
 local buckets = {}
-local scanCursor = 1
 local lastRefreshAt = -1000
-local scanList = {}
-local scanListBuiltAt = -1000
+local lastPruneAt = -1000
+local observedRoots = {}
+local OBSERVER_PRUNE_INTERVAL = 2
 
 local function isBasePart(part)
 	return typeof(part) == "Instance" and part:IsA("BasePart")
@@ -87,7 +87,71 @@ local function remove(part)
 	anchors[part] = nil
 end
 
+local function disconnectRoot(root)
+	local observer = observedRoots[root]
+	if not observer then
+		return
+	end
+
+	for _, connection in ipairs(observer.Connections) do
+		pcall(function()
+			connection:Disconnect()
+		end)
+	end
+	observedRoots[root] = nil
+end
+
+local function observeRoot(root)
+	if not (root and not observedRoots[root]) then
+		return
+	end
+
+	local observer = {
+		Connections = {},
+	}
+	observedRoots[root] = observer
+
+	local function consider(instance)
+		if isSpecialAnchor(instance) then
+			AnchorMemory.remember(instance, "incremental-scan")
+		end
+	end
+
+	consider(root)
+	for _, descendant in ipairs(root:GetDescendants()) do
+		consider(descendant)
+	end
+
+	table.insert(observer.Connections, root.DescendantAdded:Connect(consider))
+	table.insert(observer.Connections, root.DescendantRemoving:Connect(remove))
+	table.insert(
+		observer.Connections,
+		root.AncestryChanged:Connect(function(_, parent)
+			if not parent then
+				disconnectRoot(root)
+			end
+		end)
+	)
+end
+
+local function observeRoots(roots)
+	for root in pairs(observedRoots) do
+		if not root.Parent then
+			disconnectRoot(root)
+		end
+	end
+
+	for _, root in ipairs(roots) do
+		observeRoot(root)
+	end
+end
+
 local function pruneDead()
+	local now = time()
+	if now - lastPruneAt < OBSERVER_PRUNE_INTERVAL then
+		return
+	end
+	lastPruneAt = now
 	for part in pairs(anchors) do
 		if not isAlive(part) then
 			remove(part)
@@ -153,7 +217,7 @@ function AnchorMemory.noteCastResult(part, success)
 	end
 end
 
-function AnchorMemory.refreshBudgeted(scanBudget, controller)
+function AnchorMemory.refreshBudgeted(_scanBudget, controller)
 	local now = time()
 	if now - lastRefreshAt < RESCAN_COOLDOWN then
 		return
@@ -178,43 +242,7 @@ function AnchorMemory.refreshBudgeted(scanBudget, controller)
 		table.insert(roots, Workspace)
 	end
 
-	if now - scanListBuiltAt >= 4 or #scanList == 0 then
-		table.clear(scanList)
-		for _, root in ipairs(roots) do
-			if isSpecialAnchor(root) then
-				table.insert(scanList, root)
-			end
-			for _, descendant in ipairs(root:GetDescendants()) do
-				table.insert(scanList, descendant)
-			end
-		end
-		scanListBuiltAt = now
-		scanCursor = 1
-	end
-
-	local runtimeBudget = PerformanceBudget and typeof(PerformanceBudget.get) == "function" and PerformanceBudget.get()
-		or nil
-	local budget = math.clamp(
-		tonumber(scanBudget) or tonumber(runtimeBudget and runtimeBudget.AnchorScanBudget) or DEFAULT_SCAN_BUDGET,
-		25,
-		1500
-	)
-	if #scanList == 0 then
-		scanCursor = 1
-		return
-	end
-
-	for _ = 1, math.min(budget, #scanList) do
-		if scanCursor > #scanList then
-			scanCursor = 1
-		end
-
-		local descendant = scanList[scanCursor]
-		scanCursor += 1
-		if isSpecialAnchor(descendant) then
-			AnchorMemory.remember(descendant, "budgeted-scan", controller)
-		end
-	end
+	observeRoots(roots)
 end
 
 function AnchorMemory.getNearbyAnchors(origin, maxRange, controller)
@@ -261,12 +289,13 @@ function AnchorMemory.getNearbyAnchors(origin, maxRange, controller)
 end
 
 function AnchorMemory.clear()
+	for root in pairs(observedRoots) do
+		disconnectRoot(root)
+	end
 	table.clear(anchors)
 	table.clear(buckets)
-	table.clear(scanList)
-	scanCursor = 1
 	lastRefreshAt = -1000
-	scanListBuiltAt = -1000
+	lastPruneAt = -1000
 end
 
 return AnchorMemory

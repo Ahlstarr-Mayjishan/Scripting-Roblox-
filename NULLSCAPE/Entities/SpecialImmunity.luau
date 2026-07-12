@@ -28,7 +28,6 @@ local SPECIAL_FLAGS = {
     Slicer = "SlicerImmune",
     Voidbreaker = "VoidbreakerImmune",
     Razorbloom = "RazorbloomImmune",
-    VoidImplosion = "VoidImplosionImmune",
 }
 
 local function getController()

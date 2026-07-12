@@ -10,6 +10,7 @@ local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Co
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
 local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
 local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
+local ReleasePolicy = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Policy.luau")
 
 local DEFAULT_REEL_HOLD = 0.16
 local START_COOLDOWN = 0.7
@@ -161,13 +162,11 @@ local function releaseReel(grapple)
 		return false
 	end
 
-	if typeof(grapple.End) ~= "function" then
+	if not (ReleasePolicy and typeof(ReleasePolicy.release) == "function") then
 		return false
 	end
 
-	local success = pcall(function()
-		grapple:End()
-	end)
+	local success = ReleasePolicy.release(grapple, "ReelSaver")
 	if success and MomentumMemory and typeof(MomentumMemory.record) == "function" then
 		pcall(MomentumMemory.record, grapple.RootPart, "ReelSaverRelease")
 	end

@@ -7,6 +7,7 @@
 local AnchorMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Anchor Memory.luau")
 local FailFeedback = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Fail Feedback Loop.luau")
 local Gateway = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Decision Gateway.luau")
+local StateAdapter = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Grapple State Adapter.luau")
 
 local Transaction = {
 	Pending = setmetatable({}, { __mode = "k" }),
@@ -49,6 +50,14 @@ end
 function Transaction.start(grapple, hit, controller, source, context)
 	if not (grapple and typeof(grapple.Start) == "function") then
 		return false
+	end
+	if StateAdapter and typeof(StateAdapter.canStart) == "function" then
+		local allowed, reason = StateAdapter.canStart(grapple, hit)
+		if not allowed then
+			noteAnchor(hit, false)
+			record(grapple, source, hit, "blocked", reason)
+			return false
+		end
 	end
 
 	local decision = nil

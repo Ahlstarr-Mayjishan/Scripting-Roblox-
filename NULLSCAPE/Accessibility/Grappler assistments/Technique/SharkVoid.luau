@@ -8,6 +8,7 @@ local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler ass
 local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
 local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
 local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
+local ReleasePolicy = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Policy.luau")
 
 local DEFAULT_HEIGHT = 45
 local DEFAULT_REEL_HOLD = 0.12
@@ -344,13 +345,13 @@ local function autoEnd(grapple, now)
 		return false
 	end
 
-	if typeof(grapple.End) ~= "function" then
+	if not (ReleasePolicy and typeof(ReleasePolicy.release) == "function") then
 		return false
 	end
 
-	local success = pcall(function()
-		grapple:End(false)
-	end)
+	local success = ReleasePolicy.release(grapple, "SharkVoid", {
+		EndWasCancelled = false,
+	})
 
 	if success then
 		if ReleaseTiming and typeof(ReleaseTiming.cancel) == "function" then

@@ -21,8 +21,19 @@ local EntityContext = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler ass
 local Decision = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique Decision Layer.luau")
 local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
 local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
+local NativeContext = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Native Context Sync.luau")
+local AimLock = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Aim Target Lock.luau")
+local AnchorMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Anchor Memory.luau")
+local RailMemory =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau")
+local TerrainMemory =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
+local EnemyMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Threat Context/Enemy Memory.luau")
+local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
+local BadAnchorMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Bad Anchor Memory.luau")
+local PlayerIntent = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Player Intent State.luau")
 
-local HOOK_VERSION = 15
+local HOOK_VERSION = 16
 
 local PRIORITY = Decision and Decision.Priority
 	or {
@@ -170,6 +181,26 @@ local function claimTechnique(grapple, name, holdTime)
 	end
 end
 
+local function clearRuntimeCaches(grapple)
+	local rootPart = grapple and grapple.RootPart
+	if MomentumMemory and typeof(MomentumMemory.clear) == "function" and rootPart then
+		pcall(MomentumMemory.clear, rootPart)
+	end
+
+	if grapple and grapple.Movement and grapple.Movement.grappling == true then
+		return
+	end
+
+	for _, memory in ipairs({ AnchorMemory, RailMemory, TerrainMemory, EnemyMemory, BadAnchorMemory }) do
+		if memory and typeof(memory.clear) == "function" then
+			pcall(memory.clear)
+		end
+	end
+	if Targeting and typeof(Targeting.resetCache) == "function" then
+		Targeting.resetCache()
+	end
+end
+
 local function installCastHook(grappleModule, globals)
 	local originalCast = grappleModule.Cast
 	local wrappedCast
@@ -277,6 +308,19 @@ local function installStepHook(grappleModule, globals)
 
 		local results = packValues(originalStep(self, dt, ...))
 		local controller = getController()
+		if
+			isEnabled()
+			and PlayerIntent
+			and typeof(PlayerIntent.observe) == "function"
+			and (typeof(PlayerIntent.shouldSample) ~= "function" or PlayerIntent.shouldSample(self))
+		then
+			pcall(function()
+				local aimDirection = Targeting
+					and typeof(Targeting.getAimDirection) == "function"
+					and Targeting.getAimDirection(self)
+				PlayerIntent.observe(self, aimDirection)
+			end)
+		end
 		if PerformanceBudget and typeof(PerformanceBudget.observeFrame) == "function" then
 			PerformanceBudget.observeFrame(dt)
 		end
@@ -433,6 +477,9 @@ end
 
 function Logic.initialize(controller)
 	Logic.Controller = controller or Logic.Controller
+	if NativeContext and typeof(NativeContext.initialize) == "function" then
+		NativeContext.initialize()
+	end
 
 	local grappleModule = getGrappleModule()
 	if not (grappleModule and typeof(grappleModule.Cast) == "function") then
@@ -510,6 +557,7 @@ function Logic.triggerReelSaver(controller)
 end
 
 function Logic.resetRespawnState()
+	local previousGrapple = Logic.LastGrapple
 	Logic.LastGrapple = nil
 	Logic.PendingReelSaverUntil = nil
 	if VoidRescue and typeof(VoidRescue.reset) == "function" then
@@ -531,6 +579,15 @@ function Logic.resetRespawnState()
 		pcall(function()
 			DeferredAim.reset()
 		end)
+	end
+	if AimLock and typeof(AimLock.clear) == "function" then
+		AimLock.clear()
+	end
+	if PlayerIntent and typeof(PlayerIntent.clear) == "function" then
+		PlayerIntent.clear(previousGrapple)
+	end
+	if NativeContext and typeof(NativeContext.reset) == "function" then
+		NativeContext.reset()
 	end
 	if BellContact and typeof(BellContact.reset) == "function" then
 		pcall(function()
@@ -558,6 +615,7 @@ function Logic.resetRespawnState()
 	if PerformanceBudget and typeof(PerformanceBudget.reset) == "function" then
 		PerformanceBudget.reset()
 	end
+	clearRuntimeCaches(previousGrapple)
 	return true
 end
 
@@ -597,6 +655,9 @@ function Logic.disable()
 	Logic.Enabled = false
 
 	Logic.resetRespawnState()
+	if NativeContext and typeof(NativeContext.disable) == "function" then
+		NativeContext.disable()
+	end
 end
 
 return Logic

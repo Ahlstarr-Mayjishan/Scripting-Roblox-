@@ -430,6 +430,15 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateToggle({
+		Name = "Reality Break",
+		CurrentValue = getFlag(Controller, "RealityBreakImmune"),
+		Flag = "ImmunityRealityBreakToggle",
+		Callback = function(Value)
+			setImmunity(Controller, "RealityBreak", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
 		Name = "Scrapmaw",
 		CurrentValue = getFlag(Controller, "ScrapmawImmune"),
 		Flag = "ImmunityScrapmawToggle",
@@ -567,6 +576,15 @@ return function(Client, Controller)
 		Flag = "ImmunityVoidImplosionToggle",
 		Callback = function(Value)
 			setImmunity(Controller, "VoidImplosion", Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Seamine",
+		CurrentValue = getFlag(Controller, "SeamineImmune"),
+		Flag = "ImmunitySeamineToggle",
+		Callback = function(Value)
+			setImmunity(Controller, "Seamine", Value)
 		end,
 	})
 

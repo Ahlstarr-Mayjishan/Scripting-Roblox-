@@ -49,6 +49,7 @@ local createControllerProxy = function(Client, Controller)
 		GrappleWallGlide = false,
 		GrappleInstantMaxPull = false,
 		GrappleCatapultMultiplier = 1,
+		GrappleMomentumTransferPercent = 0,
 		ChargerTripmineAssistEnabled = false,
 		ChargerTripmineMode = "Auto",
 		ChargerTripmineDistance = 15,
@@ -84,6 +85,7 @@ return function(Client, Controller)
 	local Tab = Client.Window:CreateTab("Class Adjustment", 4483362458)
 
 	Tab:CreateSection("Grappler")
+	Tab:CreateDivider()
 
 	Tab:CreateToggle({
 		Name = "Disable Ground Auto-Release",
@@ -138,6 +140,8 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateDivider()
+
 	Tab:CreateSlider({
 		Name = "Grapple Reel Pull",
 		Info = "Multiplies velocity gained from reel-style pulls. Affects special pull targets and NinjaBelt reel behavior.",
@@ -176,6 +180,8 @@ return function(Client, Controller)
 			Controller:SetGrappleHookCastSpeedMultiplier(Value)
 		end,
 	})
+
+	Tab:CreateDivider()
 
 	Tab:CreateSlider({
 		Name = "Grapple Max Range",
@@ -225,6 +231,8 @@ return function(Client, Controller)
 			Controller:SetGrappleInstantMaxPull(Value)
 		end,
 	})
+
+	Tab:CreateDivider()
 	Tab:CreateSlider({
 		Name = "Slider Catapult Boost Multiplier",
 		Info = "Multiplies the native vertical catapult boost when releasing upward from a grapple.",
@@ -235,6 +243,18 @@ return function(Client, Controller)
 		Flag = "GrappleCatapultMultiplierSlider",
 		Callback = function(Value)
 			Controller:SetGrappleCatapultMultiplier(Value)
+		end,
+	})
+	Tab:CreateSlider({
+		Name = "Momentum Transfer",
+		Info = "Preserves player momentum when connecting consecutive grapples. 0% is native game behavior.",
+		Range = { 0, 100 },
+		Increment = 5,
+		Suffix = "%",
+		CurrentValue = Controller.GrappleMomentumTransferPercent or 0,
+		Flag = "GrappleMomentumTransferSlider",
+		Callback = function(Value)
+			Controller:SetGrappleMomentumTransferPercent(Value)
 		end,
 	})
 

@@ -4,6 +4,7 @@
 --  và gọi dọn dẹp giải phóng tài nguyên vật lý để tối ưu hóa hiệu năng, giảm tải cho Controller.
 -- ]]
 
+local getgenv = getgenv
 local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
 local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
 local SpecialImmunity = getgenv().loadModule("NULLSCAPE/Entities/SpecialImmunity.luau")
@@ -98,7 +99,7 @@ function GC.cleanAll()
 		SpecialImmunity.disable()
 	end)
 
-	for enemy, connections in pairs(GC.EntityConnections) do
+	for _, connections in pairs(GC.EntityConnections) do
 		for _, conn in ipairs(connections) do
 			cleanupItem(conn)
 		end
