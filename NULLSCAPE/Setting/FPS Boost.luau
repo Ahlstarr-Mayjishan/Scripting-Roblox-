@@ -146,7 +146,6 @@ local function applyLowGraphics()
 	if FPSBoost.OriginalLighting == nil then
 		FPSBoost.OriginalLighting = {
 			GlobalShadows = Lighting.GlobalShadows,
-			TerrainDecoration = Workspace.Terrain.Decoration,
 		}
 	end
 
@@ -158,13 +157,11 @@ local function applyLowGraphics()
 		rendering.QualityLevel = Enum.QualityLevel.Level01
 	end)
 	Lighting.GlobalShadows = false
-	Workspace.Terrain.Decoration = false
 end
 
 local function restoreLowGraphics()
 	if FPSBoost.OriginalLighting then
 		Lighting.GlobalShadows = FPSBoost.OriginalLighting.GlobalShadows
-		Workspace.Terrain.Decoration = FPSBoost.OriginalLighting.TerrainDecoration
 		FPSBoost.OriginalLighting = nil
 	end
 	if FPSBoost.OriginalQuality ~= nil then
@@ -224,6 +221,10 @@ local function bindMap(token)
 end
 
 function FPSBoost.setSelections(selections)
+	if typeof(selections) ~= "table" then
+		selections = {}
+	end
+
 	FPSBoost.ScanToken += 1
 	disconnectConnections()
 	restoreVisuals(FPSBoost.OriginalVFX)
@@ -232,7 +233,7 @@ function FPSBoost.setSelections(selections)
 	restoreLowGraphics()
 	table.clear(FPSBoost.Selections)
 
-	for key, value in pairs(selections or {}) do
+	for key, value in pairs(selections) do
 		local option = value == true and key or value
 		if option == "Low Graphics" or option == "VFX" or option == "Enemies" or option == "Map" then
 			FPSBoost.Selections[option] = true

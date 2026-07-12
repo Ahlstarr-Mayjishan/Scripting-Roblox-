@@ -115,21 +115,11 @@ return function(Client, Controller)
 		MultipleOptions = true,
 		Flag = "BellHackDropdownV2",
 		Callback = function(Options)
-			local hasImmunity = false
-			local hasCurseImmune = false
-			local hasBlindnessImmune = false
-			local hasOvertunedKillImmune = false
-			for _, opt in ipairs(Options) do
-				if opt == "Immunity" then
-					hasImmunity = true
-				elseif opt == "Mighty Gong" or opt == "Knockback (Curse)" then
-					hasCurseImmune = true
-				elseif opt == "Ring screen blindness" then
-					hasBlindnessImmune = true
-				elseif opt == "Overtuned kill" then
-					hasOvertunedKillImmune = true
-				end
-			end
+			local hasImmunity = optionSelected(Options, "Immunity")
+			local hasCurseImmune = optionSelected(Options, "Mighty Gong")
+				or optionSelected(Options, "Knockback (Curse)")
+			local hasBlindnessImmune = optionSelected(Options, "Ring screen blindness")
+			local hasOvertunedKillImmune = optionSelected(Options, "Overtuned kill")
 			local activeController = resolveController(nil, Controller)
 			if activeController then
 				if typeof(activeController.SetImmunity) == "function" then

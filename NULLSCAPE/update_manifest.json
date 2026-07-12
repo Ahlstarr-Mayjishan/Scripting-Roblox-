@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.12.25",
+    "Version":  "2026.07.12.26",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -130,7 +130,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "f80167a686b3c33843c8e5c9c687945761fcbc60dc1e0fd6dc8701e74b43842c"
+                      "Sha256":  "d1a9df747b564853e3b679145af310076e25f5654f72dc794cebb1180ba9b52d"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/RemoteBlocking.luau",
@@ -144,7 +144,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "656129f72b6c5e5dfe1c6b898fd6fb843fd1678862a80cba8120c977eb5a9419"
+                      "Sha256":  "95f3e2cb980f4b91e5c4cb561dd12a8d14c04a98207a3751c1f9b2c09971d983"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau",
@@ -927,7 +927,7 @@
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/FPS Boost.luau",
-                      "Sha256":  "d2844651d23b6cc1896b3a6cf040422cbfcbbc93a3f73ad296f5940e0c0d0342"
+                      "Sha256":  "d0d588aac387443df12e56b5ac8a70715ad007bc2f341b4708f5a9a02dd880f6"
                   }
               ]
 }

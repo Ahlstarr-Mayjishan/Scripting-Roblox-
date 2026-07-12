@@ -64,6 +64,8 @@ local VoidImplosionImmunity = getgenv().loadModule("NULLSCAPE/Entities/Void Impl
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 local BackTrick = getgenv().loadModule("NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau")
 local KolonaAutoQTE = nil
+local startBellGongKnockbackGuard
+local stopBellGongKnockbackGuard
 
 local function getKolonaAutoQTE()
 	if KolonaAutoQTE then
@@ -410,6 +412,11 @@ end
 
 function Controller:SetBellCurseImmune(value)
 	self.BellCurseImmune = value == true
+	if self.BellCurseImmune then
+		startBellGongKnockbackGuard(self)
+	elseif not self.BellKnockbackImmune then
+		stopBellGongKnockbackGuard(self)
+	end
 	Executor.reconcile(GC)
 end
 
@@ -1022,7 +1029,7 @@ function Controller:SetSpringerKnockbackImmune(enabled)
 	Executor.reconcile(GC)
 end
 
-local function stopBellGongKnockbackGuard(controller)
+stopBellGongKnockbackGuard = function(controller)
 	if controller.BellGongKnockbackConnection then
 		pcall(function()
 			controller.BellGongKnockbackConnection:Disconnect()
@@ -1031,8 +1038,38 @@ local function stopBellGongKnockbackGuard(controller)
 	end
 end
 
-local function startBellGongKnockbackGuard(controller)
-	controller.BellKnockbackGuardRequested = true
+startBellGongKnockbackGuard = function(controller)
+	if controller.BellGongKnockbackConnection then
+		return
+	end
+
+	local lastVelocity = nil
+	local lastHandledDebuffAt = 0
+	controller.BellGongKnockbackConnection = RunService.Heartbeat:Connect(function()
+		if controller.Destroyed or not (controller.BellCurseImmune or controller.BellKnockbackImmune) then
+			stopBellGongKnockbackGuard(controller)
+			return
+		end
+
+		local character = Players.LocalPlayer.Character
+		local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+		if not rootPart then
+			lastVelocity = nil
+			return
+		end
+
+		local now = time()
+		local debuffAt = controller.LastBellDebuffAt or 0
+		if debuffAt > lastHandledDebuffAt and now - debuffAt <= 0.25 and lastVelocity then
+			pcall(function()
+				rootPart.AssemblyLinearVelocity = lastVelocity
+				rootPart.Velocity = lastVelocity
+			end)
+			lastHandledDebuffAt = debuffAt
+		end
+
+		lastVelocity = rootPart.AssemblyLinearVelocity or rootPart.Velocity
+	end)
 end
 
 function Controller:SetBellKnockbackImmune(enabled)
@@ -1047,7 +1084,9 @@ function Controller:SetBellKnockbackImmune(enabled)
 		end
 		startBellGongKnockbackGuard(self)
 	else
-		stopBellGongKnockbackGuard(self)
+		if not self.BellCurseImmune then
+			stopBellGongKnockbackGuard(self)
+		end
 		if not self.BellImmune then
 			TouchInterest.disableImmunityForType(GC, "Bell")
 		end

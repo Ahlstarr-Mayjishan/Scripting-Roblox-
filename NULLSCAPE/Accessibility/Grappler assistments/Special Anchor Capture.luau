@@ -19,7 +19,16 @@ local EXTRA_RADIUS = {
 	JumpPad = 6,
 	GrapplePoint = 4,
 	TriaOrb = 4,
-	Bell = 3,
+	Bell = 8,
+}
+
+-- The visible Bell sprite is much wider than its physical query part. Scale the
+-- capture field with distance so aiming at the sprite edge is still intentional.
+local AIM_TOLERANCE_ANGLE = {
+	JumpPad = 18,
+	GrapplePoint = 16,
+	TriaOrb = 17,
+	Bell = 24,
 }
 
 local function getNearestPoint(part, worldPoint)
@@ -82,7 +91,9 @@ function Capture.resolve(part, origin, aimDirection, grappleParams, manualAngle)
 	local targetPoint = getNearestPoint(part, aimPoint)
 	local missDistance = (targetPoint - aimPoint).Magnitude
 	local radius = getRadius(part, anchorName)
-	if missDistance > radius then
+	local toleranceAngle = AIM_TOLERANCE_ANGLE[anchorName] or 14
+	local captureRadius = math.max(radius, forwardDistance * math.tan(math.rad(toleranceAngle)))
+	if missDistance > captureRadius then
 		return nil
 	end
 
