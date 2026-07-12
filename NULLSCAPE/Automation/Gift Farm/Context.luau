@@ -116,9 +116,10 @@ function Context.waitForStreamedGround(position, timeout)
 		return false
 	end
 
-	Context.requestStreamAround(position, STREAM_REQUEST_TIMEOUT)
+	local waitTimeout = math.max(0, tonumber(timeout) or GROUND_WAIT_TIMEOUT)
+	Context.requestStreamAround(position, waitTimeout)
 
-	local deadline = os.clock() + (timeout or GROUND_WAIT_TIMEOUT)
+	local deadline = os.clock() + waitTimeout
 	repeat
 		local result = raycastCurrentRoomsFloor(position)
 		if result and result.Instance then
@@ -233,7 +234,7 @@ function Context.moveCharacterTo(cframe)
 
 			local ok = setRootCFrame(character, hrp, intermediateCFrame)
 			if not ok then
-				break
+				return false
 			end
 			RunService.Heartbeat:Wait()
 		end
@@ -243,9 +244,13 @@ function Context.moveCharacterTo(cframe)
 		return false
 	end
 
-	setRootCFrame(character, hrp, cframe)
+	if not setRootCFrame(character, hrp, cframe) then
+		return false
+	end
 	RunService.Heartbeat:Wait()
-	setRootCFrame(character, hrp, cframe)
+	if not setRootCFrame(character, hrp, cframe) then
+		return false
+	end
 
 	return true
 end

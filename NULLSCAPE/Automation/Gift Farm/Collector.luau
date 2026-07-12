@@ -404,7 +404,10 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			return
 		end
 		clearVelocity(hrp)
-		waitForArrival(hrp, standingPosition, tailMode and "tail" or precisionMode, lease, currentSessionToken, options)
+		if not waitForArrival(hrp, standingPosition, tailMode and "tail" or precisionMode, lease, currentSessionToken, options) then
+			result.Rejected = #cluster
+			return
+		end
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end

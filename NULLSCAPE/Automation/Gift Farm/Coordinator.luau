@@ -608,7 +608,8 @@ local function runLoop(controller)
 	loopActive = true
 
 	task.spawn(function()
-		while enabled and not controller.Destroyed do
+		local ok, err = xpcall(function()
+			while enabled and not controller.Destroyed do
 			local mySessionToken = sessionToken
 
 			local function isSessionActive()
@@ -1032,8 +1033,27 @@ local function runLoop(controller)
 			end
 
 			task.wait(0.04)
-		end
+			end
+		end, debug.traceback)
 		loopActive = false
+
+		if not ok and enabled and not controller.Destroyed and controller.GiftFarmEnabled then
+			warn("[NULLSCAPE] Gift Farm coordinator recovered: " .. tostring(err))
+			sessionToken += 1
+			MovementLease.invalidateActive()
+			activeLease = nil
+			Context.releaseCharacterControl({
+				SkipVelocityClear = true,
+				SkipStateChange = true,
+				ForceAbilityClear = true,
+			})
+			transitionTo(controller, "Recovering", "Coordinator restarted after runtime error", true)
+			task.delay(0.25, function()
+				if enabled and not controller.Destroyed and controller.GiftFarmEnabled then
+					runLoop(controller)
+				end
+			end)
+		end
 	end)
 end
 
