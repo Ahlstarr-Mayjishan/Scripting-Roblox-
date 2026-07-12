@@ -160,7 +160,7 @@ function callModule(name, methodName, ...)
 end
 
 function Executor.setupAutoJump(enemy, shockwave, controller, gc)
-	callModule("SpringerLogic", "setupAutoJump", enemy, shockwave, controller, gc)
+	return callModule("SpringerLogic", "setupAutoJump", enemy, shockwave, controller, gc)
 end
 
 function Executor.initializeInfiniteAirJump()

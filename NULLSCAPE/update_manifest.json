@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.12.26",
+    "Version":  "2026.07.12.27",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -221,7 +221,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "7665817bcd8ed1fd3a650cf01079af1453152a37c0f886880e5a99ee6963a6d4"
+                      "Sha256":  "58006c1003778d5f75d9e6a51204a5c134dab2c65452488c3adb234d5a27f744"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/controller.luau",
@@ -242,7 +242,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "42ead134473f85e2349247f0242c04336b06326bb129fc6c5d12d90df5dbb560"
+                      "Sha256":  "c16ffe0722473955af142d962b312f17acde900d405a43aad5db226694e49345"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/GC.luau",
