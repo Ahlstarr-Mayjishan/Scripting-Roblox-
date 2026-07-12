@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.12.15",
+    "Version":  "2026.07.12.16",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -108,7 +108,7 @@
                                    "Entities",
                                    "Celestial"
                                ],
-                      "Sha256":  "faab43281e4f3e7dcb6614cf16c1d6f5e004342a65a048ae500f1fa3697adea5"
+                      "Sha256":  "bc4e7986a0e7a08b4249411d67971bc5678363dc87c9c4cceb7e6cbd89fbe75c"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Void Implosion Immunity.luau",

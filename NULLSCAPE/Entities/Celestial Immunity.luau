@@ -10,6 +10,7 @@ local Logic = {
 	Connections = {},
 	DisabledConnections = setmetatable({}, { __mode = "k" }),
 	ObservedEnemies = setmetatable({}, { __mode = "k" }),
+	TouchParts = setmetatable({}, { __mode = "k" }),
 	Enabled = false,
 }
 
@@ -86,6 +87,24 @@ local function suppressRemote(remote, config)
 	end
 end
 
+local function suppressCelestialTouch(enemy, config)
+	if
+		not (Logic.Enabled and enemy:IsA("BasePart"))
+		or config.ControllerFlag ~= "CelestialImmune"
+		or Logic.TouchParts[enemy] ~= nil
+	then
+		return
+	end
+
+	Logic.TouchParts[enemy] = enemy.CanTouch
+	enemy.CanTouch = false
+	table.insert(Logic.Connections, enemy:GetPropertyChangedSignal("CanTouch"):Connect(function()
+		if Logic.Enabled and enemy.Parent and isSourceEnabled(config) and enemy.CanTouch then
+			enemy.CanTouch = false
+		end
+	end))
+end
+
 local function observeEnemy(enemy)
 	local config = getSourceEvent(enemy)
 	if not (Logic.Enabled and config and isSourceEnabled(config)) or Logic.ObservedEnemies[enemy] then
@@ -93,6 +112,7 @@ local function observeEnemy(enemy)
 	end
 
 	Logic.ObservedEnemies[enemy] = true
+	suppressCelestialTouch(enemy, config)
 	for _, child in ipairs(enemy:GetChildren()) do
 		suppressRemote(child, config)
 	end
@@ -129,6 +149,17 @@ local function restoreCallbacks()
 	Logic.DisabledConnections = setmetatable({}, { __mode = "k" })
 end
 
+local function restoreTouchParts()
+	for part, originalCanTouch in pairs(Logic.TouchParts) do
+		if part and part.Parent then
+			pcall(function()
+				part.CanTouch = originalCanTouch
+			end)
+		end
+	end
+	Logic.TouchParts = setmetatable({}, { __mode = "k" })
+end
+
 function Logic.enable()
 	if Logic.Enabled then
 		return true
@@ -150,13 +181,19 @@ function Logic.enable()
 end
 
 function Logic.disable()
-	if not Logic.Enabled and #Logic.Connections == 0 and next(Logic.DisabledConnections) == nil then
+	if
+		not Logic.Enabled
+		and #Logic.Connections == 0
+		and next(Logic.DisabledConnections) == nil
+		and next(Logic.TouchParts) == nil
+	then
 		return
 	end
 
 	Logic.Enabled = false
 	disconnectObservers()
 	restoreCallbacks()
+	restoreTouchParts()
 end
 
 return Logic
