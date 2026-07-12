@@ -68,6 +68,7 @@ local KolonaAutoQTE = nil
 local SpringerAutoJump = nil
 local startBellGongKnockbackGuard
 local stopBellGongKnockbackGuard
+local initializeBellBlindnessHook
 
 local function getKolonaAutoQTE()
 	if KolonaAutoQTE then
@@ -363,6 +364,9 @@ end
 
 function Controller:SetBellBlindnessImmune(value)
 	self.BellBlindnessImmune = value == true
+	if self.BellBlindnessImmune and initializeBellBlindnessHook then
+		initializeBellBlindnessHook()
+	end
 end
 
 function Controller:SetBellOvertunedKillImmune(value)
@@ -1016,6 +1020,9 @@ stopBellGongKnockbackGuard = function(controller)
 		end)
 		controller.BellGongKnockbackConnection = nil
 	end
+	controller.BellPendingRoot = nil
+	controller.BellVelocityBeforeDebuff = nil
+	controller.BellVelocityRestoreUntil = nil
 end
 
 startBellGongKnockbackGuard = function(controller)
@@ -1023,8 +1030,6 @@ startBellGongKnockbackGuard = function(controller)
 		return
 	end
 
-	local lastVelocity = nil
-	local lastHandledDebuffAt = 0
 	controller.BellGongKnockbackConnection = RunService.Heartbeat:Connect(function()
 		if controller.Destroyed or not (controller.BellCurseImmune or controller.BellKnockbackImmune) then
 			stopBellGongKnockbackGuard(controller)
@@ -1034,21 +1039,22 @@ startBellGongKnockbackGuard = function(controller)
 		local character = Players.LocalPlayer.Character
 		local rootPart = character and character:FindFirstChild("HumanoidRootPart")
 		if not rootPart then
-			lastVelocity = nil
 			return
 		end
 
 		local now = time()
-		local debuffAt = controller.LastBellDebuffAt or 0
-		if debuffAt > lastHandledDebuffAt and now - debuffAt <= 0.25 and lastVelocity then
+		local restoreUntil = controller.BellVelocityRestoreUntil or 0
+		local savedVelocity = controller.BellVelocityBeforeDebuff
+		if controller.BellPendingRoot == rootPart and savedVelocity and now <= restoreUntil then
 			pcall(function()
-				rootPart.AssemblyLinearVelocity = lastVelocity
-				rootPart.Velocity = lastVelocity
+				rootPart.AssemblyLinearVelocity = savedVelocity
+				rootPart.Velocity = savedVelocity
 			end)
-			lastHandledDebuffAt = debuffAt
+		elseif restoreUntil > 0 then
+			controller.BellPendingRoot = nil
+			controller.BellVelocityBeforeDebuff = nil
+			controller.BellVelocityRestoreUntil = nil
 		end
-
-		lastVelocity = rootPart.AssemblyLinearVelocity or rootPart.Velocity
 	end)
 end
 
@@ -1776,13 +1782,20 @@ local function initializeStatusEffectHook()
 end
 
 -- Hook hiá»‡u á»©ng mÃ¹ khi ai Ä‘Ã³ gÃµ ChuÃ´ng (Bell Blindness / Screen flash black/white)
-local function initializeBellBlindnessHook()
+initializeBellBlindnessHook = function()
 	local globals = getgenv()._NULLSCAPE_Globals
-	if globals.BellBlindnessHookInstalled or globals.BellBlindnessHookPending or globals.OriginalRingBell then
+	if globals.BellBlindnessHookPending then
 		return
+	end
+	if globals.BellRingWrapper and _G.RingBell == globals.BellRingWrapper then
+		return
+	end
+	if globals.BellRingWrapper ~= _G.RingBell then
+		globals.BellRingWrapper = nil
 	end
 	globals.BellBlindnessHookPending = true
 	globals.BellHookedFunctions = globals.BellHookedFunctions or setmetatable({}, { __mode = "k" })
+	globals.BellOriginalFunctions = globals.BellOriginalFunctions or setmetatable({}, { __mode = "k" })
 
 	local function shouldBlockRingBell()
 		local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
@@ -1816,15 +1829,17 @@ local function initializeBellBlindnessHook()
 		end
 
 		globals.OriginalRingBell = originalRingBell
-		_G.RingBell = makeRingBellWrapper(globals.OriginalRingBell)
+		globals.BellOriginalFunctions[originalRingBell] = true
+		globals.BellRingWrapper = makeRingBellWrapper(originalRingBell)
+		_G.RingBell = globals.BellRingWrapper
 	end)
 
 	-- Hook OnClientEvent cá»§a Bell Ä‘á»ƒ trÃ¡nh mÃ¹ khi ngÆ°á»i chÆ¡i khÃ¡c gÃµ chuÃ´ng trong phÃ²ng
 	task.spawn(function()
-		while globals.BellBlindnessHookPending and not globals.OriginalRingBell do
+		while globals.BellBlindnessHookPending and not globals.BellRingWrapper do
 			task.wait(0.25)
 		end
-		if not globals.OriginalRingBell then
+		if not globals.BellRingWrapper then
 			return
 		end
 
@@ -1841,8 +1856,7 @@ local function initializeBellBlindnessHook()
 						local originalFunction = connection.Function
 						if
 							typeof(originalFunction) == "function"
-							and globals.OriginalRingBell
-							and originalFunction == globals.OriginalRingBell
+							and globals.BellOriginalFunctions[originalFunction]
 							and not globals.BellHookedFunctions[originalFunction]
 						then
 							local oldFunc
@@ -1861,13 +1875,16 @@ local function initializeBellBlindnessHook()
 				hookBellConnections()
 
 				-- Hook hÃ m Connect Ä‘á»ƒ tá»± Ä‘á»™ng bá»c cÃ¡c káº¿t ná»‘i má»›i trong tÆ°Æ¡ng lai
-				local oldConnect
-				oldConnect = hookfunction(bellEvent.OnClientEvent.Connect, function(self, callback)
-					if typeof(callback) == "function" and globals.OriginalRingBell and callback == globals.OriginalRingBell then
-						return oldConnect(self, makeRingBellWrapper(callback))
-					end
-					return oldConnect(self, callback)
-				end)
+				if not globals.BellConnectHookInstalled then
+					local oldConnect
+					oldConnect = hookfunction(bellEvent.OnClientEvent.Connect, function(self, callback)
+						if typeof(callback) == "function" and globals.BellOriginalFunctions[callback] then
+							return oldConnect(self, makeRingBellWrapper(callback))
+						end
+						return oldConnect(self, callback)
+					end)
+					globals.BellConnectHookInstalled = true
+				end
 		end
 		globals.BellBlindnessHookInstalled = true
 		globals.BellBlindnessHookPending = nil
@@ -2053,6 +2070,27 @@ task.spawn(function()
 		setInLobby(not isInMatch())
 	end
 end)
+
+local bellCharacterConnection = Players.LocalPlayer.CharacterAdded:Connect(function()
+	if Controller.Destroyed or Controller.BellBlindnessImmune ~= true then
+		return
+	end
+	local previousRingBell = _G.RingBell
+	task.spawn(function()
+		local deadline = time() + 5
+		repeat
+			task.wait(0.1)
+		until _G.RingBell ~= previousRingBell or time() >= deadline
+		if
+			not Controller.Destroyed
+			and Controller.BellBlindnessImmune == true
+			and getgenv()._NULLSCAPE_Globals.activeEntitiesController == Controller
+		then
+			initializeBellBlindnessHook()
+		end
+	end)
+end)
+table.insert(Controller.PermanentConnections, bellCharacterConnection)
 
 task.spawn(initializeICBMHook)
 task.spawn(initializeStatusEffectHook)

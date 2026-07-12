@@ -148,29 +148,53 @@ local function collectCluster(routeToken, cluster, currentPos, collectRange, col
 		if routeToken ~= pipelineToken or not lease:isValid() then
 			return attempted
 		end
+		local livePosition = Context.getCandidatePosition(item)
 		if item.rawObj
 			and not item.rawObj.Destroyed
 			and not item.rawObj.Collected
 			and not item.rawObj.ClientCollected
-			and Distance.isWithinRange(item.pos, currentPos, collectRange + 4)
+			and livePosition
+			and Distance.isWithinRange(livePosition, currentPos, collectRange + 4)
 		then
-			table.insert(attempted, item)
-			stats.Attempted += 1
-			pcall(function()
+			local success = pcall(function()
 				item.rawObj:Collect(false, true)
 			end)
-			if collectedEvent then
+			if success then
+				table.insert(attempted, item)
+				stats.Attempted += 1
+			elseif #stats.Retry < MAX_RETRY_ITEMS then
+				table.insert(stats.Retry, item)
+			end
+			if success and collectedEvent then
 				pcall(function()
 					collectedEvent:Fire()
 				end)
 			end
-			if pacingBatchSize and stats.Attempted % pacingBatchSize == 0 then
+			if success and pacingBatchSize and stats.Attempted % pacingBatchSize == 0 then
 				RunService.Heartbeat:Wait()
 			end
 		end
 	end
 
 	return attempted
+end
+
+local function hasCollectableNearby(cluster, currentPos, collectRange)
+	for _, item in ipairs(cluster) do
+		local rawObj = item.rawObj
+		local livePosition = Context.getCandidatePosition(item)
+		if
+			rawObj
+			and not rawObj.Destroyed
+			and not rawObj.Collected
+			and not rawObj.ClientCollected
+			and livePosition
+			and Distance.isWithinRange(livePosition, currentPos, collectRange + 4)
+		then
+			return true
+		end
+	end
+	return false
 end
 
 local function waitForCollectAcceptance(hrp, shouldAbort, attempted, clusterSize)
@@ -307,7 +331,7 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 			end
 
 			local attempted = {}
-			local closeEnough = arrived or (hrp.Position - standingPosition).Magnitude <= 32
+			local closeEnough = arrived or hasCollectableNearby(cluster, hrp.Position, collectRange)
 			if closeEnough and settleBeforeCollect(hrp, shouldAbort) then
 				attempted = collectCluster(
 					routeToken,

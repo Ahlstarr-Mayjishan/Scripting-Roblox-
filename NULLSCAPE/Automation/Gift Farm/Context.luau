@@ -358,6 +358,19 @@ function Context.getGiftPosition(gift)
 	return nil
 end
 
+function Context.getCandidatePosition(item)
+	if typeof(item) ~= "table" then
+		return nil
+	end
+
+	local position = Context.getGiftPosition(item.rawObj) or item.pos
+	if typeof(position) == "Vector3" then
+		item.pos = position
+		return position
+	end
+	return nil
+end
+
 local railConnection = nil
 local modifiedRails = {}
 

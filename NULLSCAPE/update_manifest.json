@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.13.19",
+    "Version":  "2026.07.13.21",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -74,7 +74,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "f7183d3e3db3c382f3e86c424df9f051ee0577ef9b55815277445ae6d63f6ceb"
+                      "Sha256":  "57cfaca736a285b8e2890a8f95c34e820014894f82df2ef09317ca1418acaa0e"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Collector.luau",
@@ -82,7 +82,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "0f2c825eae795aa94d91d1b7a074e82f8c06a88d9a316b2a0b2a5b6e5a0e0522"
+                      "Sha256":  "48d4c7305fa655672a45866f70bdb1f17f32c77ff38157c0d005b22c2b999c5c"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Beacon.luau",
@@ -99,7 +99,7 @@
                                    "Gift Farm",
                                    "Pipelining"
                                ],
-                      "Sha256":  "cc7ac29f9cd1eb00b2a1745bedaf7f08633fea9648f80e0c8cc49bd01dbab8e0"
+                      "Sha256":  "3123d456f6afbad6b4a1c54bc2e02b3810a113581ef2f8ab9385a4a8d068283d"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/controller.luau",
@@ -147,14 +147,14 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "5c84201e43bdcb0b945393040e09cd173399eda953df396b4dc9938aaff80c99"
+                      "Sha256":  "ce8dcd79e0e6f02cf16f0070acd7ac9b66c8b1a53db42ce4fe2dcf7d51a58284"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/RemoteBlocking.luau",
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "d06c6c23b747c13692cdf1d04fcb08409704c35bc8902df9932c0a328540cb20"
+                      "Sha256":  "73583d788b0e34e4570e3b37d7157129628c1e0bebba9ee8b0339641857afd3f"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/tab.luau",

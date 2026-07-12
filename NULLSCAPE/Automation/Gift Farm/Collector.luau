@@ -67,15 +67,20 @@ local function collectGift(gift, collectedEvent)
 	comboCount += 1
 	lastCollectTick = now
 
-	pcall(function()
+	local success = pcall(function()
 		gift:Collect(false, true, comboCount)
 	end)
+	if not success then
+		failedAttempts[gift] = os.clock()
+		return false
+	end
 
 	if collectedEvent then
 		pcall(function()
 			collectedEvent:Fire()
 		end)
 	end
+	return true
 end
 
 local function isGiftAccepted(gift)
@@ -275,15 +280,18 @@ end
 local function collectItems(items, currentPos, collectRange, collectedEvent, attemptedGifts, pacingBatchSize)
 	local collected = 0
 	for _, item in ipairs(items) do
+		local livePosition = Context.getCandidatePosition(item)
 		if item.rawObj
 			and not item.rawObj.Destroyed
 			and not item.rawObj.Collected
-			and Distance.isWithinRange(item.pos, currentPos, collectRange)
+			and livePosition
+			and Distance.isWithinRange(livePosition, currentPos, collectRange)
 		then
-			collectGift(item.rawObj, collectedEvent)
-			table.insert(attemptedGifts, item.rawObj)
-			collected += 1
-			if pacingBatchSize and collected % pacingBatchSize == 0 then
+			if collectGift(item.rawObj, collectedEvent) then
+				table.insert(attemptedGifts, item.rawObj)
+				collected += 1
+			end
+			if pacingBatchSize and collected > 0 and collected % pacingBatchSize == 0 then
 				RunService.Heartbeat:Wait()
 			end
 		end
@@ -294,16 +302,36 @@ end
 local function getRejectedItems(items, currentPos, collectRange)
 	local rejected = {}
 	for _, item in ipairs(items) do
+		local livePosition = Context.getCandidatePosition(item)
 		if item.rawObj
 			and not item.rawObj.Destroyed
 			and not item.rawObj.Collected
 			and not item.rawObj.ClientCollected
-			and Distance.isWithinRange(item.pos, currentPos, collectRange)
+			and livePosition
+			and Distance.isWithinRange(livePosition, currentPos, collectRange)
 		then
 			table.insert(rejected, item)
 		end
 	end
 	return rejected
+end
+
+local function hasCollectableNearby(items, currentPos, collectRange)
+	for _, item in ipairs(items) do
+		local rawObj = item.rawObj
+		local livePosition = Context.getCandidatePosition(item)
+		if
+			rawObj
+			and not rawObj.Destroyed
+			and not rawObj.Collected
+			and not rawObj.ClientCollected
+			and livePosition
+			and Distance.isWithinRange(livePosition, currentPos, collectRange)
+		then
+			return true
+		end
+	end
+	return false
 end
 
 local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, collectedEvent, attemptedGifts, options, lease, currentSessionToken)
@@ -404,7 +432,15 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			return
 		end
 		clearVelocity(hrp)
-		if not waitForArrival(hrp, standingPosition, tailMode and "tail" or precisionMode, lease, currentSessionToken, options) then
+		local arrived = waitForArrival(
+			hrp,
+			standingPosition,
+			tailMode and "tail" or precisionMode,
+			lease,
+			currentSessionToken,
+			options
+		)
+		if not arrived and not hasCollectableNearby(cluster, hrp.Position, clientCollectRange) then
 			result.Rejected = #cluster
 			return
 		end
