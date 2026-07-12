@@ -130,7 +130,7 @@ local function ensureGui()
 	local frame = Instance.new("Frame")
 	frame.Name = "MainFrame"
 	frame.Size = UDim2.fromOffset(330, 128)
-	frame.Position = UDim2.new(0.5, -165, 0.08, 0)
+	frame.Position = UDim2.fromOffset(16, 115)
 	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 22)
 	frame.BackgroundTransparency = 0.12
 	frame.BorderSizePixel = 0
@@ -197,18 +197,17 @@ local function ensureGui()
 end
 
 local function render()
-	ensureGui()
-	local labels = Status.Labels
-	if not labels then
+	if not (Status.Enemy and Status.Enemy.Parent) then
+		if Status.Gui then
+			Status.Gui.Enabled = false
+		end
 		return
 	end
 
-	if not (Status.Enemy and Status.Enemy.Parent) then
-		labels.Phase.Text = "Not active"
-		labels.Phase.TextColor3 = Color3.fromRGB(150, 150, 155)
-		labels.ETA.Text = "Waiting for Cadence"
-		labels.Details.Text = string.format("Chase: Idle   |   Instruments: %d", Status.InstrumentCount)
-		labels.Stroke.Color = Color3.fromRGB(85, 85, 90)
+	ensureGui()
+	Status.Gui.Enabled = true
+	local labels = Status.Labels
+	if not labels then
 		return
 	end
 
@@ -392,10 +391,6 @@ end
 function Status.detach(enemy)
 	if enemy == nil or Status.Enemy == enemy then
 		Status.clearRuntime()
-		if Status.Enabled then
-			ensureGui()
-			updateInstrumentCount()
-		end
 	end
 end
 
@@ -405,8 +400,6 @@ function Status.setEnabled(enabled)
 	if not Status.Enabled then
 		return
 	end
-	ensureGui()
-	updateInstrumentCount()
 	local enemy = findCadence()
 	if enemy then
 		Status.attach(enemy)

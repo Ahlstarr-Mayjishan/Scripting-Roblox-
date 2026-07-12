@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.13.18",
+    "Version":  "2026.07.13.19",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -944,7 +944,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "ef0d1aa6fb5eae3aa2583e5934db45a280535ca11b914c31ddbf73da24550fb8"
+                      "Sha256":  "1226e2c233c616467cb0d19806efc37668776e659c23dc3c4ddc82886e1ae496"
                   }
               ]
 }
