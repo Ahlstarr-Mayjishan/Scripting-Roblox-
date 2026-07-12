@@ -9,7 +9,7 @@ local Workspace = game:GetService("Workspace")
 local VoidCastAssist = {}
 
 local ASSIST_EASE_STUDS = 64
-local MAX_VOID_CAST_DISTANCE = 120
+local MAX_VOID_CAST_DISTANCE = 160
 
 local function getControl()
 	return getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
@@ -75,7 +75,7 @@ function VoidCastAssist.find(grapple, direction, maxRange)
 
 	local topY = killVoid.Size.Y * 0.5
 	local travel = (topY - localOrigin.Y) / localDirection.Y
-	local distanceLimit = math.min(tonumber(maxRange) or 90, MAX_VOID_CAST_DISTANCE)
+	local distanceLimit = MAX_VOID_CAST_DISTANCE
 	if travel <= 0 or travel > distanceLimit then
 		return nil
 	end
@@ -115,7 +115,7 @@ function VoidCastAssist.findEmergency(grapple, maxRange)
 	)
 	local snappedWorld = killVoid.CFrame:PointToWorldSpace(snappedLocal)
 	local distance = (snappedWorld - origin).Magnitude
-	local distanceLimit = math.min(tonumber(maxRange) or 90, MAX_VOID_CAST_DISTANCE)
+	local distanceLimit = MAX_VOID_CAST_DISTANCE
 	if distance <= 3 or distance > distanceLimit then
 		return nil
 	end
