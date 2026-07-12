@@ -138,7 +138,7 @@ local function settleBeforeCollect(hrp, shouldAbort)
 	return true
 end
 
-local function collectCluster(routeToken, cluster, currentPos, collectRange, collectedEvent, stats, lease)
+local function collectCluster(routeToken, cluster, currentPos, collectRange, collectedEvent, stats, lease, pacingBatchSize)
 	if routeToken ~= pipelineToken or not lease:isValid() then
 		return {}
 	end
@@ -163,6 +163,9 @@ local function collectCluster(routeToken, cluster, currentPos, collectRange, col
 				pcall(function()
 					collectedEvent:Fire()
 				end)
+			end
+			if pacingBatchSize and stats.Attempted % pacingBatchSize == 0 then
+				RunService.Heartbeat:Wait()
 			end
 		end
 	end
@@ -306,7 +309,16 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 			local attempted = {}
 			local closeEnough = arrived or (hrp.Position - standingPosition).Magnitude <= 32
 			if closeEnough and settleBeforeCollect(hrp, shouldAbort) then
-				attempted = collectCluster(routeToken, cluster, hrp.Position, collectRange, collectedEvent, stats, lease)
+				attempted = collectCluster(
+					routeToken,
+					cluster,
+					hrp.Position,
+					collectRange,
+					collectedEvent,
+					stats,
+					lease,
+					options.NormalPacingBatchSize
+				)
 			end
 			if #attempted > 0 and not waitForCollectAcceptance(hrp, shouldAbort, attempted, #cluster) then
 				return

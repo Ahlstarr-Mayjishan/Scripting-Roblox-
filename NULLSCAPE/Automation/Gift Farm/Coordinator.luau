@@ -32,6 +32,7 @@ local EMPTY_COMPLETE_DELAY = 2.5
 local PYLON_LEVEL = 35
 local GOLDEN_RETURN_VERIFY_ATTEMPTS = 6
 local GOLDEN_RETURN_VERIFY_INTERVAL = 0.12
+local GOLDEN_RETURN_CONFIRM_DELAY = 0.25
 local MAX_RETRY_QUEUE = 32
 local RESPAWN_READY_DELAY = 0.85
 local TAIL_REMAINING_RATIO = 0.12
@@ -278,6 +279,15 @@ end
 
 local function tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActive)
 	if not (pendingGoldenReturnSince and scanInfo and tonumber(scanInfo.RawGolden) == 0) then
+		return false
+	end
+	if scanInfo.GoldenProgressComplete ~= true then
+		if controller then
+			controller.GiftFarmGoldenComplete = false
+		end
+		return false
+	end
+	if os.clock() - pendingGoldenReturnSince < GOLDEN_RETURN_CONFIRM_DELAY then
 		return false
 	end
 
@@ -802,6 +812,23 @@ local function runLoop(controller)
 			if tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActive) then
 				continue
 			end
+			if pendingGoldenReturnSince
+				and rawGolden == 0
+				and scanInfo
+				and scanInfo.GoldenProgressComplete ~= true
+			then
+				transitionTo(
+					controller,
+					"Scanning",
+					string.format(
+						"Verifying golden gifts %d/%d",
+						tonumber(scanInfo.GoldenCollected) or 0,
+						tonumber(scanInfo.GoldenMax) or 0
+					)
+				)
+				task.wait(GOLDEN_RETURN_VERIFY_INTERVAL)
+				continue
+			end
 
 			-- Check Golden Wait
 			local goldenWaitReason = GoldenWait.hasSeenGolden() and "Golden respawn check" or "Post-clear check"
@@ -897,6 +924,10 @@ local function runLoop(controller)
 
 			local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
 			local wasGoldenRoute = scanInfo and scanInfo.GoldenLocked == true
+			local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
+			local normalPacingBatchSize = if wasGoldenRoute
+				then nil
+				else Progress.getNormalPacingBatchSize(normalRatio)
 			local shouldHoldForGoldenWait = GoldenWait.shouldHoldAfterRoute(scanInfo, totalPlanned)
 
 			-- Acquire Collecting Lease
@@ -908,6 +939,7 @@ local function runLoop(controller)
 
 			if mode == PIPELINE_MODE then
 				routeCompleted, routeStats = PipelinedCollector.collectRoute(controller, hrp, route, range, {
+					NormalPacingBatchSize = normalPacingBatchSize,
 					AbortCheck = function()
 						return not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision
 					end,
@@ -916,7 +948,6 @@ local function runLoop(controller)
 				-- Normal mode collection loop
 				routeCompleted = true
 				routeStats = { Attempted = 0, Accepted = 0, Failed = 0, Retry = {} }
-				local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 				local tailPrecision = isTailPrecision(candidatesWithRetry, scanInfo, normalRatio)
 				local routeRejected = false
 
@@ -949,6 +980,7 @@ local function runLoop(controller)
 						TargetPosition = planInfo and planInfo.TargetPosition,
 						PrecisionMode = precisionMode,
 						TailMode = tailPrecision,
+						NormalPacingBatchSize = normalPacingBatchSize,
 						AbortCheck = function()
 							return not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision
 						end,

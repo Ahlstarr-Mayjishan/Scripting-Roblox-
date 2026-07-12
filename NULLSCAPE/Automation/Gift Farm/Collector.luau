@@ -272,7 +272,7 @@ local function waitForArrival(hrp, targetPosition, precisionMode, lease, current
 	return (hrp.Position - targetPosition).Magnitude <= tolerance
 end
 
-local function collectItems(items, currentPos, collectRange, collectedEvent, attemptedGifts)
+local function collectItems(items, currentPos, collectRange, collectedEvent, attemptedGifts, pacingBatchSize)
 	local collected = 0
 	for _, item in ipairs(items) do
 		if item.rawObj
@@ -283,6 +283,9 @@ local function collectItems(items, currentPos, collectRange, collectedEvent, att
 			collectGift(item.rawObj, collectedEvent)
 			table.insert(attemptedGifts, item.rawObj)
 			collected += 1
+			if pacingBatchSize and collected % pacingBatchSize == 0 then
+				RunService.Heartbeat:Wait()
+			end
 		end
 	end
 	return collected
@@ -421,7 +424,14 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			comboCount = 0
 		end
 
-		collectItems(cluster, currentPos, clientCollectRange, collectedEvent, attemptedGifts)
+		collectItems(
+			cluster,
+			currentPos,
+			clientCollectRange,
+			collectedEvent,
+			attemptedGifts,
+			options.NormalPacingBatchSize
+		)
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
@@ -454,7 +464,14 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 				return
 			end
 			currentPos = hrp.Position
-			collectItems(rejected, currentPos, clientCollectRange, collectedEvent, attemptedGifts)
+			collectItems(
+				rejected,
+				currentPos,
+				clientCollectRange,
+				collectedEvent,
+				attemptedGifts,
+				options.NormalPacingBatchSize
+			)
 			task.wait(getValidationWait(controller, true))
 		end
 

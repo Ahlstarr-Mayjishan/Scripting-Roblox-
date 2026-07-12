@@ -63,7 +63,7 @@ local function getAltarState(root, tagged)
 	end
 
 	local prompt = getPrompt(root, tagged)
-	local used = (root:GetAttribute("AltarUsed") == true) or (tagged and tagged:GetAttribute("AltarUsed") == true)
+	local used = root:GetAttribute("AltarUsed") == true
 	local voting = root:HasTag("Voting") or (tagged and tagged:HasTag("Voting"))
 	local solo = isSoloRun()
 	local host = isLocalHost()
@@ -109,9 +109,6 @@ local function hookState(root, tagged)
 	end
 
 	bind(root:GetAttributeChangedSignal("AltarUsed"))
-	if tagged and tagged ~= root then
-		bind(tagged:GetAttributeChangedSignal("AltarUsed"))
-	end
 	bind(root.AncestryChanged)
 	local solo = ReplicatedStorage:FindFirstChild("Solo")
 	if solo and solo:IsA("BoolValue") then
@@ -278,19 +275,14 @@ local function collectCandidates()
 
 	for _, tagged in ipairs(CollectionService:GetTagged("Altar")) do
 		if tagged and tagged:IsDescendantOf(workspace) then
-			local root = tagged
-			if tagged.Parent and tagged.Parent:IsDescendantOf(workspace) then
-				root = tagged.Parent
-			end
-
-			if root and not seen[root] then
+			local root = tagged.Parent
+			if root
+				and root:IsDescendantOf(workspace)
+				and root:FindFirstChild("Altar")
+				and not seen[root]
+			then
 				seen[root] = tagged
 				table.insert(roots, root)
-			end
-
-			if tagged and not seen[tagged] then
-				seen[tagged] = tagged
-				table.insert(roots, tagged)
 			end
 		end
 	end

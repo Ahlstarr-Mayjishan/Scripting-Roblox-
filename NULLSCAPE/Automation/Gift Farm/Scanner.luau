@@ -122,6 +122,7 @@ function Scanner.scan(controller, gch)
 	local normalGifts = {}
 	local now = os.clock()
 	local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
+	local goldenCollected, goldenMax, goldenRatio = Progress.getGoldenGiftProgress(gch)
 	local rawGolden = 0
 	local rawNormal = 0
 	local hasFannyPack, fannyPackTiles = getFannyPackState(now)
@@ -181,6 +182,10 @@ function Scanner.scan(controller, gch)
 		PeakRawGolden = peakRawGolden,
 		PeakRawNormal = peakRawNormal,
 		GoldenRemainingRatio = if peakRawGolden > 0 then rawGolden / peakRawGolden else 1,
+		GoldenCollected = goldenCollected,
+		GoldenMax = goldenMax,
+		GoldenProgressRatio = goldenRatio,
+		GoldenProgressComplete = goldenMax > 0 and goldenCollected >= goldenMax,
 		NormalRemainingRatio = if peakRawNormal > 0 then rawNormal / peakRawNormal else 1,
 		CollapseTracked = true,
 		FannyPackTracked = hasFannyPack,
