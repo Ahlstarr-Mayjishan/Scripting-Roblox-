@@ -1010,10 +1010,6 @@ local function loadModule(path)
 				warn("[NULLSCAPE] Local file " .. tostring(path) .. " is empty or invalid, falling back to GitHub!")
 			end
 		end
-		if isfile and readfile and getgenv().NULLSCAPE_ALLOW_UNVERIFIED_REMOTE ~= true then
-			error("Local module is unavailable; install a verified update before loading " .. tostring(path))
-		end
-
 		local url = (GITHUB_RAW_ROOT .. path):gsub(" ", "%%20")
 		return Game:HttpGet(url)
 	end)
