@@ -496,6 +496,29 @@ function Controller:SetGrappleAssist(value)
 	end
 end
 
+-- Keep runtime feature gates in one place. Child toggles configure a feature;
+-- they must never implicitly reactivate the parent Grapple Assist toggle.
+function Controller:IsGrappleFeatureEnabled(featureName)
+	if self.GrappleAssistEnabled ~= true then
+		return false
+	end
+
+	if featureName == "SharkVoid" then
+		return self.GrappleVoidRescueEnabled == true
+	end
+	if featureName == "ReelSaver" then
+		return self.GrappleReelSaverEnabled == true
+	end
+	if featureName == "GrappleDodge" then
+		return self.GrappleDodgeTechniqueEnabled == true or self.GrappleSharkEscapeEnabled == true
+	end
+	if featureName == "SecondaryCast" then
+		return self.GrappleAssistSecondaryCastEnabled == true
+	end
+
+	return true
+end
+
 function Controller:SetGrappleAssistStrength(value)
 	self.GrappleAssistStrength = math.clamp(tonumber(value) or 1, 0.1, 3)
 end
@@ -605,10 +628,6 @@ end
 
 function Controller:SetGrappleVoidProtection(value)
 	self.GrappleVoidProtectionEnabled = value == true
-
-	if self.GrappleVoidProtectionEnabled then
-		self:SetGrappleAssist(true)
-	end
 end
 
 function Controller:SetGrappleVoidProtectionHeight(value)
@@ -621,10 +640,6 @@ end
 
 function Controller:SetGrappleAssistSecondaryCast(value)
 	self.GrappleAssistSecondaryCastEnabled = value == true
-
-	if self.GrappleAssistSecondaryCastEnabled then
-		self:SetGrappleAssist(true)
-	end
 end
 
 function Controller:SetGrappleAssistSecondaryCastKeybind(value)
@@ -633,10 +648,6 @@ end
 
 function Controller:SetGrappleVoidRescue(value)
 	self.GrappleVoidRescueEnabled = value == true
-
-	if self.GrappleVoidRescueEnabled then
-		self:SetGrappleAssist(true)
-	end
 end
 
 function Controller:SetGrapplerTechniqueSelection(options)
@@ -676,10 +687,6 @@ function Controller:SetGrapplerTechniqueSelection(options)
 	self.GrappleDodgeTechniqueEnabled = grappleDodge
 	self.GrappleDodgeEnabled = grappleDodge or sharkEscape
 	self.GrappleSharkEscapeEnabled = sharkEscape
-
-	if sharkVoid or reelSaver or grappleDodge or sharkEscape then
-		self:SetGrappleAssist(true)
-	end
 end
 
 function Controller:SetGrappleVoidRescueAutoReel(value)
@@ -699,12 +706,8 @@ function Controller:SetGrappleVoidRescueReelHoldTime(value)
 end
 
 function Controller:SetGrappleDodge(value)
-	self.GrappleDodgeEnabled = value == true
 	self.GrappleDodgeTechniqueEnabled = value == true
-
-	if self.GrappleDodgeEnabled then
-		self:SetGrappleAssist(true)
-	end
+	self.GrappleDodgeEnabled = self.GrappleDodgeTechniqueEnabled or self.GrappleSharkEscapeEnabled == true
 end
 
 function Controller:SetGrappleDodgeThreatRange(value)
@@ -733,11 +736,7 @@ end
 
 function Controller:SetGrappleSharkEscape(value)
 	self.GrappleSharkEscapeEnabled = value == true
-
-	if self.GrappleSharkEscapeEnabled then
-		self:SetGrappleAssist(true)
-		self.GrappleDodgeEnabled = true
-	end
+	self.GrappleDodgeEnabled = self.GrappleDodgeTechniqueEnabled == true or self.GrappleSharkEscapeEnabled
 end
 
 function Controller:SetGrappleSharkEscapeRange(value)
@@ -750,10 +749,6 @@ end
 
 function Controller:SetGrappleReelSaver(value)
 	self.GrappleReelSaverEnabled = value == true
-
-	if self.GrappleReelSaverEnabled then
-		self:SetGrappleAssist(true)
-	end
 end
 
 function Controller:SetGrappleReelSaverKeybind(value)
@@ -782,24 +777,16 @@ function Controller:SetGrappleReelSaverReelHoldTime(value)
 end
 
 function Controller:TriggerGrappleReelSaver()
-	if not self.GrappleReelSaverEnabled then
+	if not (self.GrappleAssistEnabled and self.GrappleReelSaverEnabled) then
 		return false
-	end
-
-	if not self.GrappleAssistEnabled then
-		self:SetGrappleAssist(true)
 	end
 
 	return callExecutor("triggerGrappleReelSaver", self)
 end
 
 function Controller:TriggerGrappleAssistSecondaryCast()
-	if not self.GrappleAssistSecondaryCastEnabled then
+	if not (self.GrappleAssistEnabled and self.GrappleAssistSecondaryCastEnabled) then
 		return false
-	end
-
-	if not self.GrappleAssistEnabled then
-		self:SetGrappleAssist(true)
 	end
 
 	return callExecutor("triggerGrappleAssistSecondaryCast", self)

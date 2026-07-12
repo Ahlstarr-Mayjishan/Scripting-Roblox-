@@ -52,6 +52,15 @@ function Helper.cancel(grapple)
 	end
 end
 
+function Helper.cancelReason(grapple, reason)
+	local pending = Helper.get(grapple)
+	if pending and pending.Reason == reason then
+		Helper.Pending[grapple] = nil
+		return true
+	end
+	return false
+end
+
 function Helper.get(grapple)
 	return grapple and Helper.Pending[grapple] or nil
 end

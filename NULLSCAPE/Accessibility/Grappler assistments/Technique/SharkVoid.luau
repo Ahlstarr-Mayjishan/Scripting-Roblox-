@@ -417,6 +417,12 @@ function Logic.step(grapple, _dt, controller, targeting)
 
 	if not (controller and controller.GrappleVoidRescueEnabled == true) then
 		Logic.PendingEndAt = nil
+		Logic.LastVoidAnchorAt = 0
+		Logic.SharkTailWindowGrapple = nil
+		Logic.SharkTailWindowConsumed = false
+		if ReleaseTiming and typeof(ReleaseTiming.cancelReason) == "function" then
+			ReleaseTiming.cancelReason(grapple, "SharkVoid")
+		end
 		return false
 	end
 

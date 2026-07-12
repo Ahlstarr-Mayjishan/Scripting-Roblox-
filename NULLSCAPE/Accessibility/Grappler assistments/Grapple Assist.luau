@@ -154,6 +154,19 @@ local function packValues(...)
 end
 
 local function canRunTechnique(grapple, name, intent, options)
+	local controller = getController()
+	if not controller then
+		return false
+	end
+
+	if typeof(controller.IsGrappleFeatureEnabled) == "function" then
+		if controller:IsGrappleFeatureEnabled(name) ~= true then
+			return false
+		end
+	elseif controller.GrappleAssistEnabled ~= true then
+		return false
+	end
+
 	if Decision and typeof(Decision.canRun) == "function" then
 		local ok, allowed, state = pcall(function()
 			return Decision.canRun(grapple, name, intent, options)
@@ -355,6 +368,8 @@ local function installStepHook(grappleModule, globals)
 					activeTechnique = "SharkVoid"
 					claimTechnique(self, "SharkVoid", 0.45)
 				end
+			else
+				pcall(VoidRescue.step, self, dt, controller, Targeting)
 			end
 		end
 
@@ -372,6 +387,8 @@ local function installStepHook(grappleModule, globals)
 					activeTechnique = "GrappleDodge"
 					claimTechnique(self, "GrappleDodge", 0.42)
 				end
+			else
+				pcall(GrappleDodge.step, self, dt, controller)
 			end
 		end
 
@@ -389,6 +406,8 @@ local function installStepHook(grappleModule, globals)
 					activeTechnique = "ReelSaver"
 					claimTechnique(self, "ReelSaver", 0.35)
 				end
+			else
+				pcall(ReelSaver.step, self, dt, controller)
 			end
 		end
 
@@ -443,6 +462,12 @@ local function installStepHook(grappleModule, globals)
 				or reason == "ReelSaver" and "ReelSaver"
 				or "ReleaseTiming"
 			if
+				pending and not canRunTechnique(self, releaseName, { Name = releaseName }, { Technique = releaseName })
+			then
+				if ReleaseTiming and typeof(ReleaseTiming.cancelReason) == "function" then
+					ReleaseTiming.cancelReason(self, reason)
+				end
+			elseif
 				canRunTechnique(self, releaseName, {
 					Name = releaseName,
 				}, {
@@ -503,6 +528,16 @@ end
 
 function Logic.triggerSecondaryCast(controller)
 	Logic.Controller = controller or Logic.Controller
+	local activeController = getController()
+	if
+		not (
+			activeController
+			and activeController.GrappleAssistEnabled == true
+			and activeController.GrappleAssistSecondaryCastEnabled == true
+		)
+	then
+		return false
+	end
 
 	if not Logic.Enabled and not Logic.initialize(Logic.Controller) then
 		return false
@@ -525,6 +560,16 @@ end
 
 function Logic.triggerReelSaver(controller)
 	Logic.Controller = controller or Logic.Controller
+	local activeController = getController()
+	if
+		not (
+			activeController
+			and activeController.GrappleAssistEnabled == true
+			and activeController.GrappleReelSaverEnabled == true
+		)
+	then
+		return false
+	end
 
 	if not Logic.Enabled and not Logic.initialize(Logic.Controller) then
 		return false

@@ -99,7 +99,12 @@ local function getIntentDirection(grapple)
 end
 
 local function canCast(grapple, controller, now)
-	if not (controller and controller.GrappleDodgeEnabled == true) then
+	if
+		not (
+			controller
+			and (controller.GrappleDodgeTechniqueEnabled == true or controller.GrappleSharkEscapeEnabled == true)
+		)
+	then
 		return false
 	end
 
@@ -472,8 +477,17 @@ local function serviceSharkEscape(grapple, controller, now)
 	return Logic.ActiveLift ~= nil or Logic.PendingSharkTailUntil ~= nil
 end
 
+local function cancelSharkEscape()
+	Logic.ActiveLift = nil
+	Logic.PendingLiftEndAt = nil
+	Logic.PendingSharkTailUntil = nil
+end
+
 function Logic.step(grapple, _dt, controller)
 	local now = time()
+	if not (controller and controller.GrappleSharkEscapeEnabled == true) then
+		cancelSharkEscape()
+	end
 	if serviceSharkEscape(grapple, controller, now) then
 		return true
 	end
@@ -494,7 +508,10 @@ function Logic.step(grapple, _dt, controller)
 		sharkThreat, sharkScore, sharkAway = getSharkEscapeThreat(grapple, controller)
 	end
 
-	local threat, score, awayDirection = getThreat(grapple, controller)
+	local threat, score, awayDirection = nil, 0, nil
+	if controller and controller.GrappleDodgeTechniqueEnabled == true then
+		threat, score, awayDirection = getThreat(grapple, controller)
+	end
 	if sharkThreat and sharkScore > 0 then
 		threat = sharkThreat
 		score = math.max(score, sharkScore)
