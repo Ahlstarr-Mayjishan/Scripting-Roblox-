@@ -25,6 +25,7 @@ end
 
 local function scoreCluster(cluster, targetPosition, seed, origin, range)
 	local golden = 0
+	local bonusTilePriority = 0
 	local collapseUrgency = 0
 	local collapseCount = 0
 	local edgePenalty = 0
@@ -34,6 +35,7 @@ local function scoreCluster(cluster, targetPosition, seed, origin, range)
 		if item.golden then
 			golden += 1
 		end
+		bonusTilePriority += tonumber(item.bonusTilePriority) or 0
 		local itemCollapse = tonumber(item.collapsePriority) or 0
 		if itemCollapse > 0 then
 			collapseUrgency += itemCollapse
@@ -48,6 +50,7 @@ local function scoreCluster(cluster, targetPosition, seed, origin, range)
 	local originDistance = origin and nativeDistanceSq(targetRootPosition, origin) or 0
 	return {
 		Golden = golden,
+		BonusTilePriority = bonusTilePriority,
 		CollapseUrgency = collapseUrgency,
 		CollapseCount = collapseCount,
 		Total = #cluster,
@@ -63,6 +66,9 @@ local function isBetterScore(score, bestScore)
 	end
 	if score.Golden ~= bestScore.Golden then
 		return score.Golden > bestScore.Golden
+	end
+	if score.BonusTilePriority ~= bestScore.BonusTilePriority then
+		return score.BonusTilePriority > bestScore.BonusTilePriority
 	end
 	if score.CollapseUrgency ~= bestScore.CollapseUrgency then
 		return score.CollapseUrgency > bestScore.CollapseUrgency
@@ -157,6 +163,9 @@ local function getSeedCandidates(candidates, origin)
 		if a.golden ~= b.golden then
 			return a.golden == true
 		end
+		if a.bonusTilePriority ~= b.bonusTilePriority then
+			return (a.bonusTilePriority or 0) > (b.bonusTilePriority or 0)
+		end
 
 		if a.collapsePriority ~= b.collapsePriority then
 			return (a.collapsePriority or 0) > (b.collapsePriority or 0)
@@ -184,6 +193,9 @@ local function sortCluster(cluster, targetPosition)
 	table.sort(cluster, function(a, b)
 		if a.golden ~= b.golden then
 			return a.golden == true
+		end
+		if a.bonusTilePriority ~= b.bonusTilePriority then
+			return (a.bonusTilePriority or 0) > (b.bonusTilePriority or 0)
 		end
 
 		if a.collapsePriority ~= b.collapsePriority then
@@ -316,6 +328,9 @@ function Planner.planTailRoute(candidates, range, origin)
 		table.sort(remaining, function(a, b)
 			if a.golden ~= b.golden then
 				return a.golden == true
+			end
+			if a.bonusTilePriority ~= b.bonusTilePriority then
+				return (a.bonusTilePriority or 0) > (b.bonusTilePriority or 0)
 			end
 			if a.collapsePriority ~= b.collapsePriority then
 				return (a.collapsePriority or 0) > (b.collapsePriority or 0)

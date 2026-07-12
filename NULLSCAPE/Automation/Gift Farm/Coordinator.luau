@@ -35,7 +35,6 @@ local GOLDEN_RETURN_VERIFY_INTERVAL = 0.12
 local MAX_RETRY_QUEUE = 32
 local RESPAWN_READY_DELAY = 0.85
 local TAIL_REMAINING_RATIO = 0.12
-local SOFT_GC_INTERVAL = 1.5
 
 local enabled = false
 local configDirty = false
@@ -56,7 +55,6 @@ local characterReadyAt = 0
 local lastGiftSeenAt = 0
 local pendingGoldenReturnSince = nil
 local retryQueue = {}
-local lastSoftGcAt = 0
 local lastGiftCount = nil
 local lastGiftCountChangedAt = 0
 local giftsStabilized = false
@@ -153,18 +151,6 @@ local function softCleanup(...)
 			table.clear(value)
 		end
 	end
-
-	local now = os.clock()
-	if now - lastSoftGcAt < SOFT_GC_INTERVAL then
-		return
-	end
-	lastSoftGcAt = now
-
-	task.defer(function()
-		pcall(function()
-			local _ = collectgarbage("count")
-		end)
-	end)
 end
 
 local function isRetryGiftAlive(item)

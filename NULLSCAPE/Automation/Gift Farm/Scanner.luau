@@ -16,6 +16,10 @@ local seenGifts = setmetatable({}, { __mode = "k" })
 local peakRawGolden = 0
 local peakRawNormal = 0
 local cachedUpgradeHandler = nil
+local lastFannyPackCheckAt = -math.huge
+local cachedHasFannyPack = false
+local cachedFannyPackTiles = nil
+local FANNY_PACK_CACHE_INTERVAL = 0.4
 
 local function getUpgradeHandler()
 	if cachedUpgradeHandler ~= nil then
@@ -90,10 +94,23 @@ local function getFannyPackTilePriority(position, fannyPackTiles)
 	return 0
 end
 
+local function getFannyPackState(now)
+	if now - lastFannyPackCheckAt >= FANNY_PACK_CACHE_INTERVAL then
+		cachedHasFannyPack = getActiveUpgradeStack("FannyPack") > 0
+		cachedFannyPackTiles = if cachedHasFannyPack then CollectionService:GetTagged("FannyPackTile") else nil
+		lastFannyPackCheckAt = now
+	end
+
+	return cachedHasFannyPack, cachedFannyPackTiles
+end
+
 function Scanner.reset()
 	seenGifts = setmetatable({}, { __mode = "k" })
 	peakRawGolden = 0
 	peakRawNormal = 0
+	lastFannyPackCheckAt = -math.huge
+	cachedHasFannyPack = false
+	cachedFannyPackTiles = nil
 	if Collapse and typeof(Collapse.reset) == "function" then
 		Collapse.reset()
 	end
@@ -107,8 +124,7 @@ function Scanner.scan(controller, gch)
 	local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 	local rawGolden = 0
 	local rawNormal = 0
-	local hasFannyPack = getActiveUpgradeStack("FannyPack") > 0
-	local fannyPackTiles = hasFannyPack and CollectionService:GetTagged("FannyPackTile") or nil
+	local hasFannyPack, fannyPackTiles = getFannyPackState(now)
 
 	for _, gift in pairs(gch.Gifts or {}) do
 		if gift and not gift.Destroyed and not gift.Collected and not gift.Tripmine then
@@ -156,19 +172,6 @@ function Scanner.scan(controller, gch)
 	else
 		gifts = normalGifts
 	end
-
-	table.sort(gifts, function(a, b)
-		if a.priority ~= b.priority then
-			return a.priority < b.priority
-		end
-		if a.bonusTilePriority ~= b.bonusTilePriority then
-			return (a.bonusTilePriority or 0) > (b.bonusTilePriority or 0)
-		end
-		if a.collapsePriority ~= b.collapsePriority then
-			return (a.collapsePriority or 0) > (b.collapsePriority or 0)
-		end
-		return tostring(a.id) < tostring(b.id)
-	end)
 
 	return gifts, {
 		Golden = #goldenGifts,
