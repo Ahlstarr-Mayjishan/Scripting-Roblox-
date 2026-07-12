@@ -6,6 +6,7 @@
 
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
 
 local Logic = {
 	IgnoreFakeCount = false,
@@ -15,6 +16,7 @@ local Logic = {
 	Connections = {},
 	KnownMirages = setmetatable({}, { __mode = "k" }),
 	OriginalProperties = setmetatable({}, { __mode = "k" }),
+	MirageSafetyConnection = nil,
 }
 
 local function getGlobals()
@@ -102,6 +104,54 @@ local function disconnectAll()
 		end
 	end
 	table.clear(Logic.Connections)
+end
+
+local function discardBrokenMirage(instance)
+	if not (instance and instance:IsA("Model") and instance.Name == "Mirage") then
+		return
+	end
+	if not instance:FindFirstChild("Mirage_AI") then
+		return
+	end
+
+	local character = Players.LocalPlayer and Players.LocalPlayer.Character
+	if character and character:FindFirstChild("HumanoidRootPart") then
+		return
+	end
+
+	pcall(function()
+		instance:Destroy()
+	end)
+end
+
+function Logic.initializeMirageSafety()
+	if Logic.MirageSafetyConnection then
+		return true
+	end
+
+	local enemies = Workspace:FindFirstChild("Enemies")
+	if enemies then
+		for _, child in ipairs(enemies:GetChildren()) do
+			discardBrokenMirage(child)
+		end
+	end
+
+	Logic.MirageSafetyConnection = Workspace.DescendantAdded:Connect(function(instance)
+		if instance.Name == "Mirage_AI" then
+			local mirage = instance:FindFirstAncestorWhichIsA("Model")
+			task.defer(discardBrokenMirage, mirage)
+		end
+	end)
+	return true
+end
+
+function Logic.disableMirageSafety()
+	if Logic.MirageSafetyConnection then
+		pcall(function()
+			Logic.MirageSafetyConnection:Disconnect()
+		end)
+		Logic.MirageSafetyConnection = nil
+	end
 end
 
 local function remember(instance, prop)

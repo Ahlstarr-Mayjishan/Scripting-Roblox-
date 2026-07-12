@@ -406,6 +406,18 @@ function Updater:checkAndInstall(manual)
 			notify("Runtime Updater", "Manifest has no file list", 6)
 			return false
 		end
+		local remoteVersion = tostring(manifest.Version or manifest.version or "unknown")
+		local localManifest = readJson(self.ManifestPath)
+		local localVersion = tostring(localManifest.Version or localManifest.version or "")
+		if localVersion ~= "" and localVersion == remoteVersion then
+			self.State = self.State or {}
+			self.State.LastVersion = remoteVersion
+			writeJson(self.StateFile, self.State)
+			if manual then
+				notify("Runtime Updater", "Already running release " .. remoteVersion, 5)
+			end
+			return true
+		end
 
 		local manifestMenus = collectManifestMenus(manifest)
 		local safe, blockers = isSafeToInstall(self.Client, manifestMenus)
@@ -421,7 +433,7 @@ function Updater:checkAndInstall(manual)
 		end
 
 		local changes = {
-			Version = manifest.Version or manifest.version or "unknown",
+			Version = remoteVersion,
 			Files = {},
 			Menus = manifestMenus,
 		}

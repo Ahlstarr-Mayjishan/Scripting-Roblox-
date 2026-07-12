@@ -21,7 +21,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "796aef5334a31a433929e37b710ae10118ad990499f3500ae9c7e0e3934a1371"
+                      "Sha256":  "c8a1c11bb26fbffacd7832b6ae8266b48d2b3a3a8dd3b610f1201e1e5b2cdfe9"
                   },
                   {
                       "Path":  "NULLSCAPE/Core/Remote Registry.luau",
@@ -221,21 +221,21 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "62ad75c5774d0a3005929d87b6d3c36efb356a52adce06282223540013a4bf9c"
+                      "Sha256":  "5fbdd477c74996b437e19a3281f6bd5f2622b8a432667f23f9af151053e052e3"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Curse Visual Assist.luau",
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "f418162225ad81216a7a8032326f070618957803c5537fd1a567266b035dad98"
+                      "Sha256":  "320e47fb96c0aee6819ba34da75837ae76df99b0718c6d96ec76e99f5346ccbd"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/executor.luau",
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "9e535f1fad5fd2c2bb0f3cba10ecc816ce6598756f39db476d5112ca293b9a9a"
+                      "Sha256":  "42ead134473f85e2349247f0242c04336b06326bb129fc6c5d12d90df5dbb560"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/GC.luau",

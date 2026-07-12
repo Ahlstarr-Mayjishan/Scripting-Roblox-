@@ -220,6 +220,7 @@ function Controller:CleanUp()
 		callExecutor("disableRailAssist")
 		callExecutor("disableAntiBonk")
 		callExecutor("disableCurseVisualAssist")
+		callExecutor("disableMirageSafety")
 		callExecutor("disableMomentumGuard")
 		callExecutor("disableGrappleAssist")
 	end
@@ -1025,6 +1026,7 @@ local function scheduleRespawnFeatureRefresh()
 end
 
 getGlobals().activeAccessibilityController = Controller
+callExecutor("initializeMirageSafety")
 
 -- Khởi tạo ban đầu khi nạp script
 if not inLobby then

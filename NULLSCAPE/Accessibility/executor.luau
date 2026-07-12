@@ -226,6 +226,14 @@ function Executor.setBeaconMirageIdentifier(enabled)
 	return callModule("CurseVisualAssist", "setBeaconMirageIdentifier", enabled)
 end
 
+function Executor.initializeMirageSafety()
+	return callModule("CurseVisualAssist", "initializeMirageSafety")
+end
+
+function Executor.disableMirageSafety()
+	return callModule("CurseVisualAssist", "disableMirageSafety")
+end
+
 function Executor.disableCurseVisualAssist()
 	callModule("CurseVisualAssist", "disable")
 end
