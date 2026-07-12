@@ -198,23 +198,13 @@ return function(Client, Controller)
 
 	Tab:CreateSlider({
 		Name = "Air Control Multiplier",
-		Range = { 1.1, 5 },
+		Range = { 1, 5 },
 		Increment = 0.1,
-		CurrentValue = Controller.GraceWingsAirControlMultiplier or 1.1,
+		CurrentValue = Controller.GraceWingsAirControlMultiplier or 1,
 		Flag = "GraceWingsAirControlSlider",
 		Suffix = "x",
 		Callback = function(Value)
 			Controller:SetGraceWingsAirControlMultiplier(Value)
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "Strong Air Control",
-		Info = "Extra direct horizontal steering while falling. Keep off for closer GraceWings simulation.",
-		CurrentValue = Controller.GraceWingsStrongAirControl or false,
-		Flag = "GraceWingsStrongAirControlToggle",
-		Callback = function(Value)
-			Controller:SetGraceWingsStrongAirControl(Value)
 		end,
 	})
 
@@ -256,8 +246,8 @@ return function(Client, Controller)
 
 	Tab:CreateSlider({
 		Name = "JumpPad Power",
-		Info = "Ref JumpPad power is 100. Raise it up to 200.",
-		Range = { 100, 200 },
+		Info = "100 keeps the native JumpPad launch. Raise the same launch up to 300.",
+		Range = { 100, 300 },
 		Increment = 1,
 		CurrentValue = Controller.BetterJumpPadPower or 100,
 		Flag = "BetterJumpPadPowerSlider",
@@ -311,7 +301,7 @@ return function(Client, Controller)
 
 	AirJumpSelection = Tab:CreateDropdown({
 		Name = "Air Jumps",
-		Info = "Multi-select native air-jump names, then uses the infinite air-jump module to simulate them.",
+		Info = "Multi-select native air-jump names.",
 		Options = AirJumpOptions,
 		CurrentOption = Controller.AirJumpSelections or {},
 		MultipleOptions = true,
@@ -330,6 +320,16 @@ return function(Client, Controller)
 				end)
 				isSettingAirJumps = false
 			end
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Infinite Jump",
+		Info = "Refills selected native jump charges before they can stay empty.",
+		CurrentValue = Controller.InfiniteJumpEnabled == true,
+		Flag = "InfiniteJumpToggle",
+		Callback = function(Value)
+			Controller:SetInfiniteJump(Value)
 		end,
 	})
 

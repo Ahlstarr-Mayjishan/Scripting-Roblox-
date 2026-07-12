@@ -60,51 +60,7 @@ globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
 local IFRAME_OWNER = "DefuseKits"
 
 -- 1. Tìm MovementCore
-local function getMovementCore()
-	local movement = ReplicatedStorage:FindFirstChild("Movement")
-	local movementCoreScript = movement and movement:FindFirstChild("MovementCore")
-	if not movementCoreScript then
-		return nil
-	end
-	local ok, result = pcall(require, movementCoreScript)
-	return ok and result or nil
-end
-
-local cachedInstance = nil
-local lastCharacter = nil
-
 -- 2. Tìm thực thể chuyển động hoạt động (Active Movement Instance)
-local function getActiveMovementInstance()
-	local char = LocalPlayer.Character
-	if cachedInstance and lastCharacter == char and cachedInstance.Character == char then
-		return cachedInstance
-	end
-
-	cachedInstance = nil
-	lastCharacter = char
-	if not char then
-		return nil
-	end
-
-	local movementCore = getMovementCore()
-	if not movementCore then
-		return nil
-	end
-
-	if typeof(getgc) == "function" then
-		for _, obj in ipairs(getgc(true)) do
-			if type(obj) == "table" and getmetatable(obj) == movementCore then
-				if obj.Player == LocalPlayer and obj.Character == char then
-					cachedInstance = obj
-					return obj
-				end
-			end
-		end
-	end
-
-	return nil
-end
-
 local function getIframeOwners()
 	globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
 	return globals.TripmineIframeOwners
@@ -603,12 +559,7 @@ local function startWatcher()
 				updateImmunityTripmineWindow()
 
 				-- Cô lập tính năng liên kết: Hỗ trợ tạo I-Frames tạm thời khi kết thúc Charge thực tế (chỉ cho Charger Class)
-				local movementInstance = getActiveMovementInstance()
-				local isNativeCharger = movementInstance and (movementInstance.ClassID == "class/Charger")
-
-				if isNativeCharger then
-					watchNativeChargerState()
-				end
+				watchNativeChargerState()
 			end
 		end
 		removeIframes(true)
@@ -684,8 +635,6 @@ function Barrier.stop()
 	originalTripmineCollects = setmetatable({}, { __mode = "k" })
 	originalReplicationSendCollects = setmetatable({}, { __mode = "k" })
 	cachedGCH = nil
-	cachedInstance = nil
-	lastCharacter = nil
 	activeController = nil
 	lastMode = OFF_MODE
 	watcherToken = {}

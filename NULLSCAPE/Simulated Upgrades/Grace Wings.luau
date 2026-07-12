@@ -1,14 +1,11 @@
 --!nocheck
 -- [[
 --  NULLSCAPE - Grace Wings Simulation
---  Multiplies airborne control while Freefall/Jumping.
+--  Multiplies native GraceWings friction only while Freefall.
 --  Avoids hooking HumanoidMovement.Step so it cannot break MovementCore.Step.
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-
-local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 
 local function packValues(...)
 	local values = { ... }
@@ -17,10 +14,8 @@ local function packValues(...)
 end
 
 local Logic = {
-	AirControlMultiplier = 1.1,
+	AirControlMultiplier = 1,
 	OriginalApplyFriction = nil,
-	LastMovement = nil,
-	Connection = nil,
 	Hooked = false,
 }
 
@@ -33,54 +28,11 @@ local function getHumanoidMovement()
 end
 
 local function isAirborne(humanoid)
-	local state = humanoid:GetState()
-	return state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping
+	return humanoid:GetState() == Enum.HumanoidStateType.Freefall
 end
 
 local function getMultiplier(controller)
-	return math.clamp(tonumber(controller.GraceWingsAirControlMultiplier) or Logic.AirControlMultiplier, 1.1, 5)
-end
-
-local function applyVelocitySteering(controller, movement, dt)
-	if not controller.GraceWingsEnabled then
-		return
-	end
-	if not controller.GraceWingsStrongAirControl then
-		return
-	end
-	if not movement or not movement.RootPart or not movement.Humanoid then
-		return
-	end
-	if not isAirborne(movement.Humanoid) then
-		return
-	end
-
-	local wantDirection = movement.WantDirection
-	if typeof(wantDirection) ~= "Vector3" or wantDirection.Magnitude <= 0.001 then
-		return
-	end
-
-	local rootPart = movement.RootPart
-	local velocity = rootPart.AssemblyLinearVelocity or rootPart.Velocity
-	local horizontalVelocity = velocity * Vector3.new(1, 0, 1)
-	local horizontalSpeed = horizontalVelocity.Magnitude
-	local targetSpeed = math.max(horizontalSpeed, movement.Humanoid.WalkSpeed * 0.85)
-	local targetHorizontal = wantDirection.Unit * targetSpeed
-	local multiplier = getMultiplier(controller)
-	local alpha = math.clamp((dt or 0.016) * (multiplier - 1) * 5, 0, 0.9)
-	local newHorizontal = horizontalVelocity:Lerp(targetHorizontal, alpha)
-	local newVelocity = newHorizontal + Vector3.new(0, velocity.Y, 0)
-
-	pcall(function()
-		rootPart.AssemblyLinearVelocity = newVelocity
-	end)
-	rootPart.Velocity = newVelocity
-	local delta = newVelocity - velocity
-	if delta.Magnitude > 0.05 then
-		MomentumMemory.noteImpulse(rootPart, "GraceWingsAirControl", velocity, newVelocity, delta, {
-			Multiplier = multiplier,
-		})
-	end
+	return math.clamp(tonumber(controller.GraceWingsAirControlMultiplier) or Logic.AirControlMultiplier, 1, 5)
 end
 
 function Logic.start(controller, gc)
@@ -115,8 +67,10 @@ function Logic.start(controller, gc)
 			local humanoid = self and self.Humanoid
 
 			if controller.GraceWingsEnabled and movement and humanoid and isAirborne(humanoid) then
-				Logic.LastMovement = movement
-				movement.friction = movement.friction * getMultiplier(controller)
+				local multiplier = getMultiplier(controller)
+				if multiplier > 1 then
+					movement.friction *= multiplier
+				end
 			end
 
 			return table.unpack(results, 1, results.n)
@@ -125,21 +79,10 @@ function Logic.start(controller, gc)
 		HumanoidMovement.__NULLSCAPE_grace_wings_hooked = true
 	end
 
-	if not Logic.Connection then
-		Logic.Connection = RunService.Heartbeat:Connect(function(dt)
-			applyVelocitySteering(controller, Logic.LastMovement, dt)
-		end)
-	end
-
 	Logic.Hooked = true
 end
 
 function Logic.stop()
-	if Logic.Connection then
-		Logic.Connection:Disconnect()
-		Logic.Connection = nil
-	end
-
 	local HumanoidMovementModule = getHumanoidMovement()
 	if HumanoidMovementModule then
 		local success, HumanoidMovement = pcall(require, HumanoidMovementModule)
@@ -154,13 +97,12 @@ function Logic.stop()
 		end
 	end
 
-	Logic.LastMovement = nil
 	Logic.OriginalApplyFriction = nil
 	Logic.Hooked = false
 end
 
 function Logic.setMultiplier(value)
-	Logic.AirControlMultiplier = math.clamp(tonumber(value) or 1.1, 1.1, 5)
+	Logic.AirControlMultiplier = math.clamp(tonumber(value) or 1, 1, 5)
 end
 
 return Logic

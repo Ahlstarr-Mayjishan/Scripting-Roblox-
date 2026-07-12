@@ -221,12 +221,12 @@ pcall(function()
 			ChargerTripmineBatchDistanceSlider = 60,
 			ChargerTripmineJitterSlider = 2,
 			GraceWingsToggle = false,
-			GraceWingsAirControlSlider = 1.1,
-			GraceWingsStrongAirControlToggle = false,
+			GraceWingsAirControlSlider = 1,
 			AdvancedGravityCoilToggle = false,
 			AdvancedGravityCoilJumpPowerSlider = 28,
 			BetterJumpPadToggle = false,
 			BetterJumpPadPowerSlider = 100,
+			InfiniteJumpToggle = false,
 			AutomationGiftFarmToggle = false,
 			AutomationCollectMedalToggle = false,
 			AutomationGiftFarmRangeSlider = 60,
@@ -236,6 +236,7 @@ pcall(function()
 			AutomationPylonActivatorReturnToggle = true,
 			RuntimeUpdaterEnabledToggle = false,
 			RuntimeUpdaterSilentToggle = false,
+			PerformanceCullingDropdown = {},
 		}
 
 		local currentSettings = {}
@@ -283,6 +284,12 @@ pcall(function()
 		end
 		if type(currentSettings.KolonaHackDropdown) ~= "table" then
 			currentSettings.KolonaHackDropdown = {}
+			updated = true
+		end
+		if type(currentSettings.PerformanceCullingDropdown) ~= "table" then
+			currentSettings.PerformanceCullingDropdown = currentSettings.FPSBoostToggle == true
+				and { "Low Graphics", "VFX" }
+				or {}
 			updated = true
 		end
 		for k, v in pairs(defaultSettings) do
@@ -751,37 +758,35 @@ function Client:Destroy(reason)
 	self.Destroyed = true
 	self.DestroyReason = reason or "Unknown"
 
+	safeStep("cleanup modules", function()
+		local destroyLogic = self.Modules and self.Modules.DestroyLogic
+		if destroyLogic and typeof(destroyLogic.shutdown) == "function" then
+			destroyLogic.shutdown(self, safeStep)
+		end
+	end)
+
+	safeStep("cleanup fallback modules", function()
+		if self.NativeStateRestored or not self.Modules then
+			return
+		end
+		for name, module in pairs(self.Modules) do
+			if typeof(module) == "table" then
+				module.Destroyed = true
+				if typeof(module.CleanUp) == "function" then
+					safeStep("module " .. tostring(name), function()
+						module:CleanUp()
+					end)
+				end
+			end
+		end
+	end)
+
 	safeStep("disconnect master connections", function()
 		if self.ActiveConnections then
 			for _, conn in pairs(self.ActiveConnections) do
 				safeDisconnect(conn)
 			end
 			table.clear(self.ActiveConnections)
-		end
-	end)
-
-	safeStep("cleanup modules", function()
-		if self.Modules then
-			local modules = {}
-			for name, module in pairs(self.Modules) do
-				table.insert(modules, {
-					Name = name,
-					Module = module,
-				})
-			end
-
-			for _, entry in ipairs(modules) do
-				local name = entry.Name
-				local module = entry.Module
-				if typeof(module) == "table" then
-					module.Destroyed = true
-					if typeof(module.CleanUp) == "function" then
-						safeStep("module " .. tostring(name), function()
-							module:CleanUp()
-						end)
-					end
-				end
-			end
 		end
 	end)
 
@@ -903,58 +908,6 @@ end
 -- ==========================================
 -- TAB: SETTINGS
 -- ==========================================
-local SettingsTab = Window:CreateTab("Settings", 4483362458)
-Client.Tabs["Settings"] = SettingsTab
-
-SettingsTab:CreateButton({
-	Name = "Destroy UI",
-	Callback = function()
-		Client:Destroy("User")
-	end,
-})
-
-local function getRuntimeUpdater()
-	return Client.Modules and Client.Modules.RuntimeUpdater or nil
-end
-
-SettingsTab:CreateSection("Runtime Updates")
-
-SettingsTab:CreateToggle({
-	Name = "Auto Runtime Update",
-	CurrentValue = false,
-	Flag = "RuntimeUpdaterEnabledToggle",
-	Callback = function(Value)
-		local updater = getRuntimeUpdater()
-		if updater and typeof(updater.setAutoUpdateEnabled) == "function" then
-			updater:setAutoUpdateEnabled(Value)
-		end
-	end,
-})
-
-SettingsTab:CreateToggle({
-	Name = "Silent Update Install",
-	CurrentValue = false,
-	Flag = "RuntimeUpdaterSilentToggle",
-	Callback = function(Value)
-		local updater = getRuntimeUpdater()
-		if updater and typeof(updater.setSilentInstall) == "function" then
-			updater:setSilentInstall(Value)
-		end
-	end,
-})
-
-SettingsTab:CreateButton({
-	Name = "Check Runtime Update",
-	Callback = function()
-		local updater = getRuntimeUpdater()
-		if updater and typeof(updater.checkAndInstall) == "function" then
-			task.spawn(function()
-				updater:checkAndInstall(true)
-			end)
-		end
-	end,
-})
-
 local function fetchRemoteSource(path)
 	local cached = remoteSourceCache[path]
 	if cached then
@@ -1131,6 +1084,16 @@ getgenv().loadModule = loadModule
 
 prefetchRemoteSources()
 
+local classContextLoaded, classContextResult = pcall(function()
+	return loadModule("NULLSCAPE/Core/Class Context.luau")
+end)
+if classContextLoaded and typeof(classContextResult) == "table" then
+	Client.Modules.ClassContext = classContextResult
+	pcall(classContextResult.initialize)
+else
+	warn("[NULLSCAPE] Class context unavailable: " .. tostring(classContextResult))
+end
+
 local updaterLoaded, updaterResult = pcall(function()
 	return loadModule("NULLSCAPE/Main UI/Updater.luau")
 end)
@@ -1209,6 +1172,32 @@ if not success4 then
 end
 
 -- Tải cấu hình lưu trữ của Rayfield
+local destroyLogicLoaded, destroyLogicError = pcall(function()
+	Client.Modules.DestroyLogic = loadModule("NULLSCAPE/Setting/Destroy Logic.luau")
+end)
+
+if not destroyLogicLoaded then
+	warn("[NULLSCAPE] Failed to load Destroy Logic: " .. tostring(destroyLogicError))
+end
+
+local fpsBoostLoaded, fpsBoostResult = pcall(function()
+	return loadModule("NULLSCAPE/Setting/FPS Boost.luau")
+end)
+if fpsBoostLoaded and typeof(fpsBoostResult) == "table" then
+	Client.Modules.FPSBoost = fpsBoostResult
+else
+	warn("[NULLSCAPE] FPS boost unavailable: " .. tostring(fpsBoostResult))
+end
+
+local settingsLoaded, settingsError = pcall(function()
+	local SettingsTab = loadModule("NULLSCAPE/Setting/tab.luau")
+	SettingsTab(Client)
+end)
+
+if not settingsLoaded then
+	warn("[NULLSCAPE] Failed to load Settings: " .. tostring(settingsError))
+end
+
 getgenv()._NULLSCAPE_Booting = true
 Rayfield:LoadConfiguration()
 task.delay(2, function()

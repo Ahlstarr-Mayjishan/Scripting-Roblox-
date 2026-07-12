@@ -12,6 +12,7 @@ local getgenv = getgenv
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
+local ClassContext = getgenv().loadModule("NULLSCAPE/Core/Class Context.luau")
 
 local PREDETONATE_MODE = "PreDetonate"
 local AUTO_MODE = "Auto"
@@ -62,6 +63,14 @@ end
 
 local function isChargerAssistMode(mode)
 	return mode == AUTO_MODE or mode == PREDETONATE_MODE or mode == PASS_BATCH_MODE
+end
+
+local function isActiveForNativeClass(controller)
+	return ClassContext
+		and ClassContext.is("Charger")
+		and controller
+		and controller.ChargerTripmineAssistEnabled
+		and isChargerAssistMode(controller.ChargerTripmineMode)
 end
 
 local function hasIframes()
@@ -349,13 +358,11 @@ local function startWatcher()
 		local cleanedIdle = false
 		while not globals or globals.ChargerTripmineWatcherToken == watcherToken do
 			local mode = activeController and activeController.ChargerTripmineMode
-			local active = activeController
-				and activeController.ChargerTripmineAssistEnabled
-				and isChargerAssistMode(mode)
+			local active = isActiveForNativeClass(activeController)
 			task.wait(active and ACTIVE_WATCH_INTERVAL or IDLE_WATCH_INTERVAL)
 
 			mode = activeController and activeController.ChargerTripmineMode
-			active = activeController and activeController.ChargerTripmineAssistEnabled and isChargerAssistMode(mode)
+			active = isActiveForNativeClass(activeController)
 			if not active then
 				if not cleanedIdle then
 					removeIframes(true)
@@ -470,7 +477,7 @@ function ChargerAssist.update(controller)
 		controller.ChargerTripmineMode = PASS_BATCH_MODE
 	end
 
-	if not (controller.ChargerTripmineAssistEnabled and isChargerAssistMode(controller.ChargerTripmineMode)) then
+	if not isActiveForNativeClass(controller) then
 		removeIframes(true)
 		clearState()
 	end

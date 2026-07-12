@@ -4,6 +4,7 @@ local Logic = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Radar logic.lua
 local Magnet = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Magnet logic.luau")
 local Barrier = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Defuse Kits.luau")
 local ClientUpgradeInjector = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau")
+local ClassContext = getgenv().loadModule("NULLSCAPE/Core/Class Context.luau")
 
 local Executor = {}
 local missingWarnings = {}
@@ -48,6 +49,7 @@ end
 
 function Executor.syncVirtualGrapplerUpgradeVisuals(controller)
 	if ClientUpgradeInjector then
+		local isGrappler = ClassContext and ClassContext.is("Grappler")
 		ClientUpgradeInjector.sync({
 			AdvancedGravityCoil = controller and controller.AdvancedGravityCoilEnabled == true,
 			BetterJumpPad = controller and controller.BetterJumpPadEnabled == true,
@@ -55,9 +57,9 @@ function Executor.syncVirtualGrapplerUpgradeVisuals(controller)
 			Helmet = controller and controller.HelmetEnabled == true,
 			MatrixTetrahedron = controller and controller.MatrixTetrahedronEnabled == true,
 			MiniatureHourglass = controller and controller.MiniatureHourglassEnabled == true,
-			NinjaBelt = controller and controller.GrappleVirtualNinjaBelt == true,
+			NinjaBelt = isGrappler and controller and controller.GrappleVirtualNinjaBelt == true,
 			PocketBell = controller and hasSelectedOption(controller.AirJumpSelections, "PocketBell"),
-			SharkTail = controller and controller.GrappleVirtualSharkTail == true,
+			SharkTail = isGrappler and controller and controller.GrappleVirtualSharkTail == true,
 		})
 	end
 	return true

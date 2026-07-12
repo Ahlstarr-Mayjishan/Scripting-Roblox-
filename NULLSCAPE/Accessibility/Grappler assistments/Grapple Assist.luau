@@ -242,6 +242,23 @@ local function installCastHook(grappleModule, globals)
 				end
 			end
 
+			if manualCast and Targeting and typeof(Targeting.findSpecialAnchorHit) == "function" then
+				local specialHit = Targeting.findSpecialAnchorHit(self, controller, {
+					ManualCast = true,
+					AssistiveManual = true,
+					SpecialAnchorCapture = true,
+				})
+				if specialHit then
+					if CastTransaction and typeof(CastTransaction.expect) == "function" then
+						CastTransaction.expect(self, specialHit, controller, "SpecialAnchorCapture")
+					end
+					if DeferredAim and typeof(DeferredAim.reset) == "function" then
+						DeferredAim.reset()
+					end
+					return specialHit
+				end
+			end
+
 			if manualCast and Targeting and typeof(Targeting.fallbackCast) == "function" then
 				fallbackHit, fallbackDirection, fallbackBlocked = Targeting.fallbackCast(self, controller)
 				if fallbackHit then

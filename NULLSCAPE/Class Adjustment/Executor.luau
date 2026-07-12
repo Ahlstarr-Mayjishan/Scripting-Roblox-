@@ -5,6 +5,7 @@
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local getgenv = getgenv
 
 local Executor = {}
 local HooksActive = false
@@ -38,6 +39,12 @@ local MODULE_PATHS = {
 	CatapultBoost = "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",
 	MomentumTransfer = "NULLSCAPE/Class Adjustment/Grappler/Grapple Momentum Transfer.luau",
 }
+
+local ClassContext = getgenv().loadModule("NULLSCAPE/Core/Class Context.luau")
+
+local function isGrapplerActive()
+	return HooksActive and ClassContext and ClassContext.is("Grappler")
+end
 
 local function getGlobals()
 	local env = getgenv()
@@ -161,7 +168,7 @@ local function clearStaleHooks(grappleModule, globals)
 end
 
 local function applyStepAdjustments(self, dt)
-	if not HooksActive then
+	if not isGrapplerActive() then
 		return
 	end
 	if AirControl and typeof(AirControl.apply) == "function" then
@@ -176,7 +183,7 @@ local function applyStepAdjustments(self, dt)
 end
 
 local function applySharkTailAdjustment(self, previousVelocity)
-	if not HooksActive then
+	if not isGrapplerActive() then
 		return
 	end
 	if SharkTailPull and typeof(SharkTailPull.apply) == "function" then
@@ -240,7 +247,8 @@ local function applySharkTailWindow(Control, grapple)
 	local state = grapple and SharkTailWindowState[grapple]
 	if
 		not (
-			Control
+			isGrapplerActive()
+			and Control
 			and Control.GrappleSharkTailWindow
 			and grapple
 			and grapple.Movement
@@ -355,7 +363,7 @@ function Executor.enable()
 		local originalShapecast
 		originalShapecast = hookfunction(workspace.Shapecast, function(self, ...)
 			local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
-			if getgenv()._NULLSCAPE_InGrappleStep == true and Control and Control.GrappleWallGlide == true then
+			if isGrapplerActive() and getgenv()._NULLSCAPE_InGrappleStep == true and Control and Control.GrappleWallGlide == true then
 				return nil
 			end
 			return originalShapecast(self, ...)
@@ -375,6 +383,10 @@ function Executor.enable()
 		local originalStep = grappleModule.Step
 		local wrappedStep
 		wrappedStep = function(self, dt, ...)
+			if not isGrapplerActive() then
+				return originalStep(self, dt, ...)
+			end
+
 			local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
 			local originalFilter
 			local altered = false
@@ -455,6 +467,10 @@ function Executor.enable()
 		wrappedSharkTail = function(self, ...)
 			local previousVelocity = self and self.RootPart and self.RootPart.Velocity
 			local result = originalSharkTail(self, ...)
+			if not isGrapplerActive() then
+				return result
+			end
+
 			consumeSharkTailWindow(self)
 			applySharkTailAdjustment(self, previousVelocity)
 			return result
@@ -469,6 +485,10 @@ function Executor.enable()
 		local originalEnd = grappleModule.End
 		local wrappedEnd
 		wrappedEnd = function(self, wasCancelled, ...)
+			if not isGrapplerActive() then
+				return originalEnd(self, wasCancelled, ...)
+			end
+
 			local yBefore = self and self.RootPart and self.RootPart.Velocity.Y
 			local yVelBelowMinBefore = self and self.yVelBelowMin
 
@@ -505,7 +525,7 @@ function Executor.enable()
 		local originalAltSpecialAction = grappleModule.AltSpecialAction
 		local wrappedAltSpecialAction
 		wrappedAltSpecialAction = function(self, inputState, ...)
-			if HooksActive and tryVirtualSharkTailInput(self, inputState) then
+			if isGrapplerActive() and tryVirtualSharkTailInput(self, inputState) then
 				return
 			end
 			return originalAltSpecialAction(self, inputState, ...)
@@ -520,7 +540,7 @@ function Executor.enable()
 		local originalStart = grappleModule.Start
 		local wrappedStart
 		wrappedStart = function(self, p2, ...)
-			if not HooksActive then
+			if not isGrapplerActive() then
 				return originalStart(self, p2, ...)
 			end
 
@@ -577,7 +597,7 @@ function Executor.enable()
 		local originalCast = grappleModule.Cast
 		local wrappedCast
 		wrappedCast = function(self, forceRefresh, ...)
-			if not HooksActive then
+			if not isGrapplerActive() then
 				return originalCast(self, forceRefresh, ...)
 			end
 

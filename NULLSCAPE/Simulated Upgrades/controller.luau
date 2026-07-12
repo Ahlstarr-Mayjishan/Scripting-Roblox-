@@ -13,6 +13,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local LocalPlayer = Players.LocalPlayer
+local ClassContext = getgenv().loadModule("NULLSCAPE/Core/Class Context.luau")
 
 local Logic = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Radar logic.luau")
 local Executor = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/executor.luau")
@@ -45,8 +46,7 @@ local Controller = {
 	MomentumReduction = 1.0, -- Lực Momentum Reduction tùy biến (mặc định 100%)
 
 	GraceWingsEnabled = false,
-	GraceWingsAirControlMultiplier = 1.1,
-	GraceWingsStrongAirControl = false,
+	GraceWingsAirControlMultiplier = 1,
 	AdvancedGravityCoilEnabled = false,
 	AdvancedGravityCoilJumpPower = 28,
 	BetterJumpPadEnabled = false,
@@ -56,6 +56,7 @@ local Controller = {
 	AirJumpSimulationEnabled = false,
 	AirJumpSelections = {},
 	AirJumpSelectionMap = {},
+	InfiniteJumpEnabled = false,
 	HelmetEnabled = false,
 	MiniatureHourglassEnabled = false,
 	GrappleVirtualNinjaBelt = false,
@@ -157,6 +158,10 @@ local function startObservingFolders()
 end
 
 local function hasUtilityWork()
+	local virtualGrapplerUpgradesEnabled = ClassContext
+		and ClassContext.is("Grappler")
+		and (Controller.GrappleVirtualNinjaBelt or Controller.GrappleVirtualSharkTail)
+
 	return (Controller.AutoCollectEnabled and Controller.GiftMagnetBlocked ~= true)
 		or Controller.TripmineBarrierEnabled
 		or Controller.MatrixTetrahedronEnabled
@@ -165,10 +170,10 @@ local function hasUtilityWork()
 		or Controller.BetterJumpPadEnabled
 		or Controller.SpeedBuffsEnabled
 		or Controller.AirJumpSimulationEnabled
+		or Controller.InfiniteJumpEnabled
 		or Controller.HelmetEnabled
 		or Controller.MiniatureHourglassEnabled
-		or Controller.GrappleVirtualNinjaBelt
-		or Controller.GrappleVirtualSharkTail
+		or virtualGrapplerUpgradesEnabled
 end
 
 local function syncVirtualGrapplerVisuals()
@@ -264,7 +269,7 @@ local function startUtilityLoop()
 				end
 				if Controller.GraceWingsEnabled and GraceWings and not GraceWings.Hooked then
 					pcall(function()
-						GraceWings.setMultiplier(Controller.GraceWingsAirControlMultiplier or 1.1)
+						GraceWings.setMultiplier(Controller.GraceWingsAirControlMultiplier or 1)
 						GraceWings.start(Controller, GC)
 					end)
 				end
@@ -372,7 +377,12 @@ function Controller:SetAutoCollectEnabled(value)
 		self.AutoCollectEnabled = false
 		local globals = getgenv()
 		local suppressBootNotice = globals._NULLSCAPE_Booting == true
-		if value == true and not suppressBootNotice and globals.Rayfield and typeof(globals.Rayfield.Notify) == "function" then
+		if
+			value == true
+			and not suppressBootNotice
+			and globals.Rayfield
+			and typeof(globals.Rayfield.Notify) == "function"
+		then
 			pcall(function()
 				globals.Rayfield:Notify({
 					Title = "Gift Magnet Disabled",
@@ -427,7 +437,7 @@ function Controller:SetGraceWings(value)
 	self.GraceWingsEnabled = value == true
 	if GraceWings then
 		if self.GraceWingsEnabled then
-			GraceWings.setMultiplier(self.GraceWingsAirControlMultiplier or 1.1)
+			GraceWings.setMultiplier(self.GraceWingsAirControlMultiplier or 1)
 			GraceWings.start(self, GC)
 		else
 			GraceWings.stop()
@@ -437,20 +447,13 @@ function Controller:SetGraceWings(value)
 end
 
 function Controller:SetGraceWingsAirControlMultiplier(value)
-	local val = math.clamp(tonumber(value) or 1.1, 1.1, 5)
+	local val = math.clamp(tonumber(value) or 1, 1, 5)
 	self.GraceWingsAirControlMultiplier = val
 	if GraceWings then
 		GraceWings.setMultiplier(val)
 		if self.GraceWingsEnabled then
 			GraceWings.start(self, GC)
 		end
-	end
-end
-
-function Controller:SetGraceWingsStrongAirControl(value)
-	self.GraceWingsStrongAirControl = value == true
-	if self.GraceWingsEnabled and GraceWings then
-		GraceWings.start(self, GC)
 	end
 end
 
@@ -503,7 +506,7 @@ function Controller:SetBetterJumpPadPower(value)
 	local minJumpPadPower = BetterJumpPad and BetterJumpPad.getMinJumpPadPower and BetterJumpPad.getMinJumpPadPower()
 		or 100
 	local maxJumpPadPower = BetterJumpPad and BetterJumpPad.getMaxJumpPadPower and BetterJumpPad.getMaxJumpPadPower()
-		or 200
+		or 300
 	local val = math.clamp(tonumber(value) or minJumpPadPower, minJumpPadPower, maxJumpPadPower)
 	self.BetterJumpPadPower = val
 	if BetterJumpPad then
@@ -573,6 +576,17 @@ function Controller:SetAirJumpSelections(selectedOptions)
 	syncVirtualGrapplerVisuals()
 	startUtilityLoop()
 	refreshUpgradeServerState()
+end
+
+function Controller:SetInfiniteJump(value)
+	self.InfiniteJumpEnabled = value == true
+	if AirJumps and typeof(AirJumps.setInfiniteEnabled) == "function" then
+		AirJumps.setInfiniteEnabled(self.InfiniteJumpEnabled)
+	end
+	if self.AirJumpSimulationEnabled and AirJumps then
+		AirJumps.start(self, GC)
+	end
+	startUtilityLoop()
 end
 
 function Controller:SetHelmet(value)
@@ -718,7 +732,6 @@ function Controller:TriggerMedalAction()
 		if medal then
 			local oldCFrame = hrp.CFrame
 			local ok, err = pcall(function()
-
 				-- Safe blink pick: Anchors root and teleports right on top of the Medal handle for 0.05s
 				hrp.Anchored = true
 				hrp.CFrame = medal.CFrame * CFrame.new(0, 1.5, 0)
@@ -888,7 +901,7 @@ function Controller:ReapplyRespawnFeatures()
 		end
 		if self.GraceWingsEnabled and GraceWings then
 			pcall(function()
-				GraceWings.setMultiplier(self.GraceWingsAirControlMultiplier or 1.1)
+				GraceWings.setMultiplier(self.GraceWingsAirControlMultiplier or 1)
 				GraceWings.start(self, GC)
 			end)
 		end
@@ -1015,6 +1028,7 @@ function Controller:CleanUp()
 		self.BetterJumpPadEnabled = false
 		self.SpeedBuffsEnabled = false
 		self.AirJumpSimulationEnabled = false
+		self.InfiniteJumpEnabled = false
 		self.AirJumpSelections = {}
 		self.AirJumpSelectionMap = {}
 		self.HelmetEnabled = false
@@ -1290,6 +1304,18 @@ local characterRefreshConnection = LocalPlayer.CharacterAdded:Connect(function()
 	scheduleRespawnFeatureRefresh()
 end)
 table.insert(Controller.PermanentConnections, characterRefreshConnection)
+
+if ClassContext and typeof(ClassContext.subscribe) == "function" then
+	local classConnection = ClassContext.subscribe(function()
+		if not Controller.Destroyed then
+			syncVirtualGrapplerVisuals()
+			updateRunningState()
+		end
+	end)
+	if classConnection then
+		table.insert(Controller.PermanentConnections, classConnection)
+	end
+end
 
 -- Lắng nghe và xử lý phần đầu cho các thực thể 3D như Springer (thêm proxy "head" để nhận ESP)
 local function handleEnemyAdded(enemy)

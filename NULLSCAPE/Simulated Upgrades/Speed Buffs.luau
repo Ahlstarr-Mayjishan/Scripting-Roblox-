@@ -1,191 +1,191 @@
 --!nocheck
--- [[
---  NULLSCAPE - Speed Buffs Simulation
---  Adds stacked movement speed bonuses after MovementCore.UpdateSpeed runs.
---  Ref logic:
---    - SwiftnessRing = +10%
---    - Adrenaline = +20%
---    - SportShoes = +40%
---    - Adrenaline is limited by the native index to MaxPlayers = 2
---    - Last Man/Solo +20% is native movement.lastMan, not a simulated upgrade
--- ]]
+--[[
+	NULLSCAPE - Native Speed Buff Simulation
+	Feeds simulated upgrade stacks into the native UpgradeHandler. MovementCore.UpdateSpeed
+	then applies the game's own SwiftnessRing, SportShoes, and Adrenaline formulas.
+]]
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
-local BUFF_VALUES = {
-	["Swiftness Ring I (+10%)"] = 0.10,
-	["Swiftness Ring II (+10%)"] = 0.10,
-	["Swiftness Ring III (+10%)"] = 0.10,
-	["Adrenaline (+20%)"] = 0.20,
-	["Sport Shoes (+40%)"] = 0.40,
-}
-
-local BUFF_UPGRADE_KEYS = {
-	["Swiftness Ring I (+10%)"] = "SwiftnessRing",
-	["Swiftness Ring II (+10%)"] = "SwiftnessRing",
-	["Swiftness Ring III (+10%)"] = "SwiftnessRing",
-	["Adrenaline (+20%)"] = "Adrenaline",
-	["Sport Shoes (+40%)"] = "SportShoes",
-}
-
-local function packValues(...)
-	local values = { ... }
-	values.n = select("#", ...)
-	return values
-end
+local Injector = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau")
 
 local Logic = {
 	SelectedBuffs = {},
-	OriginalUpdateSpeed = nil,
+	RefreshVersion = 0,
+	AppliedRefresh = setmetatable({}, { __mode = "k" }),
+	LastMovement = nil,
+	MovementCore = nil,
+	OriginalStep = nil,
+	WrappedStep = nil,
 	Hooked = false,
 }
 
-local function isAdrenalineAvailable()
-	local solo = ReplicatedStorage:FindFirstChild("Solo")
-	if solo and solo.Value == true then
-		return true
-	end
+local OPTIONS = {
+	"Swiftness Ring I (+10%)",
+	"Swiftness Ring II (+10%)",
+	"Swiftness Ring III (+10%)",
+	"Adrenaline (+20%)",
+	"Sport Shoes (+40%)",
+}
 
-	return #Players:GetPlayers() <= 2
+local function isAdrenalineAvailable()
+	local solo = game:GetService("ReplicatedStorage"):FindFirstChild("Solo")
+	return solo and solo.Value == true or #Players:GetPlayers() <= 2
 end
 
-local function isNativeUpgradeAlreadyActive(movement, option)
-	local upgradeKey = BUFF_UPGRADE_KEYS[option]
-	if not (movement and upgradeKey and typeof(movement.HasUpgrade) == "function") then
+local function getNativeStacks(controller)
+	local selectedBuffs = controller and controller.SpeedBuffSelections or Logic.SelectedBuffs
+	local stacks = {
+		SwiftnessRing = 0,
+		Adrenaline = 0,
+		SportShoes = 0,
+	}
+
+	for _, option in ipairs(selectedBuffs or {}) do
+		if string.find(option, "Swiftness Ring", 1, true) then
+			stacks.SwiftnessRing = math.min(stacks.SwiftnessRing + 1, 3)
+		elseif option == "Adrenaline (+20%)" and isAdrenalineAvailable() then
+			stacks.Adrenaline = 1
+		elseif option == "Sport Shoes (+40%)" then
+			stacks.SportShoes = 1
+		end
+	end
+
+	return stacks
+end
+
+local function syncNativeStacks(controller)
+	if not Injector then
 		return false
 	end
 
-	local success, enabled = pcall(function()
-		return movement:HasUpgrade(upgradeKey)
-	end)
+	local stacks = getNativeStacks(controller)
+	for upgradeName, stack in pairs(stacks) do
+		Injector.set(upgradeName, stack > 0, stack)
+	end
+	return true
+end
 
-	return success and enabled == true
+local function getActiveController()
+	local globals = getgenv()._NULLSCAPE_Globals
+	return globals and globals.activeUpgradeController
 end
 
 local function getMovementCore()
-	local movement = ReplicatedStorage:FindFirstChild("Movement")
-	if not movement then
+	local movement = game:GetService("ReplicatedStorage"):FindFirstChild("Movement")
+	local module = movement and movement:FindFirstChild("MovementCore")
+	if not module then
 		return nil
 	end
-	return movement:FindFirstChild("MovementCore")
+
+	local success, core = pcall(require, module)
+	return success and typeof(core) == "table" and core or nil
 end
 
-local function getSimulatedBonus(controller, movement)
-	local selectedBuffs = controller.SpeedBuffSelections or Logic.SelectedBuffs or {}
-	local total = 0
-
-	if typeof(selectedBuffs) ~= "table" then
-		return 0
+local function refreshNativeSpeed(movement)
+	if not (movement and movement.IsLocalPlayer and typeof(movement.UpdateSpeed) == "function") then
+		return false
+	end
+	if Logic.AppliedRefresh[movement] == Logic.RefreshVersion then
+		return false
 	end
 
-	for _, option in ipairs(selectedBuffs) do
-		if option == "Adrenaline (+20%)" and not isAdrenalineAvailable() then
-			continue
+	local success = pcall(function()
+		movement:UpdateSpeed()
+	end)
+	if success then
+		Logic.AppliedRefresh[movement] = Logic.RefreshVersion
+	end
+	return success
+end
+
+local function installStepHook()
+	local movementCore = getMovementCore()
+	if not (movementCore and typeof(movementCore.Step) == "function") then
+		return false
+	end
+
+	if Logic.MovementCore == movementCore and movementCore.Step == Logic.WrappedStep then
+		return true
+	end
+
+	if movementCore.__NULLSCAPE_speed_buffs_wrapper then
+		Logic.MovementCore = movementCore
+		Logic.OriginalStep = movementCore.__NULLSCAPE_speed_buffs_original
+		Logic.WrappedStep = movementCore.__NULLSCAPE_speed_buffs_wrapper
+		return true
+	end
+
+	local originalStep = movementCore.Step
+	local wrappedStep
+	wrappedStep = function(self, dt, ...)
+		local results = table.pack(originalStep(self, dt, ...))
+		local controller = getActiveController()
+		if controller and controller.SpeedBuffsEnabled == true then
+			Logic.LastMovement = self
+			refreshNativeSpeed(self)
 		end
-		if not isNativeUpgradeAlreadyActive(movement, option) then
-			total += BUFF_VALUES[option] or 0
-		end
-	end
-
-	return total
-end
-
-local function applySpeedBuffs(controller, movement)
-	if not controller.SpeedBuffsEnabled then
-		return
-	end
-	if not movement then
-		return
-	end
-
-	local totalBonus = getSimulatedBonus(controller, movement)
-	if totalBonus <= 0 then
-		return
-	end
-
-	movement.movementSpeedMulti = (tonumber(movement.movementSpeedMulti) or 1) + totalBonus
-end
-
-function Logic.start(controller, _gc)
-	local MovementCoreModule = getMovementCore()
-	if not MovementCoreModule then
-		return
-	end
-
-	local success, MovementCore = pcall(require, MovementCoreModule)
-	if not success or not MovementCore or type(MovementCore) ~= "table" then
-		return
-	end
-	if type(MovementCore.UpdateSpeed) ~= "function" then
-		return
-	end
-
-	if not MovementCore.__NULLSCAPE_original_UpdateSpeed then
-		MovementCore.__NULLSCAPE_original_UpdateSpeed = MovementCore.UpdateSpeed
-	end
-	Logic.OriginalUpdateSpeed = MovementCore.__NULLSCAPE_original_UpdateSpeed
-
-	if Logic.Hooked or MovementCore.__NULLSCAPE_speed_buffs_hooked then
-		return
-	end
-
-	MovementCore.UpdateSpeed = function(self, ...)
-		local results = packValues(Logic.OriginalUpdateSpeed(self, ...))
-		applySpeedBuffs(controller, self)
 		return table.unpack(results, 1, results.n)
 	end
 
-	MovementCore.__NULLSCAPE_speed_buffs_hooked = true
-	Logic.Hooked = true
+	movementCore.Step = wrappedStep
+	movementCore.__NULLSCAPE_speed_buffs_original = originalStep
+	movementCore.__NULLSCAPE_speed_buffs_wrapper = wrappedStep
+	Logic.MovementCore = movementCore
+	Logic.OriginalStep = originalStep
+	Logic.WrappedStep = wrappedStep
+	return true
+end
+
+local function uninstallStepHook()
+	local movementCore = Logic.MovementCore or getMovementCore()
+	local restored = false
+	if movementCore and movementCore.Step == Logic.WrappedStep and Logic.OriginalStep then
+		movementCore.Step = Logic.OriginalStep
+		restored = true
+	end
+	if restored and movementCore and movementCore.__NULLSCAPE_speed_buffs_wrapper == Logic.WrappedStep then
+		movementCore.__NULLSCAPE_speed_buffs_original = nil
+		movementCore.__NULLSCAPE_speed_buffs_wrapper = nil
+	end
+	if restored then
+		Logic.MovementCore = nil
+		Logic.OriginalStep = nil
+		Logic.WrappedStep = nil
+	end
+end
+
+function Logic.start(controller, _gc)
+	Logic.RefreshVersion += 1
+	Logic.Hooked = syncNativeStacks(controller) and installStepHook()
+	return Logic.Hooked
 end
 
 function Logic.stop()
-	if not Logic.Hooked then
-		return
+	if Injector then
+		Injector.clear({ "SwiftnessRing", "Adrenaline", "SportShoes" })
 	end
-
-	local MovementCoreModule = getMovementCore()
-	if MovementCoreModule then
-		local success, MovementCore = pcall(require, MovementCoreModule)
-		if
-			success
-			and MovementCore
-			and type(MovementCore) == "table"
-			and MovementCore.__NULLSCAPE_original_UpdateSpeed
-		then
-			MovementCore.UpdateSpeed = MovementCore.__NULLSCAPE_original_UpdateSpeed
-			MovementCore.__NULLSCAPE_speed_buffs_hooked = false
-		end
-	end
-
-	Logic.OriginalUpdateSpeed = nil
+	Logic.RefreshVersion += 1
+	refreshNativeSpeed(Logic.LastMovement)
+	table.clear(Logic.AppliedRefresh)
+	uninstallStepHook()
+	Logic.LastMovement = nil
 	Logic.Hooked = false
 end
 
 function Logic.setSelectedBuffs(selectedBuffs)
-	if typeof(selectedBuffs) ~= "table" then
-		Logic.SelectedBuffs = {}
-		return
-	end
-
 	local normalized = {}
-	for _, option in ipairs(selectedBuffs) do
-		if BUFF_VALUES[option] and not table.find(normalized, option) then
+	for _, option in ipairs(selectedBuffs or {}) do
+		if table.find(OPTIONS, option) and not table.find(normalized, option) then
 			table.insert(normalized, option)
 		end
 	end
 	Logic.SelectedBuffs = normalized
+	Logic.RefreshVersion += 1
 end
 
 function Logic.getOptions()
-	return {
-		"Swiftness Ring I (+10%)",
-		"Swiftness Ring II (+10%)",
-		"Swiftness Ring III (+10%)",
-		"Adrenaline (+20%)",
-		"Sport Shoes (+40%)",
-	}
+	return table.clone(OPTIONS)
 end
 
 return Logic

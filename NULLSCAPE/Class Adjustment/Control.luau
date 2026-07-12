@@ -35,6 +35,8 @@ local Control = {
 	PermanentConnections = {},
 }
 
+local ClassContext = getgenv().loadModule("NULLSCAPE/Core/Class Context.luau")
+
 local function getGlobals()
 	local env = getgenv()
 	env._NULLSCAPE_Globals = env._NULLSCAPE_Globals or {}
@@ -186,6 +188,16 @@ function Control:initialize()
 	end
 	if Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
 		Executor.updateChargerTripmineAssist(self)
+	end
+	if ClassContext and typeof(ClassContext.subscribe) == "function" then
+		local connection = ClassContext.subscribe(function()
+			if not self.Destroyed and Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
+				Executor.updateChargerTripmineAssist(self)
+			end
+		end)
+		if connection then
+			table.insert(self.PermanentConnections, connection)
+		end
 	end
 
 	return true

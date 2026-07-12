@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.12.17",
+    "Version":  "2026.07.12.25",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "14938472e469d9ee06c75536aae4ec466687bfdb8b488f2e5da0449fae8f7e02"
+                      "Sha256":  "e0012aa7ba32ec320bfcce2a13b69468d88c09c0ff5aaad05e47010a640476ed"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -22,6 +22,13 @@
                                    "Settings"
                                ],
                       "Sha256":  "c8a1c11bb26fbffacd7832b6ae8266b48d2b3a3a8dd3b610f1201e1e5b2cdfe9"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Setting/tab.luau",
+                      "Menu":  [
+                                   "Settings"
+                               ],
+                      "Sha256":  "0b8c6bca2585eadb486bdc6b249a137c0db1334e1ec9beca2306c522423d15d3"
                   },
                   {
                       "Path":  "NULLSCAPE/Core/Remote Registry.luau",
@@ -91,7 +98,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "df5287c9ac5d4c5a0c81c4d29dc122356061e1e77babeec7d511b48499f988e0"
+                      "Sha256":  "30054021726d07a61ba06e784ec4bb4e0646bda0c72bd415dac2eab370b61ed8"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Kolona Auto QTE.luau",
@@ -151,14 +158,14 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "369a739e53bc7483304a85c91006a4c427d34785f38a098aff837be0b964e926"
+                      "Sha256":  "27bd9cfeaf5eb160a4fd19a36aa34013ae95030b669bd23c0e46361a513edd23"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/executor.luau",
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "e27840c94b32725edc19478ef260362c0e063fa514ee73364bf3b9ccc2fa3f22"
+                      "Sha256":  "f0f4a6025dae92b8fa4c933ec286b456bcd285943238f6ddbf5bea411b454d52"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau",
@@ -186,7 +193,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "0defda75187484495c86cbcdd7c4c20a0a2034f096ba7440732cec960dcfb4da"
+                      "Sha256":  "c58126bddfda208a9eda6ce6ca612d155b32e092a733490d3842184f44110c9b"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Helmet.luau",
@@ -221,7 +228,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "5fbdd477c74996b437e19a3281f6bd5f2622b8a432667f23f9af151053e052e3"
+                      "Sha256":  "660f67a7fe93c0131b656d50890d43a7ea4bd458c0f1d40760d3e98b226eb8ac"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Curse Visual Assist.luau",
@@ -277,7 +284,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "9a55e9f1aee90db1865de06dad5cfded4304283adcd01d004bb30f2e52c336a6"
+                      "Sha256":  "e2840924dd5ecd4ee260a6966d62e95b9ff20eb2544b9be1b1ae7587591d5db9"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Adaptive Anchor Style.luau",
@@ -298,7 +305,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "cd1df7dbd71b17af729f9d195febb1323143ca250a9a90e79f737bbb14cec2e2"
+                      "Sha256":  "d6895f4ca786bb880b67bf20cfd49b52c09ec4a6c494c831c122c7697749072f"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Anchor Preference Profile.luau",
@@ -333,7 +340,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "11c455a6e6a320a1f6724660912b1f588995851dbc7130ed47f656c18c34c4ce"
+                      "Sha256":  "68a91a6bf94cfc9b0a52860f9e3e2b4e9854dcbb98dd6a4a49be4fa192f7686d"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Deferred Aim Cast.luau",
@@ -361,7 +368,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "9e83b8a93f6e5ff0b1c9a4472f3ea0adeef00525fa5dab82757ba837934ccb45"
+                      "Sha256":  "3505d2e548b3a17d6e14d6d7401264a77a8ff3dd0707c8fdd72d899eeb26d482"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Intent Resolver.luau",
@@ -417,7 +424,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "fff9fce4358aa1bcf789f45f8f41c7dbe89d1493a0cd3ef7c79f7de299ab615d"
+                      "Sha256":  "9361e84bf620bd0f88b081644c3f0411f4afde0b84e330f1b80197a89eab2308"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Secondary Cast.luau",
@@ -438,7 +445,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "a8f6ea75e5a7d43955936c97967820cbffcac8bbfadc9e61861b331fba23bcef"
+                      "Sha256":  "04da561e5a2524a6e5c4e491d1427213d81b15bd7a44e164a98793182b8f69ed"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Technique Arbiter.luau",
@@ -515,21 +522,21 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "4c65ba1eb9eaed9f2b9e05b9980c580e0f97fa36ceeb092176880a0e542c73b3"
+                      "Sha256":  "5ae3bb804e6bd40e7a4879747fda253619d683297d272d92f96e797d9a427e5b"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Technique/SharkVoid.luau",
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "0e5f4466a71e9353190680ddd6713cf1213b1d27cf52467ee38666e6e2bbe77c"
+                      "Sha256":  "b4b64e30c7e1beda803e6ab19f883751faa6c4a9b5c47b1c1b37bf2572dd72d5"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Technique/Reel Saver/init.luau",
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "9a00d2901fc01d9b88471406752b72f2adff61f22b7afb28693ae2f9fa834a17"
+                      "Sha256":  "18b1405aeb5b86fe35c6daf3c01fa59d2b0335e9648ca00587c9c04182669daa"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Technique/Reel Saver/Terrain Query.luau",
@@ -564,14 +571,14 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "e4eed2d9ee9790cd5aa952c0ab3a11664f9c5d53542df6e3796c6fff327cad53"
+                      "Sha256":  "e066f76d8fbf3b604bfb18426d46b3f24a52380fcda6d450ccf96675d333e29b"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Executor.luau",
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "0bb7d82d91df3c2e77cacc9e8da3ac55e3372748f9f0c7ebd96caf6422343331"
+                      "Sha256":  "d22d304b4708977bf816323132789d73e94e808cd2536271598720c15035d38b"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/GC.luau",
@@ -585,14 +592,14 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "4fca9880b7cad6f2a9f91fcc2255aadebe8885a4eafc0dca5e9346a29ca3ca4d"
+                      "Sha256":  "73b4aee20824841c1608cde2ad2831e2c2ed078fd70ea20fc362affb1eb2d9b7"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Charger/Tripmine Assist.luau",
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "5c71cdae2c9127af623c92a317aa3a76a6997c295e7024e50c4c1f9bd68b7b7b"
+                      "Sha256":  "aadd8506ff4aae68d32e6f52614517ef9a8e35588652b6c18fa3f2d5508fa37a"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Air Control.luau",
@@ -634,7 +641,7 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "60bb4f82ad691020f5de50e14ff5611dba5062daa441192d9b1f73f9be8e282d"
+                      "Sha256":  "9b0aa981c801d8190b6a975d29a5699ba8a2f2940c9ee325bd179aef0f3497e6"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/SharkTail Cooldown.luau",
@@ -802,7 +809,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "e13f836336937b21b909ab3830e21b30a112a54416d03e2b1c131169922fae0f"
+                      "Sha256":  "b3fa2fb67c33e9c19b668057e5e57250c54b2592a71dea0ceaa02bc2f45a2e6b"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/GC.luau",
@@ -816,7 +823,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "742737cb180fb9778a69afccfa32eab1364f3c60d87ab2789a3d1b2601498da0"
+                      "Sha256":  "17e65ca5857de472d6823bd78092bdd5075697b2692656cc45f98a51ed789524"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Magnet logic.luau",
@@ -837,21 +844,21 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "12cde09d435f96679ce2b63bbb2bb1dd494e63ebc796395d99e0264ec1eab55b"
+                      "Sha256":  "05e16f85d9ffccc79cdbc6de300e2d825487bb83916b1f113419f80073ef2b5f"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Air Jumps.luau",
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "0bf52cf10dee6514e0a8dcbf2253cf8e01e8dc4166f52df77e8b5c7c9484da85"
+                      "Sha256":  "d3914f08adfc0b073510eb2a61ce6481b0aed9bb0ce412b32c6189b5b160906e"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/tab.luau",
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "6155c1a3352263b926ec31af8801341d2a537d0018395ec4b73351acb3fc08b5"
+                      "Sha256":  "e77fae0b56f31e307205ae19b4cc2bdefa812b3d1766d7dfee091d934f75f39d"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",
@@ -905,7 +912,22 @@
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Release Policy.luau",
                       "Menu":  "Accessibility",
-                      "Sha256":  "bd3fe65618b574caff7585826f9916e1e040f486d7efc5c94dab1f0f5fbdaa12"
+                      "Sha256":  "40145a78c75f3ebdd70c4f25568b65313b511f95065f55af2b46a2698db96662"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Setting/Destroy Logic.luau",
+                      "Menu":  [
+                                   "Settings"
+                               ],
+                      "Sha256":  "877c0bdb600f3abca199e0443b66b17ed6146bfeec469f164ee6ab72dfffdc96"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Core/Class Context.luau",
+                      "Sha256":  "730362d3f18a7be8aaeb3a1024072d95dffa615f7c4224371c14029d28db6c73"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Setting/FPS Boost.luau",
+                      "Sha256":  "d2844651d23b6cc1896b3a6cf040422cbfcbbc93a3f73ad296f5940e0c0d0342"
                   }
               ]
 }

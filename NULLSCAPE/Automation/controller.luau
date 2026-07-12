@@ -318,10 +318,11 @@ function Controller:SetAutoChooseThingSelections(value)
 end
 
 function Controller:CleanUp()
-	if self.Destroyed then
+	if self.CleanedUp then
 		return
 	end
 
+	self.CleanedUp = true
 	self.Destroyed = true
 	disableAntiAfk()
 	callExecutor("disable", self, GC)

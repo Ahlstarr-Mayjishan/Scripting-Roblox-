@@ -6,6 +6,7 @@
 local getgenv = getgenv
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local ClassContext = getgenv().loadModule("NULLSCAPE/Core/Class Context.luau")
 
 local executorLoaded, Executor = pcall(function()
 	return getgenv().loadModule("NULLSCAPE/Accessibility/executor.luau")
@@ -176,6 +177,10 @@ local function claimActiveController(controller)
 	end
 
 	return globals.activeAccessibilityController == controller
+end
+
+local function isGrapplerClass()
+	return ClassContext and ClassContext.is("Grappler")
 end
 
 -- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
@@ -352,12 +357,16 @@ function Controller:ReapplyRespawnFeatures()
 		callExecutor("initializeMomentumGuard")
 	end
 
-	if self.GrappleAssistEnabled then
+	if self.GrappleAssistEnabled and isGrapplerClass() then
 		callExecutor("initializeGrappleAssist", self)
+	elseif self.GrappleAssistEnabled then
+		callExecutor("disableGrappleAssist")
 	end
 
-	if self.GrapplerStaminaMode ~= "Off" then
+	if self.GrapplerStaminaMode ~= "Off" and isGrapplerClass() then
 		callExecutor("initializeStaminaAssist")
+	elseif self.GrapplerStaminaMode ~= "Off" then
+		callExecutor("disableStaminaAssist")
 	end
 
 	self:RefreshRailAssistHook()
@@ -479,7 +488,7 @@ end
 function Controller:SetGrappleAssist(value)
 	self.GrappleAssistEnabled = value == true
 
-	if self.GrappleAssistEnabled and not callExecutor("initializeGrappleAssist", self) then
+	if self.GrappleAssistEnabled and isGrapplerClass() and not callExecutor("initializeGrappleAssist", self) then
 		self.GrappleAssistEnabled = false
 		if getgenv().Rayfield then
 			getgenv().Rayfield:Notify({
@@ -499,7 +508,7 @@ end
 -- Keep runtime feature gates in one place. Child toggles configure a feature;
 -- they must never implicitly reactivate the parent Grapple Assist toggle.
 function Controller:IsGrappleFeatureEnabled(featureName)
-	if self.GrappleAssistEnabled ~= true then
+	if self.GrappleAssistEnabled ~= true or not isGrapplerClass() then
 		return false
 	end
 
@@ -777,7 +786,7 @@ function Controller:SetGrappleReelSaverReelHoldTime(value)
 end
 
 function Controller:TriggerGrappleReelSaver()
-	if not (self.GrappleAssistEnabled and self.GrappleReelSaverEnabled) then
+	if not (self:IsGrappleFeatureEnabled("ReelSaver")) then
 		return false
 	end
 
@@ -785,7 +794,7 @@ function Controller:TriggerGrappleReelSaver()
 end
 
 function Controller:TriggerGrappleAssistSecondaryCast()
-	if not (self.GrappleAssistEnabled and self.GrappleAssistSecondaryCastEnabled) then
+	if not (self:IsGrappleFeatureEnabled("SecondaryCast")) then
 		return false
 	end
 
@@ -810,7 +819,7 @@ function Controller:SetStaminaMode(mode)
 	self.GrapplerStaminaMode = selectedMode
 	self.StaminaMode = selectedMode
 
-	if selectedMode == "Infinite Stamina" then
+	if selectedMode == "Infinite Stamina" and isGrapplerClass() then
 		if not callExecutor("initializeStaminaAssist") then
 			self.GrapplerStaminaMode = previousMode or "Off"
 			self.StaminaMode = previousStaminaMode or "Off"
@@ -823,7 +832,7 @@ function Controller:SetStaminaMode(mode)
 			end
 			return
 		end
-	else
+	elseif selectedMode ~= "Infinite Stamina" then
 		callExecutor("disableStaminaAssist")
 	end
 
@@ -1034,6 +1043,24 @@ local characterRefreshConnection = Players.LocalPlayer.CharacterAdded:Connect(fu
 	scheduleRespawnFeatureRefresh()
 end)
 table.insert(Controller.PermanentConnections, characterRefreshConnection)
+
+if ClassContext and typeof(ClassContext.subscribe) == "function" then
+	local classConnection = ClassContext.subscribe(function(currentClass)
+		if Controller.Destroyed then
+			return
+		end
+
+		if currentClass == "grappler" then
+			scheduleRespawnFeatureRefresh()
+		else
+			callExecutor("disableGrappleAssist")
+			callExecutor("disableStaminaAssist")
+		end
+	end)
+	if classConnection then
+		table.insert(Controller.PermanentConnections, classConnection)
+	end
+end
 
 task.spawn(function()
 	local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)

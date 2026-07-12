@@ -29,6 +29,8 @@ local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler
 local AimLock = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Aim Target Lock.luau")
 local NativeContext = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Native Context Sync.luau")
 local PlayerIntent = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Player Intent State.luau")
+local SpecialAnchorCapture =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Special Anchor Capture.luau")
 
 local Targeting = {}
 
@@ -542,6 +544,10 @@ end
 local function getOptimalMinDot(part, controller, intent)
 	local specialName = getSpecialTargetName(part)
 	if isManualIntent(intent) and isPriorityAnchor(part, specialName) then
+		if specialName then
+			local captureAngle = SpecialAnchors and SpecialAnchors.getCaptureAngle(specialName) or 45
+			return math.cos(math.rad(math.max(getManualAnchorAngle(controller), math.min(captureAngle, 52))))
+		end
 		return math.cos(math.rad(getManualAnchorAngle(controller)))
 	end
 
@@ -551,6 +557,33 @@ local function getOptimalMinDot(part, controller, intent)
 	end
 
 	return math.cos(math.rad(getCaptureAngle(controller)))
+end
+
+local function resolveCandidateHit(part, origin, aimDirection, grappleParams, controller, intent)
+	local specialName = getSpecialTargetName(part)
+	if specialName and SpecialAnchorCapture and typeof(SpecialAnchorCapture.resolve) == "function" then
+		return SpecialAnchorCapture.resolve(
+			part,
+			origin,
+			aimDirection,
+			grappleParams,
+			isManualIntent(intent) and getManualAnchorAngle(controller) or nil
+		)
+	end
+
+	local targetPoint = getSurfaceTargetPoint(part, origin)
+	local offset = targetPoint - origin
+	local distance = offset.Magnitude
+	if distance <= 3 then
+		return nil
+	end
+
+	local direction = offset.Unit
+	return Workspace:Raycast(origin, direction * (distance + HIT_OVERSHOOT), grappleParams),
+		direction,
+		distance,
+		aimDirection:Dot(direction),
+		specialName
 end
 
 function Targeting.findOptimalHit(grapple, controller, context)
@@ -583,7 +616,11 @@ function Targeting.findOptimalHit(grapple, controller, context)
 	local bestScore = -math.huge
 	local secondScore = -math.huge
 	local lockedHit = AimLock and typeof(AimLock.resolve) == "function" and AimLock.resolve(grapple, aimDirection)
-	if lockedHit and canUseOptimalHit(lockedHit, lockedHit.Instance) then
+	if
+		(not context or context.SpecialOnly ~= true)
+		and lockedHit
+		and canUseOptimalHit(lockedHit, lockedHit.Instance)
+	then
 		local lockedPart = lockedHit.Instance
 		local lockedOffset = lockedHit.Position - origin
 		local lockedDirection = lockedOffset.Magnitude > 0.001 and lockedOffset.Unit or nil
@@ -603,17 +640,13 @@ function Targeting.findOptimalHit(grapple, controller, context)
 	end
 
 	for _, part in ipairs(getOptimalCandidates(origin, maxRange, budget)) do
-		local targetPoint = getSurfaceTargetPoint(part, origin)
-		local offset = targetPoint - origin
-		local distance = offset.Magnitude
+		local specialName = getSpecialTargetName(part)
+		if not (context and context.SpecialOnly == true and not specialName) then
+			local hit, direction, distance, dot, resolvedSpecialName =
+				resolveCandidateHit(part, origin, aimDirection, grapple.grappleParams, effectiveController, intent)
+			specialName = resolvedSpecialName or specialName
 
-		if distance > 3 and distance <= maxRange then
-			local direction = offset.Unit
-			local dot = aimDirection:Dot(direction)
-
-			if dot >= getOptimalMinDot(part, effectiveController, intent) then
-				local hit = Workspace:Raycast(origin, direction * (distance + HIT_OVERSHOOT), grapple.grappleParams)
-				local specialName = getSpecialTargetName(part)
+			if hit and distance <= maxRange and dot >= getOptimalMinDot(part, effectiveController, intent) then
 				local acceptedByIntent = not IntentTargetGate
 					or IntentTargetGate.accept(grapple, hit, part, origin, direction, intent, specialName)
 				if
@@ -647,6 +680,14 @@ function Targeting.findOptimalHit(grapple, controller, context)
 	end
 
 	return bestHit
+end
+
+function Targeting.findSpecialAnchorHit(grapple, controller, context)
+	context = context or {}
+	context.SpecialOnly = true
+	context.ManualCast = context.ManualCast ~= false
+	context.AssistiveManual = context.AssistiveManual ~= false
+	return Targeting.findOptimalHit(grapple, controller, context)
 end
 
 local function validateFallbackHit(grapple, hit, controller, aimDirection)
