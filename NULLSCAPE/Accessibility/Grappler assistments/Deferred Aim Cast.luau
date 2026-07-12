@@ -9,6 +9,8 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
+local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
+local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 
 local LocalPlayer = Players.LocalPlayer
 local DeferredAim = {}
@@ -156,6 +158,13 @@ function DeferredAim.step(grapple, controller)
 	end
 
 	local now = time()
+	if
+		PerformanceBudget
+		and typeof(PerformanceBudget.shouldRun) == "function"
+		and not PerformanceBudget.shouldRun(grapple, "DeferredAim", 0.06)
+	then
+		return false
+	end
 	if now > Pending.ExpiresAt then
 		Pending = nil
 		return false
@@ -186,9 +195,12 @@ function DeferredAim.step(grapple, controller)
 		return false
 	end
 
-	local success = pcall(function()
-		grapple:Start(hit)
-	end)
+	local success = CastTransaction
+		and typeof(CastTransaction.start) == "function"
+		and CastTransaction.start(grapple, hit, controller, "DeferredAim", {
+			ManualCast = true,
+			AssistiveManual = true,
+		})
 
 	if success then
 		Pending = nil

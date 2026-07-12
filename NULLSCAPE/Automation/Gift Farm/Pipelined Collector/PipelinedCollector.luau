@@ -13,9 +13,9 @@ local Stats = game:GetService("Stats")
 
 local PipelinedCollector = {}
 local COLLECT_SETTLE_FRAMES = 1
-local PRE_COLLECT_SYNC_MULTIPLIER = 0.75
-local PRE_COLLECT_SYNC_MIN = 0.035
-local PRE_COLLECT_SYNC_MAX = 0.11
+local PRE_COLLECT_SYNC_MULTIPLIER = 0.65
+local PRE_COLLECT_SYNC_MIN = 0.02
+local PRE_COLLECT_SYNC_MAX = 0.075
 local COLLECT_ACCEPTANCE_STEP = 0.01
 local ADAPTIVE_MIN_MULTIPLIER = 0.85
 local ADAPTIVE_MAX_MULTIPLIER = 1.9
@@ -114,6 +114,11 @@ local function waitForArrival(hrp, targetPosition, lease, shouldAbort)
 end
 
 local function settleBeforeCollect(hrp, shouldAbort)
+	local ping = getPingSeconds() or 0.08
+	local targetWait = ping * PRE_COLLECT_SYNC_MULTIPLIER
+	local waitTime = math.clamp(targetWait, PRE_COLLECT_SYNC_MIN, PRE_COLLECT_SYNC_MAX)
+
+	local start = os.clock()
 	for _ = 1, COLLECT_SETTLE_FRAMES do
 		if typeof(shouldAbort) == "function" and shouldAbort() then
 			return false
@@ -121,17 +126,13 @@ local function settleBeforeCollect(hrp, shouldAbort)
 		clearVelocity(hrp)
 		RunService.Heartbeat:Wait()
 	end
-	if typeof(shouldAbort) == "function" and shouldAbort() then
-		return false
-	end
-	local syncWait = math.clamp(getOneWayLatency() * PRE_COLLECT_SYNC_MULTIPLIER, PRE_COLLECT_SYNC_MIN, PRE_COLLECT_SYNC_MAX)
-	local startedAt = os.clock()
-	while os.clock() - startedAt < syncWait do
+	local elapsed = os.clock() - start
+	local remaining = waitTime - elapsed
+	if remaining > 0 then
 		if typeof(shouldAbort) == "function" and shouldAbort() then
 			return false
 		end
-		clearVelocity(hrp)
-		task.wait(math.min(COLLECT_ACCEPTANCE_STEP, math.max(0, syncWait - (os.clock() - startedAt))))
+		task.wait(remaining)
 	end
 	clearVelocity(hrp)
 	return true

@@ -5,6 +5,7 @@
 -- ]]
 
 local Workspace = game:GetService("Workspace")
+local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 
 local sharedGlobals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = sharedGlobals
@@ -119,6 +120,8 @@ local RailMemory = {
 	Index = SpatialIndex.new(BUCKET_SIZE),
 	ScanCursor = 1,
 	LastRefreshAt = -1000,
+	ScanList = {},
+	ScanListBuiltAt = -1000,
 }
 
 local function isAlive(instance)
@@ -189,19 +192,24 @@ local function pruneDead()
 	end
 end
 
-local function collectDescendants()
-	local descendants = {}
+local function refreshScanList(now)
+	if now - RailMemory.ScanListBuiltAt < 4 and #RailMemory.ScanList > 0 then
+		return RailMemory.ScanList
+	end
+
+	table.clear(RailMemory.ScanList)
 	for _, root in ipairs(getRailRoots()) do
 		if isRailPart(root) then
-			table.insert(descendants, root)
+			table.insert(RailMemory.ScanList, root)
 		end
 
 		for _, descendant in ipairs(root:GetDescendants()) do
-			table.insert(descendants, descendant)
+			table.insert(RailMemory.ScanList, descendant)
 		end
 	end
-
-	return descendants
+	RailMemory.ScanListBuiltAt = now
+	RailMemory.ScanCursor = 1
+	return RailMemory.ScanList
 end
 
 function RailMemory.isRailPart(part)
@@ -216,13 +224,19 @@ function RailMemory.refreshBudgeted(scanBudget)
 	RailMemory.LastRefreshAt = now
 	pruneDead()
 
-	local descendants = collectDescendants()
+	local descendants = refreshScanList(now)
 	if #descendants == 0 then
 		RailMemory.ScanCursor = 1
 		return
 	end
 
-	local budget = math.clamp(tonumber(scanBudget) or DEFAULT_SCAN_BUDGET, 50, 1800)
+	local runtimeBudget = PerformanceBudget and typeof(PerformanceBudget.get) == "function" and PerformanceBudget.get()
+		or nil
+	local budget = math.clamp(
+		tonumber(scanBudget) or tonumber(runtimeBudget and runtimeBudget.AnchorScanBudget) or DEFAULT_SCAN_BUDGET,
+		50,
+		1800
+	)
 	for _ = 1, math.min(budget, #descendants) do
 		if RailMemory.ScanCursor > #descendants then
 			RailMemory.ScanCursor = 1
@@ -259,6 +273,8 @@ function RailMemory.clear()
 	SpatialIndex.clear(RailMemory.Index)
 	RailMemory.ScanCursor = 1
 	RailMemory.LastRefreshAt = -1000
+	table.clear(RailMemory.ScanList)
+	RailMemory.ScanListBuiltAt = -1000
 end
 
 return RailMemory

@@ -5,6 +5,7 @@
 -- ]]
 
 local Workspace = game:GetService("Workspace")
+local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 
 local sharedGlobals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = sharedGlobals
@@ -113,7 +114,7 @@ sharedGlobals.MapContextSpatialIndex = SpatialIndex
 
 local BUCKET_SIZE = 128
 local DEFAULT_QUERY_RADIUS = 96
-local RESCAN_COOLDOWN = 2
+local RESCAN_COOLDOWN = 3
 local partIds = setmetatable({}, { __mode = "k" })
 local nextPartId = 0
 
@@ -245,8 +246,12 @@ end
 
 function TerrainMemory.ensureScanned(force)
 	local now = time()
+	local runtimeBudget = PerformanceBudget and typeof(PerformanceBudget.get) == "function" and PerformanceBudget.get()
+		or nil
+	local cooldown =
+		math.max(RESCAN_COOLDOWN, tonumber(runtimeBudget and runtimeBudget.CandidateCacheTTL) or RESCAN_COOLDOWN)
 
-	if not force and TerrainMemory.Scanned and now - TerrainMemory.LastScanAt < RESCAN_COOLDOWN then
+	if not force and TerrainMemory.Scanned and now - TerrainMemory.LastScanAt < cooldown then
 		pruneDead()
 		return true
 	end

@@ -8,6 +8,7 @@ local Workspace = game:GetService("Workspace")
 
 local TerrainMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
+local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 
 local Probe = {}
 
@@ -81,7 +82,7 @@ local function makeParams(rootPart)
 	return params
 end
 
-local function isLandableTop(hitResult, rootPart, params, controller)
+local function isLandableTop(hitResult, rootPart, params, controller, landingChecksLimit)
 	if not hitResult or math.abs(hitResult.Normal.Y) > 0.45 then
 		return nil
 	end
@@ -117,7 +118,8 @@ local function isLandableTop(hitResult, rootPart, params, controller)
 		-sideB * landingRadius,
 	}
 
-	for _, offset in ipairs(landingChecks) do
+	for index = 1, math.min(landingChecksLimit or #landingChecks, #landingChecks) do
+		local offset = landingChecks[index]
 		local sampleOrigin = floorHit.Position + offset + Vector3.new(0, clearance, 0)
 		local sampleFloor = Workspace:Raycast(sampleOrigin, Vector3.new(0, -(clearance + 4), 0), params)
 		if not sampleFloor or sampleFloor.Normal.Y < 0.65 then
@@ -194,11 +196,19 @@ function Probe.find(grapple, controller, aimDirection)
 
 	local best = nil
 	local bestScore = -math.huge
-	for _, direction in ipairs(collectDirections(rootPart, aimDirection)) do
-		for height = minHeight, maxHeight, 2 do
+	local runtimeBudget = PerformanceBudget and typeof(PerformanceBudget.get) == "function" and PerformanceBudget.get()
+		or nil
+	local candidateLimit = tonumber(runtimeBudget and runtimeBudget.CandidateLimit) or 40
+	local directionLimit = candidateLimit <= 22 and 3 or 5
+	local heightStep = candidateLimit <= 22 and 3 or 2
+	local landingChecksLimit = candidateLimit <= 14 and 2 or candidateLimit <= 22 and 3 or 5
+	local directions = collectDirections(rootPart, aimDirection)
+	for directionIndex = 1, math.min(directionLimit, #directions) do
+		local direction = directions[directionIndex]
+		for height = minHeight, maxHeight, heightStep do
 			local origin = rootPart.Position + Vector3.new(0, height, 0)
 			local hit = Workspace:Raycast(origin, direction * sideRange, params)
-			local floor = isLandableTop(hit, rootPart, params, controller)
+			local floor = isLandableTop(hit, rootPart, params, controller, landingChecksLimit)
 			if floor then
 				local score = scoreCandidate(hit, floor, direction, rootPart)
 				if score > bestScore then

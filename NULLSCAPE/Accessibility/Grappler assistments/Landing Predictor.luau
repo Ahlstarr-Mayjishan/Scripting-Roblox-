@@ -8,6 +8,7 @@ local Workspace = game:GetService("Workspace")
 
 local TerrainMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
+local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 
 local Predictor = {}
 
@@ -56,7 +57,10 @@ function Predictor.evaluate(grapple, hit, candidatePart, controller, intent)
 	local bonus = 0
 	local reason = "clear"
 
-	for _, t in ipairs(SAMPLE_TIMES) do
+	local budget = PerformanceBudget and typeof(PerformanceBudget.get) == "function" and PerformanceBudget.get() or nil
+	local sampleCount = math.clamp(tonumber(budget and budget.TrajectorySamples) or #SAMPLE_TIMES, 1, #SAMPLE_TIMES)
+	for index = 1, sampleCount do
+		local t = SAMPLE_TIMES[index]
 		local point = origin + projectedVelocity * t + Vector3.new(0, -0.5 * Workspace.Gravity * t * t, 0)
 		if voidY and point.Y - voidY < 12 and (not intent or intent.Name ~= "VoidRescue") then
 			penalty += 18

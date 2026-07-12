@@ -272,6 +272,7 @@ local originalTouchStates = setmetatable({}, { __mode = "k" })
 local disabledShockwaves = {}
 local restoreShockwave
 local isAnySpecialImmunityEnabled
+local startCadenceAutoCollectLoop
 
 local function getCharacterRoot()
 	local localPlayer = Players.LocalPlayer
@@ -1691,7 +1692,7 @@ local function collectCadenceInstruments(controller)
 	end
 end
 
-local function startCadenceAutoCollectLoop()
+startCadenceAutoCollectLoop = function()
 	if Controller.CadenceAutoCollectLoopActive then
 		return
 	end

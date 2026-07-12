@@ -1036,6 +1036,10 @@ function Coordinator.enable(controller, gc)
 	enabled = true
 	configDirty = true
 
+	if Context and typeof(Context.suppressRails) == "function" then
+		Context.suppressRails()
+	end
+
 	-- Connect reactively to ConfigChanged
 	if controller and controller.ConfigChanged then
 		if configChangedConn then
@@ -1070,6 +1074,10 @@ function Coordinator.disable(controller)
 
 	enabled = false
 	recoverAfterStop(controller, "Gift Farm disabled")
+
+	if Context and typeof(Context.restoreRails) == "function" then
+		Context.restoreRails()
+	end
 
 	if configChangedConn then
 		pcall(function()

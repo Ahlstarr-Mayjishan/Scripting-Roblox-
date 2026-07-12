@@ -29,7 +29,7 @@ function PilotState.resolve(grapple, intent, context)
 	end
 
 	if context and context.ManualCast == true then
-		return "Manual"
+		return context.AssistiveManual == true and "AssistiveManual" or "Manual"
 	end
 
 	if AbilityIntent and typeof(AbilityIntent.resolve) == "function" then

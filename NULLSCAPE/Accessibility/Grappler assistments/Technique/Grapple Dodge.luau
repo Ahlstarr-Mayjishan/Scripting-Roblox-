@@ -14,6 +14,8 @@ local TerrainMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
+local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
+local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 
 local Logic = {
 	LastCastAt = -1000,
@@ -313,16 +315,22 @@ local function collectCandidates(origin, controller, sharkEscape)
 	local range = getNumber(controller.GrappleDodgeRange, DEFAULT_RANGE, 30, 150)
 	local candidates = {}
 
+	local budget = PerformanceBudget
+			and typeof(PerformanceBudget.get) == "function"
+			and PerformanceBudget.get(sharkEscape and "Emergency" or nil)
+		or nil
+	local terrainLimit =
+		math.min(MAX_TERRAIN_CANDIDATES, tonumber(budget and budget.CandidateLimit) or MAX_TERRAIN_CANDIDATES)
 	local terrainCount = 0
 	for _, entry in ipairs(TerrainMemory.getNearbySurfaces(origin, range)) do
-		if terrainCount >= MAX_TERRAIN_CANDIDATES then
+		if terrainCount >= terrainLimit then
 			break
 		end
 		terrainCount += 1
 		table.insert(candidates, entry)
 	end
 
-	AnchorMemory.refreshBudgeted(nil, controller)
+	AnchorMemory.refreshBudgeted(budget and budget.AnchorScanBudget, controller)
 	for _, entry in ipairs(AnchorMemory.getNearbyAnchors(origin, range, controller)) do
 		table.insert(candidates, entry)
 	end
@@ -466,6 +474,13 @@ function Logic.step(grapple, _dt, controller)
 	if serviceSharkEscape(grapple, controller, now) then
 		return true
 	end
+	if
+		PerformanceBudget
+		and typeof(PerformanceBudget.shouldRun) == "function"
+		and not PerformanceBudget.shouldRun(grapple, "GrappleDodgeThreat", 0.06)
+	then
+		return false
+	end
 
 	if not canCast(grapple, controller, now) then
 		return false
@@ -494,13 +509,11 @@ function Logic.step(grapple, _dt, controller)
 		return false
 	end
 
-	local success = pcall(function()
-		grapple:Start(hit)
-	end)
-
-	if hit.Instance and AnchorMemory and typeof(AnchorMemory.noteCastResult) == "function" then
-		AnchorMemory.noteCastResult(hit.Instance, success == true)
-	end
+	local success = CastTransaction
+		and typeof(CastTransaction.start) == "function"
+		and CastTransaction.start(grapple, hit, controller, sharkEscape and "SharkEscape" or "GrappleDodge", {
+			Technique = sharkEscape and "SharkEscape" or "ThreatDodge",
+		})
 
 	if success then
 		Logic.LastCastAt = now

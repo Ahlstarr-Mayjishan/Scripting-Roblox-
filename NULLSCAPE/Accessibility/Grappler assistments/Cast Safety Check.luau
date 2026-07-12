@@ -52,9 +52,7 @@ function Safety.evaluate(grapple, hit, candidatePart, controller, intent)
 		return result
 	end
 
-	if isSpecial(candidatePart) or isRail(candidatePart) then
-		return result
-	end
+	local protectedAnchor = isSpecial(candidatePart) or isRail(candidatePart)
 
 	local origin = rootPart.Position
 	local target = hit.Position
@@ -72,7 +70,7 @@ function Safety.evaluate(grapple, hit, candidatePart, controller, intent)
 	local intentName = intent and intent.Name or ""
 
 	if distance < 7 then
-		addIssue(result, "too-close", 18)
+		addIssue(result, "too-close", protectedAnchor and 8 or 18)
 	end
 
 	if typeof(normal) == "Vector3" then
@@ -84,7 +82,7 @@ function Safety.evaluate(grapple, hit, candidatePart, controller, intent)
 
 		local approachFace = normal:Dot(-direction)
 		if approachFace < -0.25 then
-			addIssue(result, "backface-pull", 22)
+			addIssue(result, "backface-pull", protectedAnchor and 10 or 22)
 		end
 	end
 

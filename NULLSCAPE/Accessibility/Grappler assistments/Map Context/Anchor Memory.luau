@@ -8,6 +8,7 @@ local Workspace = game:GetService("Workspace")
 
 local AnchorMemory = {}
 local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau")
+local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 
 local DEFAULT_SCAN_BUDGET = 250
 local RESCAN_COOLDOWN = 0.75
@@ -17,6 +18,8 @@ local anchors = {}
 local buckets = {}
 local scanCursor = 1
 local lastRefreshAt = -1000
+local scanList = {}
+local scanListBuiltAt = -1000
 
 local function isBasePart(part)
 	return typeof(part) == "Instance" and part:IsA("BasePart")
@@ -175,28 +178,38 @@ function AnchorMemory.refreshBudgeted(scanBudget, controller)
 		table.insert(roots, Workspace)
 	end
 
-	local descendants = {}
-	for _, root in ipairs(roots) do
-		if isSpecialAnchor(root) then
-			table.insert(descendants, root)
+	if now - scanListBuiltAt >= 4 or #scanList == 0 then
+		table.clear(scanList)
+		for _, root in ipairs(roots) do
+			if isSpecialAnchor(root) then
+				table.insert(scanList, root)
+			end
+			for _, descendant in ipairs(root:GetDescendants()) do
+				table.insert(scanList, descendant)
+			end
 		end
-		for _, descendant in ipairs(root:GetDescendants()) do
-			table.insert(descendants, descendant)
-		end
+		scanListBuiltAt = now
+		scanCursor = 1
 	end
 
-	local budget = math.clamp(tonumber(scanBudget) or DEFAULT_SCAN_BUDGET, 25, 1500)
-	if #descendants == 0 then
+	local runtimeBudget = PerformanceBudget and typeof(PerformanceBudget.get) == "function" and PerformanceBudget.get()
+		or nil
+	local budget = math.clamp(
+		tonumber(scanBudget) or tonumber(runtimeBudget and runtimeBudget.AnchorScanBudget) or DEFAULT_SCAN_BUDGET,
+		25,
+		1500
+	)
+	if #scanList == 0 then
 		scanCursor = 1
 		return
 	end
 
-	for _ = 1, math.min(budget, #descendants) do
-		if scanCursor > #descendants then
+	for _ = 1, math.min(budget, #scanList) do
+		if scanCursor > #scanList then
 			scanCursor = 1
 		end
 
-		local descendant = descendants[scanCursor]
+		local descendant = scanList[scanCursor]
 		scanCursor += 1
 		if isSpecialAnchor(descendant) then
 			AnchorMemory.remember(descendant, "budgeted-scan", controller)
@@ -250,8 +263,10 @@ end
 function AnchorMemory.clear()
 	table.clear(anchors)
 	table.clear(buckets)
+	table.clear(scanList)
 	scanCursor = 1
 	lastRefreshAt = -1000
+	scanListBuiltAt = -1000
 end
 
 return AnchorMemory

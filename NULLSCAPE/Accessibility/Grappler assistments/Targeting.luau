@@ -15,19 +15,20 @@ local AnchorProfile =
 local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
 local TerrainMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Terrain Memory.luau")
+local AnchorMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Anchor Memory.luau")
+local RailMemory =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau")
 local IntentResolver = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Intent Resolver.luau")
 local IntentTargetGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Intent Target Gate.luau")
 local ConfidenceGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Assist Confidence Gate.luau")
 local PilotState = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Pilot State.luau")
 local AdaptiveStyle = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Adaptive Anchor Style.luau")
-local CastSafety = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Safety Check.luau")
 local AnchorBias = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Anchor Bias Profile.luau")
+local DecisionGateway = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Decision Gateway.luau")
+local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 
 local Targeting = {}
 
-local MAX_OPTIMAL_CANDIDATES = 48
-local MAX_CACHED_TERRAIN_CANDIDATES = 260
-local CANDIDATE_CACHE_TTL = 3
 local DEFAULT_RANGE = 500
 local DEFAULT_CAPTURE_ANGLE = 45
 local DEFAULT_MANUAL_ANCHOR_ANGLE = 24
@@ -38,6 +39,7 @@ local HIT_OVERSHOOT = 2
 
 local CandidateCache = {
 	UpdatedAt = -1000,
+	Origin = nil,
 	Candidates = {},
 }
 
@@ -122,8 +124,8 @@ local function getTerrainScore(hit, origin)
 		score += heightDiff * 8
 	end
 
-	if hit.Normal and hit.Normal.Y < -0.5 then
-		score += 150
+	if hit.Normal and hit.Normal.Y > 0.5 then
+		score += 6
 	end
 
 	return score
@@ -303,70 +305,76 @@ local function getSurfaceTargetPoint(part, origin)
 	return part.CFrame:PointToWorldSpace(clamped)
 end
 
-local function getScanRoots()
-	local roots = {}
-	local jumpPads = Workspace:FindFirstChild("JumpPads")
-	local currentRooms = Workspace:FindFirstChild("CurrentRooms")
-	local enemies = Workspace:FindFirstChild("Enemies")
-	if jumpPads then
-		table.insert(roots, jumpPads)
-	end
-	if enemies then
-		table.insert(roots, enemies)
-	end
-	if currentRooms then
-		table.insert(roots, currentRooms)
-	end
-	if #roots == 0 then
-		table.insert(roots, Workspace)
+local function getBudget(intent)
+	local urgency = intent and (intent.Name == "VoidRescue" or intent.Name == "RazorbloomEscape") and "Emergency" or nil
+	if PerformanceBudget and typeof(PerformanceBudget.get) == "function" then
+		return PerformanceBudget.get(urgency)
 	end
 
-	return roots
+	return {
+		CandidateLimit = 40,
+		TerrainCacheLimit = 220,
+		CandidateCacheTTL = 3,
+	}
 end
 
-local function refreshCandidateCache()
+local function refreshCandidateCache(origin, maxRange, budget)
 	local now = time()
-	if now - CandidateCache.UpdatedAt < CANDIDATE_CACHE_TTL then
+	local cacheTTL = tonumber(budget and budget.CandidateCacheTTL) or 3
+	if
+		now - CandidateCache.UpdatedAt < cacheTTL
+		and CandidateCache.Origin
+		and (CandidateCache.Origin - origin).Magnitude <= 64
+	then
 		return CandidateCache.Candidates
 	end
 
-	local specialCandidates = {}
-	local terrainCandidates = {}
-	for _, root in ipairs(getScanRoots()) do
-		if isOptimalCandidate(root) then
-			if getSpecialTargetName(root) or root.Name == "_RailPart" then
-				table.insert(specialCandidates, root)
-			elseif #terrainCandidates < MAX_CACHED_TERRAIN_CANDIDATES then
-				table.insert(terrainCandidates, root)
-			end
-		end
-
-		for _, descendant in ipairs(root:GetDescendants()) do
-			local specialName = getSpecialTargetName(descendant)
-			if specialName or descendant.Name == "_RailPart" then
-				if isOptimalCandidate(descendant) then
-					table.insert(specialCandidates, descendant)
-				end
-			elseif #terrainCandidates < MAX_CACHED_TERRAIN_CANDIDATES and isOptimalCandidate(descendant) then
-				table.insert(terrainCandidates, descendant)
-			end
-		end
-	end
-
 	local candidates = {}
-	for _, part in ipairs(specialCandidates) do
+	local seen = {}
+	local terrainLimit = tonumber(budget and budget.TerrainCacheLimit) or 220
+	local function addCandidate(part)
+		if not (part and not seen[part] and isOptimalCandidate(part)) then
+			return
+		end
+		seen[part] = true
 		table.insert(candidates, part)
 	end
-	for _, part in ipairs(terrainCandidates) do
-		table.insert(candidates, part)
+
+	if TerrainMemory and typeof(TerrainMemory.getNearbySurfaces) == "function" then
+		for _, entry in ipairs(TerrainMemory.getNearbySurfaces(origin, maxRange)) do
+			if #candidates >= terrainLimit then
+				break
+			end
+			addCandidate(entry.Part)
+		end
+	end
+
+	local scanBudget = tonumber(budget and budget.AnchorScanBudget)
+	if AnchorMemory and typeof(AnchorMemory.refreshBudgeted) == "function" then
+		AnchorMemory.refreshBudgeted(scanBudget)
+	end
+	if AnchorMemory and typeof(AnchorMemory.getNearbyAnchors) == "function" then
+		for _, entry in ipairs(AnchorMemory.getNearbyAnchors(origin, maxRange)) do
+			addCandidate(entry.Part)
+		end
+	end
+
+	if RailMemory and typeof(RailMemory.refreshBudgeted) == "function" then
+		RailMemory.refreshBudgeted(scanBudget)
+	end
+	if RailMemory and typeof(RailMemory.getNearbyRails) == "function" then
+		for _, entry in ipairs(RailMemory.getNearbyRails(origin, maxRange)) do
+			addCandidate(entry.Part)
+		end
 	end
 
 	CandidateCache.UpdatedAt = now
+	CandidateCache.Origin = origin
 	CandidateCache.Candidates = candidates
 	return candidates
 end
 
-local function insertNearest(ranked, entry)
+local function insertNearest(ranked, entry, limit)
 	local inserted = false
 	for index = 1, #ranked do
 		if entry.Distance < ranked[index].Distance then
@@ -380,16 +388,17 @@ local function insertNearest(ranked, entry)
 		table.insert(ranked, entry)
 	end
 
-	if #ranked > MAX_OPTIMAL_CANDIDATES then
+	if #ranked > limit then
 		table.remove(ranked)
 	end
 end
 
-local function getOptimalCandidates(origin, maxRange)
+local function getOptimalCandidates(origin, maxRange, budget)
 	local priorityCandidates = {}
 	local rankedTerrain = {}
 
-	for _, part in ipairs(refreshCandidateCache()) do
+	local candidateLimit = tonumber(budget and budget.CandidateLimit) or 40
+	for _, part in ipairs(refreshCandidateCache(origin, maxRange, budget)) do
 		if isAliveBasePart(part) then
 			local distance = (part.Position - origin).Magnitude
 			if distance <= maxRange then
@@ -399,7 +408,7 @@ local function getOptimalCandidates(origin, maxRange)
 					insertNearest(rankedTerrain, {
 						Part = part,
 						Distance = distance,
-					})
+					}, candidateLimit)
 				end
 			end
 		end
@@ -441,23 +450,19 @@ local function scoreOptimalHit(hit, part, origin, distance, dot, controller, int
 	return score
 end
 
-local function applySafety(grapple, hit, part, controller, intent)
-	if controller and controller.GrappleAssistSafetyEnabled == false then
-		return true, 0
+local function applySafety(grapple, hit, part, controller, intent, context)
+	if DecisionGateway and typeof(DecisionGateway.evaluate) == "function" then
+		local success, result = pcall(DecisionGateway.evaluate, grapple, hit, controller, {
+			Intent = intent,
+			Technique = context and context.Technique,
+			EntityIntent = context and context.EntityIntent,
+		})
+		if success and result then
+			return result.Accept ~= false, tonumber(result.Penalty) or 0, result
+		end
 	end
 
-	if not (CastSafety and typeof(CastSafety.evaluate) == "function") then
-		return true, 0
-	end
-
-	local success, result = pcall(function()
-		return CastSafety.evaluate(grapple, hit, part, controller, intent)
-	end)
-	if not (success and result) then
-		return true, 0
-	end
-
-	return result.Accept ~= false, tonumber(result.Penalty) or 0
+	return true, 0, nil
 end
 
 local function getBiasScore(grapple, hit, part, origin, aimDirection, controller, intent)
@@ -505,7 +510,7 @@ local function getIntent(grapple, controller, aimDirection, context)
 end
 
 local function isManualIntent(intent)
-	return intent and intent.PilotMode == "Manual"
+	return intent and (intent.PilotMode == "Manual" or intent.PilotMode == "AssistiveManual")
 end
 
 local function isPriorityAnchor(part, specialName)
@@ -542,6 +547,7 @@ function Targeting.findOptimalHit(grapple, controller, context)
 	local origin = rootPart.Position
 	local maxRange = getRange(controller)
 	local intent = getIntent(grapple, controller, aimDirection, context)
+	local budget = getBudget(intent)
 	local effectiveController = controller
 	if AdaptiveStyle and typeof(AdaptiveStyle.resolve) == "function" then
 		local success, styledController = pcall(function()
@@ -555,7 +561,7 @@ function Targeting.findOptimalHit(grapple, controller, context)
 	local bestScore = -math.huge
 	local secondScore = -math.huge
 
-	for _, part in ipairs(getOptimalCandidates(origin, maxRange)) do
+	for _, part in ipairs(getOptimalCandidates(origin, maxRange, budget)) do
 		local targetPoint = getSurfaceTargetPoint(part, origin)
 		local offset = targetPoint - origin
 		local distance = offset.Magnitude
@@ -574,7 +580,7 @@ function Targeting.findOptimalHit(grapple, controller, context)
 					and canUseOptimalHit(hit, part)
 					and not isVoidProtectedHit(grapple, hit, part, origin, effectiveController)
 				then
-					local safe, safetyPenalty = applySafety(grapple, hit, part, effectiveController, intent)
+					local safe, safetyPenalty = applySafety(grapple, hit, part, effectiveController, intent, context)
 					if safe then
 						local score = scoreOptimalHit(hit, part, origin, distance, dot, effectiveController, intent)
 							+ getBiasScore(grapple, hit, part, origin, aimDirection, effectiveController, intent)
@@ -599,6 +605,23 @@ function Targeting.findOptimalHit(grapple, controller, context)
 	return bestHit
 end
 
+local function validateFallbackHit(grapple, hit, controller, aimDirection)
+	if not hit then
+		return nil, aimDirection, false
+	end
+
+	local intent = getIntent(grapple, controller, aimDirection, {
+		ManualCast = true,
+		AssistiveManual = true,
+		AimDirection = aimDirection,
+	})
+	local safe = applySafety(grapple, hit, hit.Instance, controller, intent, {
+		ManualCast = true,
+		AssistiveManual = true,
+	})
+	return safe and hit or nil, aimDirection, safe ~= true
+end
+
 function Targeting.fallbackCast(grapple, controller)
 	local rootPart = grapple and grapple.RootPart
 	local currentCamera = Workspace.CurrentCamera
@@ -619,13 +642,15 @@ function Targeting.fallbackCast(grapple, controller)
 		local humanoid = grapple.Humanoid
 		local cameraOffset = grapple.cameraOffset
 		if not (humanoid and cameraOffset) then
-			return Workspace:Raycast(position, aimDirection * maxRange, grapple.grappleParams)
+			local hit = Workspace:Raycast(position, aimDirection * maxRange, grapple.grappleParams)
+			return validateFallbackHit(grapple, hit, controller, aimDirection)
 		end
 
 		local rayOrigin = (currentCamera.CFrame * cameraOffset).Position
 			+ currentCamera.CFrame.LookVector
 				* (currentCamera.CFrame.Position - (position + humanoid.CameraOffset)).Magnitude
-		return Workspace:Raycast(rayOrigin, aimDirection * maxRange, grapple.grappleParams)
+		local hit = Workspace:Raycast(rayOrigin, aimDirection * maxRange, grapple.grappleParams)
+		return validateFallbackHit(grapple, hit, controller, aimDirection)
 	end
 
 	local mouse = LocalPlayer and LocalPlayer:GetMouse()
@@ -639,11 +664,12 @@ function Targeting.fallbackCast(grapple, controller)
 		return nil, aimDirection
 	end
 
-	return Workspace:Raycast(
+	local hit = Workspace:Raycast(
 		position,
 		CFrame.lookAt(position, mouseHit.Position).LookVector * maxRange,
 		grapple.grappleParams
 	)
+	return validateFallbackHit(grapple, hit, controller, aimDirection)
 end
 
 function Targeting.findBestAssistHit(grapple, controller, context)

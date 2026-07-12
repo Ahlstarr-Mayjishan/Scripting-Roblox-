@@ -378,4 +378,51 @@ function Context.getGiftPosition(gift)
 	return nil
 end
 
+local railConnection = nil
+local modifiedRails = {}
+
+function Context.suppressRails()
+	if railConnection then
+		return
+	end
+
+	modifiedRails = {}
+
+	local function process(descendant)
+		if descendant:IsA("BasePart") and descendant.Name == "_RailPart" then
+			if modifiedRails[descendant] == nil then
+				modifiedRails[descendant] = descendant.CanTouch
+				pcall(function()
+					descendant.CanTouch = false
+				end)
+			end
+		end
+	end
+
+	for _, descendant in ipairs(Workspace:GetDescendants()) do
+		process(descendant)
+	end
+
+	railConnection = Workspace.DescendantAdded:Connect(process)
+end
+
+function Context.restoreRails()
+	if railConnection then
+		pcall(function()
+			railConnection:Disconnect()
+		end)
+		railConnection = nil
+	end
+
+	for part, originalCanTouch in pairs(modifiedRails) do
+		if part and part.Parent then
+			pcall(function()
+				part.CanTouch = originalCanTouch
+			end)
+		end
+	end
+
+	modifiedRails = {}
+end
+
 return Context

@@ -7,6 +7,7 @@ local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Co
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
 local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
 local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
+local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
 
 local DEFAULT_HEIGHT = 45
 local DEFAULT_REEL_HOLD = 0.12
@@ -253,9 +254,12 @@ local function autoCast(grapple, targeting, now)
 		return false
 	end
 
-	local success = pcall(function()
-		grapple:Start(hitResult)
-	end)
+	local success = CastTransaction
+		and typeof(CastTransaction.start) == "function"
+		and CastTransaction.start(grapple, hitResult, controller, "SharkVoid", {
+			Technique = "VoidRescue",
+			Name = "VoidRescue",
+		})
 
 	if success then
 		recordMomentum(grapple, "SharkVoidAutoCast")
@@ -321,6 +325,7 @@ local function autoReel(grapple, controller, now)
 		pcall(function()
 			ReleaseTiming.schedule(grapple, "SharkVoid", holdTime, {
 				Intent = "VoidRescue",
+				EndWasCancelled = false,
 			})
 		end)
 	end
@@ -344,10 +349,13 @@ local function autoEnd(grapple, now)
 	end
 
 	local success = pcall(function()
-		grapple:End()
+		grapple:End(false)
 	end)
 
 	if success then
+		if ReleaseTiming and typeof(ReleaseTiming.cancel) == "function" then
+			ReleaseTiming.cancel(grapple)
+		end
 		recordMomentum(grapple, "SharkVoidAutoEnd")
 	end
 
@@ -423,8 +431,8 @@ function Logic.step(grapple, _dt, controller, targeting)
 
 	local now = time()
 	autoCast(grapple, targeting, now)
-	autoSharkTail(grapple, controller, now)
 	autoEnd(grapple, now)
+	autoSharkTail(grapple, controller, now)
 	autoReel(grapple, controller, now)
 	return true
 end

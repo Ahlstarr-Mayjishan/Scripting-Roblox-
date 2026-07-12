@@ -5,7 +5,7 @@
 -- ]]
 
 local SecondaryCast = {}
-local AnchorMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Anchor Memory.luau")
+local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
 
 local function hasBlockedStatus(grapple, statusName)
 	local status = grapple and grapple.Status
@@ -84,12 +84,12 @@ function SecondaryCast.cast(grapple, controller, targeting)
 
 	hideCrosshair(grapple)
 
-	local success = pcall(function()
-		grapple:Start(hit)
-	end)
-	if hit and hit.Instance and AnchorMemory and typeof(AnchorMemory.noteCastResult) == "function" then
-		AnchorMemory.noteCastResult(hit.Instance, success == true)
-	end
+	local success = CastTransaction
+		and typeof(CastTransaction.start) == "function"
+		and CastTransaction.start(grapple, hit, controller, "SecondaryCast", {
+			ManualCast = true,
+			AssistiveManual = true,
+		})
 
 	return success == true
 end

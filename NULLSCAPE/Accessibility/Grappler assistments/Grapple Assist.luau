@@ -19,8 +19,10 @@ local DeferredAim = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assis
 local Arbiter = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique Arbiter.luau")
 local EntityContext = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Entity Intent Context.luau")
 local Decision = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique Decision Layer.luau")
+local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
+local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 
-local HOOK_VERSION = 14
+local HOOK_VERSION = 15
 
 local PRIORITY = Decision and Decision.Priority
 	or {
@@ -178,7 +180,7 @@ local function installCastHook(grappleModule, globals)
 		if isEnabled() then
 			local controller = getController()
 			local manualCast = true
-			local fallbackHit, fallbackDirection
+			local fallbackHit, fallbackDirection, fallbackBlocked
 			local prioritizeAssist = EntityContext
 				and typeof(EntityContext.isRazorbloomActive) == "function"
 				and EntityContext.isRazorbloomActive()
@@ -189,18 +191,19 @@ local function installCastHook(grappleModule, globals)
 					EntityIntent = "RazorbloomEscape",
 				})
 				if assistedHit then
-					if FailFeedback and typeof(FailFeedback.noteAssistCast) == "function" then
-						pcall(function()
-							FailFeedback.noteAssistCast(self, assistedHit, controller)
-						end)
+					if CastTransaction and typeof(CastTransaction.expect) == "function" then
+						CastTransaction.expect(self, assistedHit, controller, "RazorbloomEscape")
 					end
 					return assistedHit
 				end
 			end
 
 			if manualCast and Targeting and typeof(Targeting.fallbackCast) == "function" then
-				fallbackHit, fallbackDirection = Targeting.fallbackCast(self, controller)
+				fallbackHit, fallbackDirection, fallbackBlocked = Targeting.fallbackCast(self, controller)
 				if fallbackHit then
+					if CastTransaction and typeof(CastTransaction.expect) == "function" then
+						CastTransaction.expect(self, fallbackHit, controller, "ManualFallback")
+					end
 					if DeferredAim and typeof(DeferredAim.reset) == "function" then
 						pcall(function()
 							DeferredAim.reset()
@@ -215,13 +218,15 @@ local function installCastHook(grappleModule, globals)
 					ManualCast = manualCast,
 				})
 				if assistedHit then
-					if FailFeedback and typeof(FailFeedback.noteAssistCast) == "function" then
-						pcall(function()
-							FailFeedback.noteAssistCast(self, assistedHit, controller)
-						end)
+					if CastTransaction and typeof(CastTransaction.expect) == "function" then
+						CastTransaction.expect(self, assistedHit, controller, "AssistFallback")
 					end
 					return assistedHit
 				end
+			end
+
+			if manualCast and fallbackBlocked then
+				return nil, fallbackDirection
 			end
 
 			if manualCast and fallbackDirection then
@@ -272,6 +277,14 @@ local function installStepHook(grappleModule, globals)
 
 		local results = packValues(originalStep(self, dt, ...))
 		local controller = getController()
+		if PerformanceBudget and typeof(PerformanceBudget.observeFrame) == "function" then
+			PerformanceBudget.observeFrame(dt)
+		end
+		if CastTransaction and typeof(CastTransaction.step) == "function" then
+			pcall(function()
+				CastTransaction.step(self)
+			end)
+		end
 		if Arbiter and typeof(Arbiter.beginFrame) == "function" then
 			pcall(function()
 				Arbiter.beginFrame(self)
@@ -538,6 +551,12 @@ function Logic.resetRespawnState()
 		pcall(function()
 			Arbiter.reset()
 		end)
+	end
+	if CastTransaction and typeof(CastTransaction.reset) == "function" then
+		CastTransaction.reset()
+	end
+	if PerformanceBudget and typeof(PerformanceBudget.reset) == "function" then
+		PerformanceBudget.reset()
 	end
 	return true
 end

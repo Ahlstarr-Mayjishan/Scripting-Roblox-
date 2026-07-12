@@ -9,6 +9,7 @@ local Probe =
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Timing Helper.luau")
 local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
+local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
 
 local DEFAULT_REEL_HOLD = 0.16
 local START_COOLDOWN = 0.7
@@ -74,9 +75,11 @@ local function castToTarget(grapple, controller, target, now)
 		return false
 	end
 
-	local success = pcall(function()
-		grapple:Start(target.Hit)
-	end)
+	local success = CastTransaction
+		and typeof(CastTransaction.start) == "function"
+		and CastTransaction.start(grapple, target.Hit, controller, "ReelSaver", {
+			Technique = "ReelSaver",
+		})
 
 	if success then
 		if MomentumMemory and typeof(MomentumMemory.record) == "function" then

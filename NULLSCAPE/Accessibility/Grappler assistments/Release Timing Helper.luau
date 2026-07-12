@@ -65,8 +65,13 @@ function Helper.step(grapple)
 		return false
 	end
 
+	local metadata = pending.Metadata or {}
 	return pcall(function()
-		grapple:End()
+		if metadata.EndWasCancelled ~= nil then
+			grapple:End(metadata.EndWasCancelled == true)
+		else
+			grapple:End()
+		end
 	end)
 end
 
