@@ -209,36 +209,11 @@ function Context.moveCharacterTo(cframe)
 		return false
 	end
 
-	local targetPos = cframe.Position
-
 	Context.releaseCharacterControl({
 		SkipVelocityClear = true,
 		SkipTouchRestore = true,
 		SkipStateChange = true,
 	})
-
-	local startPos = hrp.Position
-	local direction = (targetPos - startPos)
-	local distance = direction.Magnitude
-	local stepSize = 92
-
-	if distance > stepSize then
-		local steps = math.ceil(distance / stepSize)
-		local unitDir = direction.Unit
-		for i = 1, steps - 1 do
-			if not (hrp and hrp.Parent) or Players.LocalPlayer.Character ~= character then
-				break
-			end
-			local intermediatePos = startPos + unitDir * (i * stepSize)
-			local intermediateCFrame = CFrame.new(intermediatePos, intermediatePos + hrp.CFrame.LookVector)
-
-			local ok = setRootCFrame(character, hrp, intermediateCFrame)
-			if not ok then
-				return false
-			end
-			RunService.Heartbeat:Wait()
-		end
-	end
 
 	if not (hrp and hrp.Parent) or Players.LocalPlayer.Character ~= character then
 		return false

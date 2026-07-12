@@ -129,6 +129,15 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateToggle({
+		Name = "Medal ESP",
+		CurrentValue = Controller.MedalESPEnabled == true,
+		Flag = "MedalESPToggle",
+		Callback = function(Value)
+			Controller:SetMedalESPEnabled(Value)
+		end,
+	})
+
 	Tab:CreateSection("Defuse Kits")
 
 	Tab:CreateDropdown({

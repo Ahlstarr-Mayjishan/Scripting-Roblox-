@@ -26,6 +26,7 @@ local SpeedBuffs = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Speed Buff
 local Helmet = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Helmet.luau")
 local MiniatureHourglass = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Miniature Hourglass.luau")
 local AirJumps = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Air Jumps.luau")
+local Medal = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Medal.luau")
 
 local Controller = {
 	RadarEnabled = false,
@@ -41,6 +42,7 @@ local Controller = {
 	AutoCollectTargets = { "Gift/GoldenGift", "Instrument (Cadence)" },
 	AutoCollectMode = "Legit",
 	CollectMedalKeybind = "V",
+	MedalESPEnabled = false,
 
 	MatrixTetrahedronEnabled = false, -- Mô phỏng Matrix Tetrahedron di chuyển instant acceleration
 	MomentumReduction = 1.0, -- Lực Momentum Reduction tùy biến (mặc định 100%)
@@ -639,6 +641,11 @@ function Controller:SetCollectMedalKeybind(value)
 	self.CollectMedalKeybind = value
 end
 
+function Controller:SetMedalESPEnabled(value)
+	self.MedalESPEnabled = value == true
+	Medal.setESPEnabled(self.MedalESPEnabled)
+end
+
 function Controller:TriggerMedalAction()
 	if self.inLobby then
 		if getgenv().Rayfield then
@@ -651,118 +658,13 @@ function Controller:TriggerMedalAction()
 		return
 	end
 
-	local char = LocalPlayer.Character
-	local hrp = char and char:FindFirstChild("HumanoidRootPart")
-	if not hrp then
-		return
-	end
-
-	local carriesMedal = char:FindFirstChild("Medal") ~= nil
-	if carriesMedal then
-		-- Auto-submit to Beacon
-		local beacon = workspace:FindFirstChild("Beacon")
-		local beaconPart = beacon and beacon:FindFirstChildWhichIsA("BasePart", true)
-		if beaconPart then
-			local distToBeacon = (beaconPart.Position - hrp.Position).Magnitude
-			if distToBeacon <= 30 then
-				pcall(function()
-					if typeof(firetouchinterest) == "function" then
-						firetouchinterest(beaconPart, hrp, 0)
-						task.wait()
-						firetouchinterest(beaconPart, hrp, 1)
-						if getgenv().Rayfield then
-							getgenv().Rayfield:Notify({
-								Title = "Medal Action",
-								Content = "Medal submitted successfully!",
-								Duration = 2,
-							})
-						end
-					end
-				end)
-			else
-				if getgenv().Rayfield then
-					getgenv().Rayfield:Notify({
-						Title = "Medal Action",
-						Content = "Too far from Beacon! (Distance: "
-							.. string.format("%.1f", distToBeacon)
-							.. " studs, limit: 30)",
-						Duration = 3,
-					})
-				end
-			end
-		else
-			if getgenv().Rayfield then
-				getgenv().Rayfield:Notify({
-					Title = "Medal Action",
-					Content = "Beacon not found in workspace!",
-					Duration = 2.5,
-				})
-			end
-		end
-	else
-		-- Auto-pickup Medal using Blink Pick / Proximity Teleportation
-		-- Search for Medal
-		local function findMedal()
-			local medal = workspace:FindFirstChild("Medal")
-			if medal then
-				if medal:IsA("BasePart") then
-					return medal
-				elseif medal:IsA("Model") then
-					local handle = medal:FindFirstChild("Handle") or medal:FindFirstChildWhichIsA("BasePart", true)
-					if handle then
-						return handle
-					end
-				end
-			end
-			for _, child in ipairs(workspace:GetChildren()) do
-				if child.Name == "Medal" then
-					if child:IsA("BasePart") then
-						return child
-					end
-					local handle = child:FindFirstChild("Handle") or child:FindFirstChildWhichIsA("BasePart", true)
-					if handle then
-						return handle
-					end
-				end
-			end
-			return nil
-		end
-
-		local medal = findMedal()
-		if medal then
-			local oldCFrame = hrp.CFrame
-			local ok, err = pcall(function()
-				-- Safe blink pick: Anchors root and teleports right on top of the Medal handle for 0.05s
-				hrp.Anchored = true
-				hrp.CFrame = medal.CFrame * CFrame.new(0, 1.5, 0)
-				task.wait(0.05)
-
-				if getgenv().Rayfield then
-					getgenv().Rayfield:Notify({
-						Title = "Medal Action",
-						Content = "Attempted Medal pick up!",
-						Duration = 2,
-					})
-				end
-			end)
-			pcall(function()
-				if hrp and hrp.Parent then
-					hrp.CFrame = oldCFrame
-					hrp.Anchored = false
-				end
-			end)
-			if not ok then
-				warn("[NULLSCAPE] Medal action failed: " .. tostring(err))
-			end
-		else
-			if getgenv().Rayfield then
-				getgenv().Rayfield:Notify({
-					Title = "Medal Action",
-					Content = "Medal not found in workspace!",
-					Duration = 2.5,
-				})
-			end
-		end
+	local ok, message = Medal.triggerManual()
+	if getgenv().Rayfield then
+		getgenv().Rayfield:Notify({
+			Title = ok and "Medal Action" or "Medal Action Failed",
+			Content = message,
+			Duration = ok and 2 or 3,
+		})
 	end
 end
 
@@ -1083,6 +985,9 @@ function Controller:CleanUp()
 		pcall(function()
 			MiniatureHourglass.stop()
 		end)
+	end
+	if finalCleanup and Medal and typeof(Medal.cleanup) == "function" then
+		pcall(Medal.cleanup)
 	end
 	if finalCleanup and Executor and typeof(Executor.stopBarriers) == "function" then
 		pcall(Executor.stopBarriers)

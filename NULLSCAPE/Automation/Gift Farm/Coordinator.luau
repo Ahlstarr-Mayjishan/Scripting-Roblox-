@@ -39,6 +39,7 @@ local RESPAWN_READY_DELAY = 0.85
 local TAIL_REMAINING_RATIO = 0.12
 local WATCHDOG_INTERVAL = 1
 local WORKER_STALL_TIMEOUT = 6
+local LOGICAL_STALL_TIMEOUT = 8
 local WATCHDOG_MOVEMENT_EPSILON = 2
 
 local enabled = false
@@ -50,7 +51,9 @@ local loopActive = false
 local workerGeneration = 0
 local watchdogGeneration = 0
 local lastWorkerPulseAt = 0
+local lastProgressAt = 0
 local lastWatchPosition = nil
+local lastWatchGiftCount = nil
 
 -- Observers
 local characterAddedConnection = nil
@@ -75,6 +78,10 @@ local mode = NORMAL_MODE
 
 local function markWorkerPulse()
 	lastWorkerPulseAt = os.clock()
+end
+
+local function markProgress()
+	lastProgressAt = os.clock()
 end
 
 local function transitionTo(controller, status, detail, force)
@@ -111,6 +118,8 @@ local function recoverAfterStop(controller, detail)
 	giftsStabilized = false
 	startWaitAt = nil
 	lastGiftSeenAt = 0
+	lastWatchGiftCount = nil
+	markProgress()
 	if controller then
 		controller.GiftFarmGoldenComplete = false
 	end
@@ -452,6 +461,8 @@ local function observeCharacter(controller, gc)
 		characterReadyAt = math.huge
 		pendingGoldenReturnSince = nil
 		table.clear(retryQueue)
+		lastWatchGiftCount = nil
+		markProgress()
 		if controller then
 			controller.GiftFarmGoldenComplete = false
 		end
@@ -550,6 +561,8 @@ local function observeInRound(controller, gc)
 		startWaitAt = nil
 		lastGiftSeenAt = 0
 		table.clear(retryQueue)
+		lastWatchGiftCount = nil
+		markProgress()
 		if controller then
 			controller.GiftFarmGoldenComplete = false
 		end
@@ -1021,6 +1034,9 @@ local function runLoop(controller)
 			end
 
 			-- Release lease
+			if routeStats and (tonumber(routeStats.Accepted) or 0) > 0 then
+				markProgress()
+			end
 			lease:release({ KeepFootholdDuration = 2.5, OnlyKeepFootholdIfAirborne = true })
 			enqueueRetryItems(routeStats)
 			clearRoute(route)
@@ -1080,11 +1096,65 @@ local function runLoop(controller)
 	end)
 end
 
+local function getLiveGiftCount()
+	local gch = Context.getGiftClientHandler()
+	if not (gch and typeof(gch.Gifts) == "table") then
+		return nil
+	end
+
+	local count = 0
+	for _, gift in pairs(gch.Gifts) do
+		if gift
+			and not gift.Destroyed
+			and not gift.Collected
+			and not gift.ClientCollected
+			and not gift.Tripmine
+			and Context.getGiftPosition(gift) ~= nil
+		then
+			count += 1
+		end
+	end
+	return count
+end
+
+local function restartStalledWorker(controller, detail)
+	workerGeneration += 1
+	loopActive = false
+	sessionToken += 1
+	MovementLease.invalidateActive()
+	activeLease = nil
+	table.clear(retryQueue)
+	lastWatchGiftCount = nil
+	markWorkerPulse()
+	markProgress()
+	if Scanner and typeof(Scanner.reset) == "function" then
+		Scanner.reset()
+	end
+	if Collector and typeof(Collector.resetAdaptive) == "function" then
+		Collector.resetAdaptive(controller)
+	end
+	if PipelinedCollector and typeof(PipelinedCollector.cancelPending) == "function" then
+		PipelinedCollector.cancelPending()
+	end
+	if PipelinedCollector and typeof(PipelinedCollector.resetAdaptive) == "function" then
+		PipelinedCollector.resetAdaptive()
+	end
+	Context.releaseCharacterControl({
+		SkipVelocityClear = true,
+		SkipStateChange = true,
+		ForceAbilityClear = true,
+	})
+	transitionTo(controller, "Recovering", detail, true)
+	runLoop(controller)
+end
+
 local function startWatchdog(controller)
 	watchdogGeneration += 1
 	local myWatchdogGeneration = watchdogGeneration
 	lastWatchPosition = nil
+	lastWatchGiftCount = nil
 	markWorkerPulse()
+	markProgress()
 
 	task.spawn(function()
 		while enabled and not controller.Destroyed and watchdogGeneration == myWatchdogGeneration do
@@ -1105,20 +1175,26 @@ local function startWatchdog(controller)
 				markWorkerPulse()
 			end
 
-			if Context.isInRound() and os.clock() - lastWorkerPulseAt >= WORKER_STALL_TIMEOUT then
-				warn("[NULLSCAPE] Gift Farm watchdog restarted a stalled worker")
-				workerGeneration += 1
-				loopActive = false
-				sessionToken += 1
-				MovementLease.invalidateActive()
-				activeLease = nil
-				Context.releaseCharacterControl({
-					SkipVelocityClear = true,
-					SkipStateChange = true,
-					ForceAbilityClear = true,
-				})
-				transitionTo(controller, "Recovering", "Watchdog restarted stalled Gift Farm", true)
-				runLoop(controller)
+			local liveGiftCount = getLiveGiftCount()
+			if liveGiftCount ~= nil then
+				if liveGiftCount == 0 or lastWatchGiftCount == nil or liveGiftCount ~= lastWatchGiftCount then
+					markProgress()
+				end
+				lastWatchGiftCount = liveGiftCount
+			end
+
+			local now = os.clock()
+			local workerStalled = now - lastWorkerPulseAt >= WORKER_STALL_TIMEOUT
+			local progressStalled = liveGiftCount ~= nil
+				and liveGiftCount > 0
+				and controller.PylonActivatorHolding ~= true
+				and now - lastProgressAt >= LOGICAL_STALL_TIMEOUT
+			if Context.isInRound() and (workerStalled or progressStalled) then
+				local detail = if progressStalled
+					then string.format("No gift progress for %.0fs; rebuilding route", LOGICAL_STALL_TIMEOUT)
+					else "Worker stopped responding; restarting"
+				warn("[NULLSCAPE] Gift Farm watchdog recovery: " .. detail)
+				restartStalledWorker(controller, detail)
 			end
 		end
 	end)

@@ -7,6 +7,7 @@
 local Logic = {}
 
 local SHUTDOWN_ORDER = {
+	"CharacterActions",
 	"FPSBoost",
 	"AutomationController",
 	"AccessibilityController",

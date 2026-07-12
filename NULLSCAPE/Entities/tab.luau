@@ -329,10 +329,13 @@ return function(Client, Controller)
 	if getFlag(Controller, "CadenceAutoCollectInstruments") then
 		table.insert(currentCadenceOptions, "Auto Collect Instruments")
 	end
+	if getFlag(Controller, "CadenceCheckStatus") then
+		table.insert(currentCadenceOptions, "CheckStatus")
+	end
 
 	Tab:CreateDropdown({
 		Name = "Cadence",
-		Options = { "Immunity", "Auto Collect Instruments" },
+		Options = { "Immunity", "Auto Collect Instruments", "CheckStatus" },
 		CurrentOption = currentCadenceOptions,
 		MultipleOptions = true,
 		Flag = "CadenceOptionsDropdown",

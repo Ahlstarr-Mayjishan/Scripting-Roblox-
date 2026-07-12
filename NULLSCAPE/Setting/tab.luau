@@ -12,6 +12,49 @@ return function(Client)
 
 	local SettingsTab = Window:CreateTab("Settings", 4483362458)
 	Client.Tabs.Settings = SettingsTab
+	local characterActions = Client.Modules and Client.Modules.CharacterActions
+	if not characterActions then
+		local loaded, result = pcall(function()
+			return getgenv().loadModule("NULLSCAPE/Setting/Character Actions.luau")
+		end)
+		if loaded and typeof(result) == "table" then
+			characterActions = result
+			Client.Modules.CharacterActions = result
+		else
+			warn("[NULLSCAPE] Character actions unavailable: " .. tostring(result))
+		end
+	end
+
+	SettingsTab:CreateSection("Character")
+
+	SettingsTab:CreateButton({
+		Name = "Respawn",
+		Callback = function()
+			if characterActions and typeof(characterActions.respawn) == "function" then
+				local ok, message = characterActions.respawn()
+				if not ok and getgenv().Rayfield then
+					getgenv().Rayfield:Notify({
+						Title = "Respawn Failed",
+						Content = message,
+						Duration = 3,
+					})
+				end
+			end
+		end,
+	})
+
+	SettingsTab:CreateToggle({
+		Name = "Unlock Reset Button",
+		CurrentValue = false,
+		Flag = "UnlockResetButtonToggle",
+		Callback = function(value)
+			if characterActions and typeof(characterActions.setResetUnlocked) == "function" then
+				characterActions.setResetUnlocked(value)
+			end
+		end,
+	})
+
+	SettingsTab:CreateSection("Interface")
 
 	SettingsTab:CreateButton({
 		Name = "Destroy UI",

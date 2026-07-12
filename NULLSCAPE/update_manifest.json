@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.13.10",
+    "Version":  "2026.07.13.15",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -28,7 +28,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "0b8c6bca2585eadb486bdc6b249a137c0db1334e1ec9beca2306c522423d15d3"
+                      "Sha256":  "6c9a596ee7cc24706e9f20f44e0ae51739100f1bca3b66a63b5ac51a23eb111e"
                   },
                   {
                       "Path":  "NULLSCAPE/Core/Remote Registry.luau",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "b850c543fec10583fe5e3e85b48dc3304d49855f923561eea6856e9cb0aae979"
+                      "Sha256":  "5f71a4f9b8e5d18a05c62fc25cdb91ebaeff0418c4bbe68a994c8eebb22f1fc8"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/MovementLease.luau",
@@ -66,7 +66,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "d81bc95ed0d9e73fdf17b753455efd6eaf3b42d6e730d2035f4e6f746f68e2eb"
+                      "Sha256":  "f7183d3e3db3c382f3e86c424df9f051ee0577ef9b55815277445ae6d63f6ceb"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Collector.luau",
@@ -139,7 +139,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "825cbca104f369a6483c8b77c87e60c053a7fccd123d11c183ac0802cf9b98d3"
+                      "Sha256":  "5c84201e43bdcb0b945393040e09cd173399eda953df396b4dc9938aaff80c99"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/RemoteBlocking.luau",
@@ -153,7 +153,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "fa4bf86a89d52ed48622458bee5aad689a0994ac86d5f6075e5bb4b51d2f92a6"
+                      "Sha256":  "8f26c4ceb791cdf8a13d4d6aa1ab7c768cb7d78cce7b26e58a04890369efd9f5"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau",
@@ -167,7 +167,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "0854b387d7b6f588ba0d6881c053bf3bb2583b528c9f9c440cbb796490e110ea"
+                      "Sha256":  "2f82d8e561b55fd00dcc0c3db8ac3b8965eec5b83a65f026729d5400696ae87e"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/executor.luau",
@@ -734,7 +734,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "224970f71ceb469a94540e8894b68a1019aeb19c07ec9580d4964d0f73e7e257"
+                      "Sha256":  "4ac33473a06bca62059d11e61a9867b35258681cad6dac8b214d567ae6ccdf11"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Mode Isolation.luau",
@@ -853,7 +853,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "e77fae0b56f31e307205ae19b4cc2bdefa812b3d1766d7dfee091d934f75f39d"
+                      "Sha256":  "9c2c91d928e7ba799944b7462d3c50ba7f09c8aa25b06151738e176e0b6ffa32"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",
@@ -914,7 +914,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "877c0bdb600f3abca199e0443b66b17ed6146bfeec469f164ee6ab72dfffdc96"
+                      "Sha256":  "016a95801c8c8c50492592073e8636f35b1ca6d23f6b18743b9ed4c48e5e5c2a"
                   },
                   {
                       "Path":  "NULLSCAPE/Core/Class Context.luau",
@@ -923,6 +923,20 @@
                   {
                       "Path":  "NULLSCAPE/Setting/FPS Boost.luau",
                       "Sha256":  "d9f8f20120d5aac61c08f1fc5ef3b2ce31a34af454c2a5717ddd7f479f4a96c3"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Setting/Character Actions.luau",
+                      "Menu":  [
+                                   "Settings"
+                               ],
+                      "Sha256":  "347b99a69db2ea1c524fc8588d6ee274ebb6530cb980b96b441000417a4acc37"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Entities/Cadence Status.luau",
+                      "Menu":  [
+                                   "Entities"
+                               ],
+                      "Sha256":  "ef0d1aa6fb5eae3aa2583e5934db45a280535ca11b914c31ddbf73da24550fb8"
                   }
               ]
 }

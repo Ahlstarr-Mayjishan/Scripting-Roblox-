@@ -61,6 +61,7 @@ local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
 local RemoteBlocking = getgenv().loadModule("NULLSCAPE/Entities/RemoteBlocking.luau")
 local CelestialImmunity = getgenv().loadModule("NULLSCAPE/Entities/Celestial Immunity.luau")
 local VoidImplosionImmunity = getgenv().loadModule("NULLSCAPE/Entities/Void Implosion Immunity.luau")
+local CadenceStatus = getgenv().loadModule("NULLSCAPE/Entities/Cadence Status.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 local BackTrick = getgenv().loadModule("NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau")
 local KolonaAutoQTE = nil
@@ -144,6 +145,7 @@ local Controller = {
 	RazorbloomImmune = false,
 	CadenceImmune = false,
 	CadenceAutoCollectInstruments = false,
+	CadenceCheckStatus = false,
 	CadenceInstrumentRange = 0,
 	PondererImmune = false,
 	PondererSilentLookat = false,
@@ -176,9 +178,6 @@ local Controller = {
 	EnemiesFolder = nil,
 	PermanentConnections = {},
 	StartSkinwalkerEvasion = nil,
-	CadenceUI = nil,
-	CadenceStatusLabel = nil,
-	CadenceUIFrame = nil,
 	CadenceAutoCollectLoopActive = false,
 }
 GC.Controller = Controller
@@ -201,74 +200,6 @@ end
 local function debugPrint(...)
 	-- KhÃ´ng in debug theo yÃªu cáº§u cá»§a ngÆ°á»i dÃ¹ng
 	return select("#", ...)
-end
-
-local function createCadenceUI()
-	if Controller.CadenceUI then
-		return
-	end
-
-	local ScreenGui = Instance.new("ScreenGui")
-	ScreenGui.Name = "CadenceStatusGui"
-	ScreenGui.ResetOnSpawn = false
-	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-	local CoreGui = game:GetService("CoreGui")
-	local PlayerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
-
-	local parent = CoreGui
-	local success, _ = pcall(function()
-		ScreenGui.Parent = parent
-	end)
-	if not success then
-		ScreenGui.Parent = PlayerGui
-	end
-
-	local Frame = Instance.new("Frame")
-	Frame.Name = "MainFrame"
-	Frame.Size = UDim2.fromOffset(220, 80)
-	Frame.Position = UDim2.new(0.5, -110, 0.1, 0)
-	Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-	Frame.BackgroundTransparency = 0.2
-	Frame.BorderSizePixel = 0
-	Frame.Active = true
-	Frame.Draggable = true
-	Frame.Parent = ScreenGui
-
-	local UICorner = Instance.new("UICorner")
-	UICorner.CornerRadius = UDim.new(0, 10)
-	UICorner.Parent = Frame
-
-	local UIStroke = Instance.new("UIStroke")
-	UIStroke.Color = Color3.fromRGB(80, 80, 80)
-	UIStroke.Thickness = 1.5
-	UIStroke.Parent = Frame
-
-	local TitleLabel = Instance.new("TextLabel")
-	TitleLabel.Name = "TitleLabel"
-	TitleLabel.Size = UDim2.fromScale(1, 0.4)
-	TitleLabel.Position = UDim2.fromScale(0, 0.05)
-	TitleLabel.BackgroundTransparency = 1
-	TitleLabel.Text = "CADENCE STATUS"
-	TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	TitleLabel.TextSize = 13
-	TitleLabel.Font = Enum.Font.GothamBold
-	TitleLabel.Parent = Frame
-
-	local StatusLabel = Instance.new("TextLabel")
-	StatusLabel.Name = "StatusLabel"
-	StatusLabel.Size = UDim2.fromScale(1, 0.5)
-	StatusLabel.Position = UDim2.fromScale(0, 0.45)
-	StatusLabel.BackgroundTransparency = 1
-	StatusLabel.Text = "Not Active"
-	StatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-	StatusLabel.TextSize = 16
-	StatusLabel.Font = Enum.Font.GothamMedium
-	StatusLabel.Parent = Frame
-
-	Controller.CadenceUI = ScreenGui
-	Controller.CadenceStatusLabel = StatusLabel
-	Controller.CadenceUIFrame = Frame
 end
 
 local inLobby = not isInMatch() -- Äang á»Ÿ sáº£nh chá»/lá»±a chá»n (Khá»Ÿi táº¡o ban Ä‘áº§u)
@@ -711,14 +642,7 @@ function Controller:CleanUp()
 	GC.cleanAll()
 	self.EnemiesFolder = nil
 
-	if self.CadenceUI then
-		pcall(function()
-			self.CadenceUI:Destroy()
-		end)
-		self.CadenceUI = nil
-		self.CadenceStatusLabel = nil
-		self.CadenceUIFrame = nil
-	end
+	pcall(if self.Destroyed then CadenceStatus.cleanup else CadenceStatus.clearRuntime)
 
 	-- Náº¿u bá»‹ há»§y hoÃ n toÃ n (Destroyed = true), giáº£i phÃ³ng cÃ¡c káº¿t ná»‘i vÄ©nh viá»…n
 	if self.Destroyed and self.PermanentConnections then
@@ -1002,17 +926,22 @@ end
 function Controller:SetCadenceOptions(options)
 	local immune = false
 	local autoCollect = false
+	local checkStatus = false
 
 	for _, option in ipairs(typeof(options) == "table" and options or {}) do
 		if option == "Immunity" then
 			immune = true
 		elseif option == "Auto Collect Instruments" then
 			autoCollect = true
+		elseif option == "CheckStatus" then
+			checkStatus = true
 		end
 	end
 
+	self.CadenceCheckStatus = checkStatus
 	self:SetImmunity("Cadence", immune)
 	self:SetCadenceAutoCollectInstruments(autoCollect)
+	CadenceStatus.setEnabled(checkStatus)
 end
 
 function Controller:SetPondererSilentLookat(enabled)
@@ -1455,78 +1384,8 @@ local function processEntity(enemy)
 			end
 		end
 
-		-- â”€â”€ Cadence Status UI Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		if string.find(name, "Cadence") then
-			createCadenceUI()
-			if Controller.CadenceStatusLabel then
-				Controller.CadenceStatusLabel.Text = "Stage 1"
-				Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(80, 200, 255)
-			end
-
-			local clientEvent = enemy:WaitForChild("ClientEvent", 5)
-			if clientEvent and clientEvent:IsA("RemoteEvent") then
-				local cadenceConn = clientEvent.OnClientEvent:Connect(function(p1, p2)
-					if p1 == "Stage" then
-						local stageNum = p2.Stage
-						if Controller.CadenceStatusLabel then
-							Controller.CadenceStatusLabel.Text = "Stage " .. tostring(stageNum)
-							if stageNum == 2 then
-								Controller.CadenceStatusLabel.Text = "Phase 2 (Stage 2)"
-								Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(255, 170, 0)
-								pcall(function()
-									local ts = game:GetService("TweenService")
-									Controller.CadenceStatusLabel.TextSize = 20
-									ts:Create(
-										Controller.CadenceStatusLabel,
-										TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-										{
-											TextSize = 16,
-										}
-									):Play()
-									if Controller.CadenceUIFrame then
-										local stroke = Controller.CadenceUIFrame:FindFirstChildOfClass("UIStroke")
-										if stroke then
-											stroke.Color = Color3.fromRGB(255, 170, 0)
-											ts:Create(stroke, TweenInfo.new(1, Enum.EasingStyle.Linear), {
-												Color = Color3.fromRGB(80, 80, 80),
-											}):Play()
-										end
-									end
-								end)
-							elseif stageNum == 3 then
-								Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(255, 80, 0)
-							elseif stageNum == 4 then
-								Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
-							else
-								Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(80, 200, 255)
-							end
-						end
-					elseif p1 == "Chase" then
-						if Controller.CadenceStatusLabel then
-							Controller.CadenceStatusLabel.Text = "âš ï¸ CHASE ACTIVE âš ï¸"
-							Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(255, 50, 50)
-							pcall(function()
-								local ts = game:GetService("TweenService")
-								if Controller.CadenceUIFrame then
-									local stroke = Controller.CadenceUIFrame:FindFirstChildOfClass("UIStroke")
-									if stroke then
-										stroke.Color = Color3.fromRGB(255, 50, 50)
-										ts:Create(stroke, TweenInfo.new(1, Enum.EasingStyle.Linear), {
-											Color = Color3.fromRGB(80, 80, 80),
-										}):Play()
-									end
-								end
-							end)
-						end
-					elseif p1 == "ElasticStop" then
-						if Controller.CadenceStatusLabel then
-							Controller.CadenceStatusLabel.Text = "Stopped"
-							Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-						end
-					end
-				end)
-				GC.registerEntityConnection(enemy, cadenceConn)
-			end
+			CadenceStatus.attach(enemy)
 		end
 
 		-- â”€â”€ Telefragger ClientEvent Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1620,10 +1479,7 @@ local function removeEntity(enemy)
 		end
 	end
 	if string.find(enemy.Name, "Cadence") then
-		if Controller.CadenceStatusLabel then
-			Controller.CadenceStatusLabel.Text = "Not Active"
-			Controller.CadenceStatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-		end
+		CadenceStatus.detach(enemy)
 	end
 end
 
@@ -1807,6 +1663,9 @@ local function setInLobby(val)
 		end
 		if Controller.CadenceAutoCollectInstruments == true then
 			startCadenceAutoCollectLoop()
+		end
+		if Controller.CadenceCheckStatus == true then
+			CadenceStatus.setEnabled(true)
 		end
 		if Controller.KolonaAutoQTEEnabled == true and typeof(Controller.SetKolonaAutoQTE) == "function" then
 			Controller:SetKolonaAutoQTE(true)
