@@ -1,6 +1,4 @@
 local DEFAULTS = {
-	SpringerAutoJumpEnabled = false,
-	InfiniteAirJumpEnabled = false,
 	AntiBonkEnabled = false,
 	IgnoreFakeCountEnabled = false,
 	BeaconMirageIdentifierEnabled = false,
@@ -142,45 +140,6 @@ return function(Client, Controller)
 	local Tab = Client.Window:CreateTab("Accessibility", 4483362458)
 
 	Tab:CreateSection("Accessibility Features")
-
-	Tab:CreateToggle({
-		Name = "Auto jump - Springer",
-		Info = "Automatically jumps over Springer shockwaves when the helper detects an incoming wave.",
-		CurrentValue = Controller.SpringerAutoJumpEnabled,
-		Flag = "SpringerAutoJumpToggle",
-		Callback = function(Value)
-			Controller:SetSpringerAutoJump(Value)
-		end,
-	})
-
-	Tab:CreateToggle({
-		Name = "Infinite Air Jump",
-		Info = "Refills the native DoubleJump charge, preserving the game's animation and SFX.",
-		CurrentValue = Controller.InfiniteAirJumpEnabled,
-		Flag = "InfiniteAirJumpToggle",
-		Callback = function(Value)
-			Controller:SetInfiniteAirJump(Value)
-		end,
-	})
-
-	local infiniteAirJumpStatusLabel = nil
-	if Tab.CreateLabel then
-		infiniteAirJumpStatusLabel = Tab:CreateLabel(
-			"Infinite Air Jump Status: " .. tostring(Controller:GetInfiniteAirJumpStatus() or "pending")
-		)
-		task.spawn(function()
-			while infiniteAirJumpStatusLabel and Client and not Client.Destroyed do
-				task.wait(1)
-				if infiniteAirJumpStatusLabel and typeof(infiniteAirJumpStatusLabel.Set) == "function" then
-					pcall(function()
-						infiniteAirJumpStatusLabel:Set(
-							"Infinite Air Jump Status: " .. tostring(Controller:GetInfiniteAirJumpStatus() or "pending")
-						)
-					end)
-				end
-			end
-		end)
-	end
 
 	Tab:CreateToggle({
 		Name = "Anti Bonk",

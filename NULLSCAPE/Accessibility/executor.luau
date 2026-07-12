@@ -6,8 +6,6 @@
 -- ]]
 
 local MODULE_PATHS = {
-	SpringerLogic = "NULLSCAPE/Accessibility/Auto jump - Springer.luau",
-	InfiniteAirJump = "NULLSCAPE/Accessibility/Infinite Air Jump.luau",
 	AntiBonk = "NULLSCAPE/Accessibility/Anti Bonk.luau",
 	MomentumGuard = "NULLSCAPE/Accessibility/Momentum Guard.luau",
 	StaminaAssist = "NULLSCAPE/Accessibility/Stamina Assist.luau",
@@ -53,15 +51,6 @@ end
 
 local function clearFailure(name)
 	ModuleFailures[name] = nil
-end
-
-local function getFailureText(name)
-	local failure = ModuleFailures[name]
-	if not failure then
-		return nil
-	end
-
-	return tostring(failure.Phase or "error") .. ": " .. tostring(failure.Error or "unknown")
 end
 
 local function loadAccessibilityModule(name)
@@ -157,37 +146,6 @@ function callModule(name, methodName, ...)
 
 	clearFailure(name)
 	return result ~= false
-end
-
-function Executor.setupAutoJump(enemy, shockwave, controller, gc)
-	return callModule("SpringerLogic", "setupAutoJump", enemy, shockwave, controller, gc)
-end
-
-function Executor.initializeInfiniteAirJump()
-	return callModule("InfiniteAirJump", "initialize")
-end
-
-function Executor.disableInfiniteAirJump()
-	callModule("InfiniteAirJump", "disable")
-end
-
-function Executor.getInfiniteAirJumpStatus()
-	local failure = getFailureText("InfiniteAirJump")
-	if failure then
-		return failure
-	end
-
-	local module = loadAccessibilityModule("InfiniteAirJump")
-	if module and typeof(module.getStatus) == "function" then
-		local success, result = pcall(function()
-			return module.getStatus()
-		end)
-		if success then
-			return tostring(result)
-		end
-	end
-
-	return "pending"
 end
 
 function Executor.initializeAntiBonk()

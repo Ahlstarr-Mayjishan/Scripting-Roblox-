@@ -64,6 +64,7 @@ local VoidImplosionImmunity = getgenv().loadModule("NULLSCAPE/Entities/Void Impl
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 local BackTrick = getgenv().loadModule("NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau")
 local KolonaAutoQTE = nil
+local SpringerAutoJump = nil
 local startBellGongKnockbackGuard
 local stopBellGongKnockbackGuard
 
@@ -81,6 +82,23 @@ local function getKolonaAutoQTE()
 	end
 
 	warn("[NULLSCAPE] Kolona Auto QTE failed to load: " .. tostring(result))
+	return nil
+end
+
+local function getSpringerAutoJump()
+	if SpringerAutoJump then
+		return SpringerAutoJump
+	end
+
+	local ok, result = pcall(function()
+		return getgenv().loadModule("NULLSCAPE/Entities/Springer Auto Jump.luau")
+	end)
+	if ok and typeof(result) == "table" then
+		SpringerAutoJump = result
+		return result
+	end
+
+	warn("[NULLSCAPE] Springer Auto Jump failed to load: " .. tostring(result))
 	return nil
 end
 
@@ -113,6 +131,7 @@ local Controller = {
 	OperatorImmune = false,
 	SpringerImmune = false,
 	SpringerKnockbackImmune = false,
+	SpringerAutoJumpEnabled = false,
 	SkinwalkerImmune = false,
 	KolonaImmune = false,
 	KolonaAutoQTEEnabled = false,
@@ -250,15 +269,6 @@ local function createCadenceUI()
 	Controller.CadenceUI = ScreenGui
 	Controller.CadenceStatusLabel = StatusLabel
 	Controller.CadenceUIFrame = Frame
-end
-
-local function getAccessibilityController()
-	local globals = getgenv()._NULLSCAPE_Globals
-	if globals and globals.activeAccessibilityController then
-		return globals.activeAccessibilityController
-	end
-
-	return nil
 end
 
 local inLobby = not isInMatch() -- Äang á»Ÿ sáº£nh chá»/lá»±a chá»n (Khá»Ÿi táº¡o ban Ä‘áº§u)
@@ -650,6 +660,10 @@ function Controller:CleanUp()
 	end
 	table.clear(originalTouchStates)
 
+	for part in pairs(disabledShockwaves) do
+		restoreShockwave(part)
+	end
+
 	disconnectFolderObservations()
 	pcall(function()
 		Executor.disableSpecialImmunity()
@@ -664,6 +678,11 @@ function Controller:CleanUp()
 		local kolona = KolonaAutoQTE
 		if kolona and typeof(kolona.disable) == "function" then
 			kolona.disable(self)
+		end
+	end)
+	pcall(function()
+		if SpringerAutoJump and typeof(SpringerAutoJump.disable) == "function" then
+			SpringerAutoJump.disable()
 		end
 	end)
 
@@ -840,12 +859,6 @@ function Controller:SetImmunity(entityName, value)
 		self.SpringerImmune = value
 
 		-- ThÃ´ng bÃ¡o cho Accessibility controller cáº­p nháº­t láº¡i tráº¡ng thÃ¡i Auto Jump
-		local accessibilityController = getAccessibilityController()
-		if accessibilityController and accessibilityController.updateSpringerAutoJumpState then
-			pcall(function()
-				accessibilityController:updateSpringerAutoJumpState()
-			end)
-		end
 	elseif entityName == "Cadence" then
 		self.CadenceImmune = value
 	elseif entityName == "Ponderer" then
@@ -1027,6 +1040,44 @@ function Controller:SetSpringerKnockbackImmune(enabled)
 		end
 	end
 	Executor.reconcile(GC)
+end
+
+function Controller:SetSpringerAutoJump(enabled)
+	self.SpringerAutoJumpEnabled = enabled == true
+	local autoJump = getSpringerAutoJump()
+	if not autoJump then
+		self.SpringerAutoJumpEnabled = false
+		return false
+	end
+
+	if not self.SpringerAutoJumpEnabled then
+		autoJump.disable()
+		return true
+	end
+
+	if self.EnemiesFolder then
+		for _, enemy in ipairs(self.EnemiesFolder:GetChildren()) do
+			if string.find(enemy.Name, "Springer") then
+				for _, child in ipairs(enemy:GetChildren()) do
+					if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
+						autoJump.watch(enemy, child, self)
+					end
+				end
+			end
+		end
+	end
+
+	return true
+end
+
+function Controller:SetSpringerOptions(options)
+	local hasOption = function(option)
+		return typeof(options) == "table" and (options[option] == true or table.find(options, option) ~= nil)
+	end
+
+	self:SetImmunity("Springer", hasOption("Immunity"))
+	self:SetSpringerKnockbackImmune(hasOption("Immunity Shockwave") or hasOption("Springer Knockback"))
+	return self:SetSpringerAutoJump(hasOption("Auto Jump"))
 end
 
 stopBellGongKnockbackGuard = function(controller)
@@ -1525,6 +1576,12 @@ local function processEntity(enemy)
 				if Controller.SpringerKnockbackImmune == true then
 					disableShockwave(enemy, child)
 				end
+				if Controller.SpringerAutoJumpEnabled then
+					local autoJump = getSpringerAutoJump()
+					if autoJump then
+						autoJump.watch(enemy, child, Controller)
+					end
+				end
 			end
 		end)
 		GC.registerEntityConnection(enemy, childAddedConn)
@@ -1533,6 +1590,12 @@ local function processEntity(enemy)
 			if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
 				if Controller.SpringerKnockbackImmune == true then
 					disableShockwave(enemy, child)
+				end
+				if Controller.SpringerAutoJumpEnabled then
+					local autoJump = getSpringerAutoJump()
+					if autoJump then
+						autoJump.watch(enemy, child, Controller)
+					end
 				end
 			end
 		end
@@ -1543,6 +1606,9 @@ end
 local function removeEntity(enemy)
 	processedEntities[enemy] = nil
 	GC.removeEntityConnections(enemy)
+	if SpringerAutoJump then
+		SpringerAutoJump.releaseEnemy(enemy)
+	end
 
 	if string.find(string.lower(enemy.Name), "telefragger") then
 		Controller:CancelSilentBackTrick(enemy)

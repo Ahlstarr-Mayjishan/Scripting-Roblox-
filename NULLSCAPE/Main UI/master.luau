@@ -129,8 +129,6 @@ pcall(function()
 			ImmunityScrapmawToggle = false,
 			ImmunitynilEnemyToggle = false,
 			ImmunitynilMirageToggle = false,
-			SpringerAutoJumpToggle = false,
-			InfiniteAirJumpToggle = false,
 			AntiBonkToggle = false,
 			IgnoreFakeCountToggle = false,
 			BeaconMirageIdentifierToggle = false,

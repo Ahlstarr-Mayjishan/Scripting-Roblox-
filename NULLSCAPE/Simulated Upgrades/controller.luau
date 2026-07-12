@@ -1023,6 +1023,10 @@ function Controller:CleanUp()
 	end
 
 	if finalCleanup then
+		self.RadarEnabled = false
+		if Logic and typeof(Logic.disableRadarSimulation) == "function" then
+			Logic.disableRadarSimulation()
+		end
 		self.GraceWingsEnabled = false
 		self.AdvancedGravityCoilEnabled = false
 		self.BetterJumpPadEnabled = false

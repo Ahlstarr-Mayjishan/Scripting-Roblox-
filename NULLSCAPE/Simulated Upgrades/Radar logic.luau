@@ -8,6 +8,7 @@
 local Logic = {}
 local upgradeWatcherConnection = nil
 local upgradeWatcherController = nil
+local simulatedUpgradeStates = {}
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
@@ -23,6 +24,11 @@ Logic.RADAR_UPGRADES = {
 	"EnemyOnTop",
 }
 
+local RADAR_UPGRADE_SET = {}
+for _, upgradeName in ipairs(Logic.RADAR_UPGRADES) do
+	RADAR_UPGRADE_SET[upgradeName] = true
+end
+
 Logic.FEATURES = {
 	Gift = { upgrade = "HighlightGifts" },
 	Tripmine = { upgrade = "HighlightTripmines" },
@@ -30,6 +36,10 @@ Logic.FEATURES = {
 	Altar = { upgrade = "RadarAltars" },
 	Player = { upgrade = "RadarPlayer" },
 	Enemy = { upgrade = "EnemyOnTop" },
+}
+
+local DIRECT_FOLDER_UPGRADES = {
+	EnemyOnTop = true,
 }
 
 local function getUpgradesFolder()
@@ -126,6 +136,64 @@ local function removeSimulatedUpgradeInt(upgrades, upgradeName)
 	end
 end
 
+local function getUpvalueValue(fn, index)
+	local environment = getgenv and getgenv()
+	local getUpvalue = environment and environment.debug and environment.debug.getupvalue
+	if typeof(getUpvalue) ~= "function" then
+		return nil
+	end
+
+	local success, first, second = pcall(getUpvalue, fn, index)
+	if not success then
+		return nil
+	end
+
+	return second ~= nil and second or first
+end
+
+local function getNativeUpgradeSignal(upgradeName)
+	local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+	local upgradeModule = clientModules and clientModules:FindFirstChild("UpgradeHandler")
+	if not upgradeModule then
+		return nil
+	end
+
+	local success, handler = pcall(require, upgradeModule)
+	if not success or typeof(handler) ~= "table" or typeof(handler.GetUpgradeChangedSignal) ~= "function" then
+		return nil
+	end
+
+	for index = 1, 8 do
+		local upvalue = getUpvalueValue(handler.GetUpgradeChangedSignal, index)
+		if typeof(upvalue) == "table" then
+			local event = upvalue[upgradeName]
+			if event and typeof(event.Fire) == "function" then
+				return event
+			end
+		end
+	end
+
+	return nil
+end
+
+local function fireUpgradeTransition(upgradeName, value)
+	local signal = getNativeUpgradeSignal(upgradeName)
+	if signal then
+		pcall(function()
+			signal:Fire(value)
+		end)
+		return
+	end
+
+	local globals = getgenv()._NULLSCAPE_Globals
+	local fallback = globals and globals.customUpgradeEvents and globals.customUpgradeEvents[upgradeName]
+	if fallback then
+		pcall(function()
+			fallback:Fire(value)
+		end)
+	end
+end
+
 function Logic.syncSimulatedUpgradeHud(controller)
 	if not controller or controller.Destroyed then
 		return
@@ -139,27 +207,26 @@ function Logic.syncSimulatedUpgradeHud(controller)
 	local desired = collectDesiredSimulatedUpgrades(controller)
 
 	for _, child in ipairs(upgrades:GetChildren()) do
-		if child:GetAttribute(SIM_ATTR) and not desired[child.Name] then
+		if child:GetAttribute(SIM_ATTR) and RADAR_UPGRADE_SET[child.Name] and (not DIRECT_FOLDER_UPGRADES[child.Name] or not desired[child.Name]) then
 			removeSimulatedUpgradeInt(upgrades, child.Name)
 		end
 	end
 
 	for upgradeName in pairs(desired) do
-		ensureSimulatedUpgradeInt(upgrades, upgradeName)
+		if DIRECT_FOLDER_UPGRADES[upgradeName] then
+			ensureSimulatedUpgradeInt(upgrades, upgradeName)
+		end
 	end
 
-	-- Fire custom upgrade change signals for scripts listening via GetUpgradeChangedSignal (e.g. RadarInstruments/Cadence)
-	local globals = getgenv()._NULLSCAPE_Globals
-	if globals and type(globals.customUpgradeEvents) == "table" then
-		for _, name in ipairs(Logic.RADAR_UPGRADES) do
-			local event = globals.customUpgradeEvents[name]
-			if event then
-				local isDesired = desired[name] == true
-				pcall(function()
-					event:Fire(isDesired and 1 or 0)
-				end)
-			end
+	for _, upgradeName in ipairs(Logic.RADAR_UPGRADES) do
+		local simulatedEnabled = desired[upgradeName] == true and not isNativelyOwned(upgradeName)
+		local wasSimulated = simulatedUpgradeStates[upgradeName] == true
+		if simulatedEnabled and not wasSimulated then
+			fireUpgradeTransition(upgradeName, 1)
+		elseif wasSimulated and not simulatedEnabled and not isNativelyOwned(upgradeName) then
+			fireUpgradeTransition(upgradeName, 0)
 		end
+		simulatedUpgradeStates[upgradeName] = simulatedEnabled
 	end
 
 	-- Untag and retag "Voting" tagged instances to force the game's Altar listener to re-evaluate (RadarAltars)
@@ -241,6 +308,24 @@ function Logic.unbindUpgradeWatcher(controller)
 		upgradeWatcherConnection = nil
 	end
 	upgradeWatcherController = nil
+end
+
+function Logic.disableRadarSimulation()
+	for _, upgradeName in ipairs(Logic.RADAR_UPGRADES) do
+		if simulatedUpgradeStates[upgradeName] == true and not isNativelyOwned(upgradeName) then
+			fireUpgradeTransition(upgradeName, 0)
+		end
+		simulatedUpgradeStates[upgradeName] = false
+	end
+
+	local upgrades = getUpgradesFolder()
+	if upgrades then
+		for _, child in ipairs(upgrades:GetChildren()) do
+			if child:GetAttribute(SIM_ATTR) and RADAR_UPGRADE_SET[child.Name] then
+				removeSimulatedUpgradeInt(upgrades, child.Name)
+			end
+		end
+	end
 end
 
 -- Stubs to keep compatibility with executor/controller calls

@@ -7,7 +7,9 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Logic = {}
+local Logic = {
+	Connections = setmetatable({}, { __mode = "k" }),
+}
 
 local NORMAL_WAVE_SIZE = 128
 local SPRINGLOADED_WAVE_SIZE = 256
@@ -52,7 +54,6 @@ local function getWaveProfile(enemy)
 	local attributeName = springloaded and "SpringloadedShockwaveSize" or "ShockwaveSize"
 	local configuredSize = enemy:GetAttribute(attributeName)
 	local diameter = typeof(configuredSize) == "Vector3" and configuredSize.X or fallbackSize
-
 	return math.max(tonumber(diameter) or fallbackSize, MIN_WAVE_DIAMETER), springloaded and SPRINGLOADED_WAVE_DURATION or NORMAL_WAVE_DURATION
 end
 
@@ -64,7 +65,6 @@ local function getLocalCharacterState()
 	if not root or not humanoid or humanoid.Health <= 0 then
 		return nil
 	end
-
 	return player, character, root, humanoid
 end
 
@@ -77,36 +77,27 @@ local function requestJump(humanoid)
 	if humanoid.FloorMaterial == Enum.Material.Air then
 		return
 	end
-
 	humanoid.Jump = true
 	pcall(function()
 		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 	end)
 end
 
-function Logic.setupAutoJump(enemy, shockwave, controller, gc)
-	if not enemy or not shockwave or not controller or not gc then
+function Logic.watch(enemy, shockwave, controller)
+	if Logic.Connections[shockwave] or not enemy or not shockwave or not controller then
 		return false
 	end
 
 	local cycle = 0
 	local scheduledCycle = 0
-
 	local function scheduleJump()
 		if not controller.SpringerAutoJumpEnabled or not shockwave.CanTouch then
 			return
 		end
-
 		cycle = cycle + 1
 		local currentCycle = cycle
-
-		-- The AI sets CanTouch before Position and Size in the same task. Deferring once
-		-- observes that completed state without adding a per-frame watcher.
 		task.defer(function()
-			if currentCycle ~= cycle or scheduledCycle == currentCycle then
-				return
-			end
-			if not controller.SpringerAutoJumpEnabled or not shockwave.CanTouch then
+			if currentCycle ~= cycle or scheduledCycle == currentCycle or not controller.SpringerAutoJumpEnabled or not shockwave.CanTouch then
 				return
 			end
 
@@ -129,16 +120,10 @@ function Logic.setupAutoJump(enemy, shockwave, controller, gc)
 			scheduledCycle = currentCycle
 
 			local function jumpWhenDue()
-				if currentCycle ~= cycle or not controller.SpringerAutoJumpEnabled or not shockwave.CanTouch then
-					return
+				if currentCycle == cycle and controller.SpringerAutoJumpEnabled and shockwave.CanTouch and player.Character == character and humanoid.Parent == character then
+					requestJump(humanoid)
 				end
-				if player.Character ~= character or humanoid.Parent ~= character then
-					return
-				end
-
-				requestJump(humanoid)
 			end
-
 			if delay <= 0 then
 				jumpWhenDue()
 			else
@@ -147,20 +132,38 @@ function Logic.setupAutoJump(enemy, shockwave, controller, gc)
 		end)
 	end
 
-	local canTouchConnection = shockwave:GetPropertyChangedSignal("CanTouch"):Connect(function()
+	local connection = shockwave:GetPropertyChangedSignal("CanTouch"):Connect(function()
 		if shockwave.CanTouch then
 			scheduleJump()
 		else
 			cycle = cycle + 1
 		end
 	end)
-	gc.registerEntityConnection(enemy, canTouchConnection)
-
+	Logic.Connections[shockwave] = { Connection = connection, Enemy = enemy }
 	if shockwave.CanTouch then
 		scheduleJump()
 	end
-
 	return true
+end
+
+function Logic.releaseEnemy(enemy)
+	for shockwave, entry in pairs(Logic.Connections) do
+		if entry.Enemy == enemy then
+			pcall(function()
+				entry.Connection:Disconnect()
+			end)
+			Logic.Connections[shockwave] = nil
+		end
+	end
+end
+
+function Logic.disable()
+	for shockwave, entry in pairs(Logic.Connections) do
+		pcall(function()
+			entry.Connection:Disconnect()
+		end)
+		Logic.Connections[shockwave] = nil
+	end
 end
 
 return Logic

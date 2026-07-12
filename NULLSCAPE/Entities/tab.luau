@@ -300,34 +300,22 @@ return function(Client, Controller)
 		table.insert(currentSpringerOptions, "Immunity")
 	end
 	if getFlag(Controller, "SpringerKnockbackImmune") then
-		table.insert(currentSpringerOptions, "Springer Knockback")
+		table.insert(currentSpringerOptions, "Immunity Shockwave")
+	end
+	if getFlag(Controller, "SpringerAutoJumpEnabled") then
+		table.insert(currentSpringerOptions, "Auto Jump")
 	end
 
 	Tab:CreateDropdown({
 		Name = "Springer Hack Mode",
-		Options = { "Immunity", "Springer Knockback" },
+		Options = { "Immunity", "Immunity Shockwave", "Auto Jump" },
 		CurrentOption = currentSpringerOptions,
 		MultipleOptions = true,
 		Flag = "SpringerHackDropdown",
 		Callback = function(Options)
-			local hasImmunity = false
-			local hasKnockbackImmune = false
-			for _, opt in ipairs(Options) do
-				if opt == "Immunity" then
-					hasImmunity = true
-				elseif opt == "Springer Knockback" then
-					hasKnockbackImmune = true
-				end
-			end
-
 			local activeController = resolveController(nil, Controller)
-			if activeController then
-				if typeof(activeController.SetImmunity) == "function" then
-					activeController:SetImmunity("Springer", hasImmunity)
-				end
-				if typeof(activeController.SetSpringerKnockbackImmune) == "function" then
-					activeController:SetSpringerKnockbackImmune(hasKnockbackImmune)
-				end
+			if activeController and typeof(activeController.SetSpringerOptions) == "function" then
+				activeController:SetSpringerOptions(Options)
 			else
 				warn("[NULLSCAPE] Entities controller is not ready; ignored Springer Hack Mode change")
 			end
