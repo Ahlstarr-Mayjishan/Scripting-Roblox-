@@ -905,28 +905,7 @@ SettingsTab:CreateButton({
 })
 
 local function getRuntimeUpdater()
-	local updater = Client.Modules and Client.Modules.RuntimeUpdater
-	if updater then
-		return updater
-	end
-	if getgenv().loadModule then
-		local ok, result = pcall(function()
-			return getgenv().loadModule("NULLSCAPE/Main UI/Updater.luau")
-		end)
-		if ok and typeof(result) == "table" then
-			Client.Modules.RuntimeUpdater = result
-			if typeof(result.initialize) == "function" then
-				pcall(function()
-					result:initialize(Client, {
-						GithubRawRoot = GITHUB_RAW_ROOT,
-						ManifestPath = "NULLSCAPE/update_manifest.json",
-					})
-				end)
-			end
-			return result
-		end
-	end
-	return nil
+	return Client.Modules and Client.Modules.RuntimeUpdater or nil
 end
 
 SettingsTab:CreateSection("Runtime Updates")
