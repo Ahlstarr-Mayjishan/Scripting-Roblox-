@@ -119,18 +119,6 @@ Logic.Config = {
 		Keywords = { "Skinwalker" },
 		LegitKeywords = { "Skinwalker" },
 	},
-	["Seamine"] = {
-		ControllerFlag = "SeamineImmune",
-		Remotes = { "ClientEvent" },
-		Keywords = { "Kill" },
-		LegitKeywords = { "Kill" },
-	},
-	["SeamineUNC"] = {
-		ControllerFlag = "SeamineImmune",
-		Remotes = { "ClientEvent" },
-		Keywords = { "Kill" },
-		LegitKeywords = { "Kill" },
-	},
 }
 
 -- Bảng tra cứu nhanh tên các RemoteEvent cần chặn (Tự động xây dựng từ cấu hình để tối ưu O(1))
@@ -211,6 +199,12 @@ local function isRealityBreakKillReport(remote, args)
 	return remote.Name == "ClientEvent"
 		and REALITY_BREAK_CLIENT_BLOCKLIST[string.lower(tostring(args and args[1] or ""))] == true
 		and hasAncestorName(remote, "RealityBreak")
+end
+
+local function isSeamineKillReport(remote, args)
+	return remote.Name == "ClientEvent"
+		and string.lower(tostring(args and args[1] or "")) == "kill"
+		and hasAncestorName(remote, "Seamine")
 end
 
 local function localPlayerHasStatus(statusName)
@@ -576,6 +570,10 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 	end
 
 	if controller.RealityBreakImmune == true and isRealityBreakKillReport(remote, args) then
+		return Logic.shouldBlockWithShieldPolicy(controller)
+	end
+
+	if controller.SeamineImmune == true and isSeamineKillReport(remote, args) then
 		return Logic.shouldBlockWithShieldPolicy(controller)
 	end
 

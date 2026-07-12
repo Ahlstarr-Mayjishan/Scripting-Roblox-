@@ -27,6 +27,11 @@ local MAP_ROOT_NAMES = {
 	World = true,
 }
 
+local ENEMY_ROOT_NAMES = {
+	Enemies = true,
+	Skinwalkers = true,
+}
+
 local function optionSelected(options, option)
 	if typeof(options) ~= "table" then
 		return false
@@ -59,6 +64,8 @@ local function restoreVisuals(store)
 					instance.LocalTransparencyModifier = original.LocalTransparencyModifier
 				elseif original.Transparency ~= nil then
 					instance.Transparency = original.Transparency
+				elseif original.Visible ~= nil then
+					instance.Visible = original.Visible
 				elseif original.Density ~= nil then
 					instance.Density = original.Density
 					instance.Glare = original.Glare
@@ -123,6 +130,11 @@ local function hideVisual(instance, store)
 				store[instance] = { Transparency = instance.Transparency }
 			end
 			instance.Transparency = 1
+		elseif instance:IsA("GuiObject") then
+			if store[instance] == nil then
+				store[instance] = { Visible = instance.Visible }
+			end
+			instance.Visible = false
 		end
 	end)
 end
@@ -181,24 +193,22 @@ end
 
 local function bindEnemies(token)
 	local function attach(folder)
-		if not folder then
+		if not (folder and ENEMY_ROOT_NAMES[folder.Name]) then
 			return
 		end
 		scan(folder, function(instance)
 			hideVisual(instance, FPSBoost.OriginalEnemyVisuals)
 		end, token)
-		FPSBoost.Connections.EnemyAdded = folder.DescendantAdded:Connect(function(instance)
+		FPSBoost.Connections[folder] = folder.DescendantAdded:Connect(function(instance)
 			hideVisual(instance, FPSBoost.OriginalEnemyVisuals)
 		end)
 	end
 
-	attach(Workspace:FindFirstChild("Enemies"))
+	for rootName in pairs(ENEMY_ROOT_NAMES) do
+		attach(Workspace:FindFirstChild(rootName))
+	end
 	FPSBoost.Connections.EnemiesFolderAdded = Workspace.ChildAdded:Connect(function(child)
-		if child.Name == "Enemies" then
-			local existing = FPSBoost.Connections.EnemyAdded
-			if existing then
-				existing:Disconnect()
-			end
+		if ENEMY_ROOT_NAMES[child.Name] then
 			attach(child)
 		end
 	end)

@@ -33,6 +33,7 @@ local PYLON_LEVEL = 35
 local GOLDEN_RETURN_VERIFY_ATTEMPTS = 6
 local GOLDEN_RETURN_VERIFY_INTERVAL = 0.12
 local GOLDEN_RETURN_CONFIRM_DELAY = 0.25
+local GOLDEN_COUNTER_STALE_TIMEOUT = 1.5
 local MAX_RETRY_QUEUE = 32
 local RESPAWN_READY_DELAY = 0.85
 local TAIL_REMAINING_RATIO = 0.12
@@ -284,13 +285,18 @@ local function tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActiv
 	if not (pendingGoldenReturnSince and scanInfo and tonumber(scanInfo.RawGolden) == 0) then
 		return false
 	end
-	if scanInfo.GoldenProgressComplete ~= true then
+
+	local pendingDuration = os.clock() - pendingGoldenReturnSince
+	local rawGoldenExhausted = (tonumber(scanInfo.PeakRawGolden) or 0) > 0
+	local counterConfirmed = scanInfo.GoldenProgressComplete == true
+	local staleCounterConfirmed = rawGoldenExhausted and pendingDuration >= GOLDEN_COUNTER_STALE_TIMEOUT
+	if not counterConfirmed and not staleCounterConfirmed then
 		if controller then
 			controller.GiftFarmGoldenComplete = false
 		end
 		return false
 	end
-	if os.clock() - pendingGoldenReturnSince < GOLDEN_RETURN_CONFIRM_DELAY then
+	if pendingDuration < GOLDEN_RETURN_CONFIRM_DELAY then
 		return false
 	end
 
