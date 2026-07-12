@@ -269,7 +269,8 @@ function Updater:fetchText(pathOrUrl)
 	end
 	url = encodePath(url)
 	local ok, result = pcall(function()
-		return game:HttpGet(url)
+		local httpGet = (game :: any).HttpGet
+		return httpGet(game, url)
 	end)
 	if not ok or typeof(result) ~= "string" or #result == 0 then
 		return nil, tostring(result)
@@ -302,14 +303,15 @@ function Updater:installFile(fileInfo, changes, backups)
 		return false, "Download failed for " .. path .. ": " .. tostring(err)
 	end
 	local expectedHash = fileInfo.Sha256 or fileInfo.sha256 or fileInfo.Hash or fileInfo.hash
-	if expectedHash and expectedHash ~= "" then
-		local actualHash = getHash(source)
-		if not actualHash then
-			return false, "Hash check unavailable for " .. path
-		end
-		if actualHash ~= string.lower(tostring(expectedHash)) then
-			return false, "Hash mismatch for " .. path
-		end
+	if typeof(expectedHash) ~= "string" or expectedHash == "" then
+		return false, "Missing SHA-256 for " .. path
+	end
+	local actualHash = getHash(source)
+	if not actualHash then
+		return false, "Hash check unavailable for " .. path
+	end
+	if actualHash ~= string.lower(expectedHash) then
+		return false, "Hash mismatch for " .. path
 	end
 	if sameContent(path, source) then
 		return true, "unchanged"
@@ -359,7 +361,7 @@ function Updater:rollback(backups)
 	end
 end
 
-function Updater:restartAfterInstall(changes)
+function Updater:restartAfterInstall()
 	local client = self.Client
 	if client and typeof(client.InvalidateModulePrefix) == "function" then
 		client:InvalidateModulePrefix("NULLSCAPE/")

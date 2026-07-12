@@ -102,4 +102,11 @@ function Executor.updateBarriers(controller, gc)
 	end
 end
 
+function Executor.stopBarriers()
+	local stop = getCallable(Barrier, "stop", "DefuseKits")
+	if stop then
+		stop()
+	end
+end
+
 return Executor

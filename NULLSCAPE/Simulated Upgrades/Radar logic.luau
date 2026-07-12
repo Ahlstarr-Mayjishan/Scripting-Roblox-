@@ -6,6 +6,8 @@
 -- ]]
 
 local Logic = {}
+local upgradeWatcherConnection = nil
+local upgradeWatcherController = nil
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
@@ -200,21 +202,45 @@ function Logic.shouldSpoofUpgradeStack(controller, upgradeName)
 end
 
 function Logic.bindUpgradeWatcher(controller, onChanged)
+	Logic.unbindUpgradeWatcher()
+	upgradeWatcherController = controller
 	task.spawn(function()
 		local clientModules = ReplicatedFirst:WaitForChild("ClientModules", 15)
 		local upgradeModule = clientModules and clientModules:FindFirstChild("UpgradeHandler")
 		if upgradeModule then
 			local ok, UpgradeHandler = pcall(require, upgradeModule)
 			if ok and typeof(UpgradeHandler) == "table" and UpgradeHandler.UpgradesChanged then
-				UpgradeHandler.UpgradesChanged:Connect(function()
+				local connection = UpgradeHandler.UpgradesChanged:Connect(function()
+					if upgradeWatcherController ~= controller or controller.Destroyed then
+						return
+					end
 					Logic.syncSimulatedUpgradeHud(controller)
 					if onChanged then
 						onChanged()
 					end
 				end)
+				if upgradeWatcherController ~= controller or controller.Destroyed then
+					connection:Disconnect()
+					return
+				end
+				upgradeWatcherConnection = connection
 			end
 		end
 	end)
+end
+
+function Logic.unbindUpgradeWatcher(controller)
+	if controller and upgradeWatcherController ~= controller then
+		return
+	end
+
+	if upgradeWatcherConnection then
+		pcall(function()
+			upgradeWatcherConnection:Disconnect()
+		end)
+		upgradeWatcherConnection = nil
+	end
+	upgradeWatcherController = nil
 end
 
 -- Stubs to keep compatibility with executor/controller calls

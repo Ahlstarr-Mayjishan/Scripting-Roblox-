@@ -14,9 +14,14 @@ local function cleanupItem(item)
 		return
 	end
 
-	if typeof(item) == "function" then
+	local itemType = typeof(item)
+	if itemType == "RBXScriptConnection" then
+		pcall(function()
+			item:Disconnect()
+		end)
+	elseif itemType == "function" then
 		pcall(item)
-	elseif typeof(item) == "table" then
+	elseif itemType == "table" then
 		if typeof(item.Disconnect) == "function" then
 			pcall(function()
 				item:Disconnect()
@@ -30,7 +35,7 @@ local function cleanupItem(item)
 		elseif typeof(item.destroy) == "function" then
 			pcall(item.destroy)
 		end
-	elseif typeof(item) == "Instance" then
+	elseif itemType == "Instance" then
 		pcall(function()
 			item:Destroy()
 		end)

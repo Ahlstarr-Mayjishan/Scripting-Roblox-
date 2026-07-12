@@ -1005,6 +1005,9 @@ function Controller:CleanUp()
 		or (globals.activeUpgradeController ~= nil and globals.activeUpgradeController ~= self)
 	disconnectFolderObservations()
 	stopRenderStepped()
+	if Logic and typeof(Logic.unbindUpgradeWatcher) == "function" then
+		Logic.unbindUpgradeWatcher(self)
+	end
 
 	if finalCleanup then
 		self.GraceWingsEnabled = false
@@ -1062,6 +1065,9 @@ function Controller:CleanUp()
 		pcall(function()
 			MiniatureHourglass.stop()
 		end)
+	end
+	if finalCleanup and Executor and typeof(Executor.stopBarriers) == "function" then
+		pcall(Executor.stopBarriers)
 	end
 	if finalCleanup then
 		refreshUpgradeServerState()

@@ -5,6 +5,7 @@
 -- ]]
 
 local Barrier = {}
+local getgenv = getgenv
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -47,6 +48,8 @@ local previousHrpPos = nil
 local hookTripmineCollect = nil
 local hookedTripmineCollects = setmetatable({}, { __mode = "k" })
 local hookedReplicationClients = setmetatable({}, { __mode = "k" })
+local originalTripmineCollects = setmetatable({}, { __mode = "k" })
+local originalReplicationSendCollects = setmetatable({}, { __mode = "k" })
 local bypassNextSendCollectDelay = false
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
@@ -428,6 +431,7 @@ hookTripmineCollect = function(gift)
 
 	hookedTripmineCollects[gift] = true
 	local originalCollect = gift.Collect
+	originalTripmineCollects[gift] = originalCollect
 	gift.Collect = function(self, ...)
 		if isTripmineGift(self) and isImmunityModeActive() then
 			armChargerImmunityWindow()
@@ -459,6 +463,7 @@ local function hookTripmineSendCollect()
 
 	hookedReplicationClients[replicationClient] = true
 	local originalSendCollect = replicationClient.SendCollect
+	originalReplicationSendCollects[replicationClient] = originalSendCollect
 	replicationClient.SendCollect = function(first, ...)
 		local giftId = first
 		local args = table.pack(...)
@@ -563,10 +568,11 @@ local function startWatcher()
 		return
 	end
 	watcherRunning = true
+	local token = watcherToken
 
 	task.spawn(function()
 		local cleanedIdle = false
-		while not globals or globals.TripmineBarrierWatcherToken == watcherToken do
+		while watcherToken == token and globals.TripmineBarrierWatcherToken == token do
 			task.wait(
 				activeController and activeController.TripmineBarrierEnabled and ACTIVE_WATCH_INTERVAL
 					or IDLE_WATCH_INTERVAL
@@ -606,11 +612,17 @@ local function startWatcher()
 			end
 		end
 		removeIframes(true)
-		watcherRunning = false
+		if watcherToken == token then
+			watcherRunning = false
+		end
 	end)
 end
 
 function Barrier.update(controller)
+	if not watcherRunning then
+		bindImmunityRearmWatcher()
+		startWatcher()
+	end
 	activeController = controller
 	local mode = getBarrierMode()
 	local previousMode = lastMode
@@ -642,6 +654,43 @@ function Barrier.Init()
 		end)
 	end
 	print("[NULLSCAPE Defuse] Module ready. Modes: I-Frames | Immunity")
+end
+
+function Barrier.stop()
+	rearmToken += 1
+	resetChargerImmunity(true)
+	removeIframes(true)
+
+	if playerChildConnection then
+		pcall(function()
+			playerChildConnection:Disconnect()
+		end)
+		playerChildConnection = nil
+	end
+
+	for gift, originalCollect in pairs(originalTripmineCollects) do
+		if gift and gift.Collect and gift.Collect ~= originalCollect then
+			gift.Collect = originalCollect
+		end
+	end
+	for replicationClient, originalSendCollect in pairs(originalReplicationSendCollects) do
+		if replicationClient and replicationClient.SendCollect and replicationClient.SendCollect ~= originalSendCollect then
+			replicationClient.SendCollect = originalSendCollect
+		end
+	end
+
+	hookedTripmineCollects = setmetatable({}, { __mode = "k" })
+	hookedReplicationClients = setmetatable({}, { __mode = "k" })
+	originalTripmineCollects = setmetatable({}, { __mode = "k" })
+	originalReplicationSendCollects = setmetatable({}, { __mode = "k" })
+	cachedGCH = nil
+	cachedInstance = nil
+	lastCharacter = nil
+	activeController = nil
+	lastMode = OFF_MODE
+	watcherToken = {}
+	globals.TripmineBarrierWatcherToken = watcherToken
+	watcherRunning = false
 end
 
 Barrier.Init()

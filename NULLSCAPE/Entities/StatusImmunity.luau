@@ -109,11 +109,15 @@ end
 function StatusImmunity.initialize()
 	local sharedState = getgenv()._NULLSCAPE_Globals or {}
 	getgenv()._NULLSCAPE_Globals = sharedState
+	if typeof(sharedState.StatusImmunityRestore) == "function" then
+		pcall(sharedState.StatusImmunityRestore)
+	end
 	sharedState.NullscapeStatusImmunity = StatusImmunity
 
-	if sharedState.StatusEffectHooked or StatusImmunity.Hooked then
+	if StatusImmunity.Hooked then
 		return
 	end
+	sharedState.StatusEffectFunctionHooks = {}
 
 	local StatusEffectChanged = ReplicatedStorage:FindFirstChild("Events")
 		and ReplicatedStorage.Events:FindFirstChild("StatusEffectChanged")
@@ -140,6 +144,7 @@ function StatusImmunity.initialize()
 					return oldConnect(self, callback)
 				end)
 				sharedState.OriginalOnClientEventConnect = oldConnect
+				sharedState.StatusEffectConnectSignal = StatusEffectChanged.OnClientEvent
 			end
 		end)
 
@@ -157,6 +162,10 @@ function StatusImmunity.initialize()
 							end
 							return oldFunc(statusName, isActive, ...)
 						end)
+						table.insert(sharedState.StatusEffectFunctionHooks, {
+							Target = originalFunction,
+							Original = oldFunc,
+						})
 					end
 				end
 			end
@@ -177,7 +186,9 @@ function StatusImmunity.initialize()
 						end
 						return oldHasStatus(statusName, ...)
 					end)
-					sharedState.OriginalHasStatus = oldHasStatus
+				sharedState.OriginalHasStatus = oldHasStatus
+				sharedState.StatusEffectHandler = StatusEffectHandler
+				sharedState.StatusEffectHasStatusHooked = typeof(hookfunction) == "function"
 				else
 					local oldHasStatus = StatusEffectHandler.HasStatus
 					sharedState.OriginalHasStatus = oldHasStatus
@@ -193,7 +204,47 @@ function StatusImmunity.initialize()
 	end)
 
 	sharedState.StatusEffectHooked = true
+	sharedState.StatusImmunityRestore = function()
+		StatusImmunity.disable()
+	end
 	StatusImmunity.Hooked = true
+end
+
+function StatusImmunity.disable()
+	local sharedState = getgenv()._NULLSCAPE_Globals
+	if not sharedState then
+		return
+	end
+
+	if typeof(hookfunction) == "function" and sharedState.OriginalOnClientEventConnect and sharedState.StatusEffectConnectSignal then
+		pcall(hookfunction, sharedState.StatusEffectConnectSignal.Connect, sharedState.OriginalOnClientEventConnect)
+	end
+	for _, entry in ipairs(sharedState.StatusEffectFunctionHooks or {}) do
+		if typeof(hookfunction) == "function" and entry.Target and entry.Original then
+			pcall(hookfunction, entry.Target, entry.Original)
+		end
+	end
+
+	local handler = sharedState.StatusEffectHandler
+	if handler and sharedState.OriginalHasStatus then
+		if sharedState.StatusEffectHasStatusHooked and typeof(hookfunction) == "function" then
+			pcall(hookfunction, handler.HasStatus, sharedState.OriginalHasStatus)
+		else
+			handler.HasStatus = sharedState.OriginalHasStatus
+		end
+	end
+
+	table.clear(StatusImmunity.ActiveImmunities)
+	StatusImmunity.ActiveCallbacks = setmetatable({}, { __mode = "k" })
+	StatusImmunity.Hooked = false
+	sharedState.StatusEffectFunctionHooks = nil
+	sharedState.StatusEffectConnectSignal = nil
+	sharedState.OriginalOnClientEventConnect = nil
+	sharedState.StatusEffectHandler = nil
+	sharedState.OriginalHasStatus = nil
+	sharedState.StatusEffectHasStatusHooked = nil
+	sharedState.StatusEffectHooked = nil
+	sharedState.StatusImmunityRestore = nil
 end
 
 function StatusImmunity.removeAllStatuses()

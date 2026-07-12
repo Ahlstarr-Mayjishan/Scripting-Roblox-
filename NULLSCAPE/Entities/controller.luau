@@ -326,14 +326,6 @@ local function restoreHooks()
 		globals.OriginalNamecall = nil
 	end
 
-	-- Restore prototype hooks
-	-- WARNING: DO NOT call hookfunction on RemoteEvent/RemoteFunction prototypes as it crashes the client!
-	-- Instead, we just let them pass through since handleEntitiesRemoteCall is cleared during cleanup.
-	if globals.PrototypeHooked then
-		globals.PrototypeHooked = nil
-		globals.OriginalFireServer = nil
-		globals.OriginalInvokeServer = nil
-	end
 	globals.handleEntitiesRemoteCall = nil
 
 	-- Restore StatusEffect connection hook
@@ -715,6 +707,10 @@ function Controller:CleanUp()
 	end
 
 	if self.Destroyed then
+		local StatusImmunity = getStatusImmunity()
+		if StatusImmunity and typeof(StatusImmunity.disable) == "function" then
+			pcall(StatusImmunity.disable)
+		end
 		pcall(restoreHooks)
 	end
 
@@ -2020,54 +2016,9 @@ local function initializeICBMHook()
 		end
 	end
 
-	-- 2. Hook FireServer/InvokeServer prototype (Dá»± phÃ²ng)
-	local prototypeSuccess = false
-	if typeof(hookfunction) == "function" then
-		if not getgenv()._NULLSCAPE_Globals.PrototypeHooked then
-			pcall(function()
-				local remoteProto = Instance.new("RemoteEvent")
-				local oldFireServer
-				oldFireServer = hookfunction(remoteProto.FireServer, function(self, ...)
-					local dispatcher = getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall
-					if dispatcher then
-						local success, shouldBlock, modifiedArgs = pcall(dispatcher, self, ...)
-						if success and shouldBlock then
-							if modifiedArgs then
-								return oldFireServer(self, table.unpack(modifiedArgs))
-							end
-							return -- Cháº·n Ä‘á»©ng cuá»™c gá»i
-						end
-					end
-					return oldFireServer(self, ...)
-				end)
-
-				local funcProto = Instance.new("RemoteFunction")
-				local oldInvokeServer
-				oldInvokeServer = hookfunction(funcProto.InvokeServer, function(self, ...)
-					local dispatcher = getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall
-					if dispatcher then
-						local success, shouldBlock, modifiedArgs = pcall(dispatcher, self, ...)
-						if success and shouldBlock then
-							if modifiedArgs then
-								return oldInvokeServer(self, table.unpack(modifiedArgs))
-							end
-							return nil -- Cháº·n Ä‘á»©ng cuá»™c gá»i vÃ  tráº£ vá» nil
-						end
-					end
-					return oldInvokeServer(self, ...)
-				end)
-				getgenv()._NULLSCAPE_Globals.OriginalFireServer = oldFireServer
-				getgenv()._NULLSCAPE_Globals.OriginalInvokeServer = oldInvokeServer
-				getgenv()._NULLSCAPE_Globals.PrototypeHooked = true
-				prototypeSuccess = true
-			end)
-		else
-			prototypeSuccess = true
-		end
-	end
-
-	if not namecallSuccess and not prototypeSuccess then
-		warn("Failed to initialize any ClientSideHit hook. Exploits might not be supported.")
+	-- Namecall is the only remote interception path because it can be restored cleanly.
+	if not namecallSuccess then
+		warn("Failed to initialize the ClientSideHit namecall hook.")
 	end
 end
 
