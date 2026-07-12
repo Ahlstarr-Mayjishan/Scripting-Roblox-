@@ -28,7 +28,11 @@ function Policy.release(grapple, reason, metadata)
 	local success, result = pcall(function()
 		return grapple:End(wasCancelled == true)
 	end)
-	return success and result ~= false
+	local released = success and result ~= false
+	if released and typeof(metadata.OnReleased) == "function" then
+		pcall(metadata.OnReleased, grapple, reason)
+	end
+	return released
 end
 
 return Policy

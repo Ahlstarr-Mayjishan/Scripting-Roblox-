@@ -487,12 +487,14 @@ local function serviceSharkEscape(grapple, controller, now)
 			and typeof(ReleasePolicy.release) == "function"
 			and ReleasePolicy.release(grapple, "SharkEscape", {
 				EndWasCancelled = false,
+				OnReleased = function(releasedGrapple)
+					if SharkTailWindow and typeof(SharkTailWindow.arm) == "function" then
+						SharkTailWindow.arm(releasedGrapple, "SharkEscape", time(), SHARKTAIL_WINDOW)
+					end
+				end,
 			})
 		if success then
 			Logic.PendingLiftEndAt = nil
-			if SharkTailWindow and typeof(SharkTailWindow.arm) == "function" then
-				SharkTailWindow.arm(grapple, "SharkEscape", now, SHARKTAIL_WINDOW)
-			end
 			return true
 		end
 	end

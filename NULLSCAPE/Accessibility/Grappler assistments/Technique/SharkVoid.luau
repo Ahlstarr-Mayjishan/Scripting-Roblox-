@@ -52,22 +52,6 @@ local function getKillVoidY()
 	return nil
 end
 
-local function getKillVoidPart()
-	if TerrainMemory and typeof(TerrainMemory.getVoidInfo) == "function" then
-		local voidInfo = TerrainMemory.getVoidInfo()
-		if voidInfo and voidInfo.Part and voidInfo.Part.Parent then
-			return voidInfo.Part
-		end
-	end
-
-	local killVoid = Workspace:FindFirstChild("KillVoid", true)
-	if killVoid and killVoid:IsA("BasePart") then
-		return killVoid
-	end
-
-	return nil
-end
-
 local function isKillVoidPart(part)
 	return typeof(part) == "Instance" and part:IsA("BasePart") and part.Name == "KillVoid"
 end
@@ -140,54 +124,20 @@ local function getEffectiveRange(controller)
 	return math.clamp(tonumber(controller and controller.GrappleAssistRange) or 90, 30, 500)
 end
 
-local function makeVoidHit(part, position, origin)
-	return {
-		Instance = part,
-		Position = position,
-		Distance = (position - origin).Magnitude,
-		Normal = part.CFrame.UpVector,
-		Material = part.Material,
-	}
-end
-
 local function findEmergencyVoidHit(grapple, controller)
-	local rootPart = grapple and grapple.RootPart
-	local killVoid = getKillVoidPart()
-	if not (rootPart and rootPart.Parent and killVoid) then
-		return nil
-	end
 	local effectiveRange = getEffectiveRange(controller)
-	if VoidCastAssist and typeof(VoidCastAssist.findEmergency) == "function" then
+	if not (VoidCastAssist and typeof(VoidCastAssist.isEnabled) == "function" and VoidCastAssist.isEnabled()) then
+		return nil, false
+	end
+
+	if typeof(VoidCastAssist.findEmergency) == "function" then
 		local success, voidHit = pcall(VoidCastAssist.findEmergency, grapple, effectiveRange)
 		if success and voidHit then
-			return voidHit
+			return voidHit, true
 		end
 	end
 
-	local origin = rootPart.Position
-	local localOrigin = killVoid.CFrame:PointToObjectSpace(origin)
-	local halfSize = killVoid.Size * 0.5
-	local localHit = Vector3.new(
-		math.clamp(localOrigin.X, -halfSize.X, halfSize.X),
-		halfSize.Y,
-		math.clamp(localOrigin.Z, -halfSize.Z, halfSize.Z)
-	)
-	local hitPosition = killVoid.CFrame:PointToWorldSpace(localHit)
-	local offset = hitPosition - origin
-	local distance = offset.Magnitude
-
-	if distance <= 3 or distance > effectiveRange then
-		return nil
-	end
-
-	if grapple.grappleParams and offset.Magnitude > 0.001 then
-		local rayHit = Workspace:Raycast(origin, offset.Unit * math.max(distance - 1, 1), grapple.grappleParams)
-		if rayHit and not isKillVoidPart(rayHit.Instance) then
-			return nil
-		end
-	end
-
-	return makeVoidHit(killVoid, hitPosition, origin)
+	return nil, true
 end
 
 local function playReelSound(grapple)
@@ -228,13 +178,19 @@ local function hasRequiredUpgrades(grapple)
 	return UpgradeGate and UpgradeGate.hasAll(movement, { "NinjaBelt", "SharkBelt" })
 end
 
+local function armSharkTailWindow(grapple, now)
+	if SharkTailWindow and typeof(SharkTailWindow.arm) == "function" then
+		SharkTailWindow.arm(grapple, "SharkVoid", now or time())
+	end
+end
+
 local function autoCast(grapple, targeting, now)
 	if not canAutoCast(grapple, now) then
 		return false
 	end
 
 	local controller = Logic.Controller
-	local hitResult = findEmergencyVoidHit(grapple, controller)
+	local hitResult, usedEasierVoidCast = findEmergencyVoidHit(grapple, controller)
 	if typeof(grapple.Cast) == "function" then
 		if not hitResult then
 			local success, result = pcall(function()
@@ -267,6 +223,7 @@ local function autoCast(grapple, targeting, now)
 		and CastTransaction.start(grapple, hitResult, controller, "SharkVoid", {
 			Technique = "VoidRescue",
 			Name = "VoidRescue",
+			EasierVoidCast = usedEasierVoidCast == true,
 		})
 
 	if success then
@@ -334,6 +291,9 @@ local function autoReel(grapple, controller, now)
 			ReleaseTiming.schedule(grapple, "SharkVoid", holdTime, {
 				Intent = "VoidRescue",
 				EndWasCancelled = false,
+				OnReleased = function(releasedGrapple)
+					armSharkTailWindow(releasedGrapple)
+				end,
 			})
 		end)
 	end
@@ -358,6 +318,9 @@ local function autoEnd(grapple, now)
 
 	local success = ReleasePolicy.release(grapple, "SharkVoid", {
 		EndWasCancelled = false,
+		OnReleased = function(releasedGrapple)
+			armSharkTailWindow(releasedGrapple)
+		end,
 	})
 
 	if success then
@@ -365,11 +328,6 @@ local function autoEnd(grapple, now)
 			ReleaseTiming.cancel(grapple)
 		end
 		recordMomentum(grapple, "SharkVoidAutoEnd")
-		-- Native End(false) opens allowSharkTail synchronously for 0.25 seconds.
-		-- Keep this rescue-owned window alive even if the fall-state check changes.
-		if SharkTailWindow and typeof(SharkTailWindow.arm) == "function" then
-			SharkTailWindow.arm(grapple, "SharkVoid", now)
-		end
 	end
 
 	return success
