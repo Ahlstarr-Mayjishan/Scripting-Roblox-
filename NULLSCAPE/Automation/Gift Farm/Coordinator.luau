@@ -457,6 +457,7 @@ local function observeCharacter(controller, gc)
 		sessionToken += 1
 		characterSessionToken += 1
 		MovementLease.invalidateActive()
+		MovementLease.resetTransport()
 		characterReady = false
 		characterReadyAt = math.huge
 		pendingGoldenReturnSince = nil
@@ -556,6 +557,7 @@ local function observeInRound(controller, gc)
 	local function resetRoundState(value)
 		sessionToken += 1
 		MovementLease.invalidateActive()
+		MovementLease.resetTransport()
 		pendingGoldenReturnSince = nil
 		giftsStabilized = false
 		startWaitAt = nil
@@ -1122,6 +1124,7 @@ local function restartStalledWorker(controller, detail)
 	loopActive = false
 	sessionToken += 1
 	MovementLease.invalidateActive()
+	MovementLease.resetTransport()
 	activeLease = nil
 	table.clear(retryQueue)
 	lastWatchGiftCount = nil

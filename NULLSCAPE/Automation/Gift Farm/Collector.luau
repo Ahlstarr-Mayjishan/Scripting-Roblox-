@@ -226,7 +226,7 @@ local function jumpToWaypoint(hrp, targetPosition, lease)
 		return false
 	end
 
-	if lease:moveTo(CFrame.new(targetPosition)) == false then
+	if lease:moveCollectTo(CFrame.new(targetPosition)) == false then
 		return false
 	end
 	clearVelocity(hrp)
@@ -263,7 +263,7 @@ local function waitForArrival(hrp, targetPosition, precisionMode, lease, current
 			end
 		else
 			stableFrames = 0
-			lease:moveTo(CFrame.new(targetPosition))
+			lease:moveCollectTo(CFrame.new(targetPosition))
 		end
 
 		RunService.Heartbeat:Wait()
@@ -509,6 +509,10 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 
 	if not ok then
 		error(err, 0)
+	end
+
+	if lease and typeof(lease.reportCollectResult) == "function" and (tailMode or result.Rejected > 0) then
+		lease:reportCollectResult(result.Attempted, result.Rejected)
 	end
 
 	return result

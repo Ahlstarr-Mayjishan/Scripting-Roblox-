@@ -5,6 +5,7 @@
 -- ]]
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
+local Transport = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Transport.luau")
 local Workspace = game:GetService("Workspace")
 
 local MovementLease = {}
@@ -122,6 +123,22 @@ function MovementLease.acquire(ownerName)
 		return Context.moveCharacterTo(cf)
 	end
 
+	function lease:moveCollectTo(cframe)
+		if not self:isValid() then
+			return false
+		end
+		return Transport.moveTo(cframe, function()
+			return not self:isValid()
+		end)
+	end
+
+	function lease:reportCollectResult(attempted, rejected)
+		if not self:isValid() then
+			return
+		end
+		Transport.reportCollectResult(attempted, rejected)
+	end
+
 	function lease:placeFoothold(position)
 		if not self:isValid() then
 			return nil
@@ -186,6 +203,10 @@ function MovementLease.invalidateActive()
 	activeLeaseToken += 1
 	clearActiveLeaseState()
 	cleanUpFootholdPart()
+end
+
+function MovementLease.resetTransport()
+	Transport.reset()
 end
 
 return MovementLease

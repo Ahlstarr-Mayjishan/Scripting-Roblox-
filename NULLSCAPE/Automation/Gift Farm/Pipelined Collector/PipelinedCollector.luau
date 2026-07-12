@@ -101,7 +101,7 @@ local function waitForArrival(hrp, targetPosition, lease, shouldAbort)
 			return true
 		end
 
-		if lease:moveTo(CFrame.new(targetPosition)) == false then
+		if lease:moveCollectTo(CFrame.new(targetPosition)) == false then
 			return false
 		end
 		RunService.Heartbeat:Wait()
@@ -295,7 +295,7 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 
 			hrp.Anchored = false
 			lease:placeFoothold(standingPosition)
-			if lease:moveTo(CFrame.new(standingPosition)) == false then
+			if lease:moveCollectTo(CFrame.new(standingPosition)) == false then
 				stats.Failed += #cluster
 				continue
 			end
