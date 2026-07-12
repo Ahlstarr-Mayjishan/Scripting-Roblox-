@@ -13,6 +13,7 @@ local FPSBoost = {
 	OriginalVFX = setmetatable({}, { __mode = "k" }),
 	OriginalEnemyVisuals = setmetatable({}, { __mode = "k" }),
 	OriginalMapVisuals = setmetatable({}, { __mode = "k" }),
+	GuardedVFX = setmetatable({}, { __mode = "k" }),
 	OriginalLighting = nil,
 	OriginalQuality = nil,
 	ScanToken = 0,
@@ -40,6 +41,13 @@ local VOID_GUARDIAN_PROJECTILE_POOLS = {
 	OldHomer = true,
 }
 
+local POOLED_VFX_ROOT_NAMES = {
+	Beacons = true,
+	CatalystDebris = true,
+	DemonShockwave = true,
+	FireArea = true,
+}
+
 local function optionSelected(options, option)
 	if typeof(options) ~= "table" then
 		return false
@@ -62,6 +70,7 @@ local function disconnectConnections()
 		end)
 		FPSBoost.Connections[key] = nil
 	end
+	table.clear(FPSBoost.GuardedVFX)
 end
 
 local function restoreVisuals(store)
@@ -87,12 +96,62 @@ local function restoreVisuals(store)
 	table.clear(store)
 end
 
+local hideVisual
+
+local function hasVisualOnlyAncestor(instance)
+	local current = instance
+	while current and current ~= Workspace do
+		if POOLED_VFX_ROOT_NAMES[current.Name] or string.match(current.Name, "_Afterimages$") then
+			return true
+		end
+		current = current.Parent
+	end
+	return false
+end
+
+local function guardPooledVFX(instance)
+	if FPSBoost.GuardedVFX[instance] or not hasVisualOnlyAncestor(instance) then
+		return
+	end
+
+	local property
+	local hiddenValue
+	if instance:IsA("Decal") or instance:IsA("Texture") then
+		property = "Transparency"
+		hiddenValue = 1
+	elseif
+		instance:IsA("ParticleEmitter")
+		or instance:IsA("Trail")
+		or instance:IsA("Beam")
+		or instance:IsA("PointLight")
+		or instance:IsA("SpotLight")
+		or instance:IsA("SurfaceLight")
+	then
+		property = "Enabled"
+		hiddenValue = false
+	else
+		return
+	end
+
+	FPSBoost.GuardedVFX[instance] = true
+	FPSBoost.Connections[instance] = instance:GetPropertyChangedSignal(property):Connect(function()
+		if optionSelected(FPSBoost.Selections, "VFX") and instance[property] ~= hiddenValue then
+			instance[property] = hiddenValue
+		end
+	end)
+end
+
 local function suppressVFX(instance)
 	if not optionSelected(FPSBoost.Selections, "VFX") then
 		return
 	end
 
 	pcall(function()
+		if hasVisualOnlyAncestor(instance) then
+			hideVisual(instance, FPSBoost.OriginalVFX)
+			guardPooledVFX(instance)
+		end
+
 		if
 			instance:IsA("ParticleEmitter")
 			or instance:IsA("Trail")
@@ -121,7 +180,7 @@ local function suppressVFX(instance)
 	end)
 end
 
-local function hideVisual(instance, store)
+hideVisual = function(instance, store)
 	pcall(function()
 		if instance:IsA("BasePart") then
 			if store[instance] == nil then
