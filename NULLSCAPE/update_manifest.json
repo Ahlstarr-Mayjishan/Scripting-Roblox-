@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.13.5",
+    "Version":  "2026.07.13.7",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,14 +14,14 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "212a376a7d2da0bdea6c729216aea3d3fbb4e4fe254a410df83fdecb2ffaaaf7"
+                      "Sha256":  "4f9705627e08702667a5477f2f9b1a9f672cafbcb296c3e23792be8e5699b84e"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "c8a1c11bb26fbffacd7832b6ae8266b48d2b3a3a8dd3b610f1201e1e5b2cdfe9"
+                      "Sha256":  "9f708abf72f7361559068e65b166659aa7f9ef5b84ee7bd668b2d6a926f04634"
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/tab.luau",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "150640b537e80a3c1011e5393f1914e38bd323c9d08b8584857893fd8a91b3dd"
+                      "Sha256":  "1585d488baf37a95ae846241bd4039c8947e7ccfecc6b321335894ce06d70a69"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/MovementLease.luau",

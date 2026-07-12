@@ -36,6 +36,9 @@ local GOLDEN_RETURN_CONFIRM_DELAY = 0.25
 local MAX_RETRY_QUEUE = 32
 local RESPAWN_READY_DELAY = 0.85
 local TAIL_REMAINING_RATIO = 0.12
+local WATCHDOG_INTERVAL = 1
+local WORKER_STALL_TIMEOUT = 6
+local WATCHDOG_MOVEMENT_EPSILON = 2
 
 local enabled = false
 local configDirty = false
@@ -43,6 +46,10 @@ local sessionToken = 0
 local characterSessionToken = 0
 local activeLease = nil
 local loopActive = false
+local workerGeneration = 0
+local watchdogGeneration = 0
+local lastWorkerPulseAt = 0
+local lastWatchPosition = nil
 
 -- Observers
 local characterAddedConnection = nil
@@ -65,9 +72,14 @@ local lastStatusAt = 0
 local range = DEFAULT_RANGE
 local mode = NORMAL_MODE
 
+local function markWorkerPulse()
+	lastWorkerPulseAt = os.clock()
+end
+
 local function transitionTo(controller, status, detail, force)
 	local nextStatus = status or "Idle"
 	local now = os.clock()
+	lastWorkerPulseAt = now
 	if not force and nextStatus == currentStatus and now - lastStatusAt < STATUS_UPDATE_INTERVAL then
 		return
 	end
@@ -82,21 +94,12 @@ end
 local function recoverAfterStop(controller, detail)
 	sessionToken += 1
 	MovementLease.invalidateActive()
-
-	if activeLease then
-		activeLease:release({
-			SkipVelocityClear = true,
-			SkipStateChange = true,
-			ForceAbilityClear = true,
-		})
-		activeLease = nil
-	else
-		Context.releaseCharacterControl({
-			SkipVelocityClear = true,
-			SkipStateChange = true,
-			ForceAbilityClear = true,
-		})
-	end
+	activeLease = nil
+	Context.releaseCharacterControl({
+		SkipVelocityClear = true,
+		SkipStateChange = true,
+		ForceAbilityClear = true,
+	})
 
 	if Beacon and typeof(Beacon.restore) == "function" then
 		Beacon.restore(true)
@@ -605,15 +608,22 @@ local function runLoop(controller)
 	if loopActive then
 		return
 	end
+	workerGeneration += 1
+	local myWorkerGeneration = workerGeneration
 	loopActive = true
+	markWorkerPulse()
 
 	task.spawn(function()
 		local ok, err = xpcall(function()
-			while enabled and not controller.Destroyed do
+			while enabled and not controller.Destroyed and workerGeneration == myWorkerGeneration do
+				markWorkerPulse()
 			local mySessionToken = sessionToken
 
 			local function isSessionActive()
-				return enabled and sessionToken == mySessionToken and not controller.Destroyed
+				return enabled
+					and sessionToken == mySessionToken
+					and workerGeneration == myWorkerGeneration
+					and not controller.Destroyed
 			end
 
 			-- 1. Check config changes (HydratingConfig)
@@ -1035,9 +1045,16 @@ local function runLoop(controller)
 			task.wait(0.04)
 			end
 		end, debug.traceback)
-		loopActive = false
+		if workerGeneration == myWorkerGeneration then
+			loopActive = false
+		end
 
-		if not ok and enabled and not controller.Destroyed and controller.GiftFarmEnabled then
+		if not ok
+			and workerGeneration == myWorkerGeneration
+			and enabled
+			and not controller.Destroyed
+			and controller.GiftFarmEnabled
+		then
 			warn("[NULLSCAPE] Gift Farm coordinator recovered: " .. tostring(err))
 			sessionToken += 1
 			MovementLease.invalidateActive()
@@ -1053,6 +1070,50 @@ local function runLoop(controller)
 					runLoop(controller)
 				end
 			end)
+		end
+	end)
+end
+
+local function startWatchdog(controller)
+	watchdogGeneration += 1
+	local myWatchdogGeneration = watchdogGeneration
+	lastWatchPosition = nil
+	markWorkerPulse()
+
+	task.spawn(function()
+		while enabled and not controller.Destroyed and watchdogGeneration == myWatchdogGeneration do
+			task.wait(WATCHDOG_INTERVAL)
+			if not (enabled and controller.GiftFarmEnabled and watchdogGeneration == myWatchdogGeneration) then
+				continue
+			end
+
+			local hrp = Context.getRootPart()
+			if hrp and hrp.Parent then
+				local position = hrp.Position
+				if lastWatchPosition and (position - lastWatchPosition).Magnitude >= WATCHDOG_MOVEMENT_EPSILON then
+					markWorkerPulse()
+				end
+				lastWatchPosition = position
+			else
+				lastWatchPosition = nil
+				markWorkerPulse()
+			end
+
+			if Context.isInRound() and os.clock() - lastWorkerPulseAt >= WORKER_STALL_TIMEOUT then
+				warn("[NULLSCAPE] Gift Farm watchdog restarted a stalled worker")
+				workerGeneration += 1
+				loopActive = false
+				sessionToken += 1
+				MovementLease.invalidateActive()
+				activeLease = nil
+				Context.releaseCharacterControl({
+					SkipVelocityClear = true,
+					SkipStateChange = true,
+					ForceAbilityClear = true,
+				})
+				transitionTo(controller, "Recovering", "Watchdog restarted stalled Gift Farm", true)
+				runLoop(controller)
+			end
 		end
 	end)
 end
@@ -1092,6 +1153,7 @@ function Coordinator.enable(controller, gc)
 	observeCharacter(controller, gc)
 	observeInRound(controller, gc)
 
+	startWatchdog(controller)
 	runLoop(controller)
 	return true
 end
@@ -1102,6 +1164,9 @@ function Coordinator.disable(controller)
 	end
 
 	enabled = false
+	watchdogGeneration += 1
+	workerGeneration += 1
+	loopActive = false
 	recoverAfterStop(controller, "Gift Farm disabled")
 
 	if Context and typeof(Context.restoreRails) == "function" then

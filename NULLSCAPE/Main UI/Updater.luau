@@ -116,6 +116,29 @@ local function normalizeList(value)
 	return list
 end
 
+local function compareVersions(left, right)
+	local leftParts = {}
+	local rightParts = {}
+	for value in string.gmatch(tostring(left or ""), "%d+") do
+		table.insert(leftParts, tonumber(value) or 0)
+	end
+	for value in string.gmatch(tostring(right or ""), "%d+") do
+		table.insert(rightParts, tonumber(value) or 0)
+	end
+	if #leftParts == 0 or #rightParts == 0 then
+		return nil
+	end
+
+	for index = 1, math.max(#leftParts, #rightParts) do
+		local leftValue = leftParts[index] or 0
+		local rightValue = rightParts[index] or 0
+		if leftValue ~= rightValue then
+			return leftValue < rightValue and -1 or 1
+		end
+	end
+	return 0
+end
+
 local function joinShort(list, maxItems)
 	local limit = maxItems or 6
 	local out = {}
@@ -409,12 +432,19 @@ function Updater:checkAndInstall(manual)
 		local remoteVersion = tostring(manifest.Version or manifest.version or "unknown")
 		local localManifest = readJson(self.ManifestPath)
 		local localVersion = tostring(localManifest.Version or localManifest.version or "")
-		if localVersion ~= "" and localVersion == remoteVersion then
+		local versionOrder = if localVersion ~= "" then compareVersions(remoteVersion, localVersion) else nil
+		if localVersion ~= "" and (localVersion == remoteVersion or versionOrder == 0) then
 			self.State = self.State or {}
 			self.State.LastVersion = remoteVersion
 			writeJson(self.StateFile, self.State)
 			if manual then
 				notify("Runtime Updater", "Already running release " .. remoteVersion, 5)
+			end
+			return true
+		end
+		if versionOrder and versionOrder < 0 then
+			if manual then
+				notify("Runtime Updater", "Local release " .. localVersion .. " is newer than remote " .. remoteVersion, 5)
 			end
 			return true
 		end
