@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.13.9",
+    "Version":  "2026.07.13.10",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -922,7 +922,7 @@
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/FPS Boost.luau",
-                      "Sha256":  "519a3bac8639b0963e6a5d436a1b8f7074113587cd7ed856621ee2a5a3007410"
+                      "Sha256":  "d9f8f20120d5aac61c08f1fc5ef3b2ce31a34af454c2a5717ddd7f479f4a96c3"
                   }
               ]
 }

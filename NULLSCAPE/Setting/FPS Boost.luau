@@ -21,6 +21,7 @@ local FPSBoost = {
 local MAP_ROOT_NAMES = {
 	Map = true,
 	MapGeometry = true,
+	CurrentRooms = true,
 	Level = true,
 	Environment = true,
 	Geometry = true,
@@ -30,6 +31,13 @@ local MAP_ROOT_NAMES = {
 local ENEMY_ROOT_NAMES = {
 	Enemies = true,
 	Skinwalkers = true,
+}
+
+local VOID_GUARDIAN_PROJECTILE_POOLS = {
+	Homer = true,
+	HomerLaser = true,
+	HomerInverted = true,
+	OldHomer = true,
 }
 
 local function optionSelected(options, option)
@@ -192,6 +200,17 @@ local function bindVFX(token)
 end
 
 local function bindEnemies(token)
+	local function isVoidGuardianProjectile(instance, itemPools)
+		local current = instance
+		while current and current ~= itemPools do
+			if VOID_GUARDIAN_PROJECTILE_POOLS[current.Name] then
+				return true
+			end
+			current = current.Parent
+		end
+		return false
+	end
+
 	local function attach(folder)
 		if not (folder and ENEMY_ROOT_NAMES[folder.Name]) then
 			return
@@ -204,12 +223,28 @@ local function bindEnemies(token)
 		end)
 	end
 
+	local function attachProjectilePools(itemPools)
+		if not (itemPools and itemPools.Name == "Item_Pools") then
+			return
+		end
+		local function hideProjectileVisual(instance)
+			if isVoidGuardianProjectile(instance, itemPools) then
+				hideVisual(instance, FPSBoost.OriginalEnemyVisuals)
+			end
+		end
+		scan(itemPools, hideProjectileVisual, token)
+		FPSBoost.Connections[itemPools] = itemPools.DescendantAdded:Connect(hideProjectileVisual)
+	end
+
 	for rootName in pairs(ENEMY_ROOT_NAMES) do
 		attach(Workspace:FindFirstChild(rootName))
 	end
+	attachProjectilePools(Workspace:FindFirstChild("Item_Pools"))
 	FPSBoost.Connections.EnemiesFolderAdded = Workspace.ChildAdded:Connect(function(child)
 		if ENEMY_ROOT_NAMES[child.Name] then
 			attach(child)
+		elseif child.Name == "Item_Pools" then
+			attachProjectilePools(child)
 		end
 	end)
 end
