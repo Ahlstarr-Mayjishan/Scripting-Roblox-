@@ -7,6 +7,8 @@
 local RailSnap = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Rail Snap Assist.luau")
 local MomentumBridge = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Momentum Intent Bridge.luau")
 local BiomeTuning = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Biome Tuning.luau")
+local ActionProfiles = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Anchor Action Profiles.luau")
+local RouteHint = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Local Route Hint.luau")
 
 local Bias = {}
 
@@ -24,8 +26,20 @@ function Bias.score(grapple, hit, part, origin, aimDirection, controller, intent
 		score += BiomeTuning.score(part, hit, controller, intent)
 	end
 
+	local profile = nil
+	if ActionProfiles and typeof(ActionProfiles.score) == "function" then
+		local profileScore, profileName = ActionProfiles.score(grapple, hit, part, controller, intent)
+		score += tonumber(profileScore) or 0
+		profile = profileName
+	end
+
+	if RouteHint and typeof(RouteHint.score) == "function" then
+		score += RouteHint.score(grapple, hit, part, intent)
+	end
+
 	return score, {
 		Landing = nil,
+		Profile = profile,
 	}
 end
 

@@ -65,6 +65,7 @@ local Controller = {
 	GrappleAssistFailFeedbackEnabled = true,
 	GrappleAssistSafetyEnabled = true,
 	GrappleAssistSafetyRejectPenalty = 74,
+	GrappleBrakeProfileSpeed = 300,
 	GrappleAssistAnchorBiasEnabled = true,
 	GrappleAssistSpecialPointPriority = true,
 	GrappleAnchorTargetingStyle = "Auto",
@@ -538,6 +539,10 @@ end
 
 function Controller:SetGrappleAssistSafetyRejectPenalty(value)
 	self.GrappleAssistSafetyRejectPenalty = math.clamp(tonumber(value) or 74, 20, 140)
+end
+
+function Controller:SetGrappleBrakeProfileSpeed(value)
+	self.GrappleBrakeProfileSpeed = math.clamp(tonumber(value) or 300, 200, 500)
 end
 
 function Controller:SetGrappleAssistAnchorBias(value)

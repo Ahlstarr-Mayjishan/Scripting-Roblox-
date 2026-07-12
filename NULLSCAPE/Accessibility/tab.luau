@@ -26,6 +26,7 @@ local DEFAULTS = {
 	GrappleAssistFailFeedbackEnabled = true,
 	GrappleAssistSafetyEnabled = true,
 	GrappleAssistSafetyRejectPenalty = 74,
+	GrappleBrakeProfileSpeed = 300,
 	GrappleAssistAnchorBiasEnabled = true,
 	GrappleAssistSpecialPointPriority = true,
 	GrappleAnchorTargetingStyle = "Auto",
@@ -410,6 +411,19 @@ return function(Client, Controller)
 		Flag = "GrappleAssistSafetyToggle",
 		Callback = function(Value)
 			Controller:SetGrappleAssistSafety(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "High-Speed Brake Threshold",
+		Info = "Above this speed, targeting favors forward anchors and avoids abrupt reverse pulls or unsafe releases.",
+		Range = { 200, 500 },
+		Increment = 10,
+		Suffix = " studs/s",
+		CurrentValue = Controller.GrappleBrakeProfileSpeed or 300,
+		Flag = "GrappleBrakeProfileSpeedSlider",
+		Callback = function(Value)
+			Controller:SetGrappleBrakeProfileSpeed(Value)
 		end,
 	})
 

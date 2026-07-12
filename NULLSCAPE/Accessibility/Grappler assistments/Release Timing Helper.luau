@@ -10,6 +10,7 @@ local Helper = {
 
 local ReleaseAdvisor = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Reel Release Advisor.luau")
 local ReleasePolicy = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Policy.luau")
+local ReleasePlanner = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Planner.luau")
 
 local function getNumber(value, fallback, minimum, maximum)
 	return math.clamp(tonumber(value) or fallback, minimum, maximum)
@@ -22,6 +23,12 @@ function Helper.schedule(grapple, reason, holdTime, metadata)
 
 	if ReleaseAdvisor and typeof(ReleaseAdvisor.suggestHoldTime) == "function" then
 		local success, suggested = pcall(ReleaseAdvisor.suggestHoldTime, grapple, reason, holdTime, metadata)
+		if success and suggested then
+			holdTime = suggested
+		end
+	end
+	if ReleasePlanner and typeof(ReleasePlanner.suggestHoldTime) == "function" then
+		local success, suggested = pcall(ReleasePlanner.suggestHoldTime, grapple, reason, holdTime, metadata)
 		if success and suggested then
 			holdTime = suggested
 		end
@@ -60,6 +67,17 @@ function Helper.step(grapple)
 	local movement = grapple and grapple.Movement
 	if not (movement and movement.grappling == true and grapple.grappleReel == true) then
 		return false
+	end
+
+	if ReleasePlanner and typeof(ReleasePlanner.shouldRelease) == "function" then
+		local controller = getgenv()._NULLSCAPE_Globals and getgenv()._NULLSCAPE_Globals.activeAccessibilityController
+		local canRelease = ReleasePlanner.shouldRelease(grapple, pending.Reason, pending.Metadata, controller)
+		if not canRelease and (pending.Deferrals or 0) < 2 then
+			pending.Deferrals = (pending.Deferrals or 0) + 1
+			pending.ReleaseAt = time() + 0.04
+			Helper.Pending[grapple] = pending
+			return false
+		end
 	end
 
 	if not (ReleasePolicy and typeof(ReleasePolicy.release) == "function") then

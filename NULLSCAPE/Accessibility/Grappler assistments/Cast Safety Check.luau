@@ -11,6 +11,9 @@ local TerrainMemory =
 local RailMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau")
 local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau")
+local Availability = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Anchor Availability.luau")
+local TimeBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Grapple Time Budget.luau")
+local ExitGuard = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Exit Corridor Guard.luau")
 
 local Safety = {}
 
@@ -50,6 +53,16 @@ function Safety.evaluate(grapple, hit, candidatePart, controller, intent)
 		result.Penalty = 100
 		table.insert(result.Reasons, "invalid")
 		return result
+	end
+
+	if Availability and typeof(Availability.evaluate) == "function" then
+		local available, reason = Availability.evaluate(grapple, candidatePart)
+		if not available then
+			result.Accept = false
+			result.Penalty = 100
+			table.insert(result.Reasons, tostring(reason or "anchor-unavailable"))
+			return result
+		end
 	end
 
 	local protectedAnchor = isSpecial(candidatePart) or isRail(candidatePart)
@@ -96,6 +109,28 @@ function Safety.evaluate(grapple, hit, candidatePart, controller, intent)
 		local velocityDirection = velocity.Unit
 		if velocityDirection:Dot(direction) < -0.15 then
 			addIssue(result, "against-high-momentum", 20)
+		end
+	end
+
+	if TimeBudget and typeof(TimeBudget.evaluate) == "function" then
+		local timeBudget = TimeBudget.evaluate(grapple, hit, candidatePart, intent)
+		if timeBudget then
+			if timeBudget.Accept == false then
+				result.Accept = false
+				result.Penalty = 100
+				table.insert(result.Reasons, tostring(timeBudget.Reason or "time-budget"))
+				return result
+			end
+			if tonumber(timeBudget.Penalty) and timeBudget.Penalty > 0 then
+				addIssue(result, tostring(timeBudget.Reason or "time-budget"), timeBudget.Penalty)
+			end
+		end
+	end
+
+	if ExitGuard and typeof(ExitGuard.evaluateCast) == "function" then
+		local corridor = ExitGuard.evaluateCast(grapple, hit, controller)
+		if corridor and tonumber(corridor.Penalty) and corridor.Penalty > 0 then
+			addIssue(result, tostring(corridor.Reason or "exit-corridor"), corridor.Penalty)
 		end
 	end
 

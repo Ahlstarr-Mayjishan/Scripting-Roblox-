@@ -11,6 +11,7 @@ local ReleaseTiming = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler ass
 local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Upgrade Gate.luau")
 local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
 local ReleasePolicy = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Policy.luau")
+local ReleasePlanner = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Planner.luau")
 
 local DEFAULT_REEL_HOLD = 0.16
 local START_COOLDOWN = 0.7
@@ -153,13 +154,16 @@ local function shouldRelease(grapple, now)
 	return now >= Logic.PendingEndAt
 end
 
-local function releaseReel(grapple)
-	Logic.PendingEndAt = nil
-	Logic.ActiveTarget = nil
-
+local function releaseReel(grapple, controller)
 	local movement = grapple and grapple.Movement
 	if not (movement and movement.grappling == true and grapple.grappleReel == true) then
 		return false
+	end
+	if ReleasePlanner and typeof(ReleasePlanner.shouldRelease) == "function" then
+		local canRelease = ReleasePlanner.shouldRelease(grapple, "ReelSaver", { Intent = "ReelSaver" }, controller)
+		if not canRelease then
+			return false
+		end
 	end
 
 	if not (ReleasePolicy and typeof(ReleasePolicy.release) == "function") then
@@ -167,6 +171,10 @@ local function releaseReel(grapple)
 	end
 
 	local success = ReleasePolicy.release(grapple, "ReelSaver")
+	if success then
+		Logic.PendingEndAt = nil
+		Logic.ActiveTarget = nil
+	end
 	if success and MomentumMemory and typeof(MomentumMemory.record) == "function" then
 		pcall(MomentumMemory.record, grapple.RootPart, "ReelSaverRelease")
 	end
@@ -183,8 +191,7 @@ function Logic.step(grapple, _dt, controller)
 
 	local now = time()
 	if shouldRelease(grapple, now) then
-		releaseReel(grapple)
-		return true
+		return releaseReel(grapple, controller)
 	end
 
 	if Logic.ActiveTarget and now - (Logic.ActiveTarget.StartedAt or now) <= CAST_ACTIVE_WINDOW then
