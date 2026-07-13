@@ -242,7 +242,13 @@ local function installCastHook(grappleModule, globals)
 				end
 			end
 
-			if manualCast and Targeting and typeof(Targeting.findSpecialAnchorHit) == "function" then
+			if
+				manualCast
+				and controller
+				and controller.GrappleAssistSpecialPointPriority ~= false
+				and Targeting
+				and typeof(Targeting.findSpecialAnchorHit) == "function"
+			then
 				local specialHit = Targeting.findSpecialAnchorHit(self, controller, {
 					ManualCast = true,
 					AssistiveManual = true,

@@ -5,17 +5,24 @@ local GoldenWait = {}
 local GOLDEN_SPAWN_WAIT = 2
 local PASSAGE_GOLDEN_WAIT = 2.5
 local NORMAL_CLEAR_GOLDEN_WAIT = 5
+local PYLON_GOLDEN_WAIT = 5
 
 local hasSeenGoldenThisRound = false
 local goldenMissingSince = nil
 local passageGoldenUntil = 0
 local normalClearGoldenUntil = 0
+local pylonGoldenUntil = 0
+local pylonGoldenPending = false
+local pylonGoldenObserved = false
 
 function GoldenWait.reset()
 	hasSeenGoldenThisRound = false
 	goldenMissingSince = nil
 	passageGoldenUntil = 0
 	normalClearGoldenUntil = 0
+	pylonGoldenUntil = 0
+	pylonGoldenPending = false
+	pylonGoldenObserved = false
 end
 
 function GoldenWait.noteScan(scanInfo)
@@ -23,6 +30,9 @@ function GoldenWait.noteScan(scanInfo)
 		hasSeenGoldenThisRound = true
 		goldenMissingSince = nil
 		normalClearGoldenUntil = 0
+		if pylonGoldenPending then
+			pylonGoldenObserved = true
+		end
 	end
 end
 
@@ -40,6 +50,32 @@ function GoldenWait.startNormalClearWindow()
 	goldenMissingSince = os.clock()
 end
 
+function GoldenWait.startPylonWindow()
+	if pylonGoldenPending then
+		return false
+	end
+
+	pylonGoldenPending = true
+	pylonGoldenObserved = false
+	pylonGoldenUntil = os.clock() + PYLON_GOLDEN_WAIT
+	goldenMissingSince = os.clock()
+	return true
+end
+
+function GoldenWait.finishPylonWindow()
+	pylonGoldenUntil = 0
+	pylonGoldenPending = false
+	pylonGoldenObserved = false
+end
+
+function GoldenWait.isPylonWindowActive()
+	return pylonGoldenPending and not pylonGoldenObserved and os.clock() < pylonGoldenUntil
+end
+
+function GoldenWait.canReleasePylonWithoutGolden()
+	return pylonGoldenPending and not pylonGoldenObserved and os.clock() >= pylonGoldenUntil
+end
+
 function GoldenWait.isPassageWindowActive()
 	return os.clock() < passageGoldenUntil
 end
@@ -55,12 +91,16 @@ end
 function GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, setStatus, reason)
 	local passageActive = GoldenWait.isPassageWindowActive()
 	local normalClearActive = GoldenWait.isNormalClearWindowActive()
-	if not (scanInfo and scanInfo.RawGolden == 0 and (passageActive or normalClearActive or lastGiftSeenAt > 0)) then
+	local pylonActive = GoldenWait.isPylonWindowActive()
+	if not (scanInfo and scanInfo.RawGolden == 0 and (passageActive or normalClearActive or pylonActive or lastGiftSeenAt > 0)) then
 		goldenMissingSince = nil
 		return false
 	end
 
-	if not (passageActive or normalClearActive) and not hasSeenGoldenThisRound and (tonumber(scanInfo.RawNormal) or 0) > 0 then
+	if not (passageActive or normalClearActive or pylonActive)
+		and not hasSeenGoldenThisRound
+		and (tonumber(scanInfo.RawNormal) or 0) > 0
+	then
 		return false
 	end
 
@@ -70,6 +110,9 @@ function GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, setStatus, 
 	end
 	if normalClearActive then
 		waitTime = math.max(waitTime, NORMAL_CLEAR_GOLDEN_WAIT)
+	end
+	if pylonActive then
+		waitTime = math.max(waitTime, PYLON_GOLDEN_WAIT)
 	end
 	if waitTime <= 0 then
 		return false

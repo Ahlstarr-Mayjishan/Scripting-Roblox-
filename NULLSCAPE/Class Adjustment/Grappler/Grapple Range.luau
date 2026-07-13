@@ -14,6 +14,7 @@ local Range = {}
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 local VoidCastAssist = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Void Cast Assist.luau")
 local CachedControl = nil
+local SpecialTargeting = nil
 
 local function getControl()
 	if CachedControl then
@@ -22,6 +23,33 @@ local function getControl()
 
 	CachedControl = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
 	return CachedControl
+end
+
+local function findSpecialAnchorHit(grapple)
+	local globals = getgenv()._NULLSCAPE_Globals
+	local controller = globals and globals.activeAccessibilityController
+	if
+		not (
+			controller
+			and controller.GrappleAssistEnabled == true
+			and controller.GrappleAssistSpecialPointPriority ~= false
+		)
+	then
+		return nil
+	end
+
+	SpecialTargeting = SpecialTargeting
+		or getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Targeting.luau")
+	if not (SpecialTargeting and typeof(SpecialTargeting.findSpecialAnchorHit) == "function") then
+		return nil
+	end
+
+	local success, hit = pcall(SpecialTargeting.findSpecialAnchorHit, grapple, controller, {
+		ManualCast = true,
+		AssistiveManual = true,
+		SpecialAnchorCapture = true,
+	})
+	return success and hit or nil
 end
 
 function Range.getEffectiveRange()
@@ -44,6 +72,11 @@ end
 function Range.cast(grapple, forceRefresh, originalCast, ...)
 	local maxRange = Range.getEffectiveRange()
 	local easierVoidCast = Range.isEasierVoidCastEnabled()
+	local specialHit = findSpecialAnchorHit(grapple)
+	if specialHit then
+		recordRangeCast(grapple)
+		return specialHit
+	end
 
 	-- If all range/cast assists are at native values, call the original cast function.
 	if maxRange <= 90 and not easierVoidCast then

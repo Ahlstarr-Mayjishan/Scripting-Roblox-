@@ -20,8 +20,6 @@ local currentTargetStartedAt = 0
 local lastActionAt = 0
 local skippedUntil = setmetatable({}, { __mode = "k" })
 local activatedThisRound = setmetatable({}, { __mode = "k" })
-local stateCache = setmetatable({}, { __mode = "k" })
-local stateConnections = {}
 local getPrompt
 
 local function isSoloRun()
@@ -32,21 +30,6 @@ end
 local function isLocalHost()
 	local player = Players.LocalPlayer
 	return player and player:HasTag("Host") == true
-end
-
-local function disconnectState(root)
-	local connections = stateConnections[root]
-	if not connections then
-		return
-	end
-
-	for _, connection in ipairs(connections) do
-		pcall(function()
-			connection:Disconnect()
-		end)
-	end
-	stateConnections[root] = nil
-	stateCache[root] = nil
 end
 
 local function getAltarState(root, tagged)
@@ -80,48 +63,6 @@ local function getAltarState(root, tagged)
 		PromptEnabled = promptEnabled,
 		Ready = root:IsDescendantOf(workspace) and not used and (voting or promptEnabled or hostOrSolo),
 	}
-end
-
-local function refreshState(root, tagged)
-	stateCache[root] = getAltarState(root, tagged)
-	return stateCache[root]
-end
-
-local function hookState(root, tagged)
-	if not root or stateConnections[root] then
-		return refreshState(root, tagged)
-	end
-
-	stateConnections[root] = {}
-	local function bind(signal)
-		local ok, connection = pcall(function()
-			return signal:Connect(function()
-				if not root:IsDescendantOf(workspace) then
-					disconnectState(root)
-					return
-				end
-				refreshState(root, tagged)
-			end)
-		end)
-		if ok and connection then
-			table.insert(stateConnections[root], connection)
-		end
-	end
-
-	bind(root:GetAttributeChangedSignal("AltarUsed"))
-	bind(root.AncestryChanged)
-	local solo = ReplicatedStorage:FindFirstChild("Solo")
-	if solo and solo:IsA("BoolValue") then
-		bind(solo.Changed)
-	end
-
-	local prompt = getPrompt(root, tagged)
-	if prompt then
-		bind(prompt:GetPropertyChangedSignal("Enabled"))
-		bind(prompt:GetPropertyChangedSignal("HoldDuration"))
-	end
-
-	return refreshState(root, tagged)
 end
 
 local function touch(part, hrp)
@@ -306,7 +247,7 @@ local function isValidTarget(target, selected)
 	if activatedThisRound[target.Root] == true then
 		return false
 	end
-	local state = hookState(target.Root, target.Tagged)
+	local state = getAltarState(target.Root, target.Tagged)
 	return state and state.Ready == true
 end
 
@@ -346,7 +287,7 @@ local function findBestTarget(controller, hrp)
 	for _, root in ipairs(roots) do
 		local tagged = taggedByRoot[root]
 		local name = getAltarName(root, tagged)
-		local state = hookState(root, tagged)
+		local state = getAltarState(root, tagged)
 		if name
 			and selected[name]
 			and state
@@ -392,7 +333,7 @@ function Altar.tryStep(controller, hrp, lease, _currentSessionToken)
 	end
 
 	if currentTarget and currentTarget.Root then
-		local confirmedState = refreshState(currentTarget.Root, currentTarget.Tagged)
+		local confirmedState = getAltarState(currentTarget.Root, currentTarget.Tagged)
 		if confirmedState and confirmedState.Used == true then
 			local confirmedTarget = currentTarget
 			activatedThisRound[confirmedTarget.Root] = true
@@ -413,7 +354,7 @@ function Altar.tryStep(controller, hrp, lease, _currentSessionToken)
 		return false
 	end
 
-	local state = refreshState(target.Root, target.Tagged)
+	local state = getAltarState(target.Root, target.Tagged)
 	if not (state and state.Ready == true) then
 		currentTarget = nil
 		currentTargetStartedAt = 0
@@ -451,10 +392,6 @@ function Altar.reset()
 	lastActionAt = 0
 	skippedUntil = setmetatable({}, { __mode = "k" })
 	activatedThisRound = setmetatable({}, { __mode = "k" })
-	for root in pairs(stateConnections) do
-		disconnectState(root)
-	end
-	stateCache = setmetatable({}, { __mode = "k" })
 end
 
 return Altar

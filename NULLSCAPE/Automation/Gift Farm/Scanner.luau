@@ -118,14 +118,31 @@ end
 
 function Scanner.scan(controller, gch)
 	local gifts = {}
-	local goldenGifts = {}
-	local normalGifts = {}
 	local now = os.clock()
 	local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 	local goldenCollected, goldenMax, goldenRatio = Progress.getGoldenGiftProgress(gch)
 	local rawGolden = 0
 	local rawNormal = 0
+	local settledGolden = 0
+	local settledNormal = 0
 	local hasFannyPack, fannyPackTiles = getFannyPackState(now)
+	local collapseTiles = if Collapse and typeof(Collapse.prepareScan) == "function"
+		then Collapse.prepareScan()
+		else nil
+	local preferGolden = false
+
+	for _, gift in pairs(gch.Gifts or {}) do
+		if gift
+			and not gift.Destroyed
+			and not gift.Collected
+			and not gift.Tripmine
+			and gift.Golden == true
+			and Context.getGiftPosition(gift) ~= nil
+		then
+			preferGolden = true
+			break
+		end
+	end
 
 	for _, gift in pairs(gch.Gifts or {}) do
 		if gift and not gift.Destroyed and not gift.Collected and not gift.Tripmine then
@@ -142,11 +159,20 @@ function Scanner.scan(controller, gch)
 				end
 				local settleTime = gift.Golden and GOLDEN_SPAWN_SETTLE or SPAWN_SETTLE
 				if now - seenGifts[gift] >= settleTime then
+					if gift.Golden then
+						settledGolden += 1
+					else
+						settledNormal += 1
+					end
+
+					if gift.Golden ~= preferGolden then
+						continue
+					end
 					local collapsePriority = 0
 					if Collapse and typeof(Collapse.getGiftUrgency) == "function" then
-						collapsePriority = Collapse.getGiftUrgency(pos)
+						collapsePriority = Collapse.getGiftUrgency(pos, collapseTiles)
 					end
-					local entry = {
+					gifts[#gifts + 1] = {
 						rawObj = gift,
 						pos = pos,
 						priority = priority,
@@ -155,11 +181,6 @@ function Scanner.scan(controller, gch)
 						id = gift.Id or 0,
 						golden = gift.Golden == true,
 					}
-					if gift.Golden then
-						table.insert(goldenGifts, entry)
-					else
-						table.insert(normalGifts, entry)
-					end
 				end
 			end
 		end
@@ -168,15 +189,9 @@ function Scanner.scan(controller, gch)
 	peakRawGolden = math.max(peakRawGolden, rawGolden)
 	peakRawNormal = math.max(peakRawNormal, rawNormal)
 
-	if #goldenGifts > 0 then
-		gifts = goldenGifts
-	else
-		gifts = normalGifts
-	end
-
 	return gifts, {
-		Golden = #goldenGifts,
-		Normal = #normalGifts,
+		Golden = settledGolden,
+		Normal = settledNormal,
 		RawGolden = rawGolden,
 		RawNormal = rawNormal,
 		PeakRawGolden = peakRawGolden,
@@ -189,7 +204,7 @@ function Scanner.scan(controller, gch)
 		NormalRemainingRatio = if peakRawNormal > 0 then rawNormal / peakRawNormal else 1,
 		CollapseTracked = true,
 		FannyPackTracked = hasFannyPack,
-		GoldenLocked = #goldenGifts > 0,
+		GoldenLocked = rawGolden > 0,
 	}
 end
 

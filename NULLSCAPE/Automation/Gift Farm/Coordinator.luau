@@ -34,7 +34,6 @@ local GOLDEN_RETURN_VERIFY_ATTEMPTS = 6
 local GOLDEN_RETURN_VERIFY_INTERVAL = 0.12
 local GOLDEN_RETURN_CONFIRM_DELAY = 0.25
 local GOLDEN_COUNTER_STALE_TIMEOUT = 1.5
-local MAX_RETRY_QUEUE = 32
 local RESPAWN_READY_DELAY = 0.85
 local TAIL_REMAINING_RATIO = 0.12
 local WATCHDOG_INTERVAL = 1
@@ -46,7 +45,6 @@ local enabled = false
 local configDirty = false
 local sessionToken = 0
 local characterSessionToken = 0
-local activeLease = nil
 local loopActive = false
 local workerGeneration = 0
 local watchdogGeneration = 0
@@ -60,13 +58,13 @@ local characterAddedConnection = nil
 local characterRemovingConnection = nil
 local inRoundConnection = nil
 local configChangedConn = nil
+local pylonAddedConnection = nil
 
 -- Runtime state variables
 local characterReady = false
 local characterReadyAt = 0
 local lastGiftSeenAt = 0
 local pendingGoldenReturnSince = nil
-local retryQueue = {}
 local giftsStabilized = false
 local startWaitAt = nil
 local currentStatus = "Idle"
@@ -102,7 +100,6 @@ end
 local function recoverAfterStop(controller, detail)
 	sessionToken += 1
 	MovementLease.invalidateActive()
-	activeLease = nil
 	Context.releaseCharacterControl({
 		SkipVelocityClear = true,
 		SkipStateChange = true,
@@ -113,7 +110,6 @@ local function recoverAfterStop(controller, detail)
 		Beacon.restore(true)
 	end
 
-	table.clear(retryQueue)
 	pendingGoldenReturnSince = nil
 	giftsStabilized = false
 	startWaitAt = nil
@@ -135,112 +131,6 @@ local function getGiftFarmRange(controller)
 		r = math.clamp(tonumber(controller.GiftFarmRange) or DEFAULT_RANGE, 5, DEFAULT_RANGE)
 	end
 	return r
-end
-
-local function clearRoute(route)
-	if typeof(route) ~= "table" then
-		return
-	end
-	for _, step in ipairs(route) do
-		if typeof(step) == "table" then
-			if typeof(step.Cluster) == "table" then
-				table.clear(step.Cluster)
-			end
-			if typeof(step.Info) == "table" and typeof(step.Info.Score) == "table" then
-				table.clear(step.Info.Score)
-			end
-			table.clear(step)
-		end
-	end
-	table.clear(route)
-end
-
-local function softCleanup(...)
-	for index = 1, select("#", ...) do
-		local value = select(index, ...)
-		if typeof(value) == "table" then
-			table.clear(value)
-		end
-	end
-end
-
-local function isRetryGiftAlive(item)
-	local rawObj = item and item.rawObj
-	if not rawObj or rawObj.Destroyed or rawObj.Collected or rawObj.ClientCollected or rawObj.Tripmine then
-		return false
-	end
-	return Context.getGiftPosition(rawObj) ~= nil
-end
-
-local function enqueueRetryItems(routeStats)
-	if not (routeStats and typeof(routeStats.Retry) == "table") then
-		return 0
-	end
-
-	local queued = 0
-	local existing = {}
-	for _, item in ipairs(retryQueue) do
-		if item and item.rawObj then
-			existing[item.rawObj] = true
-		end
-	end
-
-	for _, item in ipairs(routeStats.Retry) do
-		if #retryQueue >= MAX_RETRY_QUEUE then
-			break
-		end
-		if isRetryGiftAlive(item) and not existing[item.rawObj] then
-			table.insert(retryQueue, item)
-			existing[item.rawObj] = true
-			queued += 1
-		end
-	end
-	return queued
-end
-
-local function applyRetryPriority(candidates, scanInfo)
-	if #retryQueue == 0 then
-		return candidates, 0
-	end
-
-	local goldenOnly = scanInfo and scanInfo.GoldenLocked == true
-	local nextQueue = {}
-	local retryCandidates = {}
-	local retryMap = {}
-	local retryCount = 0
-	for _, item in ipairs(retryQueue) do
-		local rawObj = item and item.rawObj
-		local pos = isRetryGiftAlive(item) and Context.getGiftPosition(rawObj) or nil
-		if pos then
-			local isGolden = rawObj.Golden == true
-			if goldenOnly and not isGolden then
-				table.insert(nextQueue, item)
-			elseif not retryMap[rawObj] then
-				table.insert(retryCandidates, {
-					rawObj = rawObj,
-					pos = pos,
-					priority = -1000,
-					collapsePriority = item.collapsePriority or 0,
-					id = item.id or rawObj.Id or 0,
-					golden = isGolden,
-				})
-				retryMap[rawObj] = true
-				retryCount += 1
-			end
-		end
-	end
-	retryQueue = nextQueue
-
-	if #retryCandidates == 0 then
-		return candidates, 0
-	end
-
-	for _, item in ipairs(candidates) do
-		if not (item and item.rawObj and retryMap[item.rawObj]) then
-			table.insert(retryCandidates, item)
-		end
-	end
-	return retryCandidates, retryCount
 end
 
 local function getLevel()
@@ -312,6 +202,9 @@ local function tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActiv
 	pendingGoldenReturnSince = nil
 	if controller then
 		controller.GiftFarmGoldenComplete = true
+	end
+	if GoldenWait and typeof(GoldenWait.finishPylonWindow) == "function" then
+		GoldenWait.finishPylonWindow()
 	end
 
 	if shouldWaitForPylons(controller) then
@@ -385,12 +278,10 @@ local function verifyGoldenRouteComplete(controller, hrp, isSessionActive)
 			return true
 		end
 
-		local verifyCandidates, verifyInfo = Scanner.scan(controller, gch)
+		local _, verifyInfo = Scanner.scan(controller, gch)
 		if GoldenWait and typeof(GoldenWait.noteScan) == "function" then
 			GoldenWait.noteScan(verifyInfo)
 		end
-		softCleanup(verifyCandidates)
-
 		if tryGoldenCompleteReturn(controller, hrp, verifyInfo, isSessionActive) then
 			return true
 		end
@@ -444,6 +335,48 @@ local function disconnectObservers()
 		end)
 		inRoundConnection = nil
 	end
+	if pylonAddedConnection then
+		pcall(function()
+			pylonAddedConnection:Disconnect()
+		end)
+		pylonAddedConnection = nil
+	end
+end
+
+local function observePylons(controller, gc)
+	local function notePylonSpawn(model)
+		if not (enabled and controller and not controller.Destroyed and Context.isInRound()) then
+			return
+		end
+		if not (model and model:IsDescendantOf(workspace) and model:GetAttribute("Completed") ~= true) then
+			return
+		end
+		if not (GoldenWait and typeof(GoldenWait.startPylonWindow) == "function") then
+			return
+		end
+		if not GoldenWait.startPylonWindow() then
+			return
+		end
+
+		controller.GiftFarmGoldenComplete = false
+		pendingGoldenReturnSince = nil
+		lastGiftSeenAt = os.clock()
+		sessionToken += 1
+		MovementLease.invalidateActive()
+		transitionTo(controller, "Scanning", "Pylon detected; waiting for golden gifts", true)
+	end
+
+	pylonAddedConnection = CollectionService:GetInstanceAddedSignal("Pylon"):Connect(notePylonSpawn)
+	if gc and typeof(gc.registerConnection) == "function" then
+		gc.registerConnection(pylonAddedConnection)
+	end
+
+	for _, model in ipairs(CollectionService:GetTagged("Pylon")) do
+		if model and model:IsDescendantOf(workspace) and model:GetAttribute("Completed") ~= true then
+			notePylonSpawn(model)
+			break
+		end
+	end
 end
 
 local function observeCharacter(controller, gc)
@@ -461,16 +394,10 @@ local function observeCharacter(controller, gc)
 		characterReady = false
 		characterReadyAt = math.huge
 		pendingGoldenReturnSince = nil
-		table.clear(retryQueue)
 		lastWatchGiftCount = nil
 		markProgress()
 		if controller then
 			controller.GiftFarmGoldenComplete = false
-		end
-
-		if activeLease then
-			activeLease:release({ SkipVelocityClear = true, SkipStateChange = true })
-			activeLease = nil
 		end
 
 		if Context and typeof(Context.resetGiftClientHandler) == "function" then
@@ -514,11 +441,6 @@ local function observeCharacter(controller, gc)
 				end
 			end
 
-			if hrp and enabled and localPlayer.Character == character and myCharacterSession == characterSessionToken then
-				if activeLease then
-					activeLease:release({ SkipVelocityClear = true, SkipStateChange = true })
-				end
-			end
 			for _ = 1, 8 do
 				RunService.Heartbeat:Wait()
 			end
@@ -562,7 +484,6 @@ local function observeInRound(controller, gc)
 		giftsStabilized = false
 		startWaitAt = nil
 		lastGiftSeenAt = 0
-		table.clear(retryQueue)
 		lastWatchGiftCount = nil
 		markProgress()
 		if controller then
@@ -578,10 +499,6 @@ local function observeInRound(controller, gc)
 		if not value then
 			if Beacon and typeof(Beacon.restore) == "function" then
 				Beacon.restore(true)
-			end
-			if activeLease then
-				activeLease:release({ ForceRelease = true })
-				activeLease = nil
 			end
 			Context.releaseCharacterControl({
 				SkipVelocityClear = true,
@@ -658,22 +575,12 @@ local function runLoop(controller)
 				range = getGiftFarmRange(controller)
 				mode = controller.GiftFarmMode
 
-				-- Invalidate/Acquire main loop lease reference
-				if activeLease then
-					activeLease:release()
-					activeLease = nil
-				end
-				activeLease = MovementLease.acquire("CoordinatorLoop")
 				task.wait(0.1)
 				if not isSessionActive() then continue end
 			end
 
 			if not controller.GiftFarmEnabled then
 				transitionTo(controller, "Idle", "Gift Farm disabled")
-				if activeLease then
-					activeLease:release()
-					activeLease = nil
-				end
 				break
 			end
 
@@ -696,10 +603,6 @@ local function runLoop(controller)
 			local deadVal = localPlayer and localPlayer:FindFirstChild("Dead")
 			if deadVal and deadVal.Value == true then
 				transitionTo(controller, "Paused", "Player is dead; waiting for respawn")
-				if activeLease then
-					activeLease:release()
-					activeLease = nil
-				end
 				task.wait(0.5)
 				continue
 			end
@@ -707,20 +610,11 @@ local function runLoop(controller)
 			if not inRound then
 				transitionTo(controller, "Recovering", "Waiting for round to start")
 				MovementLease.invalidateActive()
-				if activeLease then
-					activeLease:release({
-						SkipVelocityClear = true,
-						ForceAbilityClear = true,
-						SkipStateChange = true,
-					})
-					activeLease = nil
-				else
-					Context.releaseCharacterControl({
-						SkipVelocityClear = true,
-						ForceAbilityClear = true,
-						SkipStateChange = true,
-					})
-				end
+				Context.releaseCharacterControl({
+					SkipVelocityClear = true,
+					ForceAbilityClear = true,
+					SkipStateChange = true,
+				})
 				task.wait(0.4)
 				continue
 			end
@@ -768,16 +662,8 @@ local function runLoop(controller)
 			-- 3. Check pylon priority
 			if controller.PylonActivatorHolding == true then
 				transitionTo(controller, "Paused", "Paused for pylon activator")
-				if activeLease then
-					activeLease:release({ KeepFootholdDuration = 2.5, OnlyKeepFootholdIfAirborne = true })
-				end
 				task.wait(0.2)
 				continue
-			end
-
-			-- Ensure we have a valid lease for general states
-			if not activeLease or not activeLease:isValid() then
-				activeLease = MovementLease.acquire("CoordinatorLoop")
 			end
 
 			-- 4. Scanning state
@@ -810,36 +696,6 @@ local function runLoop(controller)
 				GoldenWait.noteScan(scanInfo)
 			end
 
-			-- Try Altar step
-			local passageGoldenPriority = GoldenWait
-				and typeof(GoldenWait.isPassageWindowActive) == "function"
-				and GoldenWait.isPassageWindowActive() == true
-			if not passageGoldenPriority and Altar and typeof(Altar.tryStep) == "function" then
-				local lease = MovementLease.acquire("AltarStep")
-				transitionTo(controller, "Collecting", "Attempting Altar activation")
-				local handledAltar, altarStatus, altarDetail, altarConfirmed = Altar.tryStep(controller, hrp, lease, mySessionToken)
-				lease:release()
-				if not isSessionActive() then continue end
-				if handledAltar then
-					if typeof(altarDetail) == "string" and string.find(altarDetail, "Passage", 1, true) then
-						controller.GiftFarmGoldenComplete = false
-						pendingGoldenReturnSince = nil
-					end
-					if altarConfirmed == true
-						and typeof(altarDetail) == "string"
-						and string.find(altarDetail, "Passage", 1, true)
-						and GoldenWait
-						and typeof(GoldenWait.startPassageWindow) == "function"
-					then
-						lastGiftSeenAt = os.clock()
-						GoldenWait.startPassageWindow()
-					end
-					transitionTo(controller, "Collecting", altarStatus or "ActivatingAltar", true)
-					task.wait(0.08)
-					continue
-				end
-			end
-
 			-- Try Golden Return
 			if tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActive) then
 				continue
@@ -862,6 +718,40 @@ local function runLoop(controller)
 				continue
 			end
 
+			-- Golden always wins. Altar is the next producer action before normal gifts.
+			local producerWindowActive = (GoldenWait.isPassageWindowActive and GoldenWait.isPassageWindowActive())
+				or (GoldenWait.isPylonWindowActive and GoldenWait.isPylonWindowActive())
+			if rawGolden == 0
+				and not producerWindowActive
+				and Altar
+				and typeof(Altar.tryStep) == "function"
+			then
+				local lease = MovementLease.acquire("AltarStep")
+				transitionTo(controller, "Collecting", "Attempting Altar activation")
+				local handledAltar, altarStatus, altarDetail, altarConfirmed = Altar.tryStep(controller, hrp, lease, mySessionToken)
+				lease:release()
+				if not isSessionActive() then continue end
+				if handledAltar then
+					local isPassage = typeof(altarDetail) == "string"
+						and string.find(altarDetail, "Passage", 1, true) ~= nil
+					if isPassage then
+						controller.GiftFarmGoldenComplete = false
+						pendingGoldenReturnSince = nil
+					end
+					if isPassage
+						and altarConfirmed == true
+						and GoldenWait
+						and typeof(GoldenWait.startPassageWindow) == "function"
+					then
+						lastGiftSeenAt = os.clock()
+						GoldenWait.startPassageWindow()
+					end
+					transitionTo(controller, "Collecting", altarStatus or "ActivatingAltar", true)
+					task.wait(0.08)
+					continue
+				end
+			end
+
 			-- Check Golden Wait
 			local goldenWaitReason = GoldenWait.hasSeenGolden() and "Golden respawn check" or "Post-clear check"
 			if GoldenWait.shouldWait(
@@ -874,6 +764,19 @@ local function runLoop(controller)
 				goldenWaitReason
 			) then
 				task.wait(0.1)
+				continue
+			end
+
+			if GoldenWait
+				and typeof(GoldenWait.canReleasePylonWithoutGolden) == "function"
+				and GoldenWait.canReleasePylonWithoutGolden()
+			then
+				if typeof(GoldenWait.finishPylonWindow) == "function" then
+					GoldenWait.finishPylonWindow()
+				end
+				controller.GiftFarmGoldenComplete = true
+				transitionTo(controller, "Paused", "No golden generation detected; releasing pylon priority", true)
+				task.wait(0.2)
 				continue
 			end
 
@@ -940,9 +843,7 @@ local function runLoop(controller)
 			lastGiftSeenAt = os.clock()
 			
 			local rangeRevision = tonumber(controller.GiftFarmRangeRevision) or 0
-			local candidatesWithRetry, retryCount = applyRetryPriority(candidates, scanInfo)
-			
-			local route, remaining = ClusterPlanner.planRoute(candidatesWithRetry, range, hrp.Position)
+			local route, remaining = ClusterPlanner.planRoute(candidates, range, hrp.Position)
 			if remaining and #remaining > 0 and typeof(ClusterPlanner.planTailRoute) == "function" then
 				local tailRoute = ClusterPlanner.planTailRoute(remaining, range, hrp.Position)
 				for _, step in ipairs(tailRoute) do
@@ -959,12 +860,12 @@ local function runLoop(controller)
 			local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 			local normalPacingBatchSize = if wasGoldenRoute
 				then nil
-				else Progress.getNormalPacingBatchSize(normalRatio)
+				else Progress.getNormalPacingBatchSize(normalRatio, scanInfo and scanInfo.RawNormal or #candidates)
 			local shouldHoldForGoldenWait = GoldenWait.shouldHoldAfterRoute(scanInfo, totalPlanned)
 
 			-- Acquire Collecting Lease
 			local lease = MovementLease.acquire("Collecting")
-			transitionTo(controller, "Collecting", string.format("Collecting %d clusters (%d %s%s)", #route, totalPlanned, focus, retryCount > 0 and (" | retry " .. tostring(retryCount)) or ""))
+			transitionTo(controller, "Collecting", string.format("Collecting %d clusters (%d %s)", #route, totalPlanned, focus))
 
 			local routeCompleted = false
 			local routeStats = nil
@@ -979,9 +880,8 @@ local function runLoop(controller)
 			else
 				-- Normal mode collection loop
 				routeCompleted = true
-				routeStats = { Attempted = 0, Accepted = 0, Failed = 0, Retry = {} }
-				local tailPrecision = isTailPrecision(candidatesWithRetry, scanInfo, normalRatio)
-				local routeRejected = false
+				routeStats = { Attempted = 0, Accepted = 0, Failed = 0 }
+				local tailPrecision = isTailPrecision(candidates, scanInfo, normalRatio)
 
 				for index, step in ipairs(route) do
 					if not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision then
@@ -1022,16 +922,7 @@ local function runLoop(controller)
 						routeStats.Attempted += collectResult.Attempted
 						routeStats.Accepted += collectResult.Accepted
 						routeStats.Failed += collectResult.Rejected
-						if (tonumber(collectResult.Rejected) or 0) > 0 then
-							routeRejected = true
-						end
 					end
-				end
-
-				if routeRejected then
-					routeStats.Failed = 0
-					-- Enqueue the rejected ones as retry
-					routeStats.Retry = candidatesWithRetry
 				end
 			end
 
@@ -1040,9 +931,6 @@ local function runLoop(controller)
 				markProgress()
 			end
 			lease:release({ KeepFootholdDuration = 2.5, OnlyKeepFootholdIfAirborne = true })
-			enqueueRetryItems(routeStats)
-			clearRoute(route)
-			softCleanup(candidates, remaining)
 
 			if not isSessionActive() then continue end
 
@@ -1082,7 +970,6 @@ local function runLoop(controller)
 			warn("[NULLSCAPE] Gift Farm coordinator recovered: " .. tostring(err))
 			sessionToken += 1
 			MovementLease.invalidateActive()
-			activeLease = nil
 			Context.releaseCharacterControl({
 				SkipVelocityClear = true,
 				SkipStateChange = true,
@@ -1125,8 +1012,6 @@ local function restartStalledWorker(controller, detail)
 	sessionToken += 1
 	MovementLease.invalidateActive()
 	MovementLease.resetTransport()
-	activeLease = nil
-	table.clear(retryQueue)
 	lastWatchGiftCount = nil
 	markWorkerPulse()
 	markProgress()
@@ -1237,6 +1122,7 @@ function Coordinator.enable(controller, gc)
 
 	observeCharacter(controller, gc)
 	observeInRound(controller, gc)
+	observePylons(controller, gc)
 
 	startWatchdog(controller)
 	runLoop(controller)

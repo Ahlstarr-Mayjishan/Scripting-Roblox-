@@ -7,6 +7,11 @@ local NORMAL_PACING_START = 0.7
 local NORMAL_PACING_FULL = 0.9
 local NORMAL_PACING_MAX_BATCH = 8
 local NORMAL_PACING_MIN_BATCH = 2
+local HIGH_VOLUME_PACING = {
+	{ Count = 800, Batch = 8 },
+	{ Count = 500, Batch = 12 },
+	{ Count = 250, Batch = 16 },
+}
 
 local function getGiftProgress(gch, giftType)
 	local giftCount = gch and gch.GiftCount and gch.GiftCount[giftType]
@@ -38,21 +43,31 @@ function Progress.getGoldenGiftProgress(gch)
 	return getGiftProgress(gch, "GoldenGift")
 end
 
-function Progress.getNormalPacingBatchSize(normalRatio)
+function Progress.getNormalPacingBatchSize(normalRatio, remainingCount)
 	local ratio = tonumber(normalRatio) or 0
-	if ratio < NORMAL_PACING_START then
-		return nil
+	local batchSize = nil
+	local count = tonumber(remainingCount) or 0
+	for _, threshold in ipairs(HIGH_VOLUME_PACING) do
+		if count >= threshold.Count then
+			batchSize = threshold.Batch
+			break
+		end
 	end
 
-	local strength = math.clamp(
-		(ratio - NORMAL_PACING_START) / (NORMAL_PACING_FULL - NORMAL_PACING_START),
-		0,
-		1
-	)
-	return math.max(
-		NORMAL_PACING_MIN_BATCH,
-		math.floor(NORMAL_PACING_MAX_BATCH - strength * (NORMAL_PACING_MAX_BATCH - NORMAL_PACING_MIN_BATCH) + 0.5)
-	)
+	if ratio >= NORMAL_PACING_START then
+		local strength = math.clamp(
+			(ratio - NORMAL_PACING_START) / (NORMAL_PACING_FULL - NORMAL_PACING_START),
+			0,
+			1
+		)
+		local tailBatchSize = math.max(
+			NORMAL_PACING_MIN_BATCH,
+			math.floor(NORMAL_PACING_MAX_BATCH - strength * (NORMAL_PACING_MAX_BATCH - NORMAL_PACING_MIN_BATCH) + 0.5)
+		)
+		batchSize = batchSize and math.min(batchSize, tailBatchSize) or tailBatchSize
+	end
+
+	return batchSize
 end
 
 function Progress.shouldCollectNormalGift()

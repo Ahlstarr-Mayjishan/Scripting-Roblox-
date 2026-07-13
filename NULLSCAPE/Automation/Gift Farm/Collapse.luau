@@ -88,12 +88,12 @@ local function refresh()
 	lastRefresh = os.clock()
 end
 
-local function distanceOutsideBounds(pos, center, size)
+local function distanceOutsideBoundsSq(pos, center, size)
 	local half = size * 0.5
 	local dx = math.max(math.abs(pos.X - center.X) - half.X, 0)
 	local dy = math.max(math.abs(pos.Y - center.Y) - half.Y, 0)
 	local dz = math.max(math.abs(pos.Z - center.Z) - half.Z, 0)
-	return math.sqrt(dx * dx + dy * dy + dz * dz)
+	return dx * dx + dy * dy + dz * dz
 end
 
 function Collapse.reset()
@@ -101,19 +101,24 @@ function Collapse.reset()
 	lastRefresh = 0
 end
 
-function Collapse.getGiftUrgency(position)
+function Collapse.prepareScan()
+	if os.clock() - lastRefresh >= REFRESH_INTERVAL then
+		refresh()
+	end
+	return cachedTiles
+end
+
+function Collapse.getGiftUrgency(position, scanTiles)
 	if typeof(position) ~= "Vector3" then
 		return 0
 	end
 
-	if os.clock() - lastRefresh >= REFRESH_INTERVAL then
-		refresh()
-	end
-
 	local best = 0
-	for _, tile in ipairs(cachedTiles) do
-		local distance = distanceOutsideBounds(position, tile.Position, tile.Size)
-		if distance <= DEFAULT_RADIUS then
+	local radiusSq = DEFAULT_RADIUS * DEFAULT_RADIUS
+	for _, tile in ipairs(scanTiles or Collapse.prepareScan()) do
+		local distanceSq = distanceOutsideBoundsSq(position, tile.Position, tile.Size)
+		if distanceSq <= radiusSq then
+			local distance = math.sqrt(distanceSq)
 			local proximity = 1 - math.clamp(distance / DEFAULT_RADIUS, 0, 1)
 			local score = tile.Urgency * (1 + proximity)
 			if score > best then

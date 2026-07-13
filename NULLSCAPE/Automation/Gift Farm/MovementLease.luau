@@ -166,6 +166,8 @@ function MovementLease.acquire(ownerName)
 		local airborneWithoutGround = not hasGround
 		if airborneWithoutGround and (not keepDuration or keepDuration < SAFETY_FOOTHOLD_DURATION) then
 			keepDuration = SAFETY_FOOTHOLD_DURATION
+		elseif options.OnlyKeepFootholdIfAirborne == true and hasGround then
+			keepDuration = nil
 		end
 
 		local shouldKeepFoothold = keepDuration and hrp
@@ -193,6 +195,10 @@ function MovementLease.acquire(ownerName)
 				ForceAbilityClear = options.ForceAbilityClear == true,
 				State = options.State or Enum.HumanoidStateType.Running,
 			})
+		end
+
+		if activeLeaseToken == leaseToken then
+			activeLeaseToken += 1
 		end
 	end
 

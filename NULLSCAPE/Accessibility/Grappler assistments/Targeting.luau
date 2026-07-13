@@ -436,6 +436,34 @@ local function getOptimalCandidates(origin, maxRange, budget)
 	return candidates
 end
 
+local function appendLiveSpecialCandidates(candidates, origin, maxRange)
+	local seen = {}
+	for _, part in ipairs(candidates) do
+		seen[part] = true
+	end
+
+	-- GrapplePoints are spawned directly under JumpPads during a round. Read those
+	-- live on a manual cast so cache throttling cannot make a fresh point invisible.
+	for _, rootName in ipairs({ "JumpPads", "Enemies" }) do
+		local root = Workspace:FindFirstChild(rootName)
+		if root then
+			for _, part in ipairs(root:GetChildren()) do
+				if
+					not seen[part]
+					and isAliveBasePart(part)
+					and getSpecialTargetName(part)
+					and (part.Position - origin).Magnitude <= maxRange
+				then
+					seen[part] = true
+					table.insert(candidates, part)
+				end
+			end
+		end
+	end
+
+	return candidates
+end
+
 local function scoreOptimalHit(hit, part, origin, distance, dot, controller, intent)
 	local score = 0
 	local specialName = getSpecialTargetName(part)
@@ -639,9 +667,18 @@ function Targeting.findOptimalHit(grapple, controller, context)
 		end
 	end
 
-	for _, part in ipairs(getOptimalCandidates(origin, maxRange, budget)) do
+	local specialOnly = context and context.SpecialOnly == true
+	local candidates = getOptimalCandidates(origin, maxRange, budget)
+	if specialOnly then
+		candidates = appendLiveSpecialCandidates(candidates, origin, maxRange)
+	end
+
+	for _, part in ipairs(candidates) do
 		local specialName = getSpecialTargetName(part)
-		if not (context and context.SpecialOnly == true and not specialName) then
+		local specialDisabled = specialName
+			and effectiveController
+			and effectiveController.GrappleAssistSpecialPointPriority == false
+		if not (specialOnly and not specialName) and not specialDisabled then
 			local hit, direction, distance, dot, resolvedSpecialName =
 				resolveCandidateHit(part, origin, aimDirection, grapple.grappleParams, effectiveController, intent)
 			specialName = resolvedSpecialName or specialName

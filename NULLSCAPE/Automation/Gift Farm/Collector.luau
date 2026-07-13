@@ -35,31 +35,8 @@ local comboCount = 0
 local lastCollectTick = 0
 local adaptiveSuccessRate = 1
 local adaptiveValidationWait = BASE_VALIDATION_WAIT
-local failedAttempts = setmetatable({}, { __mode = "k" })
-local hookedGifts = setmetatable({}, { __mode = "k" })
-
-local function hookGiftFailure(gift)
-	if not gift or hookedGifts[gift] then
-		return
-	end
-
-	local originalUncollect = gift.Uncollect
-	if typeof(originalUncollect) ~= "function" then
-		hookedGifts[gift] = true
-		return
-	end
-
-	hookedGifts[gift] = true
-	gift.Uncollect = function(self, ...)
-		failedAttempts[self] = os.clock()
-		return originalUncollect(self, ...)
-	end
-end
 
 local function collectGift(gift, collectedEvent)
-	hookGiftFailure(gift)
-	failedAttempts[gift] = nil
-
 	local now = tick()
 	if math.min(1.2, math.pow(1.1, comboCount) * 0.8) <= now - lastCollectTick then
 		comboCount = 0
@@ -71,7 +48,6 @@ local function collectGift(gift, collectedEvent)
 		gift:Collect(false, true, comboCount)
 	end)
 	if not success then
-		failedAttempts[gift] = os.clock()
 		return false
 	end
 
@@ -86,9 +62,6 @@ end
 local function isGiftAccepted(gift)
 	if not gift then
 		return true
-	end
-	if failedAttempts[gift] ~= nil then
-		return false
 	end
 	return gift.Destroyed == true or gift.Collected == true or gift.ClientCollected == true
 end
@@ -188,8 +161,6 @@ local function updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
 	for _, gift in ipairs(attemptedGifts) do
 		if isGiftAccepted(gift) then
 			accepted += 1
-		elseif failedAttempts[gift] ~= nil and failed <= 0 then
-			failed += 1
 		end
 	end
 
@@ -382,7 +353,6 @@ end
 function Collector.resetAdaptive(controller)
 	adaptiveSuccessRate = 1
 	adaptiveValidationWait = BASE_VALIDATION_WAIT
-	failedAttempts = setmetatable({}, { __mode = "k" })
 	if controller then
 		controller.GiftFarmAdaptiveSuccessRate = adaptiveSuccessRate
 		controller.GiftFarmAdaptiveValidationWait = adaptiveValidationWait

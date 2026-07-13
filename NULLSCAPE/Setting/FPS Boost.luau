@@ -5,6 +5,7 @@
 ]]
 
 local Lighting = game:GetService("Lighting")
+local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
 local FPSBoost = {
@@ -14,6 +15,8 @@ local FPSBoost = {
 	OriginalEnemyVisuals = setmetatable({}, { __mode = "k" }),
 	OriginalMapVisuals = setmetatable({}, { __mode = "k" }),
 	GuardedVFX = setmetatable({}, { __mode = "k" }),
+	VisualGuards = setmetatable({}, { __mode = "k" }),
+	MapRootConnections = setmetatable({}, { __mode = "k" }),
 	OriginalLighting = nil,
 	OriginalQuality = nil,
 	ScanToken = 0,
@@ -34,6 +37,11 @@ local ENEMY_ROOT_NAMES = {
 	Skinwalkers = true,
 }
 
+local CHARACTER_ENEMY_NAMES = {
+	Blazebloom = true,
+	Razorbloom = true,
+}
+
 local VOID_GUARDIAN_PROJECTILE_POOLS = {
 	Homer = true,
 	HomerLaser = true,
@@ -41,11 +49,13 @@ local VOID_GUARDIAN_PROJECTILE_POOLS = {
 	OldHomer = true,
 }
 
-local POOLED_VFX_ROOT_NAMES = {
+local REASSERTED_VFX_ROOT_NAMES = {
 	Beacons = true,
 	CatalystDebris = true,
 	DemonShockwave = true,
 	FireArea = true,
+	OblivionAmbient = true,
+	OblivionAttack = true,
 }
 
 local function optionSelected(options, option)
@@ -69,6 +79,22 @@ local function disconnectConnections()
 			connection:Disconnect()
 		end)
 		FPSBoost.Connections[key] = nil
+	end
+	for instance, guards in pairs(FPSBoost.VisualGuards) do
+		for _, connection in pairs(guards) do
+			pcall(function()
+				connection:Disconnect()
+			end)
+		end
+		FPSBoost.VisualGuards[instance] = nil
+	end
+	for root, connections in pairs(FPSBoost.MapRootConnections) do
+		for _, connection in pairs(connections) do
+			pcall(function()
+				connection:Disconnect()
+			end)
+		end
+		FPSBoost.MapRootConnections[root] = nil
 	end
 	table.clear(FPSBoost.GuardedVFX)
 end
@@ -98,10 +124,10 @@ end
 
 local hideVisual
 
-local function hasVisualOnlyAncestor(instance)
+local function hasReassertedVFXAncestor(instance)
 	local current = instance
 	while current and current ~= Workspace do
-		if POOLED_VFX_ROOT_NAMES[current.Name] or string.match(current.Name, "_Afterimages$") then
+		if REASSERTED_VFX_ROOT_NAMES[current.Name] or string.match(current.Name, "_Afterimages$") then
 			return true
 		end
 		current = current.Parent
@@ -109,16 +135,70 @@ local function hasVisualOnlyAncestor(instance)
 	return false
 end
 
-local function guardPooledVFX(instance)
-	if FPSBoost.GuardedVFX[instance] or not hasVisualOnlyAncestor(instance) then
+local function isOblivionPostEffect(instance)
+	return instance.Parent == Lighting and instance.Name == "Oblivion" and instance:IsA("PostEffect")
+end
+
+local function hasVoidbreakerAncestor(instance)
+	local current = instance
+	while current and current ~= Workspace do
+		if current.Name == "Voidbreaker" then
+			return true
+		end
+		current = current.Parent
+	end
+	return false
+end
+
+local function findVoidbreakerSword(instance)
+	local current = instance
+	while current and current ~= Workspace do
+		if
+			current:IsA("BasePart")
+			and current:FindFirstChild("Model1")
+			and current:FindFirstChild("Model2")
+			and hasVoidbreakerAncestor(current.Parent)
+		then
+			return current
+		end
+		current = current.Parent
+	end
+	return nil
+end
+
+local function guardVisualProperty(instance, property, hiddenValue, selection)
+	if FPSBoost.VisualGuards[instance] then
 		return
 	end
 
-	local property
-	local hiddenValue
+	FPSBoost.GuardedVFX[instance] = true
+	local guards = {}
+	FPSBoost.VisualGuards[instance] = guards
+	guards.Property = instance:GetPropertyChangedSignal(property):Connect(function()
+		if optionSelected(FPSBoost.Selections, selection) and instance[property] ~= hiddenValue then
+			instance[property] = hiddenValue
+		end
+	end)
+	guards.Destroying = instance.Destroying:Connect(function()
+		FPSBoost.GuardedVFX[instance] = nil
+		FPSBoost.VisualGuards[instance] = nil
+		guards.Property:Disconnect()
+	end)
+end
+
+local function guardReassertedVFX(instance)
+	if
+		not (
+			hasReassertedVFXAncestor(instance)
+			or hasVoidbreakerAncestor(instance)
+			or isOblivionPostEffect(instance)
+		)
+	then
+		return
+	end
+
 	if instance:IsA("Decal") or instance:IsA("Texture") then
-		property = "Transparency"
-		hiddenValue = 1
+		guardVisualProperty(instance, "Transparency", 1, "VFX")
 	elseif
 		instance:IsA("ParticleEmitter")
 		or instance:IsA("Trail")
@@ -126,19 +206,10 @@ local function guardPooledVFX(instance)
 		or instance:IsA("PointLight")
 		or instance:IsA("SpotLight")
 		or instance:IsA("SurfaceLight")
+		or instance:IsA("PostEffect")
 	then
-		property = "Enabled"
-		hiddenValue = false
-	else
-		return
+		guardVisualProperty(instance, "Enabled", false, "VFX")
 	end
-
-	FPSBoost.GuardedVFX[instance] = true
-	FPSBoost.Connections[instance] = instance:GetPropertyChangedSignal(property):Connect(function()
-		if optionSelected(FPSBoost.Selections, "VFX") and instance[property] ~= hiddenValue then
-			instance[property] = hiddenValue
-		end
-	end)
 end
 
 local function suppressVFX(instance)
@@ -147,9 +218,20 @@ local function suppressVFX(instance)
 	end
 
 	pcall(function()
-		if hasVisualOnlyAncestor(instance) then
+		local sword = findVoidbreakerSword(instance)
+		if
+			hasReassertedVFXAncestor(instance)
+			or hasVoidbreakerAncestor(instance) and (instance:IsA("Decal") or instance:IsA("Texture"))
+		then
 			hideVisual(instance, FPSBoost.OriginalVFX)
-			guardPooledVFX(instance)
+		end
+		guardReassertedVFX(instance)
+		if sword and instance:IsA("BasePart") then
+			if FPSBoost.OriginalVFX[instance] == nil then
+				FPSBoost.OriginalVFX[instance] = { Transparency = instance.Transparency }
+			end
+			instance.Transparency = 1
+			guardVisualProperty(instance, "Transparency", 1, "VFX")
 		end
 
 		if
@@ -274,11 +356,16 @@ local function bindEnemies(token)
 		if not (folder and ENEMY_ROOT_NAMES[folder.Name]) then
 			return
 		end
+		local function hideEnemyVisual(instance)
+			if not hasVoidbreakerAncestor(instance) then
+				hideVisual(instance, FPSBoost.OriginalEnemyVisuals)
+			end
+		end
 		scan(folder, function(instance)
-			hideVisual(instance, FPSBoost.OriginalEnemyVisuals)
+			hideEnemyVisual(instance)
 		end, token)
 		FPSBoost.Connections[folder] = folder.DescendantAdded:Connect(function(instance)
-			hideVisual(instance, FPSBoost.OriginalEnemyVisuals)
+			hideEnemyVisual(instance)
 		end)
 	end
 
@@ -295,10 +382,59 @@ local function bindEnemies(token)
 		FPSBoost.Connections[itemPools] = itemPools.DescendantAdded:Connect(hideProjectileVisual)
 	end
 
+	local function attachVoidbreakerGui(gui)
+		if not (gui and gui.Name == "Voidbreaker" and gui:IsA("LayerCollector")) then
+			return
+		end
+		hideVisual(gui, FPSBoost.OriginalEnemyVisuals)
+		guardVisualProperty(gui, "Enabled", false, "Enemies")
+	end
+
+	local function attachCharacter(character)
+		if not character then
+			return
+		end
+		if FPSBoost.Connections.CharacterEnemyAdded then
+			FPSBoost.Connections.CharacterEnemyAdded:Disconnect()
+			FPSBoost.Connections.CharacterEnemyAdded = nil
+		end
+
+		local function attachCharacterEnemy(enemy)
+			if not (enemy and CHARACTER_ENEMY_NAMES[enemy.Name]) then
+				return
+			end
+			scan(enemy, function(instance)
+				hideVisual(instance, FPSBoost.OriginalEnemyVisuals)
+			end, token)
+			FPSBoost.Connections[enemy] = enemy.DescendantAdded:Connect(function(instance)
+				hideVisual(instance, FPSBoost.OriginalEnemyVisuals)
+			end)
+			enemy.Destroying:Once(function()
+				local connection = FPSBoost.Connections[enemy]
+				if connection then
+					connection:Disconnect()
+					FPSBoost.Connections[enemy] = nil
+				end
+			end)
+		end
+
+		for _, child in ipairs(character:GetChildren()) do
+			attachCharacterEnemy(child)
+		end
+		FPSBoost.Connections.CharacterEnemyAdded = character.ChildAdded:Connect(attachCharacterEnemy)
+	end
+
 	for rootName in pairs(ENEMY_ROOT_NAMES) do
 		attach(Workspace:FindFirstChild(rootName))
 	end
 	attachProjectilePools(Workspace:FindFirstChild("Item_Pools"))
+	local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui then
+		attachVoidbreakerGui(playerGui:FindFirstChild("Voidbreaker"))
+		FPSBoost.Connections.VoidbreakerGuiAdded = playerGui.ChildAdded:Connect(attachVoidbreakerGui)
+	end
+	attachCharacter(Players.LocalPlayer and Players.LocalPlayer.Character)
+	FPSBoost.Connections.CharacterAdded = Players.LocalPlayer.CharacterAdded:Connect(attachCharacter)
 	FPSBoost.Connections.EnemiesFolderAdded = Workspace.ChildAdded:Connect(function(child)
 		if ENEMY_ROOT_NAMES[child.Name] then
 			attach(child)
@@ -310,12 +446,27 @@ end
 
 local function bindMap(token)
 	local function attach(root)
-		if not MAP_ROOT_NAMES[root.Name] then
+		if not (root and MAP_ROOT_NAMES[root.Name]) or FPSBoost.MapRootConnections[root] then
 			return
 		end
+
+		local connections = {}
+		FPSBoost.MapRootConnections[root] = connections
 		scan(root, function(instance)
 			hideVisual(instance, FPSBoost.OriginalMapVisuals)
 		end, token)
+		connections.DescendantAdded = root.DescendantAdded:Connect(function(instance)
+			hideVisual(instance, FPSBoost.OriginalMapVisuals)
+		end)
+		connections.AncestryChanged = root.AncestryChanged:Connect(function()
+			if root:IsDescendantOf(Workspace) then
+				return
+			end
+			for _, connection in pairs(connections) do
+				connection:Disconnect()
+			end
+			FPSBoost.MapRootConnections[root] = nil
+		end)
 	end
 
 	for _, child in ipairs(Workspace:GetChildren()) do

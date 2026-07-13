@@ -17,7 +17,7 @@ local MIN_CAPTURE_RADIUS = 3.5
 
 local EXTRA_RADIUS = {
 	JumpPad = 6,
-	GrapplePoint = 4,
+	GrapplePoint = 8,
 	TriaOrb = 4,
 	Bell = 8,
 }
@@ -26,7 +26,7 @@ local EXTRA_RADIUS = {
 -- capture field with distance so aiming at the sprite edge is still intentional.
 local AIM_TOLERANCE_ANGLE = {
 	JumpPad = 18,
-	GrapplePoint = 16,
+	GrapplePoint = 24,
 	TriaOrb = 17,
 	Bell = 24,
 }
