@@ -103,38 +103,43 @@ local function sameContent(path, source)
 	return ok and current == source
 end
 
-local function verifyLocalRelease(files)
+local function getPendingFiles(files)
 	if not (isfile and readfile) then
 		return nil, "Executor file APIs are unavailable"
 	end
 
+	local pending = {}
 	for _, fileInfo in ipairs(files) do
 		if typeof(fileInfo) == "table" then
 			local path = fileInfo.Path or fileInfo.path
 			local expectedHash = fileInfo.Sha256 or fileInfo.sha256 or fileInfo.Hash or fileInfo.hash
-			if typeof(path) ~= "string" or path == "" or not isfile(path) then
-				return false, "Missing local module: " .. tostring(path)
+			if typeof(path) ~= "string" or path == "" then
+				return nil, "Missing local module path"
 			end
 			if typeof(expectedHash) ~= "string" or expectedHash == "" then
-				return false, "Missing manifest hash: " .. path
+				return nil, "Missing manifest hash: " .. path
 			end
 
-			local readOk, source = pcall(readfile, path)
-			if not readOk or typeof(source) ~= "string" then
-				return false, "Unreadable local module: " .. path
-			end
+			if not isfile(path) then
+				table.insert(pending, fileInfo)
+			else
+				local readOk, source = pcall(readfile, path)
+				if not readOk or typeof(source) ~= "string" then
+					return nil, "Unreadable local module: " .. path
+				end
 
-			local actualHash = getHash(source)
-			if not actualHash then
-				return nil, "Hash check unavailable"
-			end
-			if actualHash ~= string.lower(expectedHash) then
-				return false, "Outdated local module: " .. path
+				local actualHash = getHash(source)
+				if not actualHash then
+					return nil, "Hash check unavailable"
+				end
+				if actualHash ~= string.lower(expectedHash) then
+					table.insert(pending, fileInfo)
+				end
 			end
 		end
 	end
 
-	return true
+	return pending
 end
 
 local function normalizeList(value)
@@ -198,9 +203,8 @@ local function addUnique(list, value)
 	end
 end
 
-local function collectManifestMenus(manifest)
-	local menus = normalizeList(manifest and (manifest.MenuChanges or manifest.menuChanges))
-	local files = manifest and (manifest.Files or manifest.files)
+local function collectFileMenus(files, fallbackMenus)
+	local menus = {}
 	if typeof(files) == "table" then
 		for _, fileInfo in ipairs(files) do
 			if typeof(fileInfo) == "table" then
@@ -209,6 +213,9 @@ local function collectManifestMenus(manifest)
 				end
 			end
 		end
+	end
+	if #menus == 0 then
+		menus = normalizeList(fallbackMenus)
 	end
 	return menus
 end
@@ -467,28 +474,6 @@ function Updater:checkAndInstall(manual)
 		local localManifest = readJson(self.ManifestPath)
 		local localVersion = tostring(localManifest.Version or localManifest.version or "")
 		local versionOrder = if localVersion ~= "" then compareVersions(remoteVersion, localVersion) else nil
-			if localVersion ~= "" and (localVersion == remoteVersion or versionOrder == 0) then
-				local releaseComplete = self.LocalIntegrityVerifiedVersion == remoteVersion
-				local integrityIssue = nil
-				if not releaseComplete then
-					releaseComplete, integrityIssue = verifyLocalRelease(files)
-				end
-
-				if releaseComplete ~= false then
-					if releaseComplete == true then
-						self.LocalIntegrityVerifiedVersion = remoteVersion
-					end
-					self.State = self.State or {}
-					self.State.LastVersion = remoteVersion
-					writeJson(self.StateFile, self.State)
-					if manual then
-						notify("Runtime Updater", "Already running release " .. remoteVersion, 5)
-					end
-					return true
-				end
-
-				notify("Runtime Updater", tostring(integrityIssue) .. " | repairing local release", 7)
-			end
 		if versionOrder and versionOrder < 0 then
 			if manual then
 				notify("Runtime Updater", "Local release " .. localVersion .. " is newer than remote " .. remoteVersion, 5)
@@ -496,10 +481,31 @@ function Updater:checkAndInstall(manual)
 			return true
 		end
 
-		local manifestMenus = collectManifestMenus(manifest)
-		local safe, blockers = isSafeToInstall(self.Client, manifestMenus)
+		local pendingFiles, pendingErr = getPendingFiles(files)
+		if not pendingFiles then
+			notify("Runtime Updater", tostring(pendingErr), 7)
+			return false
+		end
+
+		if #pendingFiles == 0 then
+			if not writeJson(self.ManifestPath, manifest) then
+				notify("Runtime Updater", "Unable to store release manifest", 7)
+				return false
+			end
+			self.LocalIntegrityVerifiedVersion = remoteVersion
+			self.State = self.State or {}
+			self.State.LastVersion = remoteVersion
+			writeJson(self.StateFile, self.State)
+			if manual then
+				notify("Runtime Updater", "Already running release " .. remoteVersion, 5)
+			end
+			return true
+		end
+
+		local changedMenus = collectFileMenus(pendingFiles, manifest.MenuChanges or manifest.menuChanges)
+		local safe, blockers = isSafeToInstall(self.Client, changedMenus)
 		if not safe then
-			local changedText = #manifestMenus > 0 and joinShort(manifestMenus, 5) or "Code modules"
+			local changedText = #changedMenus > 0 and joinShort(changedMenus, 5) or "Code modules"
 			local blockerText = joinShort(blockers, 4)
 			notify(
 				"Runtime Update Available",
@@ -512,11 +518,11 @@ function Updater:checkAndInstall(manual)
 		local changes = {
 			Version = remoteVersion,
 			Files = {},
-			Menus = manifestMenus,
+			Menus = changedMenus,
 		}
 		local backups = {}
 
-		for _, fileInfo in ipairs(files) do
+		for _, fileInfo in ipairs(pendingFiles) do
 			if typeof(fileInfo) == "table" then
 				local installed, installState = self:installFile(fileInfo, changes, backups)
 				if not installed then
@@ -525,6 +531,12 @@ function Updater:checkAndInstall(manual)
 					return false
 				end
 			end
+		end
+
+		if not writeJson(self.ManifestPath, manifest) then
+			self:rollback(backups)
+			notify("Runtime Updater", "Unable to store release manifest | rollback done", 8)
+			return false
 		end
 
 		if #changes.Files == 0 then

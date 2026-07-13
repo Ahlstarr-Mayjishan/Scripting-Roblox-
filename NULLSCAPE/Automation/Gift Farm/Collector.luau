@@ -9,9 +9,7 @@ local Stats = game:GetService("Stats")
 local Collector = {}
 local COLLECT_SETTLE = 0
 local PRECISION_COLLECT_SETTLE = 0.05
-local PRECISION_SYNC_MIN = 0.025
-local PRECISION_SYNC_MAX = 0.08
-local BASE_VALIDATION_WAIT = 0.06
+local BASE_VALIDATION_WAIT = 0.08
 local PRECISION_VALIDATION_WAIT = 0.12
 local PRECISION_VALIDATION_MAX = 0.2
 local ARRIVAL_TOLERANCE = 3
@@ -63,7 +61,7 @@ local function isGiftAccepted(gift)
 	if not gift then
 		return true
 	end
-	return gift.Destroyed == true or gift.Collected == true or gift.ClientCollected == true
+	return gift.Destroyed == true or gift.Collected == true
 end
 
 local function clearVelocity(hrp)
@@ -120,9 +118,9 @@ end
 
 local function waitForReplicationSync(precisionMode)
 	local ping = getPingSeconds() or 0.08
-	local targetWait = ping * 0.6 + 0.012
-	local minWait = precisionMode and PRECISION_SYNC_MIN or 0.025
-	local maxWait = math.max(precisionMode and PRECISION_SYNC_MAX or 0.065, ping * 0.8)
+	local targetWait = ping * 0.75 + 0.025
+	local minWait = precisionMode and 0.045 or 0.04
+	local maxWait = math.max(precisionMode and 0.14 or 0.12, ping)
 	local waitTime = math.clamp(targetWait, minWait, maxWait)
 
 	local frames = precisionMode and 2 or 1
@@ -248,7 +246,7 @@ local function waitForArrival(hrp, targetPosition, precisionMode, lease, current
 	return (hrp.Position - targetPosition).Magnitude <= tolerance
 end
 
-local function collectItems(items, currentPos, collectRange, collectedEvent, attemptedGifts, pacingBatchSize)
+local function collectItems(items, currentPos, collectRange, collectedEvent, attemptedGifts, attemptedSet, pacingBatchSize)
 	local collected = 0
 	for _, item in ipairs(items) do
 		local livePosition = Context.getCandidatePosition(item)
@@ -259,7 +257,10 @@ local function collectItems(items, currentPos, collectRange, collectedEvent, att
 			and Distance.isWithinRange(livePosition, currentPos, collectRange)
 		then
 			if collectGift(item.rawObj, collectedEvent) then
-				table.insert(attemptedGifts, item.rawObj)
+				if not attemptedSet[item.rawObj] then
+					attemptedSet[item.rawObj] = true
+					table.insert(attemptedGifts, item.rawObj)
+				end
 				collected += 1
 			end
 			if pacingBatchSize and collected > 0 and collected % pacingBatchSize == 0 then
@@ -305,7 +306,7 @@ local function hasCollectableNearby(items, currentPos, collectRange)
 	return false
 end
 
-local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, collectedEvent, attemptedGifts, options, lease, currentSessionToken)
+local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, collectedEvent, attemptedGifts, attemptedSet, options, lease, currentSessionToken)
 	if not (hrp and hrp.Parent and items and items[1]) then
 		return 0, 0
 	end
@@ -336,7 +337,7 @@ local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, c
 		end
 
 		comboCount = 0
-		collectItems(rejected, currentPos, collectRange, collectedEvent, attemptedGifts)
+		collectItems(rejected, currentPos, collectRange, collectedEvent, attemptedGifts, attemptedSet)
 		pulses += 1
 		RunService.Heartbeat:Wait()
 		waitIfPositive(CLEANUP_PULSE_INTERVAL)
@@ -428,7 +429,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 
 		local currentPos = hrp.Position
 		local attemptedGifts = {}
-		local observedRejects = 0
+		local attemptedSet = {}
 		if precisionMode then
 			comboCount = 0
 		end
@@ -439,13 +440,14 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			clientCollectRange,
 			collectedEvent,
 			attemptedGifts,
+			attemptedSet,
 			options.NormalPacingBatchSize
 		)
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
 
-		local needsValidation = tailMode
+		local needsValidation = #attemptedGifts > 0
 		if needsValidation then
 			task.wait(getValidationWait(controller, precisionMode))
 		end
@@ -461,7 +463,6 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 				break
 			end
 
-			observedRejects += #rejected
 			comboCount = 0
 			waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
 			task.wait(RETRY_SETTLE)
@@ -479,11 +480,13 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 				clientCollectRange,
 				collectedEvent,
 				attemptedGifts,
+				attemptedSet,
 				options.NormalPacingBatchSize
 			)
 			task.wait(getValidationWait(controller, true))
 		end
 
+		local observedRejects = #getRejectedItems(cluster, hrp.Position, clientCollectRange)
 		if precisionMode and needsValidation and not isAborted(options, lease, currentSessionToken) then
 			local cleanupRejects, cleanupPulses = runPrecisionCleanup(
 				hrp,
@@ -492,14 +495,16 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 				clientCollectRange,
 				collectedEvent,
 				attemptedGifts,
+				attemptedSet,
 				options,
 				lease,
 				currentSessionToken
 			)
-			observedRejects += cleanupRejects
+			observedRejects = cleanupRejects
 			result.CleanupPulses = cleanupPulses
 			if cleanupPulses > 0 then
 				task.wait(getValidationWait(controller, true))
+				observedRejects = #getRejectedItems(cluster, hrp.Position, clientCollectRange)
 			end
 		end
 

@@ -97,10 +97,9 @@ function GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, setStatus, 
 		return false
 	end
 
-	if not (passageActive or normalClearActive or pylonActive)
-		and not hasSeenGoldenThisRound
-		and (tonumber(scanInfo.RawNormal) or 0) > 0
-	then
+	-- Producer windows run in the background. Existing normal gifts must keep the
+	-- route active; Scanner will preempt them as soon as a golden gift appears.
+	if (tonumber(scanInfo.RawNormal) or 0) > 0 then
 		return false
 	end
 

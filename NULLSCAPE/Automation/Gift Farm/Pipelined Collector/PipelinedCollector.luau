@@ -1,261 +1,14 @@
 --!nocheck
 -- [[
 --  NULLSCAPE - Pipelined Collector Submodule
---  Performs fast pipelined gift collection by scheduling remote fires
---  asynchronously and overlapping movement with one-way replication delays.
+--  Runs a route through the shared, server-validated collector.
 -- ]]
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
-local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.luau")
-
-local RunService = game:GetService("RunService")
-local Stats = game:GetService("Stats")
+local Collector = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Collector.luau")
 
 local PipelinedCollector = {}
-local COLLECT_SETTLE_FRAMES = 1
-local PRE_COLLECT_SYNC_MULTIPLIER = 0.65
-local PRE_COLLECT_SYNC_MIN = 0.02
-local PRE_COLLECT_SYNC_MAX = 0.075
-local COLLECT_ACCEPTANCE_STEP = 0.01
-local ADAPTIVE_MIN_MULTIPLIER = 0.85
-local ADAPTIVE_MAX_MULTIPLIER = 1.9
-local ADAPTIVE_FAILURE_STEP = 0.12
-local ADAPTIVE_SUCCESS_STEP = 0.025
-local TAIL_CLUSTER_SIZE = 2
-local TAIL_HOLD_MULTIPLIER = 1.35
-local MAX_RETRY_ITEMS = 24
-
 local pipelineToken = 0
-local acceptanceMultiplier = 1
-
-local function clearVelocity(hrp)
-	if not (hrp and hrp.Parent) then
-		return
-	end
-	pcall(function()
-		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-	end)
-end
-
-local function normalizePingSeconds(value)
-	local ping = tonumber(value)
-	if not ping or ping <= 0 then
-		return nil
-	end
-	if ping > 1 then
-		ping /= 1000
-	end
-	return ping
-end
-
-local function getPingSeconds()
-	local ok, result = pcall(function()
-		if Stats.Network and typeof(Stats.Network.GetPing) == "function" then
-			return Stats.Network:GetPing()
-		end
-		return nil
-	end)
-	local ping = ok and normalizePingSeconds(result) or nil
-	if ping then
-		return ping
-	end
-
-	ok, result = pcall(function()
-		local serverStats = Stats.Network and Stats.Network:FindFirstChild("ServerStatsItem")
-		local dataPing = serverStats and serverStats:FindFirstChild("Data Ping")
-		if dataPing and typeof(dataPing.GetValue) == "function" then
-			return dataPing:GetValue()
-		end
-		return nil
-	end)
-	return ok and normalizePingSeconds(result) or nil
-end
-
-local function getAcceptanceLatency()
-	local ping = getPingSeconds() or 0.08
-	return math.clamp(ping * 1.05, 0.04, 0.18)
-end
-
-local function waitForArrival(hrp, targetPosition, lease, shouldAbort)
-	if not (hrp and hrp.Parent and typeof(targetPosition) == "Vector3") then
-		return false
-	end
-
-	local start = os.clock()
-	local tolerance = 2.5
-	local ping = getPingSeconds() or 0.08
-	local timeout = math.clamp(ping * 1.5, 0.12, 0.25)
-
-	while os.clock() - start <= timeout do
-		if typeof(shouldAbort) == "function" and shouldAbort() then
-			return false
-		end
-		if not (hrp and hrp.Parent) then
-			return false
-		end
-
-		clearVelocity(hrp)
-		local distance = (hrp.Position - targetPosition).Magnitude
-		if distance <= tolerance then
-			return true
-		end
-
-		if lease:moveCollectTo(CFrame.new(targetPosition)) == false then
-			return false
-		end
-		RunService.Heartbeat:Wait()
-	end
-
-	if typeof(shouldAbort) == "function" and shouldAbort() then
-		return false
-	end
-	return (hrp.Position - targetPosition).Magnitude <= tolerance
-end
-
-local function settleBeforeCollect(hrp, shouldAbort)
-	local ping = getPingSeconds() or 0.08
-	local targetWait = ping * PRE_COLLECT_SYNC_MULTIPLIER
-	local waitTime = math.clamp(targetWait, PRE_COLLECT_SYNC_MIN, PRE_COLLECT_SYNC_MAX)
-
-	local start = os.clock()
-	for _ = 1, COLLECT_SETTLE_FRAMES do
-		if typeof(shouldAbort) == "function" and shouldAbort() then
-			return false
-		end
-		clearVelocity(hrp)
-		RunService.Heartbeat:Wait()
-	end
-	local elapsed = os.clock() - start
-	local remaining = waitTime - elapsed
-	if remaining > 0 then
-		if typeof(shouldAbort) == "function" and shouldAbort() then
-			return false
-		end
-		task.wait(remaining)
-	end
-	clearVelocity(hrp)
-	return true
-end
-
-local function collectCluster(routeToken, cluster, currentPos, collectRange, collectedEvent, stats, lease, pacingBatchSize)
-	if routeToken ~= pipelineToken or not lease:isValid() then
-		return {}
-	end
-
-	local attempted = {}
-	for _, item in ipairs(cluster) do
-		if routeToken ~= pipelineToken or not lease:isValid() then
-			return attempted
-		end
-		local livePosition = Context.getCandidatePosition(item)
-		if item.rawObj
-			and not item.rawObj.Destroyed
-			and not item.rawObj.Collected
-			and not item.rawObj.ClientCollected
-			and livePosition
-			and Distance.isWithinRange(livePosition, currentPos, collectRange + 4)
-		then
-			local success = pcall(function()
-				item.rawObj:Collect(false, true)
-			end)
-			if success then
-				table.insert(attempted, item)
-				stats.Attempted += 1
-			elseif #stats.Retry < MAX_RETRY_ITEMS then
-				table.insert(stats.Retry, item)
-			end
-			if success and collectedEvent then
-				pcall(function()
-					collectedEvent:Fire()
-				end)
-			end
-			if success and pacingBatchSize and stats.Attempted % pacingBatchSize == 0 then
-				RunService.Heartbeat:Wait()
-			end
-		end
-	end
-
-	return attempted
-end
-
-local function hasCollectableNearby(cluster, currentPos, collectRange)
-	for _, item in ipairs(cluster) do
-		local rawObj = item.rawObj
-		local livePosition = Context.getCandidatePosition(item)
-		if
-			rawObj
-			and not rawObj.Destroyed
-			and not rawObj.Collected
-			and not rawObj.ClientCollected
-			and livePosition
-			and Distance.isWithinRange(livePosition, currentPos, collectRange + 4)
-		then
-			return true
-		end
-	end
-	return false
-end
-
-local function waitForCollectAcceptance(hrp, shouldAbort, attempted, clusterSize)
-	if #attempted <= 0 then
-		return true
-	end
-
-	if clusterSize > TAIL_CLUSTER_SIZE then
-		return true
-	end
-
-	local waitTime = getAcceptanceLatency() * acceptanceMultiplier * TAIL_HOLD_MULTIPLIER
-	local start = os.clock()
-	while os.clock() - start < waitTime do
-		if typeof(shouldAbort) == "function" and shouldAbort() then
-			return false
-		end
-		clearVelocity(hrp)
-		task.wait(math.min(COLLECT_ACCEPTANCE_STEP, math.max(0, waitTime - (os.clock() - start))))
-	end
-
-	if typeof(shouldAbort) == "function" and shouldAbort() then
-		return false
-	end
-	clearVelocity(hrp)
-	return true
-end
-
-local function updateAdaptiveAcceptance(stats)
-	if stats.Attempted <= 0 then
-		return
-	end
-
-	local failed = stats.Failed or 0
-	if failed > 0 then
-		acceptanceMultiplier = math.min(
-			ADAPTIVE_MAX_MULTIPLIER,
-			acceptanceMultiplier + ADAPTIVE_FAILURE_STEP * math.min(failed, 3)
-		)
-	else
-		acceptanceMultiplier = math.max(ADAPTIVE_MIN_MULTIPLIER, acceptanceMultiplier - ADAPTIVE_SUCCESS_STEP)
-	end
-	stats.AcceptanceMultiplier = acceptanceMultiplier
-end
-
-local function noteAttemptResults(attempted, stats)
-	for _, item in ipairs(attempted) do
-		local rawObj = item.rawObj
-		local accepted = rawObj
-			and (rawObj.Destroyed or rawObj.Collected or rawObj.ClientCollected)
-		if accepted then
-			stats.Accepted += 1
-		else
-			stats.Failed += 1
-			if #stats.Retry < MAX_RETRY_ITEMS then
-				table.insert(stats.Retry, item)
-			end
-		end
-	end
-	updateAdaptiveAcceptance(stats)
-end
 
 local function isAborted(options)
 	return options and typeof(options.AbortCheck) == "function" and options.AbortCheck() == true
@@ -266,7 +19,7 @@ function PipelinedCollector.cancelPending()
 end
 
 function PipelinedCollector.resetAdaptive()
-	acceptanceMultiplier = 1
+	-- Collector owns the shared adaptive network timing for both farm modes.
 end
 
 function PipelinedCollector.collectRoute(_controller, hrp, route, range, options, lease, _currentSessionToken)
@@ -277,13 +30,10 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 	options = options or {}
 	pipelineToken += 1
 	local routeToken = pipelineToken
-	local collectedEvent = Context.getCollectedGiftEvent()
 	local stats = {
 		Attempted = 0,
 		Accepted = 0,
 		Failed = 0,
-		Retry = {},
-		AcceptanceMultiplier = acceptanceMultiplier,
 	}
 	
 	local function shouldAbort()
@@ -305,49 +55,19 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 			end
 
 			local planInfo = step.Info
-			local targetPosition = planInfo and planInfo.TargetPosition or (cluster[1] and cluster[1].pos)
-			if not targetPosition then
-				continue
+			local result = Collector.collectCluster(_controller, hrp, cluster, range, {
+				SafeRange = planInfo and planInfo.SafeRange,
+				TargetPosition = planInfo and planInfo.TargetPosition,
+				PrecisionMode = #cluster <= 2 or (planInfo and planInfo.TailCleanup == true),
+				TailMode = planInfo and planInfo.TailCleanup == true,
+				NormalPacingBatchSize = options.NormalPacingBatchSize,
+				AbortCheck = shouldAbort,
+			}, lease, _currentSessionToken)
+			if result then
+				stats.Attempted += tonumber(result.Attempted) or 0
+				stats.Accepted += tonumber(result.Accepted) or 0
+				stats.Failed += tonumber(result.Rejected) or 0
 			end
-
-			local collectRange = planInfo and planInfo.SafeRange or range
-			local standingPosition = Distance.getRootPosition(targetPosition)
-
-			if Context.isInRound() then
-				Context.waitForStreamedGround(standingPosition, 0.02)
-			end
-
-			hrp.Anchored = false
-			lease:placeFoothold(standingPosition)
-			if lease:moveCollectTo(CFrame.new(standingPosition)) == false then
-				stats.Failed += #cluster
-				continue
-			end
-			clearVelocity(hrp)
-
-			local arrived = waitForArrival(hrp, standingPosition, lease, shouldAbort)
-			if shouldAbort() then
-				return
-			end
-
-			local attempted = {}
-			local closeEnough = arrived or hasCollectableNearby(cluster, hrp.Position, collectRange)
-			if closeEnough and settleBeforeCollect(hrp, shouldAbort) then
-				attempted = collectCluster(
-					routeToken,
-					cluster,
-					hrp.Position,
-					collectRange,
-					collectedEvent,
-					stats,
-					lease,
-					options.NormalPacingBatchSize
-				)
-			end
-			if #attempted > 0 and not waitForCollectAcceptance(hrp, shouldAbort, attempted, #cluster) then
-				return
-			end
-			noteAttemptResults(attempted, stats)
 			if shouldAbort() then
 				return
 			end

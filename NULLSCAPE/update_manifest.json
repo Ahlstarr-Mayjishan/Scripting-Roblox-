@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.13.32",
+    "Version":  "2026.07.13.34",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -21,7 +21,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "9a176635b09d87107b36ad9bdcbcb4c5488fa4215044601d4c897c5bdf3ed49b"
+                      "Sha256":  "23e29ae2bf8c6d00ee1efb887f3d5c80f13e5957349d3bc6cc42fde25b702046"
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/tab.luau",
@@ -82,7 +82,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "f8185c9188f6e96094fd65daa7d44ff43c8c5b8757140d5a6ebec35198ca452e"
+                       "Sha256":  "6346a9d5c779442e57c739591ef3a3d3e03d388393aa4a4a799a213d77bd8f9c"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Beacon.luau",
@@ -99,7 +99,7 @@
                                    "Gift Farm",
                                    "Pipelining"
                                ],
-                      "Sha256":  "3123d456f6afbad6b4a1c54bc2e02b3810a113581ef2f8ab9385a4a8d068283d"
+                       "Sha256":  "b2c043ea4a02c8a02fef31080773b03c357d6a898f5fbe68f98539cccd81c98b"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/controller.luau",
@@ -238,7 +238,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "1fa4c53f57dda3a28b26105a2345e3984625a1f0646846568f01ecdbecb75da3"
+                      "Sha256":  "24b68055c42bd1e56d1afa69a5319b2882f5751b4b05fb5f793c394b1f5263c0"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Curse Visual Assist.luau",
@@ -287,7 +287,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "f20f8f0fbd7c661209a8fa61b2a0f27dcf6dc2adf48f04278d782de84636be20"
+                      "Sha256":  "ab9a3f4bc223c084640cb3d8b04dd76ffe4dcc01c6434fcd0d0c8f3d945d7b9e"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Adaptive Anchor Style.luau",
@@ -371,7 +371,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "92d90427c14fbf3946c085d1ecd6b2e5f73a9718a58e1f5a1861214938a2c8cf"
+                      "Sha256":  "c9fc8b36dfd82bbc3b6d2e8d079255b0f32595f37fa149a2c0b293d35c42a6fe"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Intent Resolver.luau",
@@ -525,7 +525,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "5ae3bb804e6bd40e7a4879747fda253619d683297d272d92f96e797d9a427e5b"
+                      "Sha256":  "831d12080e8f33192682533006846548b5e38f0f1b8317f664225a049869fd5b"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Technique/SharkVoid.luau",
@@ -623,7 +623,7 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "60f24e3fd2d2bed9e92b2ac7c23fe751d5d8bfcebe1ec87d414c3a64d808538f"
+                      "Sha256":  "6ed9ec13cc4b05d92c86e3aafb0fc48e9c77254df77d3eaa5065a6ce92e1d6e4"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Recovery.luau",
@@ -735,7 +735,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "efc3acf93ad34b5ba6647bdefcfddc68e48b015961f30d2ea00896ab8804dadb"
+                       "Sha256":  "ad8b4cccfd4e91d543addab23164f65ebf3bd318d1af45855babf7936c715b66"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Medal.luau",
