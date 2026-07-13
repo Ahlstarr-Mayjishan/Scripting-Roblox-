@@ -732,6 +732,7 @@ local function runLoop(controller)
 				lease:release()
 				if not isSessionActive() then continue end
 				if handledAltar then
+					markProgress()
 					local isPassage = typeof(altarDetail) == "string"
 						and string.find(altarDetail, "Passage", 1, true) ~= nil
 					if isPassage then
