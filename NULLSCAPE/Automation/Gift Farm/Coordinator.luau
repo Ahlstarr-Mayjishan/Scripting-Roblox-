@@ -1090,6 +1090,9 @@ end
 
 function Coordinator.enable(controller, gc)
 	if enabled then
+		if not loopActive and controller and not controller.Destroyed and controller.GiftFarmEnabled then
+			runLoop(controller)
+		end
 		return true
 	end
 

@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.13.28",
+    "Version":  "2026.07.13.29",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "0793a569810777d637bfff96a3c2254d9eecdbeb6f7aaa9589dfa26ac49ad369"
+                      "Sha256":  "26644f1cc9be1f888b06eed5ef536bc0eacb11cc47faea03422a3f8036c65403"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/MovementLease.luau",
@@ -106,7 +106,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "60831e5d9319edecd9acca608dbbbc54ae9dab999ad5304e4de04e67a3565c0e"
+                      "Sha256":  "5fee9fad113b7c6ba84a9576188860003968349f57d6daa1ab3bdb4246359d93"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Kolona Auto QTE.luau",
@@ -672,7 +672,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "1b071e70efed2911adb174713fba460c61c9ad95087466812049531812eec194"
+                      "Sha256":  "a80c447c595393009c919995bf3320fa4bc1b04ffbbf73e2ca40c43eeaae9178"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/GC.luau",

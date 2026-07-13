@@ -41,12 +41,29 @@ local function disableAntiAfk()
 	end
 end
 
-local executorLoaded, Executor = pcall(function()
-	return getgenv().loadModule("NULLSCAPE/Automation/executor.luau")
-end)
-if not executorLoaded or typeof(Executor) ~= "table" then
-	warn("[NULLSCAPE] Automation executor failed; using fallback dispatcher: " .. tostring(Executor))
-	Executor = {}
+local Executor = nil
+local lastExecutorLoadError = nil
+
+local function getExecutor()
+	if typeof(Executor) == "table" then
+		return Executor
+	end
+
+	local loaded, result = pcall(function()
+		return getgenv().loadModule("NULLSCAPE/Automation/executor.luau")
+	end)
+	if loaded and typeof(result) == "table" then
+		Executor = result
+		lastExecutorLoadError = nil
+		return Executor
+	end
+
+	local loadError = tostring(result)
+	if loadError ~= lastExecutorLoadError then
+		lastExecutorLoadError = loadError
+		warn("[NULLSCAPE] Automation executor unavailable: " .. loadError)
+	end
+	return nil
 end
 
 local gcLoaded, GC = pcall(function()
@@ -65,7 +82,8 @@ local function getGlobals()
 end
 
 local function callExecutor(methodName, ...)
-	local method = Executor and Executor[methodName]
+	local executor = getExecutor()
+	local method = executor and executor[methodName]
 	if typeof(method) ~= "function" then
 		return false
 	end
