@@ -2,6 +2,9 @@ local DEFAULTS = {
 	AntiBonkEnabled = false,
 	IgnoreFakeCountEnabled = false,
 	BeaconMirageIdentifierEnabled = false,
+	PhysicalInteractionRangeGrapplePoint = 0,
+	PhysicalInteractionRangeTriaOrb = 0,
+	PhysicalInteractionRangeJumpPad = 0,
 	RailAssistSuiteEnabled = false,
 	RailAutoEnabled = false,
 	RailSpeedMultiplier = 1.1,
@@ -199,6 +202,47 @@ return function(Client, Controller)
 		Flag = "GrapplerStaminaRecoverySpeedSlider",
 		Callback = function(Value)
 			Controller:SetGrapplerStaminaRecoverySpeed(Value)
+		end,
+	})
+
+	Tab:CreateSection("Physical Interaction Range")
+
+	Tab:CreateSlider({
+		Name = "GrapplePoint Range",
+		Info = "Extends native character contact with GrapplePoint without changing grapple aim or attachment position.",
+		Range = { 0, 10 },
+		Increment = 0.5,
+		Suffix = " studs",
+		CurrentValue = Controller.PhysicalInteractionRangeGrapplePoint or 0,
+		Flag = "PhysicalInteractionRangeGrapplePointSlider",
+		Callback = function(Value)
+			Controller:SetPhysicalInteractionRangeGrapplePoint(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "TriaOrb Range",
+		Info = "Extends native character contact with TriaOrb while preserving its native activation logic.",
+		Range = { 0, 10 },
+		Increment = 0.5,
+		Suffix = " studs",
+		CurrentValue = Controller.PhysicalInteractionRangeTriaOrb or 0,
+		Flag = "PhysicalInteractionRangeTriaOrbSlider",
+		Callback = function(Value)
+			Controller:SetPhysicalInteractionRangeTriaOrb(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "JumpPad Range",
+		Info = "Extends native character contact with JumpPad while preserving its native launch behavior.",
+		Range = { 0, 10 },
+		Increment = 0.5,
+		Suffix = " studs",
+		CurrentValue = Controller.PhysicalInteractionRangeJumpPad or 0,
+		Flag = "PhysicalInteractionRangeJumpPadSlider",
+		Callback = function(Value)
+			Controller:SetPhysicalInteractionRangeJumpPad(Value)
 		end,
 	})
 

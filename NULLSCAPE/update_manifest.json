@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.14.40",
+    "Version":  "2026.07.14.41",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "4f9705627e08702667a5477f2f9b1a9f672cafbcb296c3e23792be8e5699b84e"
+                      "Sha256":  "e5f1afa37295212582cee85f9364a83b152641870081585f99091e61097c631f"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -238,7 +238,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "24b68055c42bd1e56d1afa69a5319b2882f5751b4b05fb5f793c394b1f5263c0"
+                      "Sha256":  "d0ef3418cc088c6ee45b865032b9a44266aa045311d1ae39f9132ae8d70ffe9f"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Curse Visual Assist.luau",
@@ -252,7 +252,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "ed43c9110d97c5b0a5826e592cd7e4dc1865d736e9af56c0bea87a5f9e242a22"
+                      "Sha256":  "ab606f6132f37e7a608a0cbde15bf8692c101f582ae3602d7b914f4f6d17b204"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/GC.luau",
@@ -267,6 +267,13 @@
                                    "Accessibility"
                                ],
                       "Sha256":  "de721c8b5361198dcc27bd0d51f8e4b141b5f046d1101d70418e42efb3d944d9"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Accessibility/Physical Interaction Range.luau",
+                      "Menu":  [
+                                   "Accessibility"
+                               ],
+                      "Sha256":  "e993c1f714f6891e9e010e5820bd904305cf84cddff1debe0d21530bd857946b"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Rail Assist.luau",
@@ -287,7 +294,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "ab9a3f4bc223c084640cb3d8b04dd76ffe4dcc01c6434fcd0d0c8f3d945d7b9e"
+                      "Sha256":  "b30261bbaedcb3326f029ca213437de7b5dfdf54e2295fed5b8beb44ed078697"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Adaptive Anchor Style.luau",

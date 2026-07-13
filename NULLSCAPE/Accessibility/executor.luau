@@ -12,6 +12,7 @@ local MODULE_PATHS = {
 	RailAssist = "NULLSCAPE/Accessibility/Rail Assist.luau",
 	GrappleAssist = "NULLSCAPE/Accessibility/Grappler assistments/Grapple Assist.luau",
 	CurseVisualAssist = "NULLSCAPE/Accessibility/Curse Visual Assist.luau",
+	PhysicalInteractionRange = "NULLSCAPE/Accessibility/Physical Interaction Range.luau",
 }
 
 local Modules = {}
@@ -194,6 +195,18 @@ end
 
 function Executor.disableCurseVisualAssist()
 	callModule("CurseVisualAssist", "disable")
+end
+
+function Executor.initializePhysicalInteractionRange(controller)
+	return callModule("PhysicalInteractionRange", "initialize", controller)
+end
+
+function Executor.resetPhysicalInteractionRangeRespawnState(controller)
+	return callModule("PhysicalInteractionRange", "resetRespawnState", controller)
+end
+
+function Executor.disablePhysicalInteractionRange()
+	callModule("PhysicalInteractionRange", "disable")
 end
 
 function Executor.initializeGrapplerInfiniteStamina()

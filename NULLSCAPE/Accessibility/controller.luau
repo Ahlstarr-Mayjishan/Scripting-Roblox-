@@ -100,6 +100,9 @@ local Controller = {
 	AntiBonkEnabled = false,
 	IgnoreFakeCountEnabled = false,
 	BeaconMirageIdentifierEnabled = false,
+	PhysicalInteractionRangeGrapplePoint = 0,
+	PhysicalInteractionRangeTriaOrb = 0,
+	PhysicalInteractionRangeJumpPad = 0,
 	GrapplerStaminaRecoverySpeed = 1,
 	Destroyed = false,
 
@@ -183,6 +186,7 @@ function Controller:CleanUp()
 		callExecutor("disableMirageSafety")
 		callExecutor("disableMomentumGuard")
 		callExecutor("disableGrappleAssist")
+		callExecutor("disablePhysicalInteractionRange")
 	end
 	if self.Destroyed and self.PermanentConnections then
 		for _, conn in ipairs(self.PermanentConnections) do
@@ -218,6 +222,7 @@ function Controller:ReapplyRespawnFeatures()
 
 	callExecutor("resetStaminaAssistRespawnState")
 	callExecutor("resetGrappleAssistRespawnState")
+	callExecutor("resetPhysicalInteractionRangeRespawnState", self)
 
 	if self.AntiBonkEnabled then
 		callExecutor("initializeAntiBonk")
@@ -248,6 +253,7 @@ function Controller:ReapplyRespawnFeatures()
 	end
 
 	self:RefreshRailAssistHook()
+	self:RefreshPhysicalInteractionRange()
 end
 
 function Controller:SetIgnoreFakeCount(value)
@@ -271,6 +277,34 @@ function Controller:SetBeaconMirageIdentifier(value)
 	if not callExecutor("setBeaconMirageIdentifier", enabled) then
 		self.BeaconMirageIdentifierEnabled = false
 	end
+end
+
+function Controller:RefreshPhysicalInteractionRange()
+	if
+		self.PhysicalInteractionRangeGrapplePoint > 0
+		or self.PhysicalInteractionRangeTriaOrb > 0
+		or self.PhysicalInteractionRangeJumpPad > 0
+	then
+		return callExecutor("initializePhysicalInteractionRange", self)
+	end
+
+	callExecutor("disablePhysicalInteractionRange")
+	return true
+end
+
+function Controller:SetPhysicalInteractionRangeGrapplePoint(value)
+	self.PhysicalInteractionRangeGrapplePoint = math.clamp(tonumber(value) or 0, 0, 10)
+	self:RefreshPhysicalInteractionRange()
+end
+
+function Controller:SetPhysicalInteractionRangeTriaOrb(value)
+	self.PhysicalInteractionRangeTriaOrb = math.clamp(tonumber(value) or 0, 0, 10)
+	self:RefreshPhysicalInteractionRange()
+end
+
+function Controller:SetPhysicalInteractionRangeJumpPad(value)
+	self.PhysicalInteractionRangeJumpPad = math.clamp(tonumber(value) or 0, 0, 10)
+	self:RefreshPhysicalInteractionRange()
 end
 
 function Controller:RefreshRailAssistHook()
