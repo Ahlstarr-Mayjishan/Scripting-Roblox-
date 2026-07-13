@@ -242,6 +242,16 @@ local function installCastHook(grappleModule, globals)
 				end
 			end
 
+			if manualCast and GrappleDodge and typeof(GrappleDodge.getManualCastHit) == "function" then
+				local dodgeHit, source = GrappleDodge.getManualCastHit(self, controller)
+				if dodgeHit then
+					if CastTransaction and typeof(CastTransaction.expect) == "function" then
+						CastTransaction.expect(self, dodgeHit, controller, source or "GrappleDodge")
+					end
+					return dodgeHit
+				end
+			end
+
 			if
 				manualCast
 				and controller

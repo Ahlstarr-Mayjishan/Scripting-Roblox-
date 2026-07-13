@@ -51,7 +51,9 @@ local DEFAULTS = {
 	GrappleDodgeRange = 92,
 	GrappleDodgeStrength = 1,
 	GrappleDodgeRailBonus = 34,
+	GrappleDodgeMode = "Auto",
 	GrappleSharkEscapeEnabled = false,
+	GrappleSharkEscapeMode = "Auto",
 	GrappleSharkEscapeRange = 26,
 	GrappleSharkEscapeReelHoldTime = 0.12,
 	GrappleReelSaverEnabled = false,
@@ -636,6 +638,17 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateDropdown({
+		Name = "Grapple Dodge Mode",
+		Options = { "Auto", "Manual" },
+		CurrentOption = { Controller.GrappleDodgeMode or "Auto" },
+		MultipleOptions = false,
+		Flag = "GrappleDodgeModeDropdown",
+		Callback = function(Options)
+			Controller:SetGrappleDodgeMode(Options)
+		end,
+	})
+
 	Tab:CreateSlider({
 		Name = "Dodge Threat Range",
 		Info = "Enemy scan distance for automatic grapple dodges.",
@@ -697,6 +710,17 @@ return function(Client, Controller)
 		Flag = "GrappleSharkEscapeToggle",
 		Callback = function(Value)
 			Controller:SetGrappleSharkEscape(Value)
+		end,
+	})
+
+	Tab:CreateDropdown({
+		Name = "SharkEscape Mode",
+		Options = { "Auto", "Manual" },
+		CurrentOption = { Controller.GrappleSharkEscapeMode or "Auto" },
+		MultipleOptions = false,
+		Flag = "GrappleSharkEscapeModeDropdown",
+		Callback = function(Options)
+			Controller:SetGrappleSharkEscapeMode(Options)
 		end,
 	})
 

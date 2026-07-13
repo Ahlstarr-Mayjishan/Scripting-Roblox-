@@ -15,6 +15,7 @@ local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Co
 local VoidCastAssist = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Void Cast Assist.luau")
 local CachedControl = nil
 local SpecialTargeting = nil
+local ManualDodge = nil
 
 local function getControl()
 	if CachedControl then
@@ -52,6 +53,23 @@ local function findSpecialAnchorHit(grapple)
 	return success and hit or nil
 end
 
+local function findManualDodgeHit(grapple)
+	local globals = getgenv()._NULLSCAPE_Globals
+	local controller = globals and globals.activeAccessibilityController
+	if not (controller and controller.GrappleAssistEnabled == true) then
+		return nil
+	end
+
+	ManualDodge = ManualDodge
+		or getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/Grapple Dodge.luau")
+	if not (ManualDodge and typeof(ManualDodge.getManualCastHit) == "function") then
+		return nil
+	end
+
+	local success, hit = pcall(ManualDodge.getManualCastHit, grapple, controller)
+	return success and hit or nil
+end
+
 function Range.getEffectiveRange()
 	local Control = getControl()
 	local rangeSetting = Control and tonumber(Control.GrappleMaxRange) or 90
@@ -72,6 +90,11 @@ end
 function Range.cast(grapple, forceRefresh, originalCast, ...)
 	local maxRange = Range.getEffectiveRange()
 	local easierVoidCast = Range.isEasierVoidCastEnabled()
+	local dodgeHit = findManualDodgeHit(grapple)
+	if dodgeHit then
+		recordRangeCast(grapple)
+		return dodgeHit
+	end
 	local specialHit = findSpecialAnchorHit(grapple)
 	if specialHit then
 		recordRangeCast(grapple)

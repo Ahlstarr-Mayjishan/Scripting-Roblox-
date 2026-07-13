@@ -42,6 +42,9 @@ local MAX_TERRAIN_CANDIDATES = 80
 local SHARK_ESCAPE_FRONT_DOT = 0.72
 local SHARK_ESCAPE_MIN_CLOSING_SPEED = 7
 local SHARK_ESCAPE_MAX_IMPACT_TIME = 0.55
+local MANUAL_FRONT_DOT = 0.78
+local MANUAL_SCREEN_DOT = 0.42
+local MANUAL_DODGE_DOT = 0.35
 
 local function getNumber(value, fallback, minimum, maximum)
 	local numberValue = tonumber(value) or fallback
@@ -99,6 +102,16 @@ local function getIntentDirection(grapple)
 	end
 
 	return safeUnit(camera and camera.CFrame.LookVector, rootPart and rootPart.CFrame.LookVector)
+end
+
+local function getFacingDirection(grapple)
+	local rootPart = grapple and grapple.RootPart
+	local camera = Workspace.CurrentCamera
+	return safeUnit(rootPart and rootPart.CFrame.LookVector, camera and camera.CFrame.LookVector)
+end
+
+local function isManualMode(controller, fieldName)
+	return controller and tostring(controller[fieldName] or "Auto") == "Manual"
 end
 
 local function canCast(grapple, controller, now)
@@ -256,6 +269,49 @@ local function getThreat(grapple, controller)
 	return bestThreat, bestScore, bestAway
 end
 
+local function getManualThreat(grapple, controller, sharkEscape)
+	local rootPart = grapple and grapple.RootPart
+	if not rootPart then
+		return nil
+	end
+
+	local range = sharkEscape and getNumber(controller.GrappleSharkEscapeRange, DEFAULT_SHARK_ESCAPE_RANGE, 10, 50)
+		or getNumber(controller.GrappleDodgeThreatRange, DEFAULT_THREAT_RANGE, 16, 90)
+	local dangerRadius = getNumber(controller.GrappleDodgeDangerRadius, DEFAULT_DANGER_RADIUS, 4, 24)
+	local facing = getFacingDirection(grapple)
+	local origin = rootPart.Position
+	local bestThreat = nil
+	local bestScore = 0
+
+	for _, threat in ipairs(EnemyMemory.getNearbyThreats(origin, range)) do
+		local offset = flatten(threat.Position - origin)
+		if offset.Magnitude <= 0.05 then
+			continue
+		end
+
+		local direction = offset.Unit
+		local frontDot = facing:Dot(direction)
+		if frontDot < MANUAL_FRONT_DOT then
+			continue
+		end
+
+		local enemyRadius = math.max(threat.Size.X, threat.Size.Z) * 0.5
+		local lateral = math.abs(facing.X * offset.Z - facing.Z * offset.X)
+		local corridor = math.max(dangerRadius, enemyRadius + 3)
+		if lateral > corridor then
+			continue
+		end
+
+		local score = frontDot * 4 + math.max(0, corridor - lateral) / corridor * 2 - offset.Magnitude / range
+		if score > bestScore then
+			bestThreat = threat
+			bestScore = score
+		end
+	end
+
+	return bestThreat, bestScore, facing
+end
+
 local function getCandidatePart(candidate)
 	return typeof(candidate) == "table" and candidate.Part or candidate
 end
@@ -405,6 +461,58 @@ local function findBestHit(grapple, controller, awayDirection, sharkEscape)
 	return bestHit
 end
 
+local function findManualDodgeHit(grapple, controller, threat, facing, sharkEscape)
+	local rootPart = grapple and grapple.RootPart
+	if not (rootPart and threat and facing) then
+		return nil
+	end
+
+	local threatOffset = flatten(threat.Position - rootPart.Position)
+	local right = Vector3.new(-facing.Z, 0, facing.X)
+	local side = threatOffset:Dot(right) >= 0 and -right or right
+	local desiredDirection = safeUnit(facing * 0.8 + side * 0.6, facing)
+	local bestHit = nil
+	local bestScore = -math.huge
+
+	for _, candidate in ipairs(collectCandidates(rootPart.Position, controller, sharkEscape)) do
+		local part = getCandidatePart(candidate)
+		if not (part and part:IsA("BasePart") and part.Parent) then
+			continue
+		end
+
+		local offset = part.Position - rootPart.Position
+		local distance = offset.Magnitude
+		local range = getNumber(controller.GrappleDodgeRange, DEFAULT_RANGE, 30, 150)
+		if distance <= 5 or distance > range then
+			continue
+		end
+
+		local direction = offset.Unit
+		local flatDirection = safeUnit(direction, facing)
+		local screenDot = facing:Dot(flatDirection)
+		local dodgeDot = desiredDirection:Dot(flatDirection)
+		if screenDot < MANUAL_SCREEN_DOT or dodgeDot < MANUAL_DODGE_DOT then
+			continue
+		end
+
+		local hit = Workspace:Raycast(rootPart.Position, direction * distance, grapple.grappleParams)
+		if not canUseHit(hit, part) then
+			continue
+		end
+
+		local score = dodgeDot * 100 + screenDot * 35 + getCandidateBonus(part, controller) - distance * 0.2
+		if sharkEscape then
+			score += getSharkEscapeBonus(candidate)
+		end
+		if score > bestScore then
+			bestScore = score
+			bestHit = hit
+		end
+	end
+
+	return bestHit
+end
+
 local function playReelSound(grapple)
 	local sfx = grapple and (grapple.SFX or grapple.Movement and grapple.Movement.SFX)
 	if sfx and typeof(sfx.PlaySound) == "function" then
@@ -515,6 +623,45 @@ local function cancelSharkEscape(grapple)
 	end
 end
 
+function Logic.getManualCastHit(grapple, controller)
+	local dodgeManual = controller
+		and controller.GrappleDodgeTechniqueEnabled == true
+		and isManualMode(controller, "GrappleDodgeMode")
+	local sharkManual = controller
+		and controller.GrappleSharkEscapeEnabled == true
+		and isManualMode(controller, "GrappleSharkEscapeMode")
+	if not (dodgeManual or sharkManual) then
+		return nil
+	end
+
+	local now = time()
+	if not canCast(grapple, controller, now) then
+		return nil
+	end
+
+	local threat, score, facing = getManualThreat(grapple, controller, sharkManual)
+	if not threat or score <= 0 then
+		return nil
+	end
+
+	local hit = findManualDodgeHit(grapple, controller, threat, facing, sharkManual)
+	if not hit then
+		return nil
+	end
+
+	Logic.LastCastAt = now
+	Logic.LastThreat = threat
+	if sharkManual then
+		Logic.ActiveLift = {
+			StartedAt = now,
+			Hit = hit,
+		}
+		Logic.PendingLiftEndAt = nil
+	end
+
+	return hit, sharkManual and "SharkEscape" or "GrappleDodge"
+end
+
 function Logic.step(grapple, _dt, controller)
 	local now = time()
 	if not (controller and controller.GrappleSharkEscapeEnabled == true) then
@@ -536,12 +683,16 @@ function Logic.step(grapple, _dt, controller)
 	end
 
 	local sharkThreat, sharkScore, sharkAway = nil, 0, nil
-	if canSharkEscape(grapple, controller, now) then
+	if canSharkEscape(grapple, controller, now) and not isManualMode(controller, "GrappleSharkEscapeMode") then
 		sharkThreat, sharkScore, sharkAway = getSharkEscapeThreat(grapple, controller)
 	end
 
 	local threat, score, awayDirection = nil, 0, nil
-	if controller and controller.GrappleDodgeTechniqueEnabled == true then
+	if
+		controller
+		and controller.GrappleDodgeTechniqueEnabled == true
+		and not isManualMode(controller, "GrappleDodgeMode")
+	then
 		threat, score, awayDirection = getThreat(grapple, controller)
 	end
 	if sharkThreat and sharkScore > 0 then

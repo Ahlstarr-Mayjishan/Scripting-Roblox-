@@ -82,7 +82,9 @@ local Controller = {
 	GrappleDodgeRange = 92,
 	GrappleDodgeStrength = 1,
 	GrappleDodgeRailBonus = 34,
+	GrappleDodgeMode = "Auto",
 	GrappleSharkEscapeEnabled = false,
+	GrappleSharkEscapeMode = "Auto",
 	GrappleSharkEscapeRange = 26,
 	GrappleSharkEscapeReelHoldTime = 0.12,
 	GrappleReelSaverEnabled = false,
@@ -618,9 +620,23 @@ function Controller:SetGrappleDodgeRailBonus(value)
 	self.GrappleDodgeRailBonus = math.clamp(tonumber(value) or 34, 0, 120)
 end
 
+function Controller:SetGrappleDodgeMode(value)
+	if typeof(value) == "table" then
+		value = value[1]
+	end
+	self.GrappleDodgeMode = tostring(value) == "Manual" and "Manual" or "Auto"
+end
+
 function Controller:SetGrappleSharkEscape(value)
 	self.GrappleSharkEscapeEnabled = value == true
 	self.GrappleDodgeEnabled = self.GrappleDodgeTechniqueEnabled == true or self.GrappleSharkEscapeEnabled
+end
+
+function Controller:SetGrappleSharkEscapeMode(value)
+	if typeof(value) == "table" then
+		value = value[1]
+	end
+	self.GrappleSharkEscapeMode = tostring(value) == "Manual" and "Manual" or "Auto"
 end
 
 function Controller:SetGrappleSharkEscapeRange(value)
@@ -784,8 +800,6 @@ callExecutor("initializeMirageSafety")
 
 -- Khởi tạo ban đầu khi nạp script
 -- Lắng nghe sự kiện đổi trạng thái game thời gian thực
-
-
 
 local characterRefreshConnection = Players.LocalPlayer.CharacterAdded:Connect(function()
 	scheduleRespawnFeatureRefresh()
