@@ -149,7 +149,8 @@ function Scanner.scan(controller, gch)
 			local pos = Context.getGiftPosition(gift)
 			local priority = Progress.getGiftPriority(gift, normalRatio, controller)
 			if pos and priority ~= nil then
-				if gift.Golden then
+				local isGolden = gift.Golden == true
+				if isGolden then
 					rawGolden += 1
 				else
 					rawNormal += 1
@@ -157,15 +158,15 @@ function Scanner.scan(controller, gch)
 				if not seenGifts[gift] then
 					seenGifts[gift] = now
 				end
-				local settleTime = gift.Golden and GOLDEN_SPAWN_SETTLE or SPAWN_SETTLE
+				local settleTime = isGolden and GOLDEN_SPAWN_SETTLE or SPAWN_SETTLE
 				if now - seenGifts[gift] >= settleTime then
-					if gift.Golden then
+					if isGolden then
 						settledGolden += 1
 					else
 						settledNormal += 1
 					end
 
-					if gift.Golden ~= preferGolden then
+					if isGolden ~= preferGolden then
 						continue
 					end
 					local collapsePriority = 0
@@ -179,7 +180,7 @@ function Scanner.scan(controller, gch)
 						collapsePriority = collapsePriority,
 						bonusTilePriority = getFannyPackTilePriority(pos, fannyPackTiles),
 						id = gift.Id or 0,
-						golden = gift.Golden == true,
+						golden = isGolden,
 					}
 				end
 			end
