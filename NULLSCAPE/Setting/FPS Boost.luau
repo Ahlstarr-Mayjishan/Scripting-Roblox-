@@ -56,6 +56,8 @@ local REASSERTED_VFX_ROOT_NAMES = {
 	FireArea = true,
 	OblivionAmbient = true,
 	OblivionAttack = true,
+	VoidboundNeck = true,
+	VoidboundSlam = true,
 }
 
 local function optionSelected(options, option)
@@ -105,15 +107,19 @@ local function restoreVisuals(store)
 			pcall(function()
 				if original.LocalTransparencyModifier ~= nil then
 					instance.LocalTransparencyModifier = original.LocalTransparencyModifier
-				elseif original.Transparency ~= nil then
+				end
+				if original.Transparency ~= nil then
 					instance.Transparency = original.Transparency
-				elseif original.Visible ~= nil then
+				end
+				if original.Visible ~= nil then
 					instance.Visible = original.Visible
-				elseif original.Density ~= nil then
+				end
+				if original.Density ~= nil then
 					instance.Density = original.Density
 					instance.Glare = original.Glare
 					instance.Haze = original.Haze
-				else
+				end
+				if original.Enabled ~= nil then
 					instance.Enabled = original.Enabled
 				end
 			end)
@@ -167,41 +173,46 @@ local function findVoidbreakerSword(instance)
 end
 
 local function guardVisualProperty(instance, property, hiddenValue, selection)
-	if FPSBoost.VisualGuards[instance] then
+	local guards = FPSBoost.VisualGuards[instance]
+	if guards and guards[property] then
 		return
 	end
 
 	FPSBoost.GuardedVFX[instance] = true
-	local guards = {}
-	FPSBoost.VisualGuards[instance] = guards
-	guards.Property = instance:GetPropertyChangedSignal(property):Connect(function()
+	if not guards then
+		guards = {}
+		FPSBoost.VisualGuards[instance] = guards
+		guards.Destroying = instance.Destroying:Connect(function()
+			FPSBoost.GuardedVFX[instance] = nil
+			FPSBoost.VisualGuards[instance] = nil
+			for key, connection in pairs(guards) do
+				if key ~= "Destroying" then
+					connection:Disconnect()
+				end
+			end
+		end)
+	end
+	guards[property] = instance:GetPropertyChangedSignal(property):Connect(function()
 		if optionSelected(FPSBoost.Selections, selection) and instance[property] ~= hiddenValue then
 			instance[property] = hiddenValue
 		end
-	end)
-	guards.Destroying = instance.Destroying:Connect(function()
-		FPSBoost.GuardedVFX[instance] = nil
-		FPSBoost.VisualGuards[instance] = nil
-		guards.Property:Disconnect()
 	end)
 end
 
 local function guardReassertedVFX(instance)
 	if
-		not (
-			hasReassertedVFXAncestor(instance)
-			or hasVoidbreakerAncestor(instance)
-			or isOblivionPostEffect(instance)
-		)
+		not (hasReassertedVFXAncestor(instance) or hasVoidbreakerAncestor(instance) or isOblivionPostEffect(instance))
 	then
 		return
 	end
 
 	if instance:IsA("Decal") or instance:IsA("Texture") then
 		guardVisualProperty(instance, "Transparency", 1, "VFX")
+	elseif instance:IsA("ParticleEmitter") then
+		guardVisualProperty(instance, "Enabled", false, "VFX")
+		guardVisualProperty(instance, "Transparency", NumberSequence.new(1), "VFX")
 	elseif
-		instance:IsA("ParticleEmitter")
-		or instance:IsA("Trail")
+		instance:IsA("Trail")
 		or instance:IsA("Beam")
 		or instance:IsA("PointLight")
 		or instance:IsA("SpotLight")
@@ -234,9 +245,17 @@ local function suppressVFX(instance)
 			guardVisualProperty(instance, "Transparency", 1, "VFX")
 		end
 
-		if
-			instance:IsA("ParticleEmitter")
-			or instance:IsA("Trail")
+		if instance:IsA("ParticleEmitter") then
+			if FPSBoost.OriginalVFX[instance] == nil then
+				FPSBoost.OriginalVFX[instance] = {
+					Enabled = instance.Enabled,
+					Transparency = instance.Transparency,
+				}
+			end
+			instance.Enabled = false
+			instance.Transparency = NumberSequence.new(1)
+		elseif
+			instance:IsA("Trail")
 			or instance:IsA("Beam")
 			or instance:IsA("PostEffect")
 			or instance:IsA("PointLight")
