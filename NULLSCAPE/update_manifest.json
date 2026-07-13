@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.14.42",
+    "Version":  "2026.07.14.43",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -82,7 +82,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "472b8c261e6258c6aee14141657c1105fce762caf125111ab75f907fb23393be"
+                      "Sha256":  "a3f969b069d27d3bf03de9425c5fbae49c85c1a9b5f9d01f633406e0839ce73e"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Beacon.luau",

@@ -27,6 +27,8 @@ local CLEANUP_PULSE_INTERVAL = 0.015
 local MAX_RETRY_PASSES = 2
 local MAX_PRECISION_RETRY_PASSES = 3
 local RETRY_SETTLE = 0.045
+local FAST_POSITION_SYNC_MIN = 0.05
+local FAST_POSITION_SYNC_MAX = 0.14
 
 local comboCount = 0
 local lastCollectTick = 0
@@ -117,9 +119,24 @@ end
 
 local function waitForNativeFlush()
 	-- GiftClient queues U16 ids and flushes the whole buffer on RenderStepped.
-	-- Holding position for that boundary preserves native remote ordering without
-	-- paying a full ping wait after every route point.
+	-- The following physics boundary guarantees the native callback has completed
+	-- and prevents a same-frame move away from the submitted cluster.
 	RunService.RenderStepped:Wait()
+	RunService.Heartbeat:Wait()
+end
+
+local function waitForServerPosition()
+	local ping = getPingSeconds() or 0.08
+	local waitTime = math.clamp(ping * 0.75 + 0.02, FAST_POSITION_SYNC_MIN, FAST_POSITION_SYNC_MAX)
+	local startedAt = os.clock()
+
+	-- Context.moveCharacterTo writes the final CFrame after its own Heartbeat.
+	-- One more boundary is required before the collection remote can safely race it.
+	RunService.Heartbeat:Wait()
+	local remaining = waitTime - (os.clock() - startedAt)
+	if remaining > 0 then
+		task.wait(remaining)
+	end
 end
 
 local function getValidationWait(_controller, precisionMode)
@@ -404,7 +421,11 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
-		waitIfPositive(precisionMode and PRECISION_COLLECT_SETTLE or 0)
+		if precisionMode then
+			waitIfPositive(PRECISION_COLLECT_SETTLE)
+		else
+			waitForServerPosition()
+		end
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
