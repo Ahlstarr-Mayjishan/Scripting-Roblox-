@@ -103,6 +103,40 @@ local function sameContent(path, source)
 	return ok and current == source
 end
 
+local function verifyLocalRelease(files)
+	if not (isfile and readfile) then
+		return nil, "Executor file APIs are unavailable"
+	end
+
+	for _, fileInfo in ipairs(files) do
+		if typeof(fileInfo) == "table" then
+			local path = fileInfo.Path or fileInfo.path
+			local expectedHash = fileInfo.Sha256 or fileInfo.sha256 or fileInfo.Hash or fileInfo.hash
+			if typeof(path) ~= "string" or path == "" or not isfile(path) then
+				return false, "Missing local module: " .. tostring(path)
+			end
+			if typeof(expectedHash) ~= "string" or expectedHash == "" then
+				return false, "Missing manifest hash: " .. path
+			end
+
+			local readOk, source = pcall(readfile, path)
+			if not readOk or typeof(source) ~= "string" then
+				return false, "Unreadable local module: " .. path
+			end
+
+			local actualHash = getHash(source)
+			if not actualHash then
+				return nil, "Hash check unavailable"
+			end
+			if actualHash ~= string.lower(expectedHash) then
+				return false, "Outdated local module: " .. path
+			end
+		end
+	end
+
+	return true
+end
+
 local function normalizeList(value)
 	local list = {}
 	if typeof(value) ~= "table" then
@@ -433,15 +467,28 @@ function Updater:checkAndInstall(manual)
 		local localManifest = readJson(self.ManifestPath)
 		local localVersion = tostring(localManifest.Version or localManifest.version or "")
 		local versionOrder = if localVersion ~= "" then compareVersions(remoteVersion, localVersion) else nil
-		if localVersion ~= "" and (localVersion == remoteVersion or versionOrder == 0) then
-			self.State = self.State or {}
-			self.State.LastVersion = remoteVersion
-			writeJson(self.StateFile, self.State)
-			if manual then
-				notify("Runtime Updater", "Already running release " .. remoteVersion, 5)
+			if localVersion ~= "" and (localVersion == remoteVersion or versionOrder == 0) then
+				local releaseComplete = self.LocalIntegrityVerifiedVersion == remoteVersion
+				local integrityIssue = nil
+				if not releaseComplete then
+					releaseComplete, integrityIssue = verifyLocalRelease(files)
+				end
+
+				if releaseComplete ~= false then
+					if releaseComplete == true then
+						self.LocalIntegrityVerifiedVersion = remoteVersion
+					end
+					self.State = self.State or {}
+					self.State.LastVersion = remoteVersion
+					writeJson(self.StateFile, self.State)
+					if manual then
+						notify("Runtime Updater", "Already running release " .. remoteVersion, 5)
+					end
+					return true
+				end
+
+				notify("Runtime Updater", tostring(integrityIssue) .. " | repairing local release", 7)
 			end
-			return true
-		end
 		if versionOrder and versionOrder < 0 then
 			if manual then
 				notify("Runtime Updater", "Local release " .. localVersion .. " is newer than remote " .. remoteVersion, 5)
@@ -490,9 +537,10 @@ function Updater:checkAndInstall(manual)
 			return true
 		end
 
-		self.State = self.State or {}
-		self.State.LastVersion = changes.Version
-		self.State.LastUpdatedAt = os.time()
+			self.State = self.State or {}
+			self.State.LastVersion = changes.Version
+			self.State.LastUpdatedAt = os.time()
+			self.LocalIntegrityVerifiedVersion = changes.Version
 		writeJson(self.StateFile, self.State)
 
 		local menuText = #changes.Menus > 0 and joinShort(changes.Menus, 6) or "Code modules"

@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.13.30",
+    "Version":  "2026.07.13.31",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -21,7 +21,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "9f708abf72f7361559068e65b166659aa7f9ef5b84ee7bd668b2d6a926f04634"
+                      "Sha256":  "9a176635b09d87107b36ad9bdcbcb4c5488fa4215044601d4c897c5bdf3ed49b"
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/tab.luau",
@@ -371,7 +371,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "3505d2e548b3a17d6e14d6d7401264a77a8ff3dd0707c8fdd72d899eeb26d482"
+                      "Sha256":  "92d90427c14fbf3946c085d1ecd6b2e5f73a9718a58e1f5a1861214938a2c8cf"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Intent Resolver.luau",
@@ -448,7 +448,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "04da561e5a2524a6e5c4e491d1427213d81b15bd7a44e164a98793182b8f69ed"
+                      "Sha256":  "7ad8c58a34c1f31db204d92b1a39f9e9c3cbad1923bed52c22cd2fbb33fbcf76"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Technique Arbiter.luau",
@@ -623,7 +623,7 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "a772e563aa2513e104633153418c0a766140010cfda55d943b874a3c45d1f49c"
+                      "Sha256":  "60f24e3fd2d2bed9e92b2ac7c23fe751d5d8bfcebe1ec87d414c3a64d808538f"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Recovery.luau",
