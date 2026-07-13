@@ -17,6 +17,18 @@ function Availability.evaluate(grapple, part)
 	end
 
 	local anchorName = SpecialAnchors and SpecialAnchors.getName(part) or nil
+	local humanoid = grapple and grapple.Humanoid
+	if
+		anchorName
+		and anchorName ~= "JumpPad"
+		and humanoid
+		and humanoid:GetState() == Enum.HumanoidStateType.Running
+	then
+		-- Native Grapple.Start rejects every named target except JumpPad while
+		-- Running. Do not let targeting present an impossible Bell cast.
+		return false, "native-running-reject"
+	end
+
 	local movement = grapple and grapple.Movement
 	if anchorName == "Bell" and part.CanTouch == false then
 		return false, "bell-inactive"

@@ -33,7 +33,7 @@ local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Co
 local BadAnchorMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Bad Anchor Memory.luau")
 local PlayerIntent = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Player Intent State.luau")
 
-local HOOK_VERSION = 16
+local HOOK_VERSION = 17
 
 local PRIORITY = Decision and Decision.Priority
 	or {
@@ -214,6 +214,12 @@ local function clearRuntimeCaches(grapple)
 	end
 end
 
+local function armBellContact(hit)
+	if BellContact and typeof(BellContact.armCast) == "function" then
+		pcall(BellContact.armCast, hit)
+	end
+end
+
 local function installCastHook(grappleModule, globals)
 	local originalCast = grappleModule.Cast
 	local wrappedCast
@@ -229,29 +235,6 @@ local function installCastHook(grappleModule, globals)
 				and typeof(EntityContext.isRazorbloomActive) == "function"
 				and EntityContext.isRazorbloomActive()
 
-			if prioritizeAssist then
-				local assistedHit = Targeting.findOptimalHit(self, controller, {
-					ManualCast = manualCast,
-					EntityIntent = "RazorbloomEscape",
-				})
-				if assistedHit then
-					if CastTransaction and typeof(CastTransaction.expect) == "function" then
-						CastTransaction.expect(self, assistedHit, controller, "RazorbloomEscape")
-					end
-					return assistedHit
-				end
-			end
-
-			if manualCast and GrappleDodge and typeof(GrappleDodge.getManualCastHit) == "function" then
-				local dodgeHit, source = GrappleDodge.getManualCastHit(self, controller)
-				if dodgeHit then
-					if CastTransaction and typeof(CastTransaction.expect) == "function" then
-						CastTransaction.expect(self, dodgeHit, controller, source or "GrappleDodge")
-					end
-					return dodgeHit
-				end
-			end
-
 			if
 				manualCast
 				and controller
@@ -263,6 +246,7 @@ local function installCastHook(grappleModule, globals)
 					ManualCast = true,
 					AssistiveManual = true,
 					SpecialAnchorCapture = true,
+					EntityIntent = prioritizeAssist and "RazorbloomEscape" or nil,
 				})
 				if specialHit then
 					if CastTransaction and typeof(CastTransaction.expect) == "function" then
@@ -271,7 +255,35 @@ local function installCastHook(grappleModule, globals)
 					if DeferredAim and typeof(DeferredAim.reset) == "function" then
 						DeferredAim.reset()
 					end
+					armBellContact(specialHit)
 					return specialHit
+				end
+			end
+
+			-- Razorbloom favours JumpPad/GrapplePoint first. Rail and terrain only
+			-- enter this path after no special anchor can be captured from the aim.
+			if prioritizeAssist then
+				local assistedHit = Targeting.findOptimalHit(self, controller, {
+					ManualCast = manualCast,
+					EntityIntent = "RazorbloomEscape",
+				})
+				if assistedHit then
+					if CastTransaction and typeof(CastTransaction.expect) == "function" then
+						CastTransaction.expect(self, assistedHit, controller, "RazorbloomEscapeFallback")
+					end
+					armBellContact(assistedHit)
+					return assistedHit
+				end
+			end
+
+			if manualCast and GrappleDodge and typeof(GrappleDodge.getManualCastHit) == "function" then
+				local dodgeHit, source = GrappleDodge.getManualCastHit(self, controller)
+				if dodgeHit then
+					if CastTransaction and typeof(CastTransaction.expect) == "function" then
+						CastTransaction.expect(self, dodgeHit, controller, source or "GrappleDodge")
+					end
+					armBellContact(dodgeHit)
+					return dodgeHit
 				end
 			end
 
@@ -286,6 +298,7 @@ local function installCastHook(grappleModule, globals)
 							DeferredAim.reset()
 						end)
 					end
+					armBellContact(fallbackHit)
 					return fallbackHit
 				end
 			end
@@ -298,6 +311,7 @@ local function installCastHook(grappleModule, globals)
 					if CastTransaction and typeof(CastTransaction.expect) == "function" then
 						CastTransaction.expect(self, assistedHit, controller, "AssistFallback")
 					end
+					armBellContact(assistedHit)
 					return assistedHit
 				end
 			end
@@ -318,6 +332,7 @@ local function installCastHook(grappleModule, globals)
 		end
 
 		local originalResults = packValues(originalCast(self, forceRefresh, ...))
+		armBellContact(originalResults[1])
 		if originalResults[1] and DeferredAim and typeof(DeferredAim.reset) == "function" then
 			pcall(function()
 				DeferredAim.reset()
@@ -346,9 +361,13 @@ local function installStepHook(grappleModule, globals)
 	wrappedStep = function(self, dt, ...)
 		rememberGrapple(self)
 
-		if BellContact and typeof(BellContact.beforeStep) == "function" then
+		if isEnabled() and BellContact and typeof(BellContact.beforeStep) == "function" then
 			pcall(function()
 				BellContact.beforeStep(self)
+			end)
+		elseif BellContact and typeof(BellContact.disarm) == "function" then
+			pcall(function()
+				BellContact.disarm()
 			end)
 		end
 
@@ -381,7 +400,7 @@ local function installStepHook(grappleModule, globals)
 			end)
 		end
 
-		if BellContact and typeof(BellContact.afterStep) == "function" then
+		if isEnabled() and BellContact and typeof(BellContact.afterStep) == "function" then
 			pcall(function()
 				BellContact.afterStep(self)
 			end)

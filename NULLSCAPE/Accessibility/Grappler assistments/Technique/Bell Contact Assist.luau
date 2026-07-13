@@ -1,24 +1,18 @@
 --!nocheck
 --[[
 	NULLSCAPE - Grappler Bell Contact Assist
-	Temporarily releases Bell touch immunity while a grapple is attached to Bell,
-	then restores it after the native Bell ring remote confirms contact.
+	Releases Bell touch immunity for an intentional Bell cast, then restores it
+	only when the native Bell ring remote confirms the contact.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
 
-local CONTACT_WINDOW = 2.5
-local RESTORE_DELAY = 0.08
-local MAX_ATTACH_DISTANCE = 7
-
 local Logic = {
 	Connection = nil,
 	ActiveBell = nil,
-	ExpireAt = 0,
 	LastRingAt = 0,
-	Restoring = false,
 }
 
 local function getEvents()
@@ -48,46 +42,28 @@ local function isGrappledToBell(grapple)
 	return movement and movement.grappling == true, bell
 end
 
-local function nearBell(grapple, bell)
-	local rootPart = grapple and grapple.RootPart
-	if not (rootPart and rootPart.Parent and bell and bell.Parent) then
-		return false
-	end
-
-	return (rootPart.Position - bell.Position).Magnitude <= MAX_ATTACH_DISTANCE
-end
-
 local function restore()
-	if Logic.Restoring then
-		return
+	Logic.ActiveBell = nil
+	if TouchInterest and typeof(TouchInterest.endTemporaryAllow) == "function" then
+		pcall(TouchInterest.endTemporaryAllow, "Bell")
 	end
-
-	Logic.Restoring = true
-	task.delay(RESTORE_DELAY, function()
-		Logic.ActiveBell = nil
-		Logic.ExpireAt = 0
-		Logic.Restoring = false
-
-		if TouchInterest and typeof(TouchInterest.endTemporaryAllow) == "function" then
-			pcall(TouchInterest.endTemporaryAllow, "Bell")
-		end
-	end)
 end
 
 local function begin(bell)
-	if Logic.ActiveBell == bell and time() <= Logic.ExpireAt then
-		if TouchInterest and typeof(TouchInterest.beginTemporaryAllow) == "function" then
-			pcall(TouchInterest.beginTemporaryAllow, "Bell", 0.25)
-		end
+	if not isBellPart(bell) then
+		return false
+	end
+
+	if Logic.ActiveBell == bell then
 		return
 	end
 
 	Logic.ActiveBell = bell
-	Logic.ExpireAt = time() + CONTACT_WINDOW
 
 	if TouchInterest and typeof(TouchInterest.beginTemporaryAllow) == "function" then
-		pcall(TouchInterest.beginTemporaryAllow, "Bell", CONTACT_WINDOW)
+		pcall(TouchInterest.beginTemporaryAllow, "Bell", math.huge)
 	end
+	return true
 end
 
 local function ensureRemoteListener()
@@ -110,42 +86,35 @@ local function ensureRemoteListener()
 	end)
 end
 
+function Logic.armCast(hit)
+	local bell = typeof(hit) == "RaycastResult" and hit.Instance or hit
+	if not isBellPart(bell) then
+		return false
+	end
+
+	ensureRemoteListener()
+	return begin(bell)
+end
+
 function Logic.beforeStep(grapple)
 	ensureRemoteListener()
 
 	local grapplingBell, bell = isGrappledToBell(grapple)
-	if not grapplingBell then
-		if Logic.ActiveBell and time() > Logic.ExpireAt then
-			restore()
-		end
-		return false
+	if grapplingBell then
+		return begin(bell)
 	end
 
-	begin(bell)
-	return true
+	return false
 end
 
 function Logic.afterStep(grapple)
-	if not Logic.ActiveBell then
-		return false
-	end
+	return Logic.ActiveBell ~= nil
+end
 
-	if time() > Logic.ExpireAt then
+function Logic.disarm()
+	if Logic.ActiveBell then
 		restore()
-		return false
 	end
-
-	local grapplingBell, bell = isGrappledToBell(grapple)
-	if not grapplingBell then
-		restore()
-		return false
-	end
-
-	if grapplingBell and bell == Logic.ActiveBell and nearBell(grapple, bell) then
-		return true
-	end
-
-	return true
 end
 
 function Logic.reset()
@@ -157,8 +126,6 @@ function Logic.reset()
 	end
 
 	Logic.ActiveBell = nil
-	Logic.ExpireAt = 0
-	Logic.Restoring = false
 
 	if TouchInterest and typeof(TouchInterest.endTemporaryAllow) == "function" then
 		pcall(TouchInterest.endTemporaryAllow, "Bell")

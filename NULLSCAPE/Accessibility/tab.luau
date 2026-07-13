@@ -55,6 +55,8 @@ local DEFAULTS = {
 	GrappleDodgeStrength = 1,
 	GrappleDodgeRailBonus = 34,
 	GrappleDodgeMode = "Auto",
+	GrappleThreatWhitelist = { Bell = true },
+	GrappleThreatBlacklist = {},
 	GrappleSharkEscapeEnabled = false,
 	GrappleSharkEscapeMode = "Auto",
 	GrappleSharkEscapeRange = 26,
@@ -71,6 +73,21 @@ local DEFAULTS = {
 	StaminaMode = "Off",
 	GrapplerStaminaRecoverySpeed = 1,
 }
+
+local ThreatTargetPolicy =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Threat Target Policy.luau")
+local THREAT_TARGET_OPTIONS = ThreatTargetPolicy and ThreatTargetPolicy.Options or {}
+
+local function selectedThreatOptions(options)
+	local selected = {}
+	for option, enabled in pairs(options or {}) do
+		if enabled == true then
+			table.insert(selected, option)
+		end
+	end
+	table.sort(selected)
+	return selected
+end
 
 local function resolveController(Client, Controller)
 	if typeof(Controller) == "table" and rawget(Controller, "__AccessibilityProxy") ~= true then
@@ -765,6 +782,28 @@ return function(Client, Controller)
 		Flag = "GrappleSharkEscapeModeDropdown",
 		Callback = function(Options)
 			Controller:SetGrappleSharkEscapeMode(Options)
+		end,
+	})
+
+	Tab:CreateDropdown({
+		Name = "Threat Whitelist",
+		Options = THREAT_TARGET_OPTIONS,
+		CurrentOption = selectedThreatOptions(Controller.GrappleThreatWhitelist),
+		MultipleOptions = true,
+		Flag = "GrappleThreatWhitelistDropdown",
+		Callback = function(Options)
+			Controller:SetGrappleThreatWhitelist(Options)
+		end,
+	})
+
+	Tab:CreateDropdown({
+		Name = "Threat Blacklist",
+		Options = THREAT_TARGET_OPTIONS,
+		CurrentOption = selectedThreatOptions(Controller.GrappleThreatBlacklist),
+		MultipleOptions = true,
+		Flag = "GrappleThreatBlacklistDropdown",
+		Callback = function(Options)
+			Controller:SetGrappleThreatBlacklist(Options)
 		end,
 	})
 

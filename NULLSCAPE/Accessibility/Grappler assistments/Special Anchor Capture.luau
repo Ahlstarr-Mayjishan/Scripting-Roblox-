@@ -48,6 +48,26 @@ local function getRadius(part, anchorName)
 	return math.clamp(halfSize.Magnitude + (EXTRA_RADIUS[anchorName] or 3), MIN_CAPTURE_RADIUS, 16)
 end
 
+local function raycastAnchor(part, origin, targetPoint, grappleParams)
+	local offset = targetPoint - origin
+	local distance = offset.Magnitude
+	if distance <= 3 then
+		return nil
+	end
+
+	local hit = Workspace:Raycast(origin, offset.Unit * (distance + HIT_OVERSHOOT), grappleParams)
+	if not (hit and hit.Instance) then
+		return nil
+	end
+
+	local instance = hit.Instance
+	if not (instance == part or instance:IsDescendantOf(part) or part:IsDescendantOf(instance)) then
+		return nil
+	end
+
+	return hit, offset.Unit, distance
+end
+
 function Capture.resolve(part, origin, aimDirection, grappleParams, manualAngle)
 	if
 		not (
@@ -97,23 +117,16 @@ function Capture.resolve(part, origin, aimDirection, grappleParams, manualAngle)
 		return nil
 	end
 
-	local offset = targetPoint - origin
-	local distance = offset.Magnitude
-	if distance <= 3 then
-		return nil
+	-- Thin pads can put the aim-nearest point almost flush with the floor.
+	-- Fall back to the part center before allowing terrain to take the cast.
+	for _, capturePoint in ipairs({ targetPoint, part.Position }) do
+		local hit, hitDirection, distance = raycastAnchor(part, origin, capturePoint, grappleParams)
+		if hit then
+			return hit, hitDirection, distance, direction:Dot(hitDirection), anchorName
+		end
 	end
 
-	local hit = Workspace:Raycast(origin, offset.Unit * (distance + HIT_OVERSHOOT), grappleParams)
-	if not (hit and hit.Instance) then
-		return nil
-	end
-
-	local instance = hit.Instance
-	if not (instance == part or instance:IsDescendantOf(part) or part:IsDescendantOf(instance)) then
-		return nil
-	end
-
-	return hit, offset.Unit, distance, direction:Dot(offset.Unit), anchorName
+	return nil
 end
 
 return Capture

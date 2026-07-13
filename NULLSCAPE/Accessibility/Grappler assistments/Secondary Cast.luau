@@ -6,6 +6,8 @@
 
 local SecondaryCast = {}
 local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
+local BellContact =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/Bell Contact Assist.luau")
 
 local function hasBlockedStatus(grapple, statusName)
 	local status = grapple and grapple.Status
@@ -72,11 +74,29 @@ function SecondaryCast.cast(grapple, controller, targeting)
 		return false
 	end
 
-	local hit = getNativeHit(grapple)
+	local context = {
+		Technique = "SecondaryCast",
+		ManualCast = true,
+		AssistiveManual = true,
+		SpecialAnchorCapture = true,
+	}
+
+	local hit = targeting
+			and typeof(targeting.findSpecialAnchorHit) == "function"
+			and targeting.findSpecialAnchorHit(grapple, controller, context)
+		or nil
+	if not hit and targeting and typeof(targeting.fallbackCast) == "function" then
+		hit = targeting.fallbackCast(grapple, controller)
+	end
 	if not hit and targeting and typeof(targeting.findBestAssistHit) == "function" then
 		hit = targeting.findBestAssistHit(grapple, controller, {
+			Technique = "SecondaryCast",
 			ManualCast = true,
+			AssistiveManual = true,
 		})
+	end
+	if not hit then
+		hit = getNativeHit(grapple)
 	end
 	if not hit then
 		return false
@@ -90,6 +110,9 @@ function SecondaryCast.cast(grapple, controller, targeting)
 			ManualCast = true,
 			AssistiveManual = true,
 		})
+	if success and BellContact and typeof(BellContact.armCast) == "function" then
+		pcall(BellContact.armCast, hit)
+	end
 
 	return success == true
 end

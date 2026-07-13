@@ -90,15 +90,15 @@ end
 function Range.cast(grapple, forceRefresh, originalCast, ...)
 	local maxRange = Range.getEffectiveRange()
 	local easierVoidCast = Range.isEasierVoidCastEnabled()
-	local dodgeHit = findManualDodgeHit(grapple)
-	if dodgeHit then
-		recordRangeCast(grapple)
-		return dodgeHit
-	end
 	local specialHit = findSpecialAnchorHit(grapple)
 	if specialHit then
 		recordRangeCast(grapple)
 		return specialHit
+	end
+	local dodgeHit = findManualDodgeHit(grapple)
+	if dodgeHit then
+		recordRangeCast(grapple)
+		return dodgeHit
 	end
 
 	-- If all range/cast assists are at native values, call the original cast function.

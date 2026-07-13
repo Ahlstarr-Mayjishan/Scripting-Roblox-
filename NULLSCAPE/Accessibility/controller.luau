@@ -83,6 +83,8 @@ local Controller = {
 	GrappleDodgeStrength = 1,
 	GrappleDodgeRailBonus = 34,
 	GrappleDodgeMode = "Auto",
+	GrappleThreatWhitelist = { Bell = true },
+	GrappleThreatBlacklist = {},
 	GrappleSharkEscapeEnabled = false,
 	GrappleSharkEscapeMode = "Auto",
 	GrappleSharkEscapeRange = 26,
@@ -659,6 +661,30 @@ function Controller:SetGrappleDodgeMode(value)
 		value = value[1]
 	end
 	self.GrappleDodgeMode = tostring(value) == "Manual" and "Manual" or "Auto"
+end
+
+local function normaliseThreatList(value)
+	local result = {}
+	if typeof(value) ~= "table" then
+		return result
+	end
+
+	for key, selected in pairs(value) do
+		local option = typeof(key) == "number" and selected or key
+		if selected == true or typeof(key) == "number" then
+			result[tostring(option)] = true
+		end
+	end
+
+	return result
+end
+
+function Controller:SetGrappleThreatWhitelist(value)
+	self.GrappleThreatWhitelist = normaliseThreatList(value)
+end
+
+function Controller:SetGrappleThreatBlacklist(value)
+	self.GrappleThreatBlacklist = normaliseThreatList(value)
 end
 
 function Controller:SetGrappleSharkEscape(value)

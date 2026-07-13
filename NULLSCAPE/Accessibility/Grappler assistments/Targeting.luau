@@ -565,6 +565,20 @@ local function isManualIntent(intent)
 	return intent and (intent.PilotMode == "Manual" or intent.PilotMode == "AssistiveManual")
 end
 
+local function isAllowedSpecialForIntent(specialName, intent, specialOnly)
+	if not specialName then
+		return not specialOnly
+	end
+
+	if specialOnly and intent and intent.Name == "RazorbloomEscape" then
+		-- MovementCore only disables Razorbloom when the player touches one of
+		-- these two native targets. Bell, TriaOrb, and rails are unrelated.
+		return specialName == "JumpPad" or specialName == "GrapplePoint"
+	end
+
+	return true
+end
+
 local function isPriorityAnchor(part, specialName)
 	return specialName ~= nil or part.Name == "_RailPart"
 end
@@ -678,7 +692,7 @@ function Targeting.findOptimalHit(grapple, controller, context)
 		local specialDisabled = specialName
 			and effectiveController
 			and effectiveController.GrappleAssistSpecialPointPriority == false
-		if not (specialOnly and not specialName) and not specialDisabled then
+		if isAllowedSpecialForIntent(specialName, intent, specialOnly) and not specialDisabled then
 			local hit, direction, distance, dot, resolvedSpecialName =
 				resolveCandidateHit(part, origin, aimDirection, grapple.grappleParams, effectiveController, intent)
 			specialName = resolvedSpecialName or specialName

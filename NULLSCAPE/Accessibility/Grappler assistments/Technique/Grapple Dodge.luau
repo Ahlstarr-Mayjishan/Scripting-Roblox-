@@ -18,6 +18,8 @@ local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler a
 local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 local ReleasePolicy = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Policy.luau")
 local SharkTailWindow = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/SharkTail Window.luau")
+local ThreatTargetPolicy =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Threat Target Policy.luau")
 
 local Logic = {
 	LastCastAt = -1000,
@@ -175,6 +177,10 @@ local function getSharkEscapeThreat(grapple, controller)
 	local bestAway = nil
 
 	for _, threat in ipairs(EnemyMemory.getNearbyThreats(rootPosition, range)) do
+		if ThreatTargetPolicy and ThreatTargetPolicy.shouldIgnore(threat, controller, "SharkEscape") then
+			continue
+		end
+
 		local flatToThreat = flatten(threat.Position - rootPosition)
 		if flatToThreat.Magnitude <= 0.05 then
 			continue
@@ -245,6 +251,10 @@ local function getThreat(grapple, controller)
 	local bestAway = nil
 
 	for _, threat in ipairs(EnemyMemory.getNearbyThreats(rootPosition, threatRange)) do
+		if ThreatTargetPolicy and ThreatTargetPolicy.shouldIgnore(threat, controller, "GrappleDodge") then
+			continue
+		end
+
 		local offset = rootPosition - threat.Position
 		if offset.Magnitude <= 0.05 then
 			continue
@@ -284,6 +294,11 @@ local function getManualThreat(grapple, controller, sharkEscape)
 	local bestScore = 0
 
 	for _, threat in ipairs(EnemyMemory.getNearbyThreats(origin, range)) do
+		local technique = sharkEscape and "SharkEscape" or "GrappleDodge"
+		if ThreatTargetPolicy and ThreatTargetPolicy.shouldIgnore(threat, controller, technique) then
+			continue
+		end
+
 		local offset = flatten(threat.Position - origin)
 		if offset.Magnitude <= 0.05 then
 			continue
@@ -744,6 +759,9 @@ function Logic.reset()
 	Logic.PendingLiftEndAt = nil
 	if SharkTailWindow and typeof(SharkTailWindow.reset) == "function" then
 		SharkTailWindow.reset("SharkEscape")
+	end
+	if ThreatTargetPolicy and typeof(ThreatTargetPolicy.reset) == "function" then
+		ThreatTargetPolicy.reset()
 	end
 end
 
