@@ -14,6 +14,7 @@ local LocalPlayer = Players.LocalPlayer
 local ACTIVE_INTERVAL = 0.025
 local IDLE_INTERVAL = 0.15
 local ABILITY_HOLD = 0.06
+local JUMP_STATE_TIMEOUT = 0.08
 local MOVEMENT_RETRY_INTERVAL = 0.05
 local INVERTED_MAX = 0.08
 local GRAPPLE_RANGE = 90
@@ -274,6 +275,27 @@ local function releaseOwnedCast()
 	end)
 end
 
+local function isGroundedCastState(humanoid)
+	local state = humanoid:GetState()
+	return state == Enum.HumanoidStateType.Running
+		or state == Enum.HumanoidStateType.RunningNoPhysics
+		or state == Enum.HumanoidStateType.Landed
+end
+
+local function jumpIntoCastState(humanoid)
+	if not isGroundedCastState(humanoid) then
+		return true
+	end
+
+	humanoid.Jump = true
+	humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	local deadline = time() + JUMP_STATE_TIMEOUT
+	repeat
+		task.wait()
+	until not isGroundedCastState(humanoid) or time() >= deadline
+	return not isGroundedCastState(humanoid)
+end
+
 local function castGrapple(movement, grapple, character, humanoid)
 	if movement.grappling or tonumber(grapple.Charges) == 0 or typeof(grapple.Start) ~= "function" then
 		return "unavailable"
@@ -284,8 +306,8 @@ local function castGrapple(movement, grapple, character, humanoid)
 		return "retry"
 	end
 
-	if humanoid:GetState() == Enum.HumanoidStateType.Running and hit.Instance.Name ~= "JumpPad" then
-		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	if hit.Instance.Name ~= "JumpPad" and not jumpIntoCastState(humanoid) then
+		return "retry"
 	end
 
 	ownedMovement = movement
