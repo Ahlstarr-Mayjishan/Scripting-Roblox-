@@ -223,6 +223,18 @@ local function guardReassertedVFX(instance)
 	end
 end
 
+local function suppressPlayerGuiVFX(instance)
+	if not optionSelected(FPSBoost.Selections, "VFX") then
+		return
+	end
+	if not instance:IsA("BillboardGui") or (instance.Name ~= "splode" and instance.Name ~= "splode_crayon") then
+		return
+	end
+
+	hideVisual(instance, FPSBoost.OriginalVFX)
+	guardVisualProperty(instance, "Enabled", false, "VFX")
+end
+
 local function suppressVFX(instance)
 	if not optionSelected(FPSBoost.Selections, "VFX") then
 		return
@@ -357,6 +369,14 @@ local function bindVFX(token)
 	FPSBoost.Connections.LightingVFX = Lighting.DescendantAdded:Connect(suppressVFX)
 	scan(Workspace, suppressVFX, token)
 	scan(Lighting, suppressVFX, token)
+
+	local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
+	if playerGui then
+		for _, child in ipairs(playerGui:GetChildren()) do
+			suppressPlayerGuiVFX(child)
+		end
+		FPSBoost.Connections.PlayerGuiVFX = playerGui.ChildAdded:Connect(suppressPlayerGuiVFX)
+	end
 end
 
 local function bindEnemies(token)
