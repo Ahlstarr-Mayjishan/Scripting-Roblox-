@@ -1,37 +1,48 @@
 --!nocheck
 --[[
 	NULLSCAPE - Entities Kolona Auto QTE
-	Pulses UsingAbility only during Kolona's fatal QTE window, then releases it.
+	Casts the local class ability through its native movement API during Kolona's fatal window.
 ]]
 
 local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
 
 local AutoQTE = {}
 local GameState = getgenv().loadModule("NULLSCAPE/Core/Game State Context.luau")
 
 local LocalPlayer = Players.LocalPlayer
-local LOOP_INTERVAL = 0.025
+local ACTIVE_INTERVAL = 0.025
 local IDLE_INTERVAL = 0.15
-local PULSE_HOLD = 0.03
-local PULSE_COOLDOWN = 0.45
+local ABILITY_HOLD = 0.06
+local MOVEMENT_RETRY_INTERVAL = 0.05
 local INVERTED_MAX = 0.08
+local GRAPPLE_RANGE = 90
 
 local enabled = false
 local running = false
 local targetNumber = nil
 local currentTick = nil
-local pulsed = false
-local pulseHumanoid = nil
-local pulseStartedAt = -1000
+local cycleComplete = false
+local castInProgress = false
+local cachedMovement = nil
+local lastMovementSearchAt = -1000
+local ownedMovement = nil
+local ownedSpecial = nil
 local wasKolonaActive = false
+local castGeneration = 0
 local tickStates = setmetatable({}, { __mode = "k" })
 
-local function getHumanoid()
-	if GameState and typeof(GameState.getHumanoid) == "function" then
-		return GameState.getHumanoid()
+local function getCharacter()
+	if GameState and typeof(GameState.getCharacter) == "function" then
+		return GameState.getCharacter()
 	end
+	return LocalPlayer and LocalPlayer.Character
+end
 
-	local character = LocalPlayer and LocalPlayer.Character
+local function getHumanoid(character)
+	if GameState and typeof(GameState.getHumanoid) == "function" then
+		return GameState.getHumanoid(character)
+	end
 	return character and character:FindFirstChildOfClass("Humanoid")
 end
 
@@ -80,7 +91,7 @@ end
 local function resetCycle()
 	targetNumber = nil
 	currentTick = nil
-	pulsed = false
+	cycleComplete = false
 	table.clear(tickStates)
 end
 
@@ -89,7 +100,8 @@ local function captureTarget(main)
 		return
 	end
 
-	local number = tonumber((getNumberLabel(main) or {}).Text)
+	local label = getNumberLabel(main)
+	local number = label and tonumber(label.Text)
 	if number and number >= 5 and number <= 60 then
 		targetNumber = number
 	end
@@ -126,58 +138,247 @@ local function isFatalWindow(main)
 	return deathSpin and deathSpin:IsA("Sound") and deathSpin.IsPlaying == true
 end
 
-local function setUsingAbility(humanoid, value)
-	if GameState and typeof(GameState.setUsingAbility) == "function" then
-		GameState.setUsingAbility(value)
-	else
-		pcall(function()
-			humanoid:SetAttribute("UsingAbility", value)
-		end)
-	end
-end
-
 local function isUsingAbility(humanoid)
-	if GameState and typeof(GameState.getUsingAbility) == "function" and GameState.getUsingAbility() == true then
-		return true
+	if GameState and typeof(GameState.getUsingAbility) == "function" then
+		return GameState.getUsingAbility() == true
 	end
 	return humanoid and humanoid:GetAttribute("UsingAbility") == true
 end
 
-local function cancelPulse()
-	local humanoid = pulseHumanoid
-	if humanoid and humanoid.Parent then
-		setUsingAbility(humanoid, false)
+local function isLocalMovement(candidate, character, humanoid)
+	if typeof(candidate) ~= "table" then
+		return false
 	end
-	pulseHumanoid = nil
+	local metatable = getmetatable(candidate)
+	local specialAction = rawget(candidate, "SpecialAction")
+		or (typeof(metatable) == "table" and rawget(metatable, "SpecialAction"))
+
+	return rawget(candidate, "IsLocalPlayer") == true
+		and rawget(candidate, "Player") == LocalPlayer
+		and rawget(candidate, "Character") == character
+		and rawget(candidate, "Humanoid") == humanoid
+		and typeof(specialAction) == "function"
 end
 
-local function pulse(humanoid)
-	if pulseHumanoid or time() - pulseStartedAt < PULSE_COOLDOWN then
+local function findMovement(character, humanoid)
+	if isLocalMovement(cachedMovement, character, humanoid) then
+		return cachedMovement
+	end
+	cachedMovement = nil
+
+	local globals = getgenv()._NULLSCAPE_Globals
+	if globals then
+		local candidates = table.pack(globals.NullscapeStaminaMovement, globals.NullscapeRailLocalMovement)
+		for index = 1, candidates.n do
+			local candidate = candidates[index]
+			if isLocalMovement(candidate, character, humanoid) then
+				cachedMovement = candidate
+				return candidate
+			end
+		end
+	end
+
+	if time() - lastMovementSearchAt < MOVEMENT_RETRY_INTERVAL or typeof(getgc) ~= "function" then
+		return nil
+	end
+	lastMovementSearchAt = time()
+
+	local ok, objects = pcall(getgc, true)
+	if not (ok and typeof(objects) == "table") then
+		return nil
+	end
+
+	for _, candidate in next, objects do
+		if isLocalMovement(candidate, character, humanoid) then
+			cachedMovement = candidate
+			return candidate
+		end
+	end
+
+	return nil
+end
+
+local function getClassId(movement)
+	local classId = movement and movement.ClassID
+	if typeof(classId) ~= "string" and GameState and typeof(GameState.getClassId) == "function" then
+		classId = GameState.getClassId()
+	end
+	return typeof(classId) == "string" and string.lower(classId) or ""
+end
+
+local function findGrappleHit(grapple, character)
+	local ok, hit = pcall(function()
+		return grapple:Cast(true)
+	end)
+	if ok and hit and hit.Instance then
+		return hit
+	end
+
+	local root = grapple and grapple.RootPart
+	if not (root and root.Parent) then
+		return nil
+	end
+
+	local params = grapple.grappleParams
+	if not params then
+		params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = { character }
+		params.RespectCanCollide = false
+	elseif grapple.Movement and grapple.Movement.moveCastParams then
+		params.FilterDescendantsInstances = grapple.Movement.moveCastParams.FilterDescendantsInstances
+	end
+
+	local camera = Workspace.CurrentCamera
+	local look = camera and camera.CFrame.LookVector or root.CFrame.LookVector
+	local right = root.CFrame.RightVector
+	local forward = root.CFrame.LookVector
+	local directions = {
+		look,
+		forward,
+		-Vector3.yAxis,
+		Vector3.yAxis,
+		right,
+		-right,
+		-forward,
+		(forward + right).Unit,
+		(forward - right).Unit,
+	}
+
+	for _, direction in ipairs(directions) do
+		local result = Workspace:Raycast(root.Position, direction * GRAPPLE_RANGE, params)
+		if result and result.Instance and not result.Instance:IsDescendantOf(character) then
+			return result
+		end
+	end
+
+	return nil
+end
+
+local function releaseOwnedCast()
+	local movement = ownedMovement
+	local special = ownedSpecial
+	ownedMovement = nil
+	ownedSpecial = nil
+
+	if not (movement and special and movement.ActiveSpecial == special) then
 		return
 	end
 
-	pulseHumanoid = humanoid
-	pulseStartedAt = time()
-	setUsingAbility(humanoid, true)
-
-	task.delay(PULSE_HOLD, function()
-		if pulseHumanoid == humanoid then
-			cancelPulse()
+	pcall(function()
+		if movement.grappling == true and typeof(special.End) == "function" then
+			special:End(false)
+		elseif typeof(movement.SpecialAction) == "function" then
+			movement:SpecialAction(Enum.UserInputState.End)
 		end
 	end)
 end
 
-local function tryComplete(humanoid, main)
-	if pulsed then
+local function castGrapple(movement, grapple, character, humanoid)
+	if movement.grappling or tonumber(grapple.Charges) == 0 or typeof(grapple.Start) ~= "function" then
+		return "unavailable"
+	end
+
+	local hit = findGrappleHit(grapple, character)
+	if not hit then
+		return "retry"
+	end
+
+	if humanoid:GetState() == Enum.HumanoidStateType.Running and hit.Instance.Name ~= "JumpPad" then
+		humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
+
+	ownedMovement = movement
+	ownedSpecial = grapple
+	local ok = pcall(function()
+		grapple:Start(hit)
+	end)
+	if not ok or not (movement.grappling == true and isUsingAbility(humanoid)) then
+		ownedMovement = nil
+		ownedSpecial = nil
+		return "unavailable"
+	end
+
+	task.wait(ABILITY_HOLD)
+	releaseOwnedCast()
+	return "success"
+end
+
+local function castStandardAbility(movement, special, humanoid)
+	ownedMovement = movement
+	ownedSpecial = special
+	local ok = pcall(function()
+		movement:SpecialAction(Enum.UserInputState.Begin)
+	end)
+	if not ok then
+		ownedMovement = nil
+		ownedSpecial = nil
+		return "unavailable"
+	end
+
+	local startedAt = time()
+	repeat
+		if isUsingAbility(humanoid) then
+			break
+		end
+		task.wait()
+	until time() - startedAt >= ABILITY_HOLD
+
+	local activated = isUsingAbility(humanoid)
+	local remaining = ABILITY_HOLD - (time() - startedAt)
+	if activated and remaining > 0 then
+		task.wait(remaining)
+	end
+	releaseOwnedCast()
+	return activated and "success" or "unavailable"
+end
+
+local function castNativeAbility(character, humanoid)
+	if isUsingAbility(humanoid) then
+		return "success"
+	end
+
+	local movement = findMovement(character, humanoid)
+	local special = movement and movement.ActiveSpecial
+	if not (movement and special) then
+		return "retry"
+	end
+
+	if getClassId(movement):find("grappler", 1, true) then
+		return castGrapple(movement, special, character, humanoid)
+	end
+	return castStandardAbility(movement, special, humanoid)
+end
+
+local function tryComplete(character, humanoid, main)
+	if cycleComplete or castInProgress then
 		return
 	end
 
-	pulsed = true
-	if isUsingAbility(humanoid) or isInverted(main) then
+	-- Kolona's Idiotware inversion expects the ability to remain unused.
+	if isInverted(main) then
+		cycleComplete = true
 		return
 	end
 
-	pulse(humanoid)
+	-- A player-owned cast already satisfies Kolona; never cancel or replace it.
+	if isUsingAbility(humanoid) then
+		cycleComplete = true
+		return
+	end
+
+	castInProgress = true
+	castGeneration += 1
+	local generation = castGeneration
+	task.spawn(function()
+		local outcome = castNativeAbility(character, humanoid)
+		if generation == castGeneration then
+			castInProgress = false
+			if outcome ~= "retry" then
+				cycleComplete = true
+			end
+		end
+	end)
 end
 
 local function run(controller)
@@ -188,8 +389,9 @@ local function run(controller)
 	running = true
 	task.spawn(function()
 		while enabled and controller and not controller.Destroyed do
+			local character = getCharacter()
 			local main = getMain()
-			local humanoid = getHumanoid()
+			local humanoid = getHumanoid(character)
 			local active = isKolonaActive(main)
 
 			if active and not wasKolonaActive then
@@ -197,8 +399,8 @@ local function run(controller)
 			end
 			wasKolonaActive = active
 
-			if not (active and main and humanoid) then
-				cancelPulse()
+			if not (active and character and main and humanoid) then
+				releaseOwnedCast()
 				resetCycle()
 				task.wait(IDLE_INTERVAL)
 				continue
@@ -207,13 +409,12 @@ local function run(controller)
 			captureTarget(main)
 			updateTick(main)
 			if isFatalWindow(main) then
-				tryComplete(humanoid, main)
+				tryComplete(character, humanoid, main)
 			end
 
-			task.wait(LOOP_INTERVAL)
+			task.wait(ACTIVE_INTERVAL)
 		end
 
-		cancelPulse()
 		running = false
 	end)
 end
@@ -223,14 +424,19 @@ function AutoQTE.update(controller)
 	if enabled then
 		run(controller)
 	else
-		cancelPulse()
+		AutoQTE.disable()
 	end
 	return true
 end
 
 function AutoQTE.disable()
 	enabled = false
-	cancelPulse()
+	castGeneration += 1
+	castInProgress = false
+	releaseOwnedCast()
+	resetCycle()
+	cachedMovement = nil
+	wasKolonaActive = false
 	return true
 end
 

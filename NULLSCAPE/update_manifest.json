@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.13.37",
+    "Version":  "2026.07.14.38",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -115,7 +115,7 @@
                                    "Kolona",
                                    "Auto QTE"
                                ],
-                      "Sha256":  "f4b064045d72b7c5f227584dc93230a9798a90712ddb4e3e9714aa640a6df55c"
+                      "Sha256":  "8207a03459c43624ba75e0e0deca862c2e8eb4697f8d6a60ce544bea8d0408d5"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Springer Auto Jump.luau",
