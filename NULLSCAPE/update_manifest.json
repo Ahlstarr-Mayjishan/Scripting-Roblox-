@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.14.39",
+    "Version":  "2026.07.14.40",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "4ede4b21daea976c0bcb0aaa3a9429076fa09daddcbcf7e97642fb956456749c"
+                      "Sha256":  "0b466aec322084a1b547893b0669343200fed81aeea538643d9378d215b2dcd0"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/MovementLease.luau",
@@ -74,7 +74,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "57cfaca736a285b8e2890a8f95c34e820014894f82df2ef09317ca1418acaa0e"
+                      "Sha256":  "02ded835c1c92ff8af03e86fec844a7eeae0b79fb795b61a8bad59f6f950188d"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Collector.luau",

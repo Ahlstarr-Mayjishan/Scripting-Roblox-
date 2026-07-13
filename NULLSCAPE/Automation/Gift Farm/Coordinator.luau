@@ -1100,8 +1100,8 @@ function Coordinator.enable(controller, gc)
 	enabled = true
 	configDirty = true
 
-	if Context and typeof(Context.suppressRails) == "function" then
-		Context.suppressRails()
+	if Context and typeof(Context.suppressMovementInteractions) == "function" then
+		Context.suppressMovementInteractions()
 	end
 
 	-- Connect reactively to ConfigChanged
@@ -1144,8 +1144,8 @@ function Coordinator.disable(controller)
 	loopActive = false
 	recoverAfterStop(controller, "Gift Farm disabled")
 
-	if Context and typeof(Context.restoreRails) == "function" then
-		Context.restoreRails()
+	if Context and typeof(Context.restoreMovementInteractions) == "function" then
+		Context.restoreMovementInteractions()
 	end
 
 	if configChangedConn then

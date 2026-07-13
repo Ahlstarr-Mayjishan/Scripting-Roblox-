@@ -371,43 +371,48 @@ function Context.getCandidatePosition(item)
 	return nil
 end
 
-local railConnection = nil
-local modifiedRails = {}
+local interactionConnection = nil
+local modifiedInteractionParts = setmetatable({}, { __mode = "k" })
+local suppressedInteractionNames = {
+	_RailPart = true,
+	TriaOrb = true,
+}
 
-function Context.suppressRails()
-	if railConnection then
+function Context.suppressMovementInteractions()
+	if interactionConnection then
 		return
 	end
 
-	modifiedRails = {}
-
 	local function process(descendant)
-		if descendant:IsA("BasePart") and descendant.Name == "_RailPart" then
-			if modifiedRails[descendant] == nil then
-				modifiedRails[descendant] = descendant.CanTouch
-				pcall(function()
-					descendant.CanTouch = false
-				end)
-			end
+		if not (descendant:IsA("BasePart") and suppressedInteractionNames[descendant.Name]) then
+			return
 		end
+		if modifiedInteractionParts[descendant] ~= nil then
+			return
+		end
+
+		modifiedInteractionParts[descendant] = descendant.CanTouch
+		pcall(function()
+			descendant.CanTouch = false
+		end)
 	end
 
 	for _, descendant in ipairs(Workspace:GetDescendants()) do
 		process(descendant)
 	end
 
-	railConnection = Workspace.DescendantAdded:Connect(process)
+	interactionConnection = Workspace.DescendantAdded:Connect(process)
 end
 
-function Context.restoreRails()
-	if railConnection then
+function Context.restoreMovementInteractions()
+	if interactionConnection then
 		pcall(function()
-			railConnection:Disconnect()
+			interactionConnection:Disconnect()
 		end)
-		railConnection = nil
+		interactionConnection = nil
 	end
 
-	for part, originalCanTouch in pairs(modifiedRails) do
+	for part, originalCanTouch in pairs(modifiedInteractionParts) do
 		if part and part.Parent then
 			pcall(function()
 				part.CanTouch = originalCanTouch
@@ -415,7 +420,7 @@ function Context.restoreRails()
 		end
 	end
 
-	modifiedRails = {}
+	table.clear(modifiedInteractionParts)
 end
 
 return Context
