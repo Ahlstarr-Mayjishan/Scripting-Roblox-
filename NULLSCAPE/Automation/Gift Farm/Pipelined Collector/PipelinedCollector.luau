@@ -55,11 +55,12 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 			end
 
 			local planInfo = step.Info
+			local tailMode = planInfo and planInfo.TailCleanup == true
 			local result = Collector.collectCluster(_controller, hrp, cluster, range, {
 				SafeRange = planInfo and planInfo.SafeRange,
 				TargetPosition = planInfo and planInfo.TargetPosition,
-				PrecisionMode = #cluster <= 2 or (planInfo and planInfo.TailCleanup == true),
-				TailMode = planInfo and planInfo.TailCleanup == true,
+				PrecisionMode = tailMode,
+				TailMode = tailMode,
 				NormalPacingBatchSize = options.NormalPacingBatchSize,
 				AbortCheck = shouldAbort,
 			}, lease, _currentSessionToken)

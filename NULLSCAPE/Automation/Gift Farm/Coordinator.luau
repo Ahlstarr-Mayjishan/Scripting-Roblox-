@@ -899,7 +899,6 @@ local function runLoop(controller)
 					local collapseCount = score and tonumber(score.CollapseCount) or 0
 					local precisionMode = tailPrecision
 						or (planInfo and planInfo.TailCleanup == true)
-						or #cluster <= 2
 						or (collapseCount > 0 and #cluster <= 4)
 
 					transitionTo(

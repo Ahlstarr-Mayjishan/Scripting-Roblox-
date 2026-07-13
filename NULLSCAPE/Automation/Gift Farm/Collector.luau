@@ -7,7 +7,6 @@ local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
 
 local Collector = {}
-local COLLECT_SETTLE = 0
 local PRECISION_COLLECT_SETTLE = 0.05
 local BASE_VALIDATION_WAIT = 0.08
 local PRECISION_VALIDATION_WAIT = 0.12
@@ -116,23 +115,11 @@ local function getPingSeconds()
 	return ok and normalizePingSeconds(result) or nil
 end
 
-local function waitForReplicationSync(precisionMode)
-	local ping = getPingSeconds() or 0.08
-	local targetWait = ping * 0.75 + 0.025
-	local minWait = precisionMode and 0.045 or 0.04
-	local maxWait = math.max(precisionMode and 0.14 or 0.12, ping)
-	local waitTime = math.clamp(targetWait, minWait, maxWait)
-
-	local frames = precisionMode and 2 or 1
-	local start = os.clock()
-	for _ = 1, frames do
-		RunService.Heartbeat:Wait()
-	end
-	local elapsed = os.clock() - start
-	local remaining = waitTime - elapsed
-	if remaining > 0 then
-		task.wait(remaining)
-	end
+local function waitForNativeFlush()
+	-- GiftClient queues U16 ids and flushes the whole buffer on RenderStepped.
+	-- Holding position for that boundary preserves native remote ordering without
+	-- paying a full ping wait after every route point.
+	RunService.RenderStepped:Wait()
 end
 
 local function getValidationWait(_controller, precisionMode)
@@ -204,7 +191,6 @@ local function jumpToWaypoint(hrp, targetPosition, lease)
 		return false
 	end
 	clearVelocity(hrp)
-	RunService.Heartbeat:Wait()
 	return true
 end
 
@@ -369,7 +355,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 
 	options = options or {}
 	local tailMode = options.TailMode == true
-	local precisionMode = tailMode or options.PrecisionMode == true or #cluster <= 2
+	local precisionMode = tailMode or options.PrecisionMode == true
 	local targetPosition = options.TargetPosition or cluster.TargetPosition or cluster[1].pos
 	local collectRange = options.SafeRange or cluster.SafeRange or range
 	local clientCollectRange = collectRange + 3.0 -- Allow a slight client buffer to prevent skipping edge gifts
@@ -418,11 +404,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
-		waitIfPositive(precisionMode and PRECISION_COLLECT_SETTLE or COLLECT_SETTLE)
-		if isAborted(options, lease, currentSessionToken) then
-			return
-		end
-		waitForReplicationSync(precisionMode)
+		waitIfPositive(precisionMode and PRECISION_COLLECT_SETTLE or 0)
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
@@ -447,7 +429,10 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			return
 		end
 
-		local needsValidation = #attemptedGifts > 0
+		local needsValidation = precisionMode and #attemptedGifts > 0
+		if #attemptedGifts > 0 then
+			waitForNativeFlush()
+		end
 		if needsValidation then
 			task.wait(getValidationWait(controller, precisionMode))
 		end
@@ -469,10 +454,6 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			if isAborted(options, lease, currentSessionToken) then
 				return
 			end
-			waitForReplicationSync(true)
-			if isAborted(options, lease, currentSessionToken) then
-				return
-			end
 			currentPos = hrp.Position
 			collectItems(
 				rejected,
@@ -483,6 +464,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 				attemptedSet,
 				options.NormalPacingBatchSize
 			)
+			waitForNativeFlush()
 			task.wait(getValidationWait(controller, true))
 		end
 
@@ -508,13 +490,21 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			end
 		end
 
-		updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
+		if needsValidation then
+			updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
+		end
 		result.Attempted = #attemptedGifts
 		result.Rejected = observedRejects
-		for _, gift in ipairs(attemptedGifts) do
-			if isGiftAccepted(gift) then
-				result.Accepted += 1
+		if needsValidation then
+			for _, gift in ipairs(attemptedGifts) do
+				if isGiftAccepted(gift) then
+					result.Accepted += 1
+				end
 			end
+		else
+			-- Native collection is optimistic and restores rejected gifts through
+			-- Collection.OnClientEvent. The next scan naturally retries those gifts.
+			result.Accepted = #attemptedGifts
 		end
 	end)
 
@@ -522,7 +512,11 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 		error(err, 0)
 	end
 
-	if lease and typeof(lease.reportCollectResult) == "function" and (tailMode or result.Rejected > 0) then
+	if lease
+		and typeof(lease.reportCollectResult) == "function"
+		and precisionMode
+		and result.Attempted > 0
+	then
 		lease:reportCollectResult(result.Attempted, result.Rejected)
 	end
 
