@@ -84,6 +84,24 @@ return function(Client)
 		end,
 	})
 
+	SettingsTab:CreateToggle({
+		Name = "Ultimated FSP Booster",
+		CurrentValue = false,
+		Flag = "UltimateFPSBoosterToggle",
+		Callback = function(value)
+			local booster = Client.Modules and Client.Modules.UltimateFPSBooster
+			if not booster or typeof(booster.setEnabled) ~= "function" then
+				warn("[NULLSCAPE] Ultimate FPS booster is unavailable")
+				return
+			end
+
+			local enabled, reason = booster.setEnabled(value)
+			if not enabled then
+				warn("[NULLSCAPE] Ultimate FPS booster failed: " .. tostring(reason))
+			end
+		end,
+	})
+
 	SettingsTab:CreateSection("Runtime Updates")
 
 	SettingsTab:CreateToggle({

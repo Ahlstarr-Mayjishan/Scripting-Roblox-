@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.14.52",
+    "Version":  "2026.07.14.53",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "abbfc2d084346fb4067ac428f0d739e20b7f73efd90363230fc14b15f64779e4"
+                      "Sha256":  "8b083b551fcb11879e6c1028072b545fd311132a735121e261b49732a9934178"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -28,7 +28,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "6c9a596ee7cc24706e9f20f44e0ae51739100f1bca3b66a63b5ac51a23eb111e"
+                      "Sha256":  "70d9b3192e36b249a11c92931f5a6f9eac1730ade393c21f1ee932c0f278fe2d"
                   },
                   {
                       "Path":  "NULLSCAPE/Core/Remote Registry.luau",
@@ -938,6 +938,13 @@
                   {
                       "Path":  "NULLSCAPE/Setting/FPS Boost.luau",
                       "Sha256":  "5b116b48dc5fefbcc110fd919fe0aab5da99eba06f5dd6ce5a5c0ae7c6dee0c4"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Setting/Ultimate FPS Booster.luau",
+                      "Menu":  [
+                                   "Settings"
+                               ],
+                      "Sha256":  "98d961014207c22156f42ab3dd03935ba57f458e271838eab52627bcd7bfbd4d"
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/Character Actions.luau",

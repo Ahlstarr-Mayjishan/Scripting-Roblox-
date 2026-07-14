@@ -1196,6 +1196,15 @@ else
 	warn("[NULLSCAPE] FPS boost unavailable: " .. tostring(fpsBoostResult))
 end
 
+local ultimateFPSBoosterLoaded, ultimateFPSBoosterResult = pcall(function()
+	return loadModule("NULLSCAPE/Setting/Ultimate FPS Booster.luau")
+end)
+if ultimateFPSBoosterLoaded and typeof(ultimateFPSBoosterResult) == "table" then
+	Client.Modules.UltimateFPSBooster = ultimateFPSBoosterResult
+else
+	warn("[NULLSCAPE] Ultimate FPS booster unavailable: " .. tostring(ultimateFPSBoosterResult))
+end
+
 local settingsLoaded, settingsError = pcall(function()
 	local SettingsTab = loadModule("NULLSCAPE/Setting/tab.luau")
 	SettingsTab(Client)
