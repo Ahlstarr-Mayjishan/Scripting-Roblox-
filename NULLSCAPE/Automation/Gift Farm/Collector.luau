@@ -127,6 +127,46 @@ local function getPingSeconds()
 	return ok and normalizePingSeconds(result) or nil
 end
 
+local function withNativePickupSuppressed(callback)
+	local handler = Context.getGiftClientHandler()
+	local classes = handler and handler.GiftClasses
+	if typeof(classes) ~= "table" then
+		return callback()
+	end
+
+	local wrapped = {}
+	for _, class in pairs(classes) do
+		local original = typeof(class) == "table" and rawget(class, "Collect") or nil
+		if typeof(original) == "function" then
+			local wrapper = function(gift, alternate, clientCollect, ...)
+				if clientCollect == true then
+					return
+				end
+				return original(gift, alternate, clientCollect, ...)
+			end
+			class.Collect = wrapper
+			wrapped[#wrapped + 1] = {
+				Class = class,
+				Original = original,
+				Wrapper = wrapper,
+			}
+		end
+	end
+
+	local results = table.pack(xpcall(callback, debug.traceback))
+	for index = #wrapped, 1, -1 do
+		local entry = wrapped[index]
+		if entry.Class.Collect == entry.Wrapper then
+			entry.Class.Collect = entry.Original
+		end
+	end
+
+	if not results[1] then
+		error(results[2], 0)
+	end
+	return table.unpack(results, 2, results.n)
+end
+
 local function waitForNativeFlush()
 	-- GiftClient queues U16 ids and flushes the whole buffer on RenderStepped.
 	-- The following physics boundary guarantees the native callback has completed
@@ -341,8 +381,12 @@ local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, c
 
 		clearVelocity(hrp)
 		if (hrp.Position - standingPosition).Magnitude > PRECISION_ARRIVAL_TOLERANCE then
-			waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
-			waitForServerPosition()
+			withNativePickupSuppressed(function()
+				waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
+				if not isAborted(options, lease, currentSessionToken) then
+					waitForServerPosition()
+				end
+			end)
 		end
 
 		local currentPos = hrp.Position
@@ -411,30 +455,39 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 
 		hrp.Anchored = false
 		lease:placeFoothold(standingPosition)
-		if not jumpToWaypoint(hrp, standingPosition, lease) then
+		local moved = false
+		local arrived = false
+		withNativePickupSuppressed(function()
+			moved = jumpToWaypoint(hrp, standingPosition, lease)
+			if not moved or isAborted(options, lease, currentSessionToken) then
+				return
+			end
+			clearVelocity(hrp)
+			arrived = waitForArrival(
+				hrp,
+				standingPosition,
+				tailMode and "tail" or precisionMode,
+				lease,
+				currentSessionToken,
+				options
+			)
+			if not isAborted(options, lease, currentSessionToken)
+				and (arrived or hasCollectableNearby(cluster, hrp.Position, clientCollectRange))
+			then
+				waitForServerPosition()
+			end
+		end)
+		if not moved then
 			result.Rejected = #cluster
 			return
 		end
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
-		clearVelocity(hrp)
-		local arrived = waitForArrival(
-			hrp,
-			standingPosition,
-			tailMode and "tail" or precisionMode,
-			lease,
-			currentSessionToken,
-			options
-		)
 		if not arrived and not hasCollectableNearby(cluster, hrp.Position, clientCollectRange) then
 			result.Rejected = #cluster
 			return
 		end
-		if isAborted(options, lease, currentSessionToken) then
-			return
-		end
-		waitForServerPosition()
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
@@ -481,8 +534,12 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			end
 
 			comboCount = 0
-			waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
-			waitForServerPosition()
+			withNativePickupSuppressed(function()
+				waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
+				if not isAborted(options, lease, currentSessionToken) then
+					waitForServerPosition()
+				end
+			end)
 			if isAborted(options, lease, currentSessionToken) then
 				return
 			end

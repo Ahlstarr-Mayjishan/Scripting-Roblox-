@@ -66,6 +66,12 @@ local state = {
 	PositionDeltas = table.create(MAX_LATENCY_SAMPLES),
 	PositionDeltaHead = 1,
 	PositionDeltaCount = 0,
+	AcceptedGiftDistances = table.create(MAX_LATENCY_SAMPLES),
+	AcceptedGiftDistanceHead = 1,
+	AcceptedGiftDistanceCount = 0,
+	AcceptedSettledTimes = table.create(MAX_LATENCY_SAMPLES),
+	AcceptedSettledTimeHead = 1,
+	AcceptedSettledTimeCount = 0,
 	RejectGiftDistances = table.create(MAX_LATENCY_SAMPLES),
 	RejectGiftDistanceHead = 1,
 	RejectGiftDistanceCount = 0,
@@ -236,6 +242,15 @@ local function resolveAccept(giftId)
 	local latency = os.clock() - pending.At
 	pushBounded(state.AckLatencies, "AckLatencyHead", "AckLatencyCount", latency)
 	recordPositionDelta(pending)
+	if pending.GiftDistance then
+		pushBounded(
+			state.AcceptedGiftDistances,
+			"AcceptedGiftDistanceHead",
+			"AcceptedGiftDistanceCount",
+			pending.GiftDistance
+		)
+	end
+	pushBounded(state.AcceptedSettledTimes, "AcceptedSettledTimeHead", "AcceptedSettledTimeCount", pending.SettledFor)
 end
 
 local function resolveReject(giftId, protocol)
@@ -316,6 +331,10 @@ local function buildReport()
 	local failureP95 = percentile(state.FailureLatencies, state.FailureLatencyHead, state.FailureLatencyCount, 0.95)
 	local ackP95 = percentile(state.AckLatencies, state.AckLatencyHead, state.AckLatencyCount, 0.95)
 	local positionP95 = percentile(state.PositionDeltas, state.PositionDeltaHead, state.PositionDeltaCount, 0.95)
+	local acceptedDistanceP95 =
+		percentile(state.AcceptedGiftDistances, state.AcceptedGiftDistanceHead, state.AcceptedGiftDistanceCount, 0.95)
+	local acceptedSettledP50 =
+		percentile(state.AcceptedSettledTimes, state.AcceptedSettledTimeHead, state.AcceptedSettledTimeCount, 0.5)
 	local rejectDistanceP95 =
 		percentile(state.RejectGiftDistances, state.RejectGiftDistanceHead, state.RejectGiftDistanceCount, 0.95)
 	local rejectSettledP50 =
@@ -357,6 +376,8 @@ local function buildReport()
 		AckP95 = ackP95,
 		FailureP95 = failureP95,
 		PositionDeltaP95 = positionP95,
+		AcceptedGiftDistanceP95 = acceptedDistanceP95,
+		AcceptedSettledP50 = acceptedSettledP50,
 		RejectGiftDistanceP95 = rejectDistanceP95,
 		RejectSettledP50 = rejectSettledP50,
 		BatchOutcomes = table.concat(batchOutcomeStrings, ","),
@@ -372,7 +393,7 @@ local function printReport()
 	state.LastReport = report
 	print(
 		string.format(
-			"[GiftTelemetry] runtime=%.1fs attempts=%d accepted=%d rejected=%d timedOut=%d pending=%d rejectRate=%.1f%% ping=%s ackP95=%s failP95=%s positionDeltaP95=%s rejectGiftDistanceP95=%s rejectSettledP50=%s observedWaitFloor=%.3fs batches=[%s]",
+			"[GiftTelemetry] runtime=%.1fs attempts=%d accepted=%d rejected=%d timedOut=%d pending=%d rejectRate=%.1f%% ping=%s ackP95=%s failP95=%s positionDeltaP95=%s acceptedGiftDistanceP95=%s acceptedSettledP50=%s rejectGiftDistanceP95=%s rejectSettledP50=%s observedWaitFloor=%.3fs batches=[%s]",
 			report.Runtime,
 			report.Attempts,
 			report.Accepted,
@@ -384,6 +405,8 @@ local function printReport()
 			report.AckP95 and string.format("%.3fs", report.AckP95) or "n/a",
 			report.FailureP95 and string.format("%.3fs", report.FailureP95) or "n/a",
 			report.PositionDeltaP95 and string.format("%.2f", report.PositionDeltaP95) or "n/a",
+			report.AcceptedGiftDistanceP95 and string.format("%.2f", report.AcceptedGiftDistanceP95) or "n/a",
+			report.AcceptedSettledP50 and string.format("%.3fs", report.AcceptedSettledP50) or "n/a",
 			report.RejectGiftDistanceP95 and string.format("%.2f", report.RejectGiftDistanceP95) or "n/a",
 			report.RejectSettledP50 and string.format("%.3fs", report.RejectSettledP50) or "n/a",
 			report.ObservedWaitFloor,
@@ -536,6 +559,12 @@ function api.reset()
 	table.clear(state.PositionDeltas)
 	state.PositionDeltaHead = 1
 	state.PositionDeltaCount = 0
+	table.clear(state.AcceptedGiftDistances)
+	state.AcceptedGiftDistanceHead = 1
+	state.AcceptedGiftDistanceCount = 0
+	table.clear(state.AcceptedSettledTimes)
+	state.AcceptedSettledTimeHead = 1
+	state.AcceptedSettledTimeCount = 0
 	table.clear(state.RejectGiftDistances)
 	state.RejectGiftDistanceHead = 1
 	state.RejectGiftDistanceCount = 0
