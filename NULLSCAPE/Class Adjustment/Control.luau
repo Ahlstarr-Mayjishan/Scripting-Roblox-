@@ -30,6 +30,13 @@ local Control = {
 	ChargerSteeringAssistStrength = 50,
 	ChargerCollisionGuardEnabled = false,
 	ChargerAirPlatformDuration = 1,
+	ChargerChargeChainAssistEnabled = false,
+	ChargerChargeChainBuffer = 0.25,
+	ChargerSharkTailTimingAssistEnabled = false,
+	ChargerSharkTailTimingWindow = 0.25,
+	ChargerAirPlatformAssistEnabled = false,
+	ChargerLongJumpGuardEnabled = false,
+	ChargerLongJumpGuardDistance = 18,
 	GrappleInstantGroundCast = false,
 	GrappleWallGlide = false,
 	GrappleInstantMaxPull = false,
@@ -147,6 +154,33 @@ local function readSettings()
 		end
 		Control.ChargerAirPlatformDuration =
 			math.clamp(tonumber(decoded.ChargerAirPlatformDurationSlider) or Control.ChargerAirPlatformDuration, 1, 10)
+		if decoded.ChargerChargeChainAssistToggle ~= nil then
+			Control.ChargerChargeChainAssistEnabled = not not decoded.ChargerChargeChainAssistToggle
+		end
+		Control.ChargerChargeChainBuffer = math.clamp(
+			tonumber(decoded.ChargerChargeChainBufferSlider) or Control.ChargerChargeChainBuffer,
+			0.05,
+			0.5
+		)
+		if decoded.ChargerSharkTailTimingAssistToggle ~= nil then
+			Control.ChargerSharkTailTimingAssistEnabled = not not decoded.ChargerSharkTailTimingAssistToggle
+		end
+		Control.ChargerSharkTailTimingWindow = math.clamp(
+			tonumber(decoded.ChargerSharkTailTimingWindowSlider) or Control.ChargerSharkTailTimingWindow,
+			0.05,
+			0.6
+		)
+		if decoded.ChargerAirPlatformAssistToggle ~= nil then
+			Control.ChargerAirPlatformAssistEnabled = not not decoded.ChargerAirPlatformAssistToggle
+		end
+		if decoded.ChargerLongJumpGuardToggle ~= nil then
+			Control.ChargerLongJumpGuardEnabled = not not decoded.ChargerLongJumpGuardToggle
+		end
+		Control.ChargerLongJumpGuardDistance = math.clamp(
+			tonumber(decoded.ChargerLongJumpGuardDistanceSlider) or Control.ChargerLongJumpGuardDistance,
+			8,
+			40
+		)
 	end
 end
 
@@ -190,6 +224,13 @@ local function writeSettings()
 	data.ChargerSteeringAssistStrengthSlider = Control.ChargerSteeringAssistStrength
 	data.ChargerCollisionGuardToggle = Control.ChargerCollisionGuardEnabled
 	data.ChargerAirPlatformDurationSlider = Control.ChargerAirPlatformDuration
+	data.ChargerChargeChainAssistToggle = Control.ChargerChargeChainAssistEnabled
+	data.ChargerChargeChainBufferSlider = Control.ChargerChargeChainBuffer
+	data.ChargerSharkTailTimingAssistToggle = Control.ChargerSharkTailTimingAssistEnabled
+	data.ChargerSharkTailTimingWindowSlider = Control.ChargerSharkTailTimingWindow
+	data.ChargerAirPlatformAssistToggle = Control.ChargerAirPlatformAssistEnabled
+	data.ChargerLongJumpGuardToggle = Control.ChargerLongJumpGuardEnabled
+	data.ChargerLongJumpGuardDistanceSlider = Control.ChargerLongJumpGuardDistance
 
 	pcall(makefolder, SETTINGS_FOLDER)
 
@@ -256,6 +297,9 @@ function Control:initialize()
 	if Executor and typeof(Executor.updateChargerAirPlatformDuration) == "function" then
 		Executor.updateChargerAirPlatformDuration(self)
 	end
+	if Executor and typeof(Executor.updateChargerAssistSuite) == "function" then
+		Executor.updateChargerAssistSuite(self)
+	end
 	if ClassContext and typeof(ClassContext.subscribe) == "function" then
 		local connection = ClassContext.subscribe(function()
 			if not self.Destroyed and Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
@@ -269,6 +313,9 @@ function Control:initialize()
 			end
 			if not self.Destroyed and Executor and typeof(Executor.updateChargerAirPlatformDuration) == "function" then
 				Executor.updateChargerAirPlatformDuration(self)
+			end
+			if not self.Destroyed and Executor and typeof(Executor.updateChargerAssistSuite) == "function" then
+				Executor.updateChargerAssistSuite(self)
 			end
 		end)
 		if connection then
@@ -442,6 +489,51 @@ function Control:SetChargerAirPlatformDuration(value)
 	if Executor and typeof(Executor.updateChargerAirPlatformDuration) == "function" then
 		Executor.updateChargerAirPlatformDuration(self)
 	end
+end
+
+local function updateChargerAssistSuite()
+	if Executor and typeof(Executor.updateChargerAssistSuite) == "function" then
+		Executor.updateChargerAssistSuite(Control)
+	end
+end
+
+function Control:SetChargerChargeChainAssist(value)
+	self.ChargerChargeChainAssistEnabled = value == true
+	saveSettings()
+	updateChargerAssistSuite()
+end
+
+function Control:SetChargerChargeChainBuffer(value)
+	self.ChargerChargeChainBuffer = math.clamp(tonumber(value) or 0.25, 0.05, 0.5)
+	saveSettings()
+end
+
+function Control:SetChargerSharkTailTimingAssist(value)
+	self.ChargerSharkTailTimingAssistEnabled = value == true
+	saveSettings()
+	updateChargerAssistSuite()
+end
+
+function Control:SetChargerSharkTailTimingWindow(value)
+	self.ChargerSharkTailTimingWindow = math.clamp(tonumber(value) or 0.25, 0.05, 0.6)
+	saveSettings()
+end
+
+function Control:SetChargerAirPlatformAssist(value)
+	self.ChargerAirPlatformAssistEnabled = value == true
+	saveSettings()
+	updateChargerAssistSuite()
+end
+
+function Control:SetChargerLongJumpGuard(value)
+	self.ChargerLongJumpGuardEnabled = value == true
+	saveSettings()
+	updateChargerAssistSuite()
+end
+
+function Control:SetChargerLongJumpGuardDistance(value)
+	self.ChargerLongJumpGuardDistance = math.clamp(tonumber(value) or 18, 8, 40)
+	saveSettings()
 end
 
 function Control:SetGrappleInstantGroundCast(value)

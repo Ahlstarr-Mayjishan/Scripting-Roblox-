@@ -24,6 +24,7 @@ local HookCastSpeed = nil
 local ChargerTripmineAssist = nil
 local ChargerSteeringAssist = nil
 local ChargerCollisionGuard = nil
+local ChargerAssistSuite = nil
 local CatapultBoost = nil
 local MomentumTransfer = nil
 local MAIN_THREAD_KEY = {}
@@ -48,6 +49,7 @@ local MODULE_PATHS = {
 	ChargerTripmineAssist = "NULLSCAPE/Class Adjustment/Charger/Tripmine Assist.luau",
 	ChargerSteeringAssist = "NULLSCAPE/Class Adjustment/Charger/Steering Assist.luau",
 	ChargerCollisionGuard = "NULLSCAPE/Class Adjustment/Charger/Charge Collision Guard.luau",
+	ChargerAssistSuite = "NULLSCAPE/Class Adjustment/Charger/Charger Assist Suite.luau",
 	CatapultBoost = "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",
 	MomentumTransfer = "NULLSCAPE/Class Adjustment/Grappler/Grapple Momentum Transfer.luau",
 }
@@ -849,6 +851,9 @@ function Executor.disable()
 	if ChargerCollisionGuard and typeof(ChargerCollisionGuard.stop) == "function" then
 		pcall(ChargerCollisionGuard.stop)
 	end
+	if ChargerAssistSuite and typeof(ChargerAssistSuite.stop) == "function" then
+		pcall(ChargerAssistSuite.stop)
+	end
 	restoreChargerAirPlatformDuration()
 end
 
@@ -934,6 +939,14 @@ end
 
 function Executor.updateChargerAirPlatformDuration(controller)
 	return updateChargerAirPlatformDuration(controller)
+end
+
+function Executor.updateChargerAssistSuite(controller)
+	ChargerAssistSuite = ChargerAssistSuite or getgenv().loadModule(MODULE_PATHS.ChargerAssistSuite)
+	if ChargerAssistSuite and typeof(ChargerAssistSuite.update) == "function" then
+		return ChargerAssistSuite.update(controller)
+	end
+	return nil
 end
 
 return Executor
