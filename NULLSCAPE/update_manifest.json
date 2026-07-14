@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.14.48",
+    "Version":  "2026.07.14.52",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "ba88b466ee2a1235b55b7d007c31c7baa21dd67c4c34b094212dbecf1084d800"
+                      "Sha256":  "531d28343aa9825d88b22cea42939679f7f721171207724dfaec371b4f0a7afd"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/MovementLease.luau",
@@ -714,7 +714,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "8c223bab4bd416ac27820964515ed9fb3f713446f7a75add517ccc8b8751f8f1"
+                      "Sha256":  "ab7e30b6ba40df4750aa4806bc0e0c9774ab4b30d5c68af6fa5d28c77636d42b"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Cluster Planner.luau",
@@ -937,7 +937,7 @@
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/FPS Boost.luau",
-                      "Sha256":  "0821aaf6a039cd93f405fda1c60ab47ff2ca5a0cbfc3b925f2fe49bc22b9be88"
+                      "Sha256":  "5b116b48dc5fefbcc110fd919fe0aab5da99eba06f5dd6ce5a5c0ae7c6dee0c4"
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/Character Actions.luau",

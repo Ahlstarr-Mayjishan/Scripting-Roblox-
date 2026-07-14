@@ -725,13 +725,19 @@ local function runLoop(controller)
 			then
 				local lease = MovementLease.acquire("AltarStep")
 				transitionTo(controller, "Collecting", "Attempting Altar activation")
-				local handledAltar, altarStatus, altarDetail, altarConfirmed = Altar.tryStep(controller, hrp, lease, mySessionToken)
+				local _, _, normalGiftRatio = Progress.getNormalGiftProgress(gch)
+				local handledAltar, altarStatus, _altarDetail, altarConfirmed, altarName = Altar.tryStep(
+					controller,
+					hrp,
+					lease,
+					mySessionToken,
+					normalGiftRatio
+				)
 				lease:release()
 				if not isSessionActive() then continue end
 				if handledAltar then
 					markProgress()
-					local isPassage = typeof(altarDetail) == "string"
-						and string.find(altarDetail, "Passage", 1, true) ~= nil
+					local isPassage = altarName == "Passage"
 					if isPassage then
 						controller.GiftFarmGoldenComplete = false
 						pendingGoldenReturnSince = nil

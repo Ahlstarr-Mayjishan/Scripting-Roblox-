@@ -42,11 +42,15 @@ local CHARACTER_ENEMY_NAMES = {
 	Razorbloom = true,
 }
 
-local VOID_GUARDIAN_PROJECTILE_POOLS = {
+local PROJECTILE_VFX_POOLS = {
+	Bullet = true,
 	Homer = true,
 	HomerLaser = true,
 	HomerInverted = true,
 	OldHomer = true,
+	SigilPartsGroup = true,
+	SigilBeamGroup = true,
+	SigilBlastGroup = true,
 }
 
 local REASSERTED_VFX_ROOT_NAMES = {
@@ -187,6 +191,17 @@ local function hasVoidbreakerAncestor(instance)
 	return false
 end
 
+local function hasProjectileVFXPoolAncestor(instance)
+	local current = instance
+	while current and current ~= Workspace do
+		if PROJECTILE_VFX_POOLS[current.Name] and current.Parent and current.Parent.Name == "Item_Pools" then
+			return true
+		end
+		current = current.Parent
+	end
+	return false
+end
+
 local function findVoidbreakerSword(instance)
 	local current = instance
 	while current and current ~= Workspace do
@@ -273,13 +288,25 @@ local function suppressVFX(instance)
 
 	pcall(function()
 		local sword = findVoidbreakerSword(instance)
+		local isProjectileVFX = hasProjectileVFXPoolAncestor(instance)
 		if
 			hasReassertedVFXAncestor(instance)
 			or hasVoidbreakerAncestor(instance) and (instance:IsA("Decal") or instance:IsA("Texture"))
+			or isProjectileVFX
 		then
 			hideVisual(instance, FPSBoost.OriginalVFX)
 		end
 		guardReassertedVFX(instance)
+		if isProjectileVFX then
+			if instance:IsA("BasePart") then
+				guardVisualProperty(instance, "LocalTransparencyModifier", 1, "VFX")
+			elseif instance:IsA("ParticleEmitter") then
+				guardVisualProperty(instance, "Enabled", false, "VFX")
+				guardVisualProperty(instance, "Transparency", NumberSequence.new(1), "VFX")
+			elseif instance:IsA("Beam") or instance:IsA("Trail") or instance:IsA("Light") then
+				guardVisualProperty(instance, "Enabled", false, "VFX")
+			end
+		end
 		if sword and instance:IsA("BasePart") then
 			if FPSBoost.OriginalVFX[instance] == nil then
 				FPSBoost.OriginalVFX[instance] = { Transparency = instance.Transparency }
@@ -411,17 +438,6 @@ local function bindVFX(token)
 end
 
 local function bindEnemies(token)
-	local function isVoidGuardianProjectile(instance, itemPools)
-		local current = instance
-		while current and current ~= itemPools do
-			if VOID_GUARDIAN_PROJECTILE_POOLS[current.Name] then
-				return true
-			end
-			current = current.Parent
-		end
-		return false
-	end
-
 	local function attach(folder)
 		if not (folder and ENEMY_ROOT_NAMES[folder.Name]) then
 			return
@@ -435,19 +451,6 @@ local function bindEnemies(token)
 		FPSBoost.Connections[folder] = folder.DescendantAdded:Connect(function(instance)
 			hideEnemyVisual(instance)
 		end)
-	end
-
-	local function attachProjectilePools(itemPools)
-		if not (itemPools and itemPools.Name == "Item_Pools") then
-			return
-		end
-		local function hideProjectileVisual(instance)
-			if isVoidGuardianProjectile(instance, itemPools) then
-				hideVisual(instance, FPSBoost.OriginalEnemyVisuals)
-			end
-		end
-		scan(itemPools, hideProjectileVisual, token)
-		FPSBoost.Connections[itemPools] = itemPools.DescendantAdded:Connect(hideProjectileVisual)
 	end
 
 	local function attachVoidbreakerGui(gui)
@@ -495,7 +498,6 @@ local function bindEnemies(token)
 	for rootName in pairs(ENEMY_ROOT_NAMES) do
 		attach(Workspace:FindFirstChild(rootName))
 	end
-	attachProjectilePools(Workspace:FindFirstChild("Item_Pools"))
 	local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	if playerGui then
 		attachVoidbreakerGui(playerGui:FindFirstChild("Voidbreaker"))
@@ -506,8 +508,6 @@ local function bindEnemies(token)
 	FPSBoost.Connections.EnemiesFolderAdded = Workspace.ChildAdded:Connect(function(child)
 		if ENEMY_ROOT_NAMES[child.Name] then
 			attach(child)
-		elseif child.Name == "Item_Pools" then
-			attachProjectilePools(child)
 		end
 	end)
 end

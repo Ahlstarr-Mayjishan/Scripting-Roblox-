@@ -8,8 +8,18 @@ local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.lua
 
 local Altar = {}
 
-local ALTAR_ORDER = { "Passage", "Purgatory", "Chance", "Protection", "Chaos", "Echo", "Purification" }
-local ALTAR_COMBO_ORDER = { "Purgatory", "Echo" }
+local POLICY_ORDER = { "Purgatory", "Chance", "Protection", "Passage", "Purification", "Chaos" }
+local POLICY_PRIORITY = {}
+local PRIMARY_ECHO_SOURCES = {
+	Purgatory = true,
+	Chance = true,
+	Protection = true,
+}
+local ECHO_IGNORED_ALTARS = {
+	Purification = true,
+	Chaos = true,
+}
+local PURGATORY_GREED_LIMIT = 0.5
 local ACTION_COOLDOWN = 0.7
 local TOUCH_SETTLE = 0.08
 local MAX_ACTIVATION_SECONDS = 5
@@ -20,7 +30,13 @@ local currentTargetStartedAt = 0
 local lastActionAt = 0
 local skippedUntil = setmetatable({}, { __mode = "k" })
 local activatedThisRound = setmetatable({}, { __mode = "k" })
+local rememberedEchoSource = nil
+local lastObservedLevel = nil
 local getPrompt
+
+for index, altarName in ipairs(POLICY_ORDER) do
+	POLICY_PRIORITY[altarName] = index
+end
 
 local function isSoloRun()
 	local solo = ReplicatedStorage:FindFirstChild("Solo")
@@ -152,22 +168,17 @@ local function getAltarName(root, tagged)
 		or readStringValue(marker and marker:FindFirstChild("RealName"))
 end
 
-local function buildSelectionPriority(controller)
+local function buildSelection(controller)
 	local selected = {}
-	local priority = {}
-	local orderedSelections = {}
 	local selections = controller and controller.AltarSelections
 
 	if typeof(selections) ~= "table" then
-		return selected, priority
+		return selected
 	end
 
 	for _, altarName in ipairs(selections) do
 		if typeof(altarName) == "string" and altarName ~= "" then
 			selected[altarName] = true
-			if not table.find(orderedSelections, altarName) then
-				table.insert(orderedSelections, altarName)
-			end
 		end
 	end
 
@@ -177,37 +188,48 @@ local function buildSelectionPriority(controller)
 		end
 	end
 
-	local nextPriority = 1
-	if selected.Purgatory == true and selected.Echo == true then
-		for _, altarName in ipairs(ALTAR_COMBO_ORDER) do
-			priority[altarName] = nextPriority
-			nextPriority += 1
-		end
-	end
-
-	for _, altarName in ipairs(orderedSelections) do
-		if selected[altarName] and not priority[altarName] then
-			priority[altarName] = nextPriority
-			nextPriority += 1
-		end
-	end
-
-	for _, altarName in ipairs(ALTAR_ORDER) do
-		if selected[altarName] and not priority[altarName] then
-			priority[altarName] = nextPriority
-			nextPriority += 1
-		end
-	end
-
-	return selected, priority
+	return selected
 end
 
 local function isSelected(controller)
-	local selected = buildSelectionPriority(controller)
+	local selected = buildSelection(controller)
 	for _ in pairs(selected) do
 		return true
 	end
 	return false
+end
+
+local function hasDeadPlayer()
+	for _, player in ipairs(Players:GetPlayers()) do
+		local dead = player:FindFirstChild("Dead")
+		if dead and dead:IsA("BoolValue") and dead.Value == true then
+			return true
+		end
+
+		local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		if humanoid and humanoid.Health <= 0 then
+			return true
+		end
+	end
+	return false
+end
+
+local function canUsePurgatory(normalGiftRatio)
+	local ratio = tonumber(normalGiftRatio) or 0
+	if ratio < PURGATORY_GREED_LIMIT then
+		return true
+	end
+	return ratio <= 0.9 and not isSoloRun() and hasDeadPlayer()
+end
+
+local function isPolicyEligible(altarName, purgatoryEligible)
+	return altarName ~= "Purgatory" or purgatoryEligible
+end
+
+local function isBetterCandidate(candidate, current)
+	return not current
+		or candidate.Priority < current.Priority
+		or (candidate.Priority == current.Priority and candidate.Distance < current.Distance)
 end
 
 local function collectCandidates()
@@ -231,7 +253,7 @@ local function collectCandidates()
 	return roots, seen
 end
 
-local function isValidTarget(target, selected)
+local function isValidTarget(target, selected, purgatoryEligible)
 	if not target or not target.Root or not target.Root:IsDescendantOf(workspace) then
 		return false
 	end
@@ -239,6 +261,9 @@ local function isValidTarget(target, selected)
 		return false
 	end
 	if not selected[target.Name] then
+		return false
+	end
+	if not isPolicyEligible(target.Name, purgatoryEligible) then
 		return false
 	end
 	if skippedUntil[target.Root] and os.clock() < skippedUntil[target.Root] then
@@ -270,19 +295,27 @@ local function getStateDetail(target, state)
 	return target.Name .. " | " .. stateText
 end
 
-local function findBestTarget(controller, hrp)
-	local selected, priority = buildSelectionPriority(controller)
+local function findBestTarget(controller, hrp, normalGiftRatio)
+	local selected = buildSelection(controller)
+	local purgatoryEligible = canUsePurgatory(normalGiftRatio)
 	if not next(selected) then
 		return nil
 	end
 
-	if isValidTarget(currentTarget, selected) then
+	if isValidTarget(currentTarget, selected, purgatoryEligible)
+		and (currentTarget.Name ~= "Echo" or rememberedEchoSource ~= nil)
+	then
 		return currentTarget
 	end
 
 	currentTarget = nil
 	local roots, taggedByRoot = collectCandidates()
-	local best = nil
+	local primaryBest = nil
+	local echoBest = nil
+	local passageBest = nil
+	local deferredBest = nil
+	local primaryCount = 0
+	local echoCount = 0
 
 	for _, root in ipairs(roots) do
 		local tagged = taggedByRoot[root]
@@ -290,6 +323,7 @@ local function findBestTarget(controller, hrp)
 		local state = getAltarState(root, tagged)
 		if name
 			and selected[name]
+			and isPolicyEligible(name, purgatoryEligible)
 			and state
 			and state.Ready == true
 			and activatedThisRound[root] ~= true
@@ -305,25 +339,46 @@ local function findBestTarget(controller, hrp)
 					Prompt = state.Prompt,
 					State = state,
 					Name = name,
-					Priority = priority[name] or 999,
+					Priority = POLICY_PRIORITY[name] or 999,
 					Distance = distance,
 				}
-				if not best
-					or candidate.Priority < best.Priority
-					or (candidate.Priority == best.Priority and candidate.Distance < best.Distance)
-				then
-					best = candidate
+				if name == "Echo" then
+					echoCount += 1
+					candidate.EchoSource = rememberedEchoSource
+					if not echoBest or candidate.Distance < echoBest.Distance then
+						echoBest = candidate
+					end
+				elseif name == "Passage" then
+					if not passageBest or candidate.Distance < passageBest.Distance then
+						passageBest = candidate
+					end
+				elseif PRIMARY_ECHO_SOURCES[name] then
+					primaryCount += 1
+					if isBetterCandidate(candidate, primaryBest) then
+						primaryBest = candidate
+					end
+				elseif ECHO_IGNORED_ALTARS[name] and isBetterCandidate(candidate, deferredBest) then
+					deferredBest = candidate
 				end
 			end
 		end
 	end
 
-	currentTarget = best
-	currentTargetStartedAt = best and os.clock() or 0
-	return best
+	local shouldRepeatRemembered = rememberedEchoSource ~= nil and echoBest ~= nil
+	if rememberedEchoSource == "Passage" and primaryCount > 0 and echoCount <= primaryCount then
+		shouldRepeatRemembered = false
+	end
+
+	if shouldRepeatRemembered then
+		currentTarget = echoBest
+	else
+		currentTarget = primaryBest or passageBest or deferredBest
+	end
+	currentTargetStartedAt = currentTarget and os.clock() or 0
+	return currentTarget
 end
 
-function Altar.tryStep(controller, hrp, lease, _currentSessionToken)
+function Altar.tryStep(controller, hrp, lease, _currentSessionToken, normalGiftRatio)
 	if not (controller and hrp and hrp.Parent) then
 		return false
 	end
@@ -337,13 +392,24 @@ function Altar.tryStep(controller, hrp, lease, _currentSessionToken)
 		if confirmedState and confirmedState.Used == true then
 			local confirmedTarget = currentTarget
 			activatedThisRound[confirmedTarget.Root] = true
+			if confirmedTarget.Name == "Echo" then
+				rememberedEchoSource = nil
+			elseif confirmedTarget.Name == "Passage" then
+				rememberedEchoSource = "Passage"
+			elseif PRIMARY_ECHO_SOURCES[confirmedTarget.Name] then
+				rememberedEchoSource = confirmedTarget.Name
+			end
 			currentTarget = nil
 			currentTargetStartedAt = 0
-			return true, "AltarActivated", confirmedTarget.Name .. " | Confirmed", true
+			local detail = confirmedTarget.Name .. " | Confirmed"
+			if confirmedTarget.Name == "Echo" and confirmedTarget.EchoSource then
+				detail = detail .. " | Repeated " .. confirmedTarget.EchoSource
+			end
+			return true, "AltarActivated", detail, true, confirmedTarget.Name
 		end
 	end
 
-	local target = findBestTarget(controller, hrp)
+	local target = findBestTarget(controller, hrp, normalGiftRatio)
 	if not target then
 		return false
 	end
@@ -383,10 +449,19 @@ function Altar.tryStep(controller, hrp, lease, _currentSessionToken)
 		end
 	end
 
-	return true, "ActivatingAltar", getStateDetail(target, state), false
+	return true, "ActivatingAltar", getStateDetail(target, state), false, target.Name
 end
 
 function Altar.reset()
+	local levelValue = ReplicatedStorage:FindFirstChild("Level")
+	local level = tonumber(levelValue and levelValue.Value)
+	if level and lastObservedLevel and level < lastObservedLevel then
+		rememberedEchoSource = nil
+	end
+	if level then
+		lastObservedLevel = level
+	end
+
 	currentTarget = nil
 	currentTargetStartedAt = 0
 	lastActionAt = 0
