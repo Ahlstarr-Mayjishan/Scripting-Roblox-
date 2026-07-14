@@ -221,6 +221,7 @@ pcall(function()
 			ChargerSteeringAssistToggle = false,
 			ChargerSteeringAssistStrengthSlider = 50,
 			ChargerCollisionGuardToggle = false,
+			ChargerAirPlatformDurationSlider = 1,
 			GraceWingsToggle = false,
 			GraceWingsAirControlSlider = 1,
 			AdvancedGravityCoilToggle = false,
