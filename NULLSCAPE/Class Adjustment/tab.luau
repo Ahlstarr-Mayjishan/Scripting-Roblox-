@@ -57,6 +57,7 @@ local createControllerProxy = function(Client, Controller)
 		ChargerSteeringAssistEnabled = false,
 		ChargerSteeringAssistStrength = 50,
 		ChargerCollisionGuardEnabled = false,
+		ChargerAirPlatformDuration = 1,
 	}
 
 	return setmetatable({ __ClassAdjustmentProxy = true }, {
@@ -306,6 +307,19 @@ return function(Client, Controller)
 		Flag = "ChargerCollisionGuardToggle",
 		Callback = function(Value)
 			Controller:SetChargerCollisionGuard(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Air Platform Duration",
+		Info = "1s tra ve timer native cua game (1.4s neu Hourglass dang duoc ap dung). 2-10s ghi de bang thoi luong tuy chinh.",
+		Range = { 1, 10 },
+		Increment = 0.1,
+		Suffix = "s",
+		CurrentValue = Controller.ChargerAirPlatformDuration or 1,
+		Flag = "ChargerAirPlatformDurationSlider",
+		Callback = function(Value)
+			Controller:SetChargerAirPlatformDuration(Value)
 		end,
 	})
 

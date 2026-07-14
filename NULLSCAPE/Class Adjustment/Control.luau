@@ -29,6 +29,7 @@ local Control = {
 	ChargerSteeringAssistEnabled = false,
 	ChargerSteeringAssistStrength = 50,
 	ChargerCollisionGuardEnabled = false,
+	ChargerAirPlatformDuration = 1,
 	GrappleInstantGroundCast = false,
 	GrappleWallGlide = false,
 	GrappleInstantMaxPull = false,
@@ -144,6 +145,8 @@ local function readSettings()
 		if decoded.ChargerCollisionGuardToggle ~= nil then
 			Control.ChargerCollisionGuardEnabled = not not decoded.ChargerCollisionGuardToggle
 		end
+		Control.ChargerAirPlatformDuration =
+			math.clamp(tonumber(decoded.ChargerAirPlatformDurationSlider) or Control.ChargerAirPlatformDuration, 1, 10)
 	end
 end
 
@@ -186,6 +189,7 @@ local function writeSettings()
 	data.ChargerSteeringAssistToggle = Control.ChargerSteeringAssistEnabled
 	data.ChargerSteeringAssistStrengthSlider = Control.ChargerSteeringAssistStrength
 	data.ChargerCollisionGuardToggle = Control.ChargerCollisionGuardEnabled
+	data.ChargerAirPlatformDurationSlider = Control.ChargerAirPlatformDuration
 
 	pcall(makefolder, SETTINGS_FOLDER)
 
@@ -249,6 +253,9 @@ function Control:initialize()
 	if Executor and typeof(Executor.updateChargerCollisionGuard) == "function" then
 		Executor.updateChargerCollisionGuard(self)
 	end
+	if Executor and typeof(Executor.updateChargerAirPlatformDuration) == "function" then
+		Executor.updateChargerAirPlatformDuration(self)
+	end
 	if ClassContext and typeof(ClassContext.subscribe) == "function" then
 		local connection = ClassContext.subscribe(function()
 			if not self.Destroyed and Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
@@ -259,6 +266,9 @@ function Control:initialize()
 			end
 			if not self.Destroyed and Executor and typeof(Executor.updateChargerCollisionGuard) == "function" then
 				Executor.updateChargerCollisionGuard(self)
+			end
+			if not self.Destroyed and Executor and typeof(Executor.updateChargerAirPlatformDuration) == "function" then
+				Executor.updateChargerAirPlatformDuration(self)
 			end
 		end)
 		if connection then
@@ -423,6 +433,14 @@ function Control:SetChargerCollisionGuard(value)
 	saveSettings()
 	if Executor and typeof(Executor.updateChargerCollisionGuard) == "function" then
 		Executor.updateChargerCollisionGuard(self)
+	end
+end
+
+function Control:SetChargerAirPlatformDuration(value)
+	self.ChargerAirPlatformDuration = math.clamp(tonumber(value) or 1, 1, 10)
+	saveSettings()
+	if Executor and typeof(Executor.updateChargerAirPlatformDuration) == "function" then
+		Executor.updateChargerAirPlatformDuration(self)
 	end
 end
 
