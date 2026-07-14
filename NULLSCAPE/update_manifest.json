@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.15.59",
+    "Version":  "2026.07.15.62",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "233063f76dc21ae6e8fc85f5d9b6a111812d25caebfdafa53234b11f57276920"
+                      "Sha256":  "a23976ed50475bc0240b4a5be1950b3b6712186e0b08d4f9e2be7822d8d2008a"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -147,7 +147,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "95e192db611293b22b989de55a4311aea9eb7e059feccc9156d6933a410fd670"
+                      "Sha256":  "6b04827c37229657e998fef209de21366ca56ed598023fa512f5620676802910"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/RemoteBlocking.luau",
@@ -168,14 +168,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "f9560feeecb15abd4ef919c776134f5b26158a535e2d3d4f1bd733e4eefdb3af"
-                  },
-                  {
-                      "Path":  "NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau",
-                      "Menu":  [
-                                   "Entities"
-                               ],
-                      "Sha256":  "f0fdfce7f66d4223b0ddf976ff285c75d1a262d3728675bffcdcd769decf60b1"
+                      "Sha256":  "80798df3f0a95fdc68d0028415a3090b9ccffb1d6068a40d4ac99ee35df8dff7"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/controller.luau",
@@ -721,7 +714,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "ab7e30b6ba40df4750aa4806bc0e0c9774ab4b30d5c68af6fa5d28c77636d42b"
+                      "Sha256":  "38bb68ca4acd6271829bac450d31d08985cc75efb7a5834661bd8114f5318afb"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Cluster Planner.luau",
@@ -979,7 +972,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "d08edf41b5d6dd7c9f8750059301b0eafa3eb42798a39aade0444082652fcc60"
+                      "Sha256":  "bde5360faa3981da1aaea45e069ab2e3765bfd8fcdeed9573ebf5040161fd357"
                   }
               ]
 }

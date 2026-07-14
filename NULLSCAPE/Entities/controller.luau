@@ -5,7 +5,6 @@
 
 local getgenv = getgenv
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
@@ -63,7 +62,6 @@ local OperatorAutoDisable = getgenv().loadModule("NULLSCAPE/Entities/Operator Au
 local RazorbloomAutoDisable = getgenv().loadModule("NULLSCAPE/Entities/Razorbloom Auto Disable.luau")
 local BellImmunity = getgenv().loadModule("NULLSCAPE/Entities/Bell Immunity.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
-local BackTrick = getgenv().loadModule("NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau")
 local KolonaAutoQTE = nil
 local SpringerAutoJump = nil
 
@@ -100,8 +98,6 @@ local function getSpringerAutoJump()
 	warn("[NULLSCAPE] Springer Auto Jump failed to load: " .. tostring(result))
 	return nil
 end
-
-local hookedTelefraggers = setmetatable({}, { __mode = "k" })
 
 local function shouldBlockWithShieldPolicy(controller, allowShieldBait)
 	if RemoteBlocking and typeof(RemoteBlocking.shouldBlockWithShieldPolicy) == "function" then
@@ -159,17 +155,6 @@ local Controller = {
 	ShieldBaitEnabled = false,
 	ShieldBaitChance = 0,
 	LastShieldBaitAt = 0,
-	TelefraggerAutoDodge = false,
-	TelefraggerAutoDodgeRequested = false,
-	TelefraggerBackTrick = false,
-	TelefraggerBackTrickMode = "180",
-	TelefraggerDesyncDelay = 0.44,
-	TelefraggerActiveThreads = {},
-	TelefraggerActiveDesyncs = {},
-	TelefraggerConnection = nil,
-	WasRedirectingTelefragger = false,
-	RedirectRootJoint = nil,
-	RedirectOriginalC0 = nil,
 	Destroyed = false,
 
 	EnemiesFolder = nil,
@@ -298,25 +283,6 @@ local function restoreHooks()
 	globals.EntitiesHookOwner = nil
 end
 
-function Controller:SetTelefraggerAutoDodge(value)
-	self.TelefraggerAutoDodge = false
-	self.TelefraggerAutoDodgeRequested = value == true
-	self:UpdateTelefraggerConnection()
-end
-
-function Controller:SetTelefraggerBackTrick(value)
-	self.TelefraggerBackTrick = value
-	self:UpdateTelefraggerConnection()
-end
-
-function Controller:SetTelefraggerBackTrickMode(value)
-	self.TelefraggerBackTrickMode = value
-end
-
-function Controller:SetTelefraggerDesyncDelay(value)
-	self.TelefraggerDesyncDelay = value
-end
-
 function Controller:SetSeamineImmune(value)
 	self.SeamineImmune = value
 end
@@ -411,163 +377,10 @@ function Controller:ReconcileImmunityState()
 	end
 end
 
-function Controller:UpdateTelefraggerConnection()
-	if self.TelefraggerConnection then
-		pcall(function()
-			self.TelefraggerConnection:Disconnect()
-		end)
-		self.TelefraggerConnection = nil
-	end
-
-	if not self.TelefraggerBackTrick and self.WasRedirectingTelefragger then
-		BackTrick.revert(self)
-	end
-
-	if not self.TelefraggerAutoDodge then
-		return
-	end
-
-	local LocalPlayer = game.Players.LocalPlayer
-
-	local function getDistanceToSegment(p, a, b)
-		local ab = b - a
-		local ap = p - a
-		local abLenSq = ab:Dot(ab)
-		if abLenSq < 1e-5 then
-			return (p - a).Magnitude, a
-		end
-		local t = ap:Dot(ab) / abLenSq
-		t = math.clamp(t, 0, 1)
-		local closest = a + t * ab
-		return (p - closest).Magnitude, closest
-	end
-
-	self.TelefraggerConnection = RunService.Heartbeat:Connect(function()
-		local char = LocalPlayer.Character
-		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-		local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-		if not (humanoid and rootPart and humanoid.Health > 0) then
-			return
-		end
-
-		local enemiesFolder = workspace:FindFirstChild("Enemies")
-		if not enemiesFolder then
-			return
-		end
-
-		local dangerSegment = nil
-		local minSegmentDist = math.huge
-
-		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-			if string.find(string.lower(enemy.Name), "telefragger") then
-				local indicatorPart = enemy:FindFirstChild("IndicatorPart", true)
-				if indicatorPart then
-					local attachments = {}
-					for _, child in ipairs(indicatorPart:GetChildren()) do
-						if child:IsA("Attachment") then
-							table.insert(attachments, child)
-						end
-					end
-					if #attachments >= 2 then
-						local startPos = attachments[1].WorldPosition
-						local endPos = attachments[2].WorldPosition
-						local dist, closest = getDistanceToSegment(rootPart.Position, startPos, endPos)
-						if dist < 15 and dist < minSegmentDist then
-							minSegmentDist = dist
-							dangerSegment = { Start = startPos, End = endPos, Closest = closest }
-						end
-					end
-				end
-			end
-		end
-
-		if self.TelefraggerAutoDodge and dangerSegment then
-			local startPos = dangerSegment.Start
-			local endPos = dangerSegment.End
-			local dir = (endPos - startPos).Unit
-			local perp = Vector3.new(-dir.Z, 0, dir.X).Unit
-
-			local moveDir = humanoid.MoveDirection
-			local slideDir = perp
-			if moveDir.Magnitude > 0.1 then
-				if moveDir:Dot(perp) < 0 then
-					slideDir = -perp
-				end
-			else
-				local camera = workspace.CurrentCamera
-				if camera then
-					if camera.CFrame.RightVector:Dot(perp) < 0 then
-						slideDir = -perp
-					end
-				end
-			end
-
-			self.TelefraggerSuggestedDodgeDirection = slideDir
-			self.TelefraggerSuggestedDodgeAt = os.clock()
-		end
-	end)
-end
-
-function Controller:TriggerSilentBackTrick(enemy)
-	if not enemy then
-		return
-	end
-
-	if self.TelefraggerActiveThreads[enemy] then
-		pcall(task.cancel, self.TelefraggerActiveThreads[enemy])
-		self.TelefraggerActiveThreads[enemy] = nil
-	end
-
-	self.TelefraggerActiveThreads[enemy] = task.delay(self.TelefraggerDesyncDelay or 0.44, function()
-		self.TelefraggerActiveThreads[enemy] = nil
-
-		local wasEmpty = (next(self.TelefraggerActiveDesyncs) == nil)
-		self.TelefraggerActiveDesyncs[enemy] = true
-
-		if wasEmpty then
-			BackTrick.trigger(self)
-		end
-	end)
-end
-
-function Controller:CancelSilentBackTrick(enemy)
-	if not enemy then
-		return
-	end
-
-	if self.TelefraggerActiveThreads[enemy] then
-		pcall(task.cancel, self.TelefraggerActiveThreads[enemy])
-		self.TelefraggerActiveThreads[enemy] = nil
-	end
-
-	if self.TelefraggerActiveDesyncs[enemy] then
-		self.TelefraggerActiveDesyncs[enemy] = nil
-
-		if next(self.TelefraggerActiveDesyncs) == nil then
-			BackTrick.revert(self)
-		end
-	end
-
-	Executor.reconcile(GC)
-	if not self.BellImmune and not self.SpringerImmune then
-		restoreCharacterTouchStates()
-	end
-end
-
 function Controller:CleanUp()
 	local globals = getgenv()._NULLSCAPE_Globals
 	local finalCleanup = self.Destroyed
 		or (globals and globals.activeEntitiesController ~= nil and globals.activeEntitiesController ~= self)
-
-	for _, thread in pairs(self.TelefraggerActiveThreads) do
-		pcall(task.cancel, thread)
-	end
-	table.clear(self.TelefraggerActiveThreads)
-	table.clear(self.TelefraggerActiveDesyncs)
-
-	pcall(function()
-		BackTrick.cleanup(self)
-	end)
 
 	for part, state in pairs(originalTouchStates) do
 		if part and part.Parent then
@@ -614,22 +427,6 @@ function Controller:CleanUp()
 		pcall(OperatorAutoDisable.disable)
 	end
 	pcall(if finalCleanup then BellImmunity.disable else BellImmunity.clearRuntime)
-
-	if self.TelefraggerRedirectConnection then
-		pcall(function()
-			self.TelefraggerRedirectConnection:Disconnect()
-		end)
-		self.TelefraggerRedirectConnection = nil
-	end
-	if self.TelefraggerConnection then
-		pcall(function()
-			self.TelefraggerConnection:Disconnect()
-		end)
-		self.TelefraggerConnection = nil
-	end
-	if self.WasRedirectingTelefragger then
-		BackTrick.revert(self)
-	end
 
 	GC.cleanAll()
 	self.EnemiesFolder = nil
@@ -1351,23 +1148,6 @@ local function processEntity(enemy)
 		if string.find(name, "Bell", 1, true) then
 			BellImmunity.attachEnemy(enemy, GC)
 		end
-
-		if string.find(string.lower(name), "telefragger") and not hookedTelefraggers[enemy] then
-			hookedTelefraggers[enemy] = true
-			task.spawn(function()
-				local clientEvent = enemy:WaitForChild("ClientEvent", 5)
-				if clientEvent and clientEvent:IsA("RemoteEvent") then
-					local telefraggerConn = clientEvent.OnClientEvent:Connect(function(actionName)
-						if actionName == "SetTeleport" then
-							Controller:TriggerSilentBackTrick(enemy)
-						elseif actionName == "Indicator" then
-							Controller:CancelSilentBackTrick(enemy)
-						end
-					end)
-					GC.registerEntityConnection(enemy, telefraggerConn)
-				end
-			end)
-		end
 	end
 
 	local nameConn = enemy:GetPropertyChangedSignal("Name"):Connect(checkAndApply)
@@ -1426,10 +1206,6 @@ local function removeEntity(enemy)
 	GC.removeEntityConnections(enemy)
 	if SpringerAutoJump then
 		SpringerAutoJump.releaseEnemy(enemy)
-	end
-
-	if string.find(string.lower(enemy.Name), "telefragger") then
-		Controller:CancelSilentBackTrick(enemy)
 	end
 
 	for part, data in pairs(disabledShockwaves) do

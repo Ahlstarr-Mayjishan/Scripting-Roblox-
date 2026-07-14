@@ -19,7 +19,9 @@ local ECHO_IGNORED_ALTARS = {
 	Purification = true,
 	Chaos = true,
 }
-local PURGATORY_GREED_LIMIT = 0.5
+local DISCOVERY_MIN_SECONDS = 1
+local DISCOVERY_QUIET_SECONDS = 0.35
+local DISCOVERY_MAX_SECONDS = 3
 local ACTION_COOLDOWN = 0.7
 local TOUCH_SETTLE = 0.08
 local MAX_ACTIVATION_SECONDS = 5
@@ -32,6 +34,10 @@ local skippedUntil = setmetatable({}, { __mode = "k" })
 local activatedThisRound = setmetatable({}, { __mode = "k" })
 local rememberedEchoSource = nil
 local lastObservedLevel = nil
+local discoveryStartedAt = nil
+local discoveryChangedAt = nil
+local discoverySignature = nil
+local discoveryComplete = false
 local getPrompt
 
 for index, altarName in ipairs(POLICY_ORDER) do
@@ -199,33 +205,6 @@ local function isSelected(controller)
 	return false
 end
 
-local function hasDeadPlayer()
-	for _, player in ipairs(Players:GetPlayers()) do
-		local dead = player:FindFirstChild("Dead")
-		if dead and dead:IsA("BoolValue") and dead.Value == true then
-			return true
-		end
-
-		local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-		if humanoid and humanoid.Health <= 0 then
-			return true
-		end
-	end
-	return false
-end
-
-local function canUsePurgatory(normalGiftRatio)
-	local ratio = tonumber(normalGiftRatio) or 0
-	if ratio < PURGATORY_GREED_LIMIT then
-		return true
-	end
-	return ratio <= 0.9 and not isSoloRun() and hasDeadPlayer()
-end
-
-local function isPolicyEligible(altarName, purgatoryEligible)
-	return altarName ~= "Purgatory" or purgatoryEligible
-end
-
 local function isBetterCandidate(candidate, current)
 	return not current
 		or candidate.Priority < current.Priority
@@ -239,11 +218,7 @@ local function collectCandidates()
 	for _, tagged in ipairs(CollectionService:GetTagged("Altar")) do
 		if tagged and tagged:IsDescendantOf(workspace) then
 			local root = tagged.Parent
-			if root
-				and root:IsDescendantOf(workspace)
-				and root:FindFirstChild("Altar")
-				and not seen[root]
-			then
+			if root and root:IsDescendantOf(workspace) and root:FindFirstChild("Altar") and not seen[root] then
 				seen[root] = tagged
 				table.insert(roots, root)
 			end
@@ -253,7 +228,48 @@ local function collectCandidates()
 	return roots, seen
 end
 
-local function isValidTarget(target, selected, purgatoryEligible)
+local function getDiscoverySignature(roots, taggedByRoot, selected)
+	local counts = {}
+	for _, root in ipairs(roots) do
+		local altarName = getAltarName(root, taggedByRoot[root])
+		if altarName and selected[altarName] then
+			counts[altarName] = (counts[altarName] or 0) + 1
+		end
+	end
+
+	local parts = {}
+	for altarName, count in pairs(counts) do
+		parts[#parts + 1] = altarName .. ":" .. tostring(count)
+	end
+	table.sort(parts)
+	return table.concat(parts, "|")
+end
+
+local function isDiscoveryReady(roots, taggedByRoot, selected)
+	if discoveryComplete then
+		return true
+	end
+
+	local now = os.clock()
+	if not discoveryStartedAt then
+		discoveryStartedAt = now
+		discoveryChangedAt = now
+	end
+
+	local signature = getDiscoverySignature(roots, taggedByRoot, selected)
+	if signature ~= discoverySignature then
+		discoverySignature = signature
+		discoveryChangedAt = now
+	end
+
+	local elapsed = now - discoveryStartedAt
+	local quietFor = now - (discoveryChangedAt or now)
+	discoveryComplete = elapsed >= DISCOVERY_MAX_SECONDS
+		or (signature ~= "" and elapsed >= DISCOVERY_MIN_SECONDS and quietFor >= DISCOVERY_QUIET_SECONDS)
+	return discoveryComplete
+end
+
+local function isValidTarget(target, selected)
 	if not target or not target.Root or not target.Root:IsDescendantOf(workspace) then
 		return false
 	end
@@ -261,9 +277,6 @@ local function isValidTarget(target, selected, purgatoryEligible)
 		return false
 	end
 	if not selected[target.Name] then
-		return false
-	end
-	if not isPolicyEligible(target.Name, purgatoryEligible) then
 		return false
 	end
 	if skippedUntil[target.Root] and os.clock() < skippedUntil[target.Root] then
@@ -295,35 +308,34 @@ local function getStateDetail(target, state)
 	return target.Name .. " | " .. stateText
 end
 
-local function findBestTarget(controller, hrp, normalGiftRatio)
+local function findBestTarget(controller, hrp)
 	local selected = buildSelection(controller)
-	local purgatoryEligible = canUsePurgatory(normalGiftRatio)
 	if not next(selected) then
 		return nil
 	end
 
-	if isValidTarget(currentTarget, selected, purgatoryEligible)
-		and (currentTarget.Name ~= "Echo" or rememberedEchoSource ~= nil)
-	then
+	local roots, taggedByRoot = collectCandidates()
+	if not isDiscoveryReady(roots, taggedByRoot, selected) then
+		return nil, true
+	end
+
+	if isValidTarget(currentTarget, selected) and (currentTarget.Name ~= "Echo" or rememberedEchoSource ~= nil) then
 		return currentTarget
 	end
 
 	currentTarget = nil
-	local roots, taggedByRoot = collectCandidates()
 	local primaryBest = nil
 	local echoBest = nil
 	local passageBest = nil
 	local deferredBest = nil
-	local primaryCount = 0
-	local echoCount = 0
 
 	for _, root in ipairs(roots) do
 		local tagged = taggedByRoot[root]
 		local name = getAltarName(root, tagged)
 		local state = getAltarState(root, tagged)
-		if name
+		if
+			name
 			and selected[name]
-			and isPolicyEligible(name, purgatoryEligible)
 			and state
 			and state.Ready == true
 			and activatedThisRound[root] ~= true
@@ -343,7 +355,6 @@ local function findBestTarget(controller, hrp, normalGiftRatio)
 					Distance = distance,
 				}
 				if name == "Echo" then
-					echoCount += 1
 					candidate.EchoSource = rememberedEchoSource
 					if not echoBest or candidate.Distance < echoBest.Distance then
 						echoBest = candidate
@@ -353,7 +364,6 @@ local function findBestTarget(controller, hrp, normalGiftRatio)
 						passageBest = candidate
 					end
 				elseif PRIMARY_ECHO_SOURCES[name] then
-					primaryCount += 1
 					if isBetterCandidate(candidate, primaryBest) then
 						primaryBest = candidate
 					end
@@ -365,9 +375,6 @@ local function findBestTarget(controller, hrp, normalGiftRatio)
 	end
 
 	local shouldRepeatRemembered = rememberedEchoSource ~= nil and echoBest ~= nil
-	if rememberedEchoSource == "Passage" and primaryCount > 0 and echoCount <= primaryCount then
-		shouldRepeatRemembered = false
-	end
 
 	if shouldRepeatRemembered then
 		currentTarget = echoBest
@@ -378,7 +385,7 @@ local function findBestTarget(controller, hrp, normalGiftRatio)
 	return currentTarget
 end
 
-function Altar.tryStep(controller, hrp, lease, _currentSessionToken, normalGiftRatio)
+function Altar.tryStep(controller, hrp, lease, _currentSessionToken, _normalGiftRatio)
 	if not (controller and hrp and hrp.Parent) then
 		return false
 	end
@@ -392,12 +399,10 @@ function Altar.tryStep(controller, hrp, lease, _currentSessionToken, normalGiftR
 		if confirmedState and confirmedState.Used == true then
 			local confirmedTarget = currentTarget
 			activatedThisRound[confirmedTarget.Root] = true
-			if confirmedTarget.Name == "Echo" then
-				rememberedEchoSource = nil
-			elseif confirmedTarget.Name == "Passage" then
-				rememberedEchoSource = "Passage"
-			elseif PRIMARY_ECHO_SOURCES[confirmedTarget.Name] then
+			if PRIMARY_ECHO_SOURCES[confirmedTarget.Name] then
 				rememberedEchoSource = confirmedTarget.Name
+			else
+				rememberedEchoSource = nil
 			end
 			currentTarget = nil
 			currentTargetStartedAt = 0
@@ -409,7 +414,10 @@ function Altar.tryStep(controller, hrp, lease, _currentSessionToken, normalGiftR
 		end
 	end
 
-	local target = findBestTarget(controller, hrp, normalGiftRatio)
+	local target, discovering = findBestTarget(controller, hrp)
+	if discovering then
+		return true, "DiscoveringAltars", "Waiting for altar replication", false
+	end
 	if not target then
 		return false
 	end
@@ -467,6 +475,10 @@ function Altar.reset()
 	lastActionAt = 0
 	skippedUntil = setmetatable({}, { __mode = "k" })
 	activatedThisRound = setmetatable({}, { __mode = "k" })
+	discoveryStartedAt = nil
+	discoveryChangedAt = nil
+	discoverySignature = nil
+	discoveryComplete = false
 end
 
 return Altar

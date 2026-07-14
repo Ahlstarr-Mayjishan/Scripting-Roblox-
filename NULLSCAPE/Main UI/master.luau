@@ -101,7 +101,6 @@ pcall(function()
 			FleshHackDropdown = {},
 			ImmunityMartToggle = false,
 			ImmunityTelefraggerToggle = false,
-			TelefraggerHackDropdown = {},
 			ImmunityICBMToggle = false,
 			ICBMHackDropdown = {},
 			ImmunityGuardianToggle = false,
@@ -275,8 +274,16 @@ pcall(function()
 			currentSettings.BellHackDropdownV2 = { "Immunity" }
 			updated = true
 		end
-		if currentSettings.TelefraggerHackDropdown == nil and currentSettings.ImmunityTelefraggerToggle == true then
-			currentSettings.TelefraggerHackDropdown = { "Immunity" }
+		if type(currentSettings.TelefraggerHackDropdown) == "table" then
+			local immunitySelected = false
+			for key, value in pairs(currentSettings.TelefraggerHackDropdown) do
+				if value == "Immunity" or (key == "Immunity" and value == true) then
+					immunitySelected = true
+					break
+				end
+			end
+			currentSettings.ImmunityTelefraggerToggle = immunitySelected
+			currentSettings.TelefraggerHackDropdown = nil
 			updated = true
 		end
 		if currentSettings.ICBMHackDropdown == nil and currentSettings.ImmunityICBMToggle == true then
