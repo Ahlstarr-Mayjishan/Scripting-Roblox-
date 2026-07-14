@@ -103,6 +103,9 @@ function SecondaryCast.cast(grapple, controller, targeting)
 	end
 
 	hideCrosshair(grapple)
+	if BellContact and typeof(BellContact.armCast) == "function" then
+		pcall(BellContact.armCast, hit)
+	end
 
 	local success = CastTransaction
 		and typeof(CastTransaction.start) == "function"
@@ -110,10 +113,9 @@ function SecondaryCast.cast(grapple, controller, targeting)
 			ManualCast = true,
 			AssistiveManual = true,
 		})
-	if success and BellContact and typeof(BellContact.armCast) == "function" then
-		pcall(BellContact.armCast, hit)
+	if not success and BellContact and typeof(BellContact.disarm) == "function" then
+		pcall(BellContact.disarm)
 	end
-
 	return success == true
 end
 

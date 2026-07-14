@@ -13,6 +13,8 @@ local Range = {}
 
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 local VoidCastAssist = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Void Cast Assist.luau")
+local BellContact =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Technique/Bell Contact Assist.luau")
 local CachedControl = nil
 local SpecialTargeting = nil
 local ManualDodge = nil
@@ -87,12 +89,19 @@ local function recordRangeCast(grapple)
 	end
 end
 
+local function armBellContact(hit)
+	if BellContact and typeof(BellContact.armCast) == "function" then
+		pcall(BellContact.armCast, hit)
+	end
+end
+
 function Range.cast(grapple, forceRefresh, originalCast, ...)
 	local maxRange = Range.getEffectiveRange()
 	local easierVoidCast = Range.isEasierVoidCastEnabled()
 	local specialHit = findSpecialAnchorHit(grapple)
 	if specialHit then
 		recordRangeCast(grapple)
+		armBellContact(specialHit)
 		return specialHit
 	end
 	local dodgeHit = findManualDodgeHit(grapple)

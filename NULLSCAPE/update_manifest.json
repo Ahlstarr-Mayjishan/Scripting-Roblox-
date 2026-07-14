@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.14.58",
+    "Version":  "2026.07.15.59",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "4b5b3fa179ea3d25faadab712e16165ee80e0f22f96c3d8eba805ca30385e04b"
+                      "Sha256":  "233063f76dc21ae6e8fc85f5d9b6a111812d25caebfdafa53234b11f57276920"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -147,14 +147,21 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "3967ff8b699070e3db93de2b28709ae9b73add74a9d9cff83213f9e0ab98e87e"
+                      "Sha256":  "95e192db611293b22b989de55a4311aea9eb7e059feccc9156d6933a410fd670"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/RemoteBlocking.luau",
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "5053a559bd77ac00817c66a13f9987c6023ebc9b0fe02bd763217ed505db1da1"
+                      "Sha256":  "14fa322a9e85939118e2cf7b55cf7e824eacb36f63dc1be8178d82eb4d12edaa"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Entities/Bell Immunity.luau",
+                      "Menu":  [
+                                   "Entities"
+                               ],
+                      "Sha256":  "fcbaaea60b1e9bedda1e47771e77cd3d9068d253a7c261c6fc4d1d37ab0fe110"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/tab.luau",
@@ -266,7 +273,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "de721c8b5361198dcc27bd0d51f8e4b141b5f046d1101d70418e42efb3d944d9"
+                      "Sha256":  "251f1d211d94aaff20534bc8db449cc1282adf5add8fef8550c59c9b0cc468e9"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Physical Interaction Range.luau",
@@ -455,7 +462,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "d655db85c82b0a16d91e5177fea73d1a5651940d273c8821214e1df8343b5b6e"
+                      "Sha256":  "2eaccefc388f68781ca837b0d3e05db4fc5b9ab786f90eb3611fd4e613923aef"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Technique Arbiter.luau",
@@ -581,14 +588,14 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "f59cde610a5e2d1a46a12709aeac71269e4ba1a808757941a962b2eda56f686e"
+                      "Sha256":  "f3ef64f9a6e4b7f15404a75d962208bb3d2a92042443a66550f6f29a8d0e6a61"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Executor.luau",
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "d22d304b4708977bf816323132789d73e94e808cd2536271598720c15035d38b"
+                      "Sha256":  "84eb388a9e048527f0996637c8fedbb07302ced651d16f1ce8561835512d0bbb"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/GC.luau",
@@ -602,7 +609,7 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "73b4aee20824841c1608cde2ad2831e2c2ed078fd70ea20fc362affb1eb2d9b7"
+                      "Sha256":  "cc2b592c1791b37974225989e77212967a2e639ffc6aa0f9de129286fefae89e"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Charger/Tripmine Assist.luau",
