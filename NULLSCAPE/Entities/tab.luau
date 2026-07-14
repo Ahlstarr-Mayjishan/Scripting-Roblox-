@@ -286,12 +286,27 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
-		Name = "Operator",
-		CurrentValue = getFlag(Controller, "OperatorImmune"),
-		Flag = "ImmunityOperatorToggle",
-		Callback = function(Value)
-			setImmunity(Controller, "Operator", Value)
+	local currentOperatorOptions = {}
+	if getFlag(Controller, "OperatorImmune") then
+		table.insert(currentOperatorOptions, "Immunity")
+	end
+	if getFlag(Controller, "OperatorAutoDisable") then
+		table.insert(currentOperatorOptions, "Auto Disable")
+	end
+
+	Tab:CreateDropdown({
+		Name = "Operator Hack Mode",
+		Options = { "Immunity", "Auto Disable" },
+		CurrentOption = currentOperatorOptions,
+		MultipleOptions = true,
+		Flag = "OperatorHackDropdown",
+		Callback = function(Options)
+			local activeController = resolveController(nil, Controller)
+			if activeController and typeof(activeController.SetOperatorOptions) == "function" then
+				activeController:SetOperatorOptions(Options)
+			else
+				warn("[NULLSCAPE] Entities controller is not ready; ignored Operator Hack Mode change")
+			end
 		end,
 	})
 

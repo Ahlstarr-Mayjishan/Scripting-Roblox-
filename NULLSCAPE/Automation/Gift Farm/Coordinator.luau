@@ -1087,6 +1087,9 @@ end
 
 function Coordinator.enable(controller, gc)
 	if enabled then
+		if Context and typeof(Context.suppressMovementInteractions) == "function" then
+			Context.suppressMovementInteractions()
+		end
 		if not loopActive and controller and not controller.Destroyed and controller.GiftFarmEnabled then
 			runLoop(controller)
 		end
@@ -1130,18 +1133,26 @@ function Coordinator.enable(controller, gc)
 end
 
 function Coordinator.disable(controller)
-	if not enabled then
-		return true
-	end
-
+	local wasEnabled = enabled
 	enabled = false
 	watchdogGeneration += 1
 	workerGeneration += 1
 	loopActive = false
-	recoverAfterStop(controller, "Gift Farm disabled")
+	sessionToken += 1
+	MovementLease.invalidateActive()
 
 	if Context and typeof(Context.restoreMovementInteractions) == "function" then
-		Context.restoreMovementInteractions()
+		local restored, restoreError = pcall(Context.restoreMovementInteractions)
+		if not restored then
+			warn("[NULLSCAPE] Gift Farm interaction restore failed: " .. tostring(restoreError))
+		end
+	end
+
+	if wasEnabled then
+		local recovered, recoveryError = pcall(recoverAfterStop, controller, "Gift Farm disabled")
+		if not recovered then
+			warn("[NULLSCAPE] Gift Farm shutdown recovery failed: " .. tostring(recoveryError))
+		end
 	end
 
 	if configChangedConn then

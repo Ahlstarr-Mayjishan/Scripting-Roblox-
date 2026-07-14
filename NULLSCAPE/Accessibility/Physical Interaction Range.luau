@@ -162,6 +162,20 @@ local function refreshSensors()
 	return true
 end
 
+local function registerRearmCallback()
+	local globals = getGlobals()
+	globals.NullscapePhysicalInteractionRearmOwner = Logic
+	globals.NullscapeRearmPhysicalInteractions = Logic.rearm
+end
+
+local function unregisterRearmCallback()
+	local globals = getGlobals()
+	if globals.NullscapePhysicalInteractionRearmOwner == Logic then
+		globals.NullscapePhysicalInteractionRearmOwner = nil
+		globals.NullscapeRearmPhysicalInteractions = nil
+	end
+end
+
 local function restoreCaptureHook()
 	local movementCore = Logic.HookedCore
 	if movementCore and Logic.WrappedStep and movementCore.Step == Logic.WrappedStep and Logic.OriginalStep then
@@ -245,11 +259,21 @@ function Logic.initialize(controller)
 		Logic.disable()
 		return true
 	end
+	registerRearmCallback()
 
 	if refreshSensors() then
 		return true
 	end
 	return acquireMovement()
+end
+
+function Logic.rearm()
+	if not Logic.Active or giftFarmOwnsMovement() then
+		return false
+	end
+
+	destroySensors()
+	return refreshSensors()
 end
 
 function Logic.resetRespawnState(controller)
@@ -263,6 +287,7 @@ end
 
 function Logic.disable()
 	Logic.Active = false
+	unregisterRearmCallback()
 	restoreCaptureHook()
 	destroySensors()
 	Logic.Movement = nil

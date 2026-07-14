@@ -1,9 +1,8 @@
 -- [[
 --  NULLSCAPE Master Script (Modular Rayfield UI Edition)
---  Đây là file điều khiển chính (Master loader). Các tính năng sẽ được thêm dưới dạng module.
+--  Bootstraps runtime ownership, settings, UI modules, and update handling.
 -- ]]
 
--- Tự động dọn dẹp phiên chạy cũ trước khi chạy phiên mới
 local getgenv = getgenv
 local Game = game
 local HttpService = Game:GetService("HttpService")
@@ -49,7 +48,6 @@ if getgenv().Client then
 end
 getgenv()._NULLSCAPE_Globals = getgenv()._NULLSCAPE_Globals or {}
 
--- Đối tượng quản lý chung của Client
 local Client = {
 	Window = nil,
 	Tabs = {},
@@ -83,7 +81,6 @@ local function safeStep(label, callback)
 	return success
 end
 
--- Tạo hoặc tự động cập nhật file cấu hình mặc định để ngăn Rayfield in cảnh báo console
 pcall(function()
 	if makefolder and writefile and readfile and isfile then
 		local folder = "NULLSCAPE"
@@ -108,6 +105,7 @@ pcall(function()
 			ImmunityICBMToggle = false,
 			ICBMHackDropdown = {},
 			ImmunityGuardianToggle = false,
+			OperatorHackDropdown = {},
 			SpringerHackDropdown = {},
 			StatusImmunityDropdownV2 = {},
 			EntityShieldBaitToggle = false,
@@ -125,7 +123,6 @@ pcall(function()
 			ImmunityCadenceToggle = false,
 			ImmunityCatalystToggle = false,
 			ImmunityCelestialToggle = false,
-			ImmunityOperatorToggle = false,
 			ImmunityScrapmawToggle = false,
 			ImmunitynilEnemyToggle = false,
 			ImmunitynilMirageToggle = false,
@@ -202,7 +199,7 @@ pcall(function()
 			GrappleCatapultMultiplierSlider = 1,
 			GrappleEasierVoidCastToggle = false,
 			MatrixTetrahedronToggle = false,
-			MomentumReductionSlider = 100, -- Mặc định là 100% giảm quán tính
+			MomentumReductionSlider = 100,
 			SpeedBuffSelectionsDropdown = {},
 			AirJumpSelectionsDropdown = {},
 			HelmetToggle = false,
@@ -273,6 +270,16 @@ pcall(function()
 		end
 		if currentSettings.ICBMHackDropdown == nil and currentSettings.ImmunityICBMToggle == true then
 			currentSettings.ICBMHackDropdown = { "Immunity" }
+			updated = true
+		end
+		if type(currentSettings.OperatorHackDropdown) ~= "table" then
+			currentSettings.OperatorHackDropdown = currentSettings.ImmunityOperatorToggle == true
+				and { "Immunity" }
+				or {}
+			updated = true
+		end
+		if currentSettings.ImmunityOperatorToggle ~= nil then
+			currentSettings.ImmunityOperatorToggle = nil
 			updated = true
 		end
 		if type(currentSettings.ICBMHackDropdown) == "table" then
@@ -413,7 +420,6 @@ do
 	end
 end
 
--- Dịch vụ Roblox phổ biến
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
@@ -670,7 +676,6 @@ task.spawn(function()
 	end
 end)
 
--- Khởi tạo Window chính
 local Window = Rayfield:CreateWindow({
 	Name = "NULLSCAPE Client",
 	LoadingTitle = "NULLSCAPE Loader",
@@ -699,13 +704,11 @@ do
 	end
 end
 
--- Hàm đăng ký các module tính năng
 function Client:LoadModule(moduleName, tabIcon, callback)
 	local success, err = pcall(function()
 		local newTab = self.Window:CreateTab(moduleName, tabIcon or 4483362458)
 		self.Tabs[moduleName] = newTab
 
-		-- Thực thi callback để khởi tạo các phần tử UI và Logic của module
 		if callback then
 			callback(newTab, self)
 		end
@@ -1115,7 +1118,6 @@ else
 	warn("[NULLSCAPE] Runtime updater unavailable: " .. tostring(updaterResult))
 end
 
--- Tải các module con
 local success0, err0 = pcall(function()
 	local AutomationController = loadModule("NULLSCAPE/Automation/controller.luau")
 	Client.Modules["AutomationController"] = AutomationController
@@ -1177,7 +1179,6 @@ if not success4 then
 	warn("[NULLSCAPE] Lỗi khi nạp module Class Adjustment: " .. tostring(err4))
 end
 
--- Tải cấu hình lưu trữ của Rayfield
 local destroyLogicLoaded, destroyLogicError = pcall(function()
 	Client.Modules.DestroyLogic = loadModule("NULLSCAPE/Setting/Destroy Logic.luau")
 end)

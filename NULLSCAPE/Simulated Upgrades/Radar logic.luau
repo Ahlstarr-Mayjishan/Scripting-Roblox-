@@ -1,8 +1,7 @@
 --!nocheck
 -- [[
 --  NULLSCAPE - Native Radar & Highlight Simulation Logic
---  Vai trò: Quản lý kích hoạt các tính năng định vị (Radar) và viền sáng (Highlight)
---  nativ của game thông qua cơ chế giả lập Upgrade.
+--  Mirrors native upgrade ownership while preserving game-controlled effects.
 -- ]]
 
 local Logic = {}
@@ -246,12 +245,10 @@ function Logic.shouldSpoofUpgradeEnabled(controller, upgradeName)
 		return false
 	end
 
-	-- Nếu người dùng đã thực sự mua nâng cấp này, nhường quyền kiểm soát lại cho game
 	if isNativelyOwned(upgradeName) then
 		return false
 	end
 
-	-- Kiểm tra nếu nâng cấp này nằm trong danh sách các mục được chọn
 	local desired = collectDesiredSimulatedUpgrades(controller)
 	if desired[upgradeName] then
 		return true, true

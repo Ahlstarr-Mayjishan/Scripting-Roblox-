@@ -1,6 +1,6 @@
 -- [[
 --  NULLSCAPE - Remote Event Blocking
---  Vai trò: Chặn các cuộc gọi ClientEvent/ShockwaveEvent báo tử/gây hại từ thực thể
+--  Filters selected client-originated entity damage and death reports.
 -- ]]
 
 local Logic = {}
@@ -11,7 +11,7 @@ local RemoteRegistry = getgenv().loadModule("NULLSCAPE/Core/Remote Registry.luau
 local rng = Random.new()
 
 -- ============================================================
---  CẤU HÌNH CHẶN REMOTE EVENT
+-- Remote blocking configuration
 -- ============================================================
 Logic.Config = {
 	["Baby"] = {
@@ -121,7 +121,6 @@ Logic.Config = {
 	},
 }
 
--- Bảng tra cứu nhanh tên các RemoteEvent cần chặn (Tự động xây dựng từ cấu hình để tối ưu O(1))
 Logic.TargetRemotes = {}
 for _, data in pairs(Logic.Config) do
 	if data.Remotes then
@@ -522,7 +521,6 @@ local function isICBMClientReport(remote, args)
 
 	return false
 end
--- Helper check xem remote có thuộc Model của thực thể mục tiêu không
 local function isKolonaKillReport(remote, args)
 	if typeof(remote) ~= "Instance" then
 		return false
@@ -556,7 +554,6 @@ local function findEntityParent(obj, targetSubName)
 	return nil
 end
 
--- Helper check xem remote hoặc args có nhắm tới người khác không
 local function isTargetsSomeoneElse(args, localPlayer, char)
 	for i = 2, #args do
 		local arg = args[i]
@@ -661,7 +658,6 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 		end
 	end
 
-	-- Chặn riêng biệt hiệu ứng cháy (Burn curse) của ICBM nếu tùy chọn được bật
 	-- Operator is entirely client-driven and reports its kill through the BroSecureMethod RemoteEvent or DiedFunc.
 	if controller.OperatorImmune == true then
 		if
@@ -683,7 +679,6 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 	local LocalPlayer = Players.LocalPlayer
 	local char = LocalPlayer and LocalPlayer.Character
 
-	-- Quét qua các cấu hình chặn remote
 	for entityName, config in pairs(Logic.Config) do
 		local controllerFlag = config.ControllerFlag
 		if controller[controllerFlag] == true then

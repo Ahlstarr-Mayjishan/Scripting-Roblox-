@@ -205,7 +205,6 @@ function Controller:SetGiftFarmEnabled(value)
 	end
 	self.GiftFarmEnabled = nextEnabled
 
-	-- Đồng bộ với cờ GiftMagnetBlocked của Simulated Upgrades
 	local upgradeController = getUpgradeController(true)
 	if upgradeController then
 		upgradeController.GiftMagnetBlocked = nextEnabled

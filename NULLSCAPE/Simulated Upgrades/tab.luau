@@ -1,7 +1,7 @@
 --!nocheck
 -- [[
 --  NULLSCAPE - Simulated Upgrades & Radar UI Tab
---  Dong vai tro tao tab "Mo phong Upgrades & Radar" tren giao dien Rayfield
+--  Builds the Simulated Upgrades and Radar tab in the Rayfield interface.
 -- ]]
 
 local function makeLabelAutoResize(labelText)

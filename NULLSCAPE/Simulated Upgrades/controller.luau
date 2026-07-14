@@ -1,11 +1,7 @@
 --!nocheck
 -- [[
 --  NULLSCAPE - Simulated Upgrades & Radar Controller
---  Vai trò: Đảm nhiệm việc quan sát hiệu năng, phân tích tài nguyên và đưa ra các quyết định điều phối:
---  - Giám sát trạng thái hoạt động của script, điều phối chế độ ngủ đông (hibernating) tối ưu CPU.
---  - Phát hiện trạng thái sảnh chờ/trận đấu (khi inLobby = false sẽ kích hoạt gọi quét scan).
---  - Phát lệnh gọi quét định vị (scan) định kỳ thông qua Executor.
---  - Gửi kết nối đăng ký qua GC và phát lệnh dọn dẹp giải phóng tài nguyên.
+--  Coordinates simulated upgrade state, class constraints, and lifecycle cleanup.
 -- ]]
 
 local getgenv = getgenv
@@ -44,8 +40,8 @@ local Controller = {
 	CollectMedalKeybind = "V",
 	MedalESPEnabled = false,
 
-	MatrixTetrahedronEnabled = false, -- Mô phỏng Matrix Tetrahedron di chuyển instant acceleration
-	MomentumReduction = 1.0, -- Lực Momentum Reduction tùy biến (mặc định 100%)
+	MatrixTetrahedronEnabled = false,
+	MomentumReduction = 1.0,
 
 	GraceWingsEnabled = false,
 	GraceWingsAirControlMultiplier = 1,
@@ -82,7 +78,6 @@ local function safeControllerCleanUp()
 	end
 end
 
--- Xác minh kiểm tra trạng thái game bằng ReplicatedStorage.InRound
 local function isInMatch()
 	local inRoundVal = ReplicatedStorage:FindFirstChild("InRound")
 	if inRoundVal and inRoundVal:IsA("BoolValue") then
@@ -97,7 +92,7 @@ local function isInMatch()
 	return false
 end
 
-local inLobby = not isInMatch() -- Đang ở sảnh chờ/lựa chọn (Khởi tạo ban đầu)
+local inLobby = not isInMatch()
 Controller.inLobby = inLobby
 local function refreshUpgradeServerState()
 	task.spawn(function()
@@ -202,7 +197,6 @@ local function startUtilityLoop()
 					end)
 				end
 
-				-- Tự động kích hoạt lại Matrix Tetrahedron nếu được bật nhưng chưa hook (phòng hờ load trễ/lobby)
 				if Controller.MatrixTetrahedronEnabled and MatrixTetrahedron and not MatrixTetrahedron.Hooked then
 					pcall(function()
 						local reduction = Controller.MomentumReduction or 1.0
@@ -256,7 +250,6 @@ local function startUtilityLoop()
 	end)
 end
 
--- Hàm cập nhật trạng thái sảnh chờ và tự động dọn dẹp visual khi vào sảnh
 local function setInLobby(val)
 	if inLobby == val then
 		return
@@ -269,7 +262,6 @@ local function setInLobby(val)
 	end
 end
 
--- Bật/tắt radar tổng
 function Controller:SetRadarEnabled(value)
 	self.RadarEnabled = value
 	Logic.syncSimulatedUpgradeHud(self)
@@ -313,7 +305,6 @@ function Controller:SetAutoCollectEnabled(value)
 	return true
 end
 
--- Bật/tắt mô phỏng nâng cấp Matrix Tetrahedron
 function Controller:SetMatrixTetrahedron(value)
 	self.MatrixTetrahedronEnabled = value == true
 	if MatrixTetrahedron then
@@ -327,7 +318,6 @@ function Controller:SetMatrixTetrahedron(value)
 	end
 end
 
--- Tùy biến lực Momentum Reduction của Matrix Tetrahedron
 function Controller:SetMomentumReduction(value)
 	local val = tonumber(value) or 1.0
 	if val > 1 then
@@ -344,7 +334,6 @@ function Controller:SetMomentumReduction(value)
 	end
 end
 
--- Điều chỉnh khoảng cách Auto Collect
 function Controller:SetGraceWings(value)
 	self.GraceWingsEnabled = value == true
 	if GraceWings then
@@ -586,12 +575,10 @@ function Controller:SetAutoCollectTargets(value)
 	self.AutoCollectTargets = value or {}
 end
 
--- Thiết lập chế độ Auto Collect (Legit / Blatant)
 function Controller:SetAutoCollectMode(value)
 	self.AutoCollectMode = value or "Legit"
 end
 
--- Bật/tắt rào cản vật lý mìn (Tripmine Barrier)
 local function normalizeTripmineBarrierMode(value)
 	if value == "I-Frames" or value == "Immunity" then
 		return value
@@ -630,12 +617,10 @@ function Controller:SetTripmineBarrierMode(value)
 	startUtilityLoop()
 end
 
--- Thiết lập khoảng cách kích nổ mìn cơ sở
 function Controller:SetTripmineDetonationDistance(value)
 	self.TripmineDetonationDistance = value or 15
 end
 
--- Thiết lập biên độ dao động khoảng cách kích nổ ngẫu nhiên
 function Controller:SetTripmineDetonationJitter(value)
 	self.TripmineDetonationJitter = value or 2
 end
@@ -825,7 +810,6 @@ local function restoreHooks()
 	end
 end
 
--- Hàm dọn dẹp tài nguyên (GC) khi tắt hoặc hủy UI
 function Controller:CleanUp()
 	local globals = getGlobals()
 	local finalCleanup = self.Destroyed
@@ -926,7 +910,6 @@ function Controller:CleanUp()
 		end
 	end
 
-	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
 	if finalCleanup and globals and globals.activeUpgradeController == self then
 		globals.activeUpgradeController = nil
 	end
@@ -1071,18 +1054,15 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	return false
 end
 
--- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
 if Executor and typeof(Executor.enableUpgradeSimulationHook) == "function" then
 	pcall(Executor.enableUpgradeSimulationHook)
 end
 
 getGlobals().activeUpgradeController = Controller
 
--- Khởi tạo trạng thái chặn Gift Magnet dựa trên Gift Farm hiện tại
 local autoCtrl = getGlobals().activeAutomationController
 Controller.GiftMagnetBlocked = autoCtrl and autoCtrl.GiftFarmEnabled == true or false
 
--- Khởi tạo ban đầu khi nạp script
 Logic.syncSimulatedUpgradeHud(Controller)
 Logic.bindUpgradeWatcher(Controller)
 startUtilityLoop()
@@ -1127,7 +1107,6 @@ if ClassContext and typeof(ClassContext.subscribe) == "function" then
 	end
 end
 
--- Lắng nghe và xử lý phần đầu cho các thực thể 3D như Springer (thêm proxy "head" để nhận ESP)
 local function handleEnemyAdded(enemy)
 	if not enemy or not enemy:IsA("Model") then
 		return
@@ -1154,7 +1133,6 @@ local function handleEnemyAdded(enemy)
 				proxyHead.CFrame = Head.CFrame
 				proxyHead.Parent = enemy
 
-				-- Sửa lỗi hiển thị ESP cho thực thể 3D: hướng Adornee trực tiếp vào Head và đặt AlwaysOnTop = true
 				local espConn
 				espConn = enemy.ChildAdded:Connect(function(child)
 					if child.Name == "ESP" or child.Name == "ESPCrayon" then
@@ -1166,7 +1144,6 @@ local function handleEnemyAdded(enemy)
 				end)
 				GC.registerEntityConnection(enemy, espConn)
 
-				-- Sửa ngay nếu ESP đã được sinh ra trước khi kết nối sự kiện
 				for _, child in ipairs(enemy:GetChildren()) do
 					if child.Name == "ESP" or child.Name == "ESPCrayon" then
 						pcall(function()
@@ -1192,7 +1169,6 @@ if enemiesFolder then
 	table.insert(Controller.PermanentConnections, enemyAddedConn)
 end
 
--- Lắng nghe sự kiện đổi trạng thái game thời gian thực
 task.spawn(function()
 	local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
 	if Controller.Destroyed or not Controller.PermanentConnections then
@@ -1233,7 +1209,6 @@ task.spawn(function()
 	end
 end)
 
--- Vòng lặp quan sát dự phòng (chỉ chạy khi không có InRound)
 task.spawn(function()
 	while not Controller.Destroyed and not hasInRoundValue do
 		task.wait(3.0)

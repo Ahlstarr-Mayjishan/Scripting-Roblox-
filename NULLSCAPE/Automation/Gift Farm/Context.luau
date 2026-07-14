@@ -8,6 +8,19 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
+local function getGlobals()
+	local env = getgenv()
+	env._NULLSCAPE_Globals = env._NULLSCAPE_Globals or {}
+	return env._NULLSCAPE_Globals
+end
+
+do
+	local previousRestore = getGlobals().GiftFarmMovementInteractionRestore
+	if typeof(previousRestore) == "function" then
+		pcall(previousRestore)
+	end
+end
+
 local beaconPartStates = nil
 local STREAM_REQUEST_TIMEOUT = 2.5
 local GROUND_WAIT_TIMEOUT = 1.25
@@ -146,16 +159,6 @@ function Context.releaseCharacterControl(options)
 		end
 	end)
 
-	if options.SkipTouchRestore ~= true then
-		for _, descendant in ipairs(character:GetDescendants()) do
-			if descendant:IsA("BasePart") then
-				pcall(function()
-					descendant.CanTouch = true
-				end)
-			end
-		end
-	end
-
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		pcall(function()
@@ -207,7 +210,6 @@ function Context.moveCharacterTo(cframe)
 
 	Context.releaseCharacterControl({
 		SkipVelocityClear = true,
-		SkipTouchRestore = true,
 		SkipStateChange = true,
 	})
 
@@ -369,6 +371,7 @@ end
 
 local interactionConnection = nil
 local modifiedInteractionParts = setmetatable({}, { __mode = "k" })
+local interactionGeneration = 0
 local suppressedInteractionNames = {
 	_RailPart = true,
 	TriaOrb = true,
@@ -376,8 +379,10 @@ local suppressedInteractionNames = {
 
 function Context.suppressMovementInteractions()
 	if interactionConnection then
-		return
+		return true
 	end
+
+	interactionGeneration += 1
 
 	local function process(descendant)
 		if not (descendant:IsA("BasePart") and suppressedInteractionNames[descendant.Name]) then
@@ -398,9 +403,17 @@ function Context.suppressMovementInteractions()
 	end
 
 	interactionConnection = Workspace.DescendantAdded:Connect(process)
+
+	local globals = getGlobals()
+	globals.GiftFarmMovementInteractionOwner = Context
+	globals.GiftFarmMovementInteractionRestore = Context.restoreMovementInteractions
+	return true
 end
 
 function Context.restoreMovementInteractions()
+	interactionGeneration += 1
+	local restoreGeneration = interactionGeneration
+
 	if interactionConnection then
 		pcall(function()
 			interactionConnection:Disconnect()
@@ -417,6 +430,23 @@ function Context.restoreMovementInteractions()
 	end
 
 	table.clear(modifiedInteractionParts)
+
+	local globals = getGlobals()
+	if globals.GiftFarmMovementInteractionOwner == Context then
+		globals.GiftFarmMovementInteractionOwner = nil
+		globals.GiftFarmMovementInteractionRestore = nil
+	end
+
+	local rearmPhysicalInteractions = globals.NullscapeRearmPhysicalInteractions
+	if typeof(rearmPhysicalInteractions) == "function" then
+		task.defer(function()
+			if interactionGeneration == restoreGeneration and interactionConnection == nil then
+				pcall(rearmPhysicalInteractions)
+			end
+		end)
+	end
+
+	return true
 end
 
 return Context

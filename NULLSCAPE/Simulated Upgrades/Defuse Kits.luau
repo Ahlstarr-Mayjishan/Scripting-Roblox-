@@ -59,8 +59,6 @@ globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
 
 local IFRAME_OWNER = "DefuseKits"
 
--- 1. Tìm MovementCore
--- 2. Tìm thực thể chuyển động hoạt động (Active Movement Instance)
 local function getIframeOwners()
 	globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
 	return globals.TripmineIframeOwners
@@ -558,7 +556,6 @@ local function startWatcher()
 			elseif mode == IMMUNITY_MODE then
 				updateImmunityTripmineWindow()
 
-				-- Cô lập tính năng liên kết: Hỗ trợ tạo I-Frames tạm thời khi kết thúc Charge thực tế (chỉ cho Charger Class)
 				watchNativeChargerState()
 			end
 		end
@@ -597,7 +594,6 @@ end
 function Barrier.Init()
 	bindImmunityRearmWatcher()
 	startWatcher()
-	-- Dọn dẹp TRIP_IFRAMES cũ nếu có khi load/reload script
 	local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
 	if existing then
 		pcall(function()

@@ -1,6 +1,6 @@
 -- [[
 --  NULLSCAPE - Accessibility Controller
---  Vai trò: Quản lý trạng thái và phối hợp các tính năng trợ năng (Accessibility) của hack.
+--  Owns accessibility state, module coordination, and lifecycle cleanup.
 -- ]]
 
 local getgenv = getgenv
@@ -171,7 +171,6 @@ local function isGrapplerClass()
 	return ClassContext and ClassContext.is("Grappler")
 end
 
--- Hàm dọn dẹp tài nguyên
 function Controller:CleanUp()
 	local globals = getGlobals()
 	local finalCleanup = self.Destroyed
@@ -204,7 +203,6 @@ function Controller:CleanUp()
 		table.clear(self.PermanentConnections)
 	end
 
-	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
 	if finalCleanup and globals and globals.activeAccessibilityController == self then
 		globals.activeAccessibilityController = nil
 	end
@@ -834,7 +832,6 @@ function Controller:SetAntiBonk(value)
 	end
 end
 
--- Đăng ký active controller hiện tại để tự động dừng các phiên bản cũ
 local function scheduleRespawnFeatureRefresh()
 	Controller.RespawnRefreshToken = (Controller.RespawnRefreshToken or 0) + 1
 	local token = Controller.RespawnRefreshToken
@@ -864,8 +861,6 @@ if typeof(Executor.resume) == "function" then
 end
 callExecutor("initializeMirageSafety")
 
--- Khởi tạo ban đầu khi nạp script
--- Lắng nghe sự kiện đổi trạng thái game thời gian thực
 
 local characterRefreshConnection = Players.LocalPlayer.CharacterAdded:Connect(function()
 	scheduleRespawnFeatureRefresh()

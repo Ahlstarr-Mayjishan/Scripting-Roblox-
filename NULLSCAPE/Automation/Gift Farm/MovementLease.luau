@@ -190,7 +190,6 @@ function MovementLease.acquire(ownerName)
 		if hrp then
 			Context.releaseCharacterControl({
 				SkipVelocityClear = options.SkipVelocityClear == true,
-				SkipTouchRestore = options.SkipTouchRestore == true,
 				SkipStateChange = options.SkipStateChange == true,
 				ForceAbilityClear = options.ForceAbilityClear == true,
 				State = options.State or Enum.HumanoidStateType.Running,

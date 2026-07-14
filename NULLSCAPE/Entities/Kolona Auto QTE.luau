@@ -18,11 +18,13 @@ local JUMP_STATE_TIMEOUT = 0.08
 local MOVEMENT_RETRY_INTERVAL = 0.05
 local INVERTED_MAX = 0.08
 local GRAPPLE_RANGE = 90
+local FATAL_TICK_FALLBACK_DELAY = 0.3
 
 local enabled = false
 local running = false
 local targetNumber = nil
 local currentTick = nil
+local fatalTickStartedAt = nil
 local cycleComplete = false
 local castInProgress = false
 local cachedMovement = nil
@@ -92,6 +94,7 @@ end
 local function resetCycle()
 	targetNumber = nil
 	currentTick = nil
+	fatalTickStartedAt = nil
 	cycleComplete = false
 	table.clear(tickStates)
 end
@@ -119,6 +122,9 @@ local function updateTick(main)
 			local nowPlaying = sound.IsPlaying == true
 			if nowPlaying and tickStates[sound] ~= true then
 				currentTick = tonumber(sound.Name) or currentTick
+				if targetNumber and currentTick == targetNumber then
+					fatalTickStartedAt = time()
+				end
 			end
 			tickStates[sound] = nowPlaying
 		end
@@ -127,7 +133,13 @@ end
 
 local function isFatalWindow(main)
 	if targetNumber and currentTick == targetNumber then
-		return true
+		local label = getNumberLabel(main)
+		if label and tonumber(label.Text) == targetNumber then
+			return true
+		end
+		if fatalTickStartedAt and time() - fatalTickStartedAt >= FATAL_TICK_FALLBACK_DELAY then
+			return true
+		end
 	end
 
 	local eyes = main and main:FindFirstChild("Eyes")

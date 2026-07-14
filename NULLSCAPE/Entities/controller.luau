@@ -1,9 +1,6 @@
 -- [[
 --  NULLSCAPE - Entities Controller
---  Vai trÃ²: Äáº£m nhiá»‡m viá»‡c quan sÃ¡t hiá»‡u nÄƒng, phÃ¢n tÃ­ch tÃ i nguyÃªn vÃ  Ä‘Æ°a ra cÃ¡c quyáº¿t Ä‘á»‹nh Ä‘iá»u phá»‘i:
---  - PhÃ¡t hiá»‡n tráº¡ng thÃ¡i sáº£nh chá»/tráº­n Ä‘áº¥u (khi inLobby = false sáº½ kÃ­ch hoáº¡t gá»i quÃ©t scan).
---  - GiÃ¡m sÃ¡t tráº¡ng thÃ¡i hoáº¡t Ä‘á»™ng cá»§a script, Ä‘iá»u phá»‘i cháº¿ Ä‘á»™ ngá»§ Ä‘Ã´ng (hibernating) tá»‘i Æ°u CPU.
---  - Gá»­i káº¿t ná»‘i Ä‘Äƒng kÃ½ qua GC vÃ  phÃ¡t lá»‡nh dá»n dáº¹p giáº£i phÃ³ng tÃ i nguyÃªn.
+--  Coordinates entity detection, immunity modules, observers, and cleanup.
 -- ]]
 
 local getgenv = getgenv
@@ -62,6 +59,7 @@ local RemoteBlocking = getgenv().loadModule("NULLSCAPE/Entities/RemoteBlocking.l
 local CelestialImmunity = getgenv().loadModule("NULLSCAPE/Entities/Celestial Immunity.luau")
 local VoidImplosionImmunity = getgenv().loadModule("NULLSCAPE/Entities/Void Implosion Immunity.luau")
 local CadenceStatus = getgenv().loadModule("NULLSCAPE/Entities/Cadence Status.luau")
+local OperatorAutoDisable = getgenv().loadModule("NULLSCAPE/Entities/Operator Auto Disable.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 local BackTrick = getgenv().loadModule("NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau")
 local KolonaAutoQTE = nil
@@ -115,7 +113,6 @@ local function shouldBlockWithShieldPolicy(controller, allowShieldBait)
 end
 
 local Controller = {
-	-- Tráº¡ng thÃ¡i báº­t/táº¯t miá»…n nhiá»…m cho tá»«ng thá»±c thá»ƒ
 	BabyImmune = false,
 	BellImmune = false,
 	BellCurseImmune = false,
@@ -131,6 +128,7 @@ local Controller = {
 	ICBMBurnImmune = false,
 	GuardianImmune = false,
 	OperatorImmune = false,
+	OperatorAutoDisable = false,
 	SpringerImmune = false,
 	SpringerKnockbackImmune = false,
 	SpringerAutoJumpEnabled = false,
@@ -182,7 +180,6 @@ local Controller = {
 }
 GC.Controller = Controller
 
--- XÃ¡c minh kiá»ƒm tra tráº¡ng thÃ¡i game báº±ng ReplicatedStorage.InRound
 local function isInMatch()
 	local inRoundVal = ReplicatedStorage:FindFirstChild("InRound")
 	if inRoundVal and inRoundVal:IsA("BoolValue") then
@@ -198,11 +195,10 @@ local function isInMatch()
 end
 
 local function debugPrint(...)
-	-- KhÃ´ng in debug theo yÃªu cáº§u cá»§a ngÆ°á»i dÃ¹ng
 	return select("#", ...)
 end
 
-local inLobby = not isInMatch() -- Äang á»Ÿ sáº£nh chá»/lá»±a chá»n (Khá»Ÿi táº¡o ban Ä‘áº§u)
+local inLobby = not isInMatch()
 local function getStatusImmunity()
 	local globals = getgenv()._NULLSCAPE_Globals
 	return globals and globals.NullscapeStatusImmunity or nil
@@ -230,7 +226,6 @@ local function restoreCharacterTouchStates()
 	end
 end
 
--- Ngáº¯t cÃ¡c káº¿t ná»‘i quan sÃ¡t thÆ° má»¥c vÃ  workspace
 local function disconnectFolderObservations()
 	table.clear(processedEntities)
 	for _, conn in ipairs(workspaceConnections) do
@@ -422,6 +417,7 @@ end
 function Controller:ReconcileImmunityState()
 	Executor.reconcile(GC)
 	updateSourceEventImmunity(self)
+	OperatorAutoDisable.setEnabled(self.OperatorAutoDisable == true)
 	if self.VoidImplosionImmune == true and self.inLobby ~= true then
 		VoidImplosionImmunity.enable()
 	else
@@ -454,7 +450,6 @@ function Controller:UpdateTelefraggerConnection()
 		self.TelefraggerConnection = nil
 	end
 
-	-- KhÃ´i phá»¥c tráº¡ng thÃ¡i xoay khá»›p náº¿u BackTrick bá»‹ táº¯t
 	if not self.TelefraggerBackTrick and self.WasRedirectingTelefragger then
 		BackTrick.revert(self)
 	end
@@ -465,7 +460,6 @@ function Controller:UpdateTelefraggerConnection()
 
 	local LocalPlayer = game.Players.LocalPlayer
 
-	-- Helper: TÃ­nh khoáº£ng cÃ¡ch ngáº¯n nháº¥t tá»« Ä‘iá»ƒm P Ä‘áº¿n Ä‘oáº¡n tháº³ng AB
 	local function getDistanceToSegment(p, a, b)
 		local ab = b - a
 		local ap = p - a
@@ -479,7 +473,6 @@ function Controller:UpdateTelefraggerConnection()
 		return (p - closest).Magnitude, closest
 	end
 
-	-- Helper: Kiá»ƒm tra vá»‹ trÃ­ sÃ n an toÃ n Ä‘á»ƒ trÃ¡nh nÃ© xuá»‘ng vá»±c
 	self.TelefraggerConnection = RunService.Heartbeat:Connect(function()
 		local char = LocalPlayer.Character
 		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -496,7 +489,6 @@ function Controller:UpdateTelefraggerConnection()
 		local dangerSegment = nil
 		local minSegmentDist = math.huge
 
-		-- QuÃ©t táº¥t cáº£ cÃ¡c chá»‰ thá»‹ (Indicator) hoáº¡t Ä‘á»™ng cá»§a Telefragger á»Ÿ cá»± ly gáº§n
 		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
 			if string.find(string.lower(enemy.Name), "telefragger") then
 				local indicatorPart = enemy:FindFirstChild("IndicatorPart", true)
@@ -507,7 +499,6 @@ function Controller:UpdateTelefraggerConnection()
 							table.insert(attachments, child)
 						end
 					end
-					-- Attachment vÃ  Attachment2 Ä‘Æ°á»£c sinh ra á»Ÿ client biá»ƒu diá»…n vá»‹ trÃ­ báº¯t Ä‘áº§u vÃ  káº¿t thÃºc cá»§a cÃº dash/teleport
 					if #attachments >= 2 then
 						local startPos = attachments[1].WorldPosition
 						local endPos = attachments[2].WorldPosition
@@ -521,7 +512,6 @@ function Controller:UpdateTelefraggerConnection()
 			end
 		end
 
-		-- 2. Xá»­ lÃ½ cÆ¡ cháº¿ Auto-Dodge (NÃ© trÃ¡nh di chuyá»ƒn tá»‹nh tiáº¿n sang ngang ra khá»i Ä‘Æ°á»ng dash Ä‘á»)
 		if self.TelefraggerAutoDodge and dangerSegment then
 			local startPos = dangerSegment.Start
 			local endPos = dangerSegment.End
@@ -554,7 +544,6 @@ function Controller:TriggerSilentBackTrick(enemy)
 		return
 	end
 
-	-- Há»§y luá»“ng chá» cÅ© cá»§a Telefragger nÃ y náº¿u cÃ³
 	if self.TelefraggerActiveThreads[enemy] then
 		pcall(task.cancel, self.TelefraggerActiveThreads[enemy])
 		self.TelefraggerActiveThreads[enemy] = nil
@@ -563,7 +552,6 @@ function Controller:TriggerSilentBackTrick(enemy)
 	self.TelefraggerActiveThreads[enemy] = task.delay(self.TelefraggerDesyncDelay or 0.44, function()
 		self.TelefraggerActiveThreads[enemy] = nil
 
-		-- ThÃªm vÃ o danh sÃ¡ch Ä‘ang desync active
 		local wasEmpty = (next(self.TelefraggerActiveDesyncs) == nil)
 		self.TelefraggerActiveDesyncs[enemy] = true
 
@@ -578,17 +566,14 @@ function Controller:CancelSilentBackTrick(enemy)
 		return
 	end
 
-	-- Há»§y luá»“ng chá» náº¿u chÆ°a kÃ­ch hoáº¡t desync
 	if self.TelefraggerActiveThreads[enemy] then
 		pcall(task.cancel, self.TelefraggerActiveThreads[enemy])
 		self.TelefraggerActiveThreads[enemy] = nil
 	end
 
-	-- XÃ³a khá»i danh sÃ¡ch active
 	if self.TelefraggerActiveDesyncs[enemy] then
 		self.TelefraggerActiveDesyncs[enemy] = nil
 
-		-- Náº¿u khÃ´ng cÃ²n thá»±c thá»ƒ nÃ o Ä‘ang desync thÃ¬ khÃ´i phá»¥c nhÃ¢n váº­t
 		if next(self.TelefraggerActiveDesyncs) == nil then
 			BackTrick.revert(self)
 		end
@@ -600,13 +585,11 @@ function Controller:CancelSilentBackTrick(enemy)
 	end
 end
 
--- HÃ m dá»n dáº¹p tÃ i nguyÃªn (Garbage Collection - GC) giáº£i phÃ³ng bá»™ nhá»›
 function Controller:CleanUp()
 	local globals = getgenv()._NULLSCAPE_Globals
 	local finalCleanup = self.Destroyed
 		or (globals and globals.activeEntitiesController ~= nil and globals.activeEntitiesController ~= self)
 
-	-- Há»§y táº¥t cáº£ cÃ¡c luá»“ng chá» vÃ  dá»n dáº¹p danh sÃ¡ch active
 	for _, thread in pairs(self.TelefraggerActiveThreads) do
 		pcall(task.cancel, thread)
 	end
@@ -651,6 +634,9 @@ function Controller:CleanUp()
 			SpringerAutoJump.disable()
 		end
 	end)
+	if finalCleanup then
+		pcall(OperatorAutoDisable.disable)
+	end
 
 	if self.TelefraggerRedirectConnection then
 		pcall(function()
@@ -679,7 +665,6 @@ function Controller:CleanUp()
 
 	pcall(if finalCleanup then CadenceStatus.cleanup else CadenceStatus.clearRuntime)
 
-	-- Náº¿u bá»‹ há»§y hoÃ n toÃ n (Destroyed = true), giáº£i phÃ³ng cÃ¡c káº¿t ná»‘i vÄ©nh viá»…n
 	if finalCleanup and self.PermanentConnections then
 		for _, conn in ipairs(self.PermanentConnections) do
 			if conn then
@@ -790,7 +775,6 @@ local function disableShockwave(enemy, part)
 	}
 end
 
--- Thiáº¿t láº­p cáº¥u hÃ¬nh miá»…n nhiá»…m vÃ  kÃ­ch hoáº¡t dá»n dáº¹p tá»©c thá»i
 function Controller:SetImmunity(entityName, value)
 	debugPrint("SetImmunity called for:", entityName, "| value:", value)
 	if entityName == "Baby" then
@@ -819,7 +803,6 @@ function Controller:SetImmunity(entityName, value)
 	elseif entityName == "Springer" then
 		self.SpringerImmune = value
 
-		-- ThÃ´ng bÃ¡o cho Accessibility controller cáº­p nháº­t láº¡i tráº¡ng thÃ¡i Auto Jump
 	elseif entityName == "Cadence" then
 		self.CadenceImmune = value
 	elseif entityName == "Ponderer" then
@@ -854,14 +837,12 @@ function Controller:SetImmunity(entityName, value)
 		end
 	end
 
-	-- Ãp dá»¥ng thay Ä‘á»•i tá»©c thá»i cho thá»±c thá»ƒ Ä‘Ã£ tá»“n táº¡i trong workspace
 	if value then
 		local function applyImmunityToChild(child)
 			if not (child:IsA("Model") or child:IsA("BasePart")) then
 				return
 			end
 
-			-- Husk / Skinwalker dÃ¹ng module HuskEvasion má»›i
 			if entityName == "Skinwalker" then
 				local isHusk = (string.find(child.Name, "Skinwalker") or string.find(child.Name, "Husk"))
 					and child.Name ~= "Skinwalkers"
@@ -871,7 +852,6 @@ function Controller:SetImmunity(entityName, value)
 				return
 			end
 
-			-- Baby / Bell / Mart dÃ¹ng module TouchInterest Types
 			local isTarget = string.find(string.lower(child.Name), string.lower(entityName))
 			debugPrint("applyImmunityToChild check for target:", child.Name, "| isTarget:", isTarget ~= nil)
 			if isTarget then
@@ -948,7 +928,6 @@ function Controller:SetImmunity(entityName, value)
 	end
 end
 
--- Cáº¥u hÃ¬nh Silent Lookat cá»§a Ponderer
 function Controller:SetCadenceAutoCollectInstruments(value)
 	self.CadenceAutoCollectInstruments = value == true
 	if self.CadenceAutoCollectInstruments and self.inLobby ~= true then
@@ -981,11 +960,28 @@ function Controller:SetCadenceOptions(options)
 	CadenceStatus.setEnabled(checkStatus)
 end
 
+function Controller:SetOperatorAutoDisable(enabled)
+	self.OperatorAutoDisable = enabled == true
+	local installed = OperatorAutoDisable.setEnabled(self.OperatorAutoDisable)
+	if self.OperatorAutoDisable and not installed then
+		warn("[NULLSCAPE] Operator Auto Disable could not locate the native isStationary closure")
+	end
+	return installed
+end
+
+function Controller:SetOperatorOptions(options)
+	local hasOption = function(option)
+		return typeof(options) == "table" and (options[option] == true or table.find(options, option) ~= nil)
+	end
+
+	self:SetImmunity("Operator", hasOption("Immunity"))
+	return self:SetOperatorAutoDisable(hasOption("Auto Disable"))
+end
+
 function Controller:SetPondererSilentLookat(enabled)
 	self.PondererSilentLookat = enabled == true
 end
 
--- Cáº¥u hÃ¬nh miá»…n nhiá»…m knockback cá»§a Springer
 function Controller:SetSpringerKnockbackImmune(enabled)
 	self.SpringerKnockbackImmune = enabled == true
 	if enabled then
@@ -1123,7 +1119,6 @@ function Controller:RestoreSpringerShockwaves()
 	end
 end
 
--- Tá»‘i Æ°u hÃ³a xá»­ lÃ½ tá»«ng thá»±c thá»ƒ (Sá»­ dá»¥ng Event thay vÃ¬ Loop)
 local function findNativeEnemyESPTemplate()
 	local globals = getgenv()._NULLSCAPE_Globals
 	if globals and globals.EntitiesNativeEnemyESPTemplate and globals.EntitiesNativeEnemyESPTemplate.Parent then
@@ -1201,7 +1196,6 @@ local function getEnemyDisplayName(enemy)
 	return nameLower
 end
 
--- Tá»‘i Æ°u hÃ³a xá»­ lÃ½ tá»«ng thá»±c thá»ƒ (Sá»­ dá»¥ng Event thay vÃ¬ Loop)
 local function processEntity(enemy)
 	if not enemy or not (enemy:IsA("Model") or enemy:IsA("BasePart")) or enemy.Name == "Skinwalkers" then
 		return
@@ -1212,7 +1206,6 @@ local function processEntity(enemy)
 	processedEntities[enemy] = true
 
 	if enemy:IsA("Model") then
-		-- Tá»± Ä‘á»™ng Ä‘á»•i Adornee cá»§a ESP / ESPCrayon sang PrimaryPart Ä‘á»ƒ trÃ¡nh lá»—i hiá»ƒn thá»‹ khi Adornee lÃ  Model khÃ´ng cÃ³ PrimaryPart tá»« server
 		local function onChildAdded(child)
 			if child.Name == "ESP" or child.Name == "ESPCrayon" then
 				if child:IsA("BillboardGui") then
@@ -1293,9 +1286,8 @@ local function processEntity(enemy)
 		end
 
 		task.spawn(function()
-			-- TÃ¬m kiáº¿m Ä‘á»‡ quy pháº§n Ä‘áº§u hoáº·c pháº§n thÃ¢n kháº£ dá»¥ng cá»§a quÃ¡i váº­t 3D má»™t cÃ¡ch khÃ´ng Ä‘á»“ng bá»™
 			local actualHead
-			for _ = 1, 30 do -- Thá»­ tá»‘i Ä‘a 30 láº§n (30 * 0.05s = 1.5s) Ä‘á»ƒ khá»›p vá»›i nhá»‹p táº£i pháº§n tá»­ cá»§a game
+			for _ = 1, 30 do
 				if not enemy or not enemy.Parent then
 					break
 				end
@@ -1308,14 +1300,13 @@ local function processEntity(enemy)
 				if actualHead then
 					break
 				end
-				task.wait(0.05) -- Chá» má»™t nhá»‹p cá»±c ngáº¯n trÆ°á»›c khi kiá»ƒm tra láº¡i
+				task.wait(0.05)
 			end
 
 			if not enemy or not enemy.Parent then
 				return
 			end
 
-			-- GÃ¡n PrimaryPart náº¿u model thiáº¿u (Cá»±c ká»³ quan trá»ng Ä‘á»ƒ BillboardGui ESP cá»§a game gá»‘c hiá»ƒn thá»‹)
 			if not enemy.PrimaryPart then
 				local rootPart = actualHead
 				if rootPart and rootPart:IsA("BillboardGui") then
@@ -1331,7 +1322,6 @@ local function processEntity(enemy)
 				end
 			end
 
-			-- Táº¡o pháº§n Ä‘áº§u giáº£ láº­p "head" (chá»¯ thÆ°á»ng) dáº¡ng BillboardGui cho thá»±c thá»ƒ 3D Ä‘á»ƒ khá»›p kiá»ƒu dá»¯ liá»‡u UDim2.Size cá»§a game gá»‘c
 			if not enemy:FindFirstChild("head") then
 				local rootPart = actualHead
 				if rootPart and rootPart:IsA("BillboardGui") then
@@ -1347,10 +1337,8 @@ local function processEntity(enemy)
 				end
 			end
 
-			-- Chá» má»™t chÃºt Ä‘á»ƒ xem há»‡ thá»‘ng gá»‘c cá»§a game cÃ³ tá»± Ä‘á»™ng gáº¯n ESP hay khÃ´ng
 			task.wait(0.2)
 			if enemy.Parent and not (enemy:FindFirstChild("ESP") or enemy:FindFirstChild("ESPCrayon")) then
-				-- Náº¿u script gá»‘c cá»§a game bá» lá»¡ hoáº·c khÃ´ng ká»‹p gáº¯n, chÃºng ta tá»± gáº¯n thá»§ cÃ´ng báº±ng template gá»‘c
 				local template = findNativeEnemyESPTemplate()
 				if template then
 					local cloned = template:Clone()
@@ -1391,7 +1379,6 @@ local function processEntity(enemy)
 		end)
 	end
 
-	-- HÃ m xá»­ lÃ½ chÃ­nh khi kiá»ƒm tra tÃªn thá»±c thá»ƒ
 	local function checkAndApply()
 		if not enemy or not enemy.Parent then
 			return
@@ -1399,7 +1386,6 @@ local function processEntity(enemy)
 		local name = enemy.Name
 		debugPrint("processEntity checkAndApply for:", name)
 
-		-- â”€â”€ Thá»±c thá»ƒ dÃ¹ng nguyÃªn lÃ½ XÃ³a TouchInterest (Baby, Bell, Mart,...) â”€â”€
 		if TouchInterest.isTargetEntity(name) then
 			local checkFunc = TouchInterest.getImmunityCheck(name, Controller)
 			debugPrint("checkAndApply TargetEntity:", name, "| checkFunc found:", checkFunc ~= nil)
@@ -1411,7 +1397,6 @@ local function processEntity(enemy)
 			end
 		end
 
-		-- â”€â”€ Husk / Skinwalker (Ä‘á»•i tÃªn + CanTouch) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		if
 			HuskEvasion.isHuskEntity(name)
 			or (enemy:GetAttribute("OriginalName") and HuskEvasion.isHuskEntity(enemy:GetAttribute("OriginalName")))
@@ -1425,7 +1410,6 @@ local function processEntity(enemy)
 			CadenceStatus.attach(enemy)
 		end
 
-		-- â”€â”€ Telefragger ClientEvent Hook â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 		if string.find(string.lower(name), "telefragger") and not hookedTelefraggers[enemy] then
 			hookedTelefraggers[enemy] = true
 			task.spawn(function()
@@ -1444,14 +1428,11 @@ local function processEntity(enemy)
 		end
 	end
 
-	-- ÄÄƒng kÃ½ sá»± kiá»‡n láº¯ng nghe Ä‘á»•i tÃªn cá»§a thá»±c thá»ƒ (PhÃ²ng há» game Ä‘á»•i tÃªn trá»… sau khi spawn)
 	local nameConn = enemy:GetPropertyChangedSignal("Name"):Connect(checkAndApply)
 	GC.registerEntityConnection(enemy, nameConn)
 
-	-- Cháº¡y kiá»ƒm tra ngay láº­p tá»©c
 	checkAndApply()
 
-	-- Láº¯ng nghe bá»™ pháº­n má»›i Ä‘Æ°á»£c thÃªm vÃ o cho Husk/Skinwalker
 	local descConn = enemy.DescendantAdded:Connect(function(part)
 		local name = enemy.Name
 		if
@@ -1465,7 +1446,6 @@ local function processEntity(enemy)
 	end)
 	GC.registerEntityConnection(enemy, descConn)
 
-	-- Xá»­ lÃ½ vÃ´ hiá»‡u hÃ³a shockwave cho Springer (Springer khÃ´ng cÃ³ TouchInterest, chá»‰ cÃ³ ClientEvent vÃ  ShockwaveEvent)
 	if string.find(enemy.Name, "Springer") then
 		local childAddedConn = enemy.ChildAdded:Connect(function(child)
 			if child.Name == "SpringerShockwave" or child.Name == "DemonShockwave" then
@@ -1498,7 +1478,6 @@ local function processEntity(enemy)
 	end
 end
 
--- Gá»¡ bá» láº¯ng nghe cá»§a thá»±c thá»ƒ khi nÃ³ bá»‹ xÃ³a
 local function removeEntity(enemy)
 	processedEntities[enemy] = nil
 	GC.removeEntityConnections(enemy)
@@ -1520,18 +1499,15 @@ local function removeEntity(enemy)
 	end
 end
 
--- HÃ m dá»n dáº¹p tÃ i nguyÃªn riÃªng cho má»™t thÆ° má»¥c cá»¥ thá»ƒ khi nÃ³ bá»‹ xÃ³a khá»i Workspace
 function Controller:CleanUpFolder(folder)
 	if not folder then
 		return
 	end
 
-	-- 1. Dá»n dáº¹p cÃ¡c thá»±c thá»ƒ Ä‘ang tá»“n táº¡i trong thÆ° má»¥c nÃ y
 	for _, child in ipairs(folder:GetChildren()) do
 		removeEntity(child)
 	end
 
-	-- 2. Ngáº¯t káº¿t ná»‘i cá»§a riÃªng thÆ° má»¥c nÃ y
 	local conns = folderConnections[folder]
 	if conns then
 		for _, conn in ipairs(conns) do
@@ -1544,16 +1520,13 @@ function Controller:CleanUpFolder(folder)
 		folderConnections[folder] = nil
 	end
 
-	-- 3. Cáº­p nháº­t biáº¿n tham chiáº¿u EnemiesFolder náº¿u cáº§n
 	if self.EnemiesFolder == folder then
 		self.EnemiesFolder = nil
 	end
 end
 
--- Thiáº¿t láº­p quan sÃ¡t thÆ° má»¥c Enemies trong Workspace
 function Controller:ObserveFolder(folder)
 	debugPrint("ObserveFolder called for:", folder:GetFullName())
-	-- TrÃ¡nh Ä‘Äƒng kÃ½ nhiá»u láº§n cho cÃ¹ng má»™t thÆ° má»¥c
 	if folderConnections[folder] then
 		debugPrint("Folder already observed, skipping:", folder.Name)
 		return
@@ -1565,30 +1538,25 @@ function Controller:ObserveFolder(folder)
 
 	local conns = {}
 
-	-- 1. Láº¯ng nghe khi thá»±c thá»ƒ má»›i xuáº¥t hiá»‡n
 	local childAddedConn = folder.ChildAdded:Connect(function(child)
 		debugPrint("ObserveFolder: ChildAdded in:", folder.Name, "| Child Name:", child.Name)
 		processEntity(child)
 	end)
 	table.insert(conns, childAddedConn)
 
-	-- 2. Láº¯ng nghe khi thá»±c thá»ƒ bá»‹ xÃ³a khá»i game
 	local childRemovedConn = folder.ChildRemoved:Connect(function(child)
 		removeEntity(child)
 	end)
 	table.insert(conns, childRemovedConn)
 
-	-- 3. Xá»­ lÃ½ cÃ¡c thá»±c thá»ƒ Ä‘Ã£ cÃ³ sáºµn trong thÆ° má»¥c
 	debugPrint("ObserveFolder: Existing children in:", folder.Name, "| count:", #folder:GetChildren())
 	for _, child in ipairs(folder:GetChildren()) do
 		debugPrint("ObserveFolder: Processing existing child:", child.Name)
 		processEntity(child)
 	end
 
-	-- 4. CÆ¡ cháº¿ tá»± Ä‘á»™ng GC khi thÆ° má»¥c bá»‹ xÃ³a/há»§y khá»i Workspace
 	local destroyingConn = folder.AncestryChanged:Connect(function(_, parent)
 		if not parent then
-			-- ThÆ° má»¥c Ä‘Ã£ bá»‹ xÃ³a hoÃ n toÃ n khá»i trÃ² chÆ¡i
 			self:CleanUpFolder(folder)
 		end
 	end)
@@ -1652,7 +1620,6 @@ startCadenceAutoCollectLoop = function()
 	end)
 end
 
--- QuÃ©t tÃ¬m thÆ° má»¥c Enemies vÃ  Skinwalkers trong Workspace vÃ  láº¯ng nghe sá»± thay Ä‘á»•i
 local function startObservingFolders()
 	debugPrint("startObservingFolders called")
 	disconnectFolderObservations()
@@ -1669,7 +1636,6 @@ local function startObservingFolders()
 	local wsConn = workspace.ChildAdded:Connect(checkAndObserve)
 	table.insert(workspaceConnections, wsConn)
 
-	-- Xá»­ lÃ½ cÃ¡c folder cÃ³ sáºµn
 	for _, child in ipairs(workspace:GetChildren()) do
 		if (child.Name == "Enemies" or child.Name == "Skinwalkers") and child:IsA("Folder") then
 			Controller:ObserveFolder(child)
@@ -1677,7 +1643,6 @@ local function startObservingFolders()
 	end
 end
 
--- HÃ m cáº­p nháº­t tráº¡ng thÃ¡i sáº£nh chá» vÃ  tá»± Ä‘á»™ng dá»n dáº¹p visual/connections
 local function setInLobby(val)
 	if inLobby == val then
 		return
@@ -1710,7 +1675,6 @@ local function setInLobby(val)
 	end
 end
 
--- Hook há»‡ thá»‘ng tráº¡ng thÃ¡i (Status Effects) Ä‘á»ƒ miá»…n nhiá»…m debuff vÃ  screen effect Ä‘Æ°á»£c chá»n
 local function initializeStatusEffectHook()
 	local globals = getgenv()._NULLSCAPE_Globals
 	local StatusImmunity = getStatusImmunity() or getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
@@ -1774,7 +1738,6 @@ local function initializeStatusEffectHook()
 		end
 	end)
 
-	-- Khá»Ÿi cháº¡y vÃ²ng láº·p ngáº§m Ä‘á»ƒ liÃªn tá»¥c khá»­ kÃ­ch thÆ°á»›c Blur vÃ  cÃ¡c hiá»‡u á»©ng mÃ©o/Ä‘á» mÃ n hÃ¬nh
 	globals.StatusEffectHooked = true
 	local loopToken = {}
 	globals.StatusEffectLoopToken = loopToken
@@ -1812,7 +1775,6 @@ local function initializeStatusEffectHook()
 	end)
 end
 
--- Hook hiá»‡u á»©ng mÃ¹ khi ai Ä‘Ã³ gÃµ ChuÃ´ng (Bell Blindness / Screen flash black/white)
 initializeBellBlindnessHook = function()
 	local globals = getgenv()._NULLSCAPE_Globals
 	if globals.BellBlindnessHookPending then
@@ -1842,7 +1804,6 @@ initializeBellBlindnessHook = function()
 		end
 	end
 
-	-- Hook _G.RingBell Ä‘á»ƒ trÃ¡nh nháº¥p nhÃ¡y/mÃ¹ cá»¥c bá»™ khi ta tá»± gÃµ hoáº·c cháº¡m chuÃ´ng
 	task.spawn(function()
 		local originalRingBell
 		local deadline = time() + 30
@@ -1871,7 +1832,6 @@ initializeBellBlindnessHook = function()
 		_G.RingBell = globals.BellRingWrapper
 	end)
 
-	-- Hook OnClientEvent cá»§a Bell Ä‘á»ƒ trÃ¡nh mÃ¹ khi ngÆ°á»i chÆ¡i khÃ¡c gÃµ chuÃ´ng trong phÃ²ng
 	task.spawn(function()
 		while
 			globals.BellBlindnessHookPending
@@ -1913,10 +1873,8 @@ initializeBellBlindnessHook = function()
 					end
 				end
 
-				-- Hook cÃ¡c káº¿t ná»‘i cÅ© Ä‘ang hoáº¡t Ä‘á»™ng
 				hookBellConnections()
 
-				-- Hook hÃ m Connect Ä‘á»ƒ tá»± Ä‘á»™ng bá»c cÃ¡c káº¿t ná»‘i má»›i trong tÆ°Æ¡ng lai
 				if not globals.BellConnectHookInstalled then
 					local oldConnect
 					oldConnect = hookfunction(bellEvent.OnClientEvent.Connect, function(self, callback)
@@ -1934,9 +1892,7 @@ initializeBellBlindnessHook = function()
 	end)
 end
 
--- Hook Ä‘á»ƒ cháº·n RemoteEvent bÃ¡o tá»­ cá»§a thá»±c thá»ƒ Client-side (nhÆ° ICBM vÃ  Springer) má»™t cÃ¡ch an toÃ n
 local function initializeICBMHook()
-	-- XÃ¢y dá»±ng báº£ng tra cá»©u nhanh O(1) tÃªn cÃ¡c RemoteEvent cáº§n cháº·n
 	local TargetRemoteNames = {
 		["ClientEvent"] = true,
 		["ShockwaveEvent"] = true,
@@ -1950,20 +1906,17 @@ local function initializeICBMHook()
 	local function handleRemoteCall(self, ...)
 		local args = { ... }
 
-		-- Láº¥y activeController hiá»‡n táº¡i tá»« globals
 		local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
 		if not activeCtrl then
 			return false
 		end
 
 
-		-- Kiá»ƒm tra nhanh tÃªn remote trÆ°á»›c (O(1) lookup)
 		if not TargetRemoteNames[self.Name] then
 			return false
 		end
 
 
-		-- Cháº¡y logic cháº·n RemoteEvent thá»‘ng nháº¥t tá»« RemoteBlocking.luau
 		if activeCtrl.GuardianImmune == true and self.Name == "Died" and args[1] == "Guardian" then
 			return shouldBlockWithShieldPolicy(activeCtrl)
 		end
@@ -1982,10 +1935,8 @@ local function initializeICBMHook()
 		return false
 	end
 
-	-- ÄÄƒng kÃ½ dispatcher toÃ n cá»¥c
 	getgenv()._NULLSCAPE_Globals.handleEntitiesRemoteCall = handleRemoteCall
 
-	-- 1. Hook __namecall (PhÆ°Æ¡ng phÃ¡p chuáº©n vÃ  máº¡nh nháº¥t cho cÃ¡c cuá»™c gá»i dáº¡ng Remote:FireServer(...) hoáº·c Remote:InvokeServer(...))
 	local namecallSuccess = false
 	if typeof(hookmetamethod) == "function" then
 		if not getgenv()._NULLSCAPE_Globals.NamecallHooked then
@@ -2020,9 +1971,9 @@ local function initializeICBMHook()
 									return oldNamecall(self, table.unpack(modifiedArgs))
 								end
 								if isRemoteFunction then
-									return nil -- Cháº·n Ä‘á»©ng InvokeServer vÃ  tráº£ vá» nil
+									return nil
 								end
-								return -- Cháº·n Ä‘á»©ng FireServer
+								return
 							end
 						end
 					end
@@ -2046,16 +1997,13 @@ local function initializeICBMHook()
 	end
 end
 
--- ÄÄƒng kÃ½ active controller hiá»‡n táº¡i Ä‘á»ƒ tá»± Ä‘á»™ng dá»«ng cÃ¡c phiÃªn báº£n cÅ©
 getgenv()._NULLSCAPE_Globals.activeEntitiesController = Controller
 getgenv()._NULLSCAPE_Globals.EntitiesHookOwner = Controller
 
--- Khá»Ÿi táº¡o ban Ä‘áº§u khi náº¡p script
 if not inLobby then
 	startObservingFolders()
 end
 
--- Láº¯ng nghe sá»± kiá»‡n Ä‘á»•i tráº¡ng thÃ¡i game thá»i gian thá»±c
 task.spawn(function()
 	local inRoundVal = ReplicatedStorage:WaitForChild("InRound", 15)
 	if Controller.Destroyed or not Controller.PermanentConnections then
@@ -2098,7 +2046,6 @@ task.spawn(function()
 	end
 end)
 
--- VÃ²ng láº·p quan sÃ¡t dá»± phÃ²ng (chá»‰ cháº¡y khi khÃ´ng cÃ³ InRound)
 task.spawn(function()
 	while not Controller.Destroyed and not hasInRoundValue do
 		task.wait(3.0)

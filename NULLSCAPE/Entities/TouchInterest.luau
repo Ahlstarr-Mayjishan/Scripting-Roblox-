@@ -1,13 +1,13 @@
 -- [[
 --  NULLSCAPE - TouchInterest Entities Immunity
---  Vai trò: Quản lý miễn nhiễm thực thể bằng nguyên lý Xóa TouchInterest (CanTouch = false)
+--  Owns reversible CanTouch changes for contact-based entity immunity.
 -- ]]
 
 local Logic = {}
 local CollectionService = game:GetService("CollectionService")
 
 -- ============================================================
---  CẤU HÌNH THỰC THỂ TOUCHINTEREST
+-- Contact immunity configuration
 -- ============================================================
 Logic.Config = {
 	["Baby"] = "BabyImmune",

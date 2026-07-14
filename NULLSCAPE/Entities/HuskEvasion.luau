@@ -1,12 +1,12 @@
 -- [[
 --  NULLSCAPE - Husk / Skinwalker Evasion
---  Vai trò: Quản lý tắt CanTouch của Husk/Skinwalker để miễn nhiễm va chạm (Không đổi tên để chạy tốt ESP gốc và AI)
+--  Disables contact damage without renaming entities or disrupting native ESP.
 -- ]]
 
 local Logic = {}
 
 -- ============================================================
---  CẤU HÌNH THỰC THỂ HUSK / SKINWALKER
+-- Entity configuration
 -- ============================================================
 Logic.Config = {
 	["Skinwalker"] = "SkinwalkerImmune",
