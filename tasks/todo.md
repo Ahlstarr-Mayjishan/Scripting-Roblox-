@@ -1,0 +1,9 @@
+- [x] Add Charger steering setting, persistence, and UI controls.
+  - Acceptance: opt-in toggle and percentage slider persist with safe defaults.
+  - Verify: `selene NULLSCAPE` and `stylua --check NULLSCAPE`.
+- [x] Add class-gated steering runtime assist.
+  - Acceptance: uses movement direction first, camera direction second, only while charging.
+  - Verify: `rojo build default.project.json -o NULLSCAPE.rbxlx`.
+- [ ] Validate a native Charger cooldown hook exists before adding no-cooldown.
+  - Acceptance: do not ship a non-functional toggle.
+  - Verify: inspect available native modules/runtime interfaces in a Charger session.

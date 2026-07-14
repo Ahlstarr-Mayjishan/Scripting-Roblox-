@@ -26,6 +26,8 @@ local Control = {
 	ChargerTripmineDistance = 15,
 	ChargerTripmineBatchDistance = 60,
 	ChargerTripmineJitter = 2,
+	ChargerSteeringAssistEnabled = false,
+	ChargerSteeringAssistStrength = 50,
 	GrappleInstantGroundCast = false,
 	GrappleWallGlide = false,
 	GrappleInstantMaxPull = false,
@@ -130,6 +132,14 @@ local function readSettings()
 		Control.ChargerTripmineBatchDistance = tonumber(decoded.ChargerTripmineBatchDistanceSlider)
 			or Control.ChargerTripmineBatchDistance
 		Control.ChargerTripmineJitter = tonumber(decoded.ChargerTripmineJitterSlider) or Control.ChargerTripmineJitter
+		if decoded.ChargerSteeringAssistToggle ~= nil then
+			Control.ChargerSteeringAssistEnabled = not not decoded.ChargerSteeringAssistToggle
+		end
+		Control.ChargerSteeringAssistStrength = math.clamp(
+			tonumber(decoded.ChargerSteeringAssistStrengthSlider) or Control.ChargerSteeringAssistStrength,
+			0,
+			100
+		)
 	end
 end
 
@@ -169,6 +179,8 @@ local function writeSettings()
 	data.ChargerTripmineDistanceSlider = Control.ChargerTripmineDistance
 	data.ChargerTripmineBatchDistanceSlider = Control.ChargerTripmineBatchDistance
 	data.ChargerTripmineJitterSlider = Control.ChargerTripmineJitter
+	data.ChargerSteeringAssistToggle = Control.ChargerSteeringAssistEnabled
+	data.ChargerSteeringAssistStrengthSlider = Control.ChargerSteeringAssistStrength
 
 	pcall(makefolder, SETTINGS_FOLDER)
 
@@ -226,10 +238,16 @@ function Control:initialize()
 	if Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
 		Executor.updateChargerTripmineAssist(self)
 	end
+	if Executor and typeof(Executor.updateChargerSteeringAssist) == "function" then
+		Executor.updateChargerSteeringAssist(self)
+	end
 	if ClassContext and typeof(ClassContext.subscribe) == "function" then
 		local connection = ClassContext.subscribe(function()
 			if not self.Destroyed and Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
 				Executor.updateChargerTripmineAssist(self)
+			end
+			if not self.Destroyed and Executor and typeof(Executor.updateChargerSteeringAssist) == "function" then
+				Executor.updateChargerSteeringAssist(self)
 			end
 		end)
 		if connection then
@@ -373,6 +391,19 @@ end
 
 function Control:SetChargerTripmineJitter(value)
 	self.ChargerTripmineJitter = math.clamp(tonumber(value) or 2, 0, 10)
+	saveSettings()
+end
+
+function Control:SetChargerSteeringAssist(value)
+	self.ChargerSteeringAssistEnabled = value == true
+	saveSettings()
+	if Executor and typeof(Executor.updateChargerSteeringAssist) == "function" then
+		Executor.updateChargerSteeringAssist(self)
+	end
+end
+
+function Control:SetChargerSteeringAssistStrength(value)
+	self.ChargerSteeringAssistStrength = math.clamp(tonumber(value) or 50, 0, 100)
 	saveSettings()
 end
 

@@ -54,6 +54,8 @@ local createControllerProxy = function(Client, Controller)
 		ChargerTripmineMode = "Auto",
 		ChargerTripmineDistance = 15,
 		ChargerTripmineJitter = 2,
+		ChargerSteeringAssistEnabled = false,
+		ChargerSteeringAssistStrength = 50,
 	}
 
 	return setmetatable({ __ClassAdjustmentProxy = true }, {
@@ -272,6 +274,29 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateSection("Charger")
+
+	Tab:CreateToggle({
+		Name = "Charger Steering Assist",
+		Info = "Khi dang lao, uu tien huong WASD; neu khong co input thi theo huong camera.",
+		CurrentValue = Controller.ChargerSteeringAssistEnabled or false,
+		Flag = "ChargerSteeringAssistToggle",
+		Callback = function(Value)
+			Controller:SetChargerSteeringAssist(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Charger Steering Strength",
+		Info = "0% khong can thiep; 100% bam sat huong WASD/camera trong luc lao.",
+		Range = { 0, 100 },
+		Increment = 1,
+		Suffix = "%",
+		CurrentValue = Controller.ChargerSteeringAssistStrength or 50,
+		Flag = "ChargerSteeringAssistStrengthSlider",
+		Callback = function(Value)
+			Controller:SetChargerSteeringAssistStrength(Value)
+		end,
+	})
 
 	Tab:CreateToggle({
 		Name = "Charger Tripmine Assist",

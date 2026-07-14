@@ -22,6 +22,7 @@ local GrappleRecovery = nil
 local GrappleRange = nil
 local HookCastSpeed = nil
 local ChargerTripmineAssist = nil
+local ChargerSteeringAssist = nil
 local CatapultBoost = nil
 local MomentumTransfer = nil
 local SharkTailWindowState = setmetatable({}, { __mode = "k" })
@@ -36,6 +37,7 @@ local MODULE_PATHS = {
 	GrappleRange = "NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau",
 	HookCastSpeed = "NULLSCAPE/Class Adjustment/Grappler/Grapple Hook Cast Speed.luau",
 	ChargerTripmineAssist = "NULLSCAPE/Class Adjustment/Charger/Tripmine Assist.luau",
+	ChargerSteeringAssist = "NULLSCAPE/Class Adjustment/Charger/Steering Assist.luau",
 	CatapultBoost = "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",
 	MomentumTransfer = "NULLSCAPE/Class Adjustment/Grappler/Grapple Momentum Transfer.luau",
 }
@@ -110,6 +112,7 @@ local function loadAdjustmentModules()
 	GrappleRange = GrappleRange or getgenv().loadModule(MODULE_PATHS.GrappleRange)
 	HookCastSpeed = HookCastSpeed or getgenv().loadModule(MODULE_PATHS.HookCastSpeed)
 	ChargerTripmineAssist = ChargerTripmineAssist or getgenv().loadModule(MODULE_PATHS.ChargerTripmineAssist)
+	ChargerSteeringAssist = ChargerSteeringAssist or getgenv().loadModule(MODULE_PATHS.ChargerSteeringAssist)
 	CatapultBoost = CatapultBoost or getgenv().loadModule(MODULE_PATHS.CatapultBoost)
 	MomentumTransfer = MomentumTransfer or getgenv().loadModule(MODULE_PATHS.MomentumTransfer)
 end
@@ -629,6 +632,9 @@ function Executor.disable()
 			ChargerTripmineMode = "Auto",
 		})
 	end
+	if ChargerSteeringAssist and typeof(ChargerSteeringAssist.stop) == "function" then
+		pcall(ChargerSteeringAssist.stop)
+	end
 end
 
 function Executor.restore()
@@ -688,6 +694,15 @@ function Executor.updateChargerTripmineAssist(controller)
 	ChargerTripmineAssist = ChargerTripmineAssist or getgenv().loadModule(MODULE_PATHS.ChargerTripmineAssist)
 	if ChargerTripmineAssist and typeof(ChargerTripmineAssist.update) == "function" then
 		return ChargerTripmineAssist.update(controller)
+	end
+
+	return nil
+end
+
+function Executor.updateChargerSteeringAssist(controller)
+	ChargerSteeringAssist = ChargerSteeringAssist or getgenv().loadModule(MODULE_PATHS.ChargerSteeringAssist)
+	if ChargerSteeringAssist and typeof(ChargerSteeringAssist.update) == "function" then
+		return ChargerSteeringAssist.update(controller)
 	end
 
 	return nil
