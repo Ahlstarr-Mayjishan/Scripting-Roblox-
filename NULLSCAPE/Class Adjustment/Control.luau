@@ -28,6 +28,7 @@ local Control = {
 	ChargerTripmineJitter = 2,
 	ChargerSteeringAssistEnabled = false,
 	ChargerSteeringAssistStrength = 50,
+	ChargerCollisionGuardEnabled = false,
 	GrappleInstantGroundCast = false,
 	GrappleWallGlide = false,
 	GrappleInstantMaxPull = false,
@@ -140,6 +141,9 @@ local function readSettings()
 			0,
 			100
 		)
+		if decoded.ChargerCollisionGuardToggle ~= nil then
+			Control.ChargerCollisionGuardEnabled = not not decoded.ChargerCollisionGuardToggle
+		end
 	end
 end
 
@@ -181,6 +185,7 @@ local function writeSettings()
 	data.ChargerTripmineJitterSlider = Control.ChargerTripmineJitter
 	data.ChargerSteeringAssistToggle = Control.ChargerSteeringAssistEnabled
 	data.ChargerSteeringAssistStrengthSlider = Control.ChargerSteeringAssistStrength
+	data.ChargerCollisionGuardToggle = Control.ChargerCollisionGuardEnabled
 
 	pcall(makefolder, SETTINGS_FOLDER)
 
@@ -241,6 +246,9 @@ function Control:initialize()
 	if Executor and typeof(Executor.updateChargerSteeringAssist) == "function" then
 		Executor.updateChargerSteeringAssist(self)
 	end
+	if Executor and typeof(Executor.updateChargerCollisionGuard) == "function" then
+		Executor.updateChargerCollisionGuard(self)
+	end
 	if ClassContext and typeof(ClassContext.subscribe) == "function" then
 		local connection = ClassContext.subscribe(function()
 			if not self.Destroyed and Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
@@ -248,6 +256,9 @@ function Control:initialize()
 			end
 			if not self.Destroyed and Executor and typeof(Executor.updateChargerSteeringAssist) == "function" then
 				Executor.updateChargerSteeringAssist(self)
+			end
+			if not self.Destroyed and Executor and typeof(Executor.updateChargerCollisionGuard) == "function" then
+				Executor.updateChargerCollisionGuard(self)
 			end
 		end)
 		if connection then
@@ -405,6 +416,14 @@ end
 function Control:SetChargerSteeringAssistStrength(value)
 	self.ChargerSteeringAssistStrength = math.clamp(tonumber(value) or 50, 0, 100)
 	saveSettings()
+end
+
+function Control:SetChargerCollisionGuard(value)
+	self.ChargerCollisionGuardEnabled = value == true
+	saveSettings()
+	if Executor and typeof(Executor.updateChargerCollisionGuard) == "function" then
+		Executor.updateChargerCollisionGuard(self)
+	end
 end
 
 function Control:SetGrappleInstantGroundCast(value)

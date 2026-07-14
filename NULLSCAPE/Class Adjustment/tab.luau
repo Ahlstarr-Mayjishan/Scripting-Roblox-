@@ -56,6 +56,7 @@ local createControllerProxy = function(Client, Controller)
 		ChargerTripmineJitter = 2,
 		ChargerSteeringAssistEnabled = false,
 		ChargerSteeringAssistStrength = 50,
+		ChargerCollisionGuardEnabled = false,
 	}
 
 	return setmetatable({ __ClassAdjustmentProxy = true }, {
@@ -295,6 +296,16 @@ return function(Client, Controller)
 		Flag = "ChargerSteeringAssistStrengthSlider",
 		Callback = function(Value)
 			Controller:SetChargerSteeringAssistStrength(Value)
+		end,
+	})
+
+	Tab:CreateToggle({
+		Name = "Charger Collision Guard",
+		Info = "Giup charge khong bi ngat boi player khac va vat the nho; van giu va cham voi terrain/tuong map.",
+		CurrentValue = Controller.ChargerCollisionGuardEnabled or false,
+		Flag = "ChargerCollisionGuardToggle",
+		Callback = function(Value)
+			Controller:SetChargerCollisionGuard(Value)
 		end,
 	})
 
