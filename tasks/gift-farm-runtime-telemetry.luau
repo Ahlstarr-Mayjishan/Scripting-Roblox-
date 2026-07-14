@@ -43,6 +43,7 @@ local state = {
 	ReplicationClient = nil,
 	GiftHandler = nil,
 	CollectWrappers = {},
+	RenderEpoch = 0,
 	CurrentBatch = nil,
 	BatchOutcomes = {},
 	LastRootPosition = nil,
@@ -159,7 +160,7 @@ local function recordAttempt(giftId)
 	local gift = state.GiftHandler and state.GiftHandler.Gifts and state.GiftHandler.Gifts[id]
 	local giftPosition = gift and gift.Position
 	local giftDistance = position and typeof(giftPosition) == "Vector3" and (giftPosition - position).Magnitude or nil
-	local frame = RunService.FrameNumber
+	local frame = state.RenderEpoch
 	local batch = state.CurrentBatch
 	if not batch or batch.Frame ~= frame then
 		batch = {
@@ -584,6 +585,11 @@ end
 
 api.state = state
 env.NULLSCAPE_GiftTelemetryProbe = api
+
+connect(RunService.RenderStepped, function()
+	state.RenderEpoch += 1
+	state.CurrentBatch = nil
+end)
 
 local function bindRootTracking(character)
 	local root = character

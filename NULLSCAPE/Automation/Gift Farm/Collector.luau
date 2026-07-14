@@ -7,7 +7,6 @@ local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
 
 local Collector = {}
-local PRECISION_COLLECT_SETTLE = 0.05
 local BASE_VALIDATION_WAIT = 0.08
 local PRECISION_VALIDATION_WAIT = 0.12
 local PRECISION_VALIDATION_MAX = 0.2
@@ -26,9 +25,10 @@ local TAIL_CLEANUP_MAX_PULSES = 10
 local CLEANUP_PULSE_INTERVAL = 0.015
 local MAX_RETRY_PASSES = 2
 local MAX_PRECISION_RETRY_PASSES = 3
-local RETRY_SETTLE = 0.045
-local FAST_POSITION_SYNC_MIN = 0.05
-local FAST_POSITION_SYNC_MAX = 0.14
+local POSITION_SYNC_MIN = 0.065
+local POSITION_SYNC_MAX = 0.5
+local POSITION_SYNC_PING_MULTIPLIER = 1.2
+local POSITION_SYNC_MARGIN = 0.02
 
 local comboCount = 0
 local lastCollectTick = 0
@@ -137,7 +137,8 @@ end
 
 local function waitForServerPosition()
 	local ping = getPingSeconds() or 0.08
-	local waitTime = math.clamp(ping * 0.75 + 0.02, FAST_POSITION_SYNC_MIN, FAST_POSITION_SYNC_MAX)
+	local waitTime =
+		math.clamp(ping * POSITION_SYNC_PING_MULTIPLIER + POSITION_SYNC_MARGIN, POSITION_SYNC_MIN, POSITION_SYNC_MAX)
 	local startedAt = os.clock()
 
 	-- Context.moveCharacterTo writes the final CFrame after its own Heartbeat.
@@ -341,6 +342,7 @@ local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, c
 		clearVelocity(hrp)
 		if (hrp.Position - standingPosition).Magnitude > PRECISION_ARRIVAL_TOLERANCE then
 			waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
+			waitForServerPosition()
 		end
 
 		local currentPos = hrp.Position
@@ -432,11 +434,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
-		if precisionMode then
-			waitIfPositive(PRECISION_COLLECT_SETTLE)
-		else
-			waitForServerPosition()
-		end
+		waitForServerPosition()
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
@@ -484,7 +482,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 
 			comboCount = 0
 			waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
-			task.wait(RETRY_SETTLE)
+			waitForServerPosition()
 			if isAborted(options, lease, currentSessionToken) then
 				return
 			end

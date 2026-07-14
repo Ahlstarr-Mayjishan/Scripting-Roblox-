@@ -20,6 +20,7 @@ local lastFannyPackCheckAt = -math.huge
 local cachedHasFannyPack = false
 local cachedFannyPackTiles = nil
 local FANNY_PACK_CACHE_INTERVAL = 0.4
+local GOLDEN_GIFT_TYPES = { "PassageGift", "GoldenGift" }
 
 local function getUpgradeHandler()
 	if cachedUpgradeHandler ~= nil then
@@ -116,6 +117,28 @@ function Scanner.reset()
 	end
 end
 
+function Scanner.getLiveGoldenKind(gch)
+	local gifts = gch and gch.Gifts
+	local giftsByType = gch and gch.GiftsByType
+	if typeof(gifts) ~= "table" or typeof(giftsByType) ~= "table" then
+		return nil
+	end
+
+	for _, giftType in ipairs(GOLDEN_GIFT_TYPES) do
+		local giftIds = giftsByType[giftType]
+		if giftIds then
+			for giftId in pairs(giftIds) do
+				local gift = gifts[giftId]
+				if gift and gift.Golden == true and not gift.Destroyed and not gift.Collected then
+					return giftType
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
 function Scanner.scan(controller, gch)
 	local goldenGifts = {}
 	local normalGifts = {}
@@ -123,8 +146,10 @@ function Scanner.scan(controller, gch)
 	local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 	local goldenCollected, goldenMax, goldenRatio = Progress.getGoldenGiftProgress(gch)
 	local rawGolden = 0
+	local rawPassage = 0
 	local rawNormal = 0
 	local settledGolden = 0
+	local settledPassage = 0
 	local settledNormal = 0
 	local hasFannyPack, fannyPackTiles = getFannyPackState(now)
 	local collapseTiles = if Collapse and typeof(Collapse.prepareScan) == "function"
@@ -136,8 +161,12 @@ function Scanner.scan(controller, gch)
 			local priority = Progress.getGiftPriority(gift, normalRatio, controller)
 			if pos and priority ~= nil then
 				local isGolden = gift.Golden == true
+				local isPassage = gift.Type == "PassageGift"
 				if isGolden then
 					rawGolden += 1
+					if isPassage then
+						rawPassage += 1
+					end
 				else
 					rawNormal += 1
 				end
@@ -148,6 +177,9 @@ function Scanner.scan(controller, gch)
 				if now - seenGifts[gift] >= settleTime then
 					if isGolden then
 						settledGolden += 1
+						if isPassage then
+							settledPassage += 1
+						end
 					else
 						settledNormal += 1
 					end
@@ -165,6 +197,7 @@ function Scanner.scan(controller, gch)
 						bonusTilePriority = getFannyPackTilePriority(pos, fannyPackTiles),
 						id = gift.Id or 0,
 						golden = isGolden,
+						passage = isPassage,
 					}
 				end
 			end
@@ -177,8 +210,10 @@ function Scanner.scan(controller, gch)
 
 	return gifts, {
 		Golden = settledGolden,
+		Passage = settledPassage,
 		Normal = settledNormal,
 		RawGolden = rawGolden,
+		RawPassage = rawPassage,
 		RawNormal = rawNormal,
 		PeakRawGolden = peakRawGolden,
 		PeakRawNormal = peakRawNormal,
@@ -191,6 +226,7 @@ function Scanner.scan(controller, gch)
 		CollapseTracked = true,
 		FannyPackTracked = hasFannyPack,
 		GoldenLocked = rawGolden > 0,
+		PassageLocked = rawPassage > 0,
 	}
 end
 

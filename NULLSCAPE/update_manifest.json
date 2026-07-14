@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.15.62",
+    "Version":  "2026.07.15.64",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "531d28343aa9825d88b22cea42939679f7f721171207724dfaec371b4f0a7afd"
+                      "Sha256":  "ecf12fc4ce1fac78638ee7beb96ea6178176303a975cc1dd59fe2f35ab7636c7"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/MovementLease.luau",
@@ -82,7 +82,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "0d0e4e31cdf99fcfb29945644133edfda615a1a1a54246544baec880267ae1be"
+                      "Sha256":  "8b6dcd88ac6a82cf99d8f2d1318294ad0a5a465cc14d7562ab41169c63aa3689"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Beacon.luau",
@@ -581,14 +581,14 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "f3ef64f9a6e4b7f15404a75d962208bb3d2a92042443a66550f6f29a8d0e6a61"
+                      "Sha256":  "5d91b566e82d1714f0725ef567e4d43deab329e48603c701c9e75a8b78e08077"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Executor.luau",
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "350e09e2e82c644a931a98de15b714ebdd62f73e7d84df453906984e111feb30"
+                      "Sha256":  "f9bb44a61e223ed289d30bd99e5dfdad833840f8bc1179bea3be38343a10a4fb"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/GC.luau",
@@ -602,7 +602,7 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "cc2b592c1791b37974225989e77212967a2e639ffc6aa0f9de129286fefae89e"
+                      "Sha256":  "04e267f3377727d69c377823e4f316df48b42a52275c4f8fecd8338541de8441"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Charger/Tripmine Assist.luau",
@@ -721,7 +721,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "8ca44512080e4623ab0e6b73a558d844001b88824aae57b6be182adb4416a49d"
+                      "Sha256":  "8131a1bcaecf8184403ef951ba3c118eb41c6118b6c1e91f6fbd153c7047808e"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Collapse.luau",
@@ -770,7 +770,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "6fde7754ed52e39d2e81b57ec15ee7f2daf52390b87097bb9b2b0adff6a54649"
+                      "Sha256":  "1c745654ed9e15501962de080f011946c87655c3f83e1861a1b8a53fe7ffd7e0"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/executor.luau",

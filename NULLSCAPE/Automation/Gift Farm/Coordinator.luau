@@ -40,6 +40,7 @@ local WATCHDOG_INTERVAL = 1
 local WORKER_STALL_TIMEOUT = 6
 local LOGICAL_STALL_TIMEOUT = 8
 local WATCHDOG_MOVEMENT_EPSILON = 2
+local GOLDEN_PREEMPT_SCAN_INTERVAL = 0.03
 
 local enabled = false
 local configDirty = false
@@ -861,11 +862,33 @@ local function runLoop(controller)
 
 			local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
 			local wasGoldenRoute = scanInfo and scanInfo.GoldenLocked == true
+			local wasPassageRoute = scanInfo and scanInfo.PassageLocked == true
 			local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 			local normalPacingBatchSize = if wasGoldenRoute
 				then nil
 				else Progress.getNormalPacingBatchSize(normalRatio, scanInfo and scanInfo.RawNormal or #candidates)
 			local shouldHoldForGoldenWait = GoldenWait.shouldHoldAfterRoute(scanInfo, totalPlanned)
+			local goldenPreempted = false
+			local lastGoldenPreemptCheckAt = -math.huge
+			local cachedLiveGoldenKind = nil
+			local function shouldAbortRoute()
+				if not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision then
+					return true
+				end
+				local now = os.clock()
+				if now - lastGoldenPreemptCheckAt >= GOLDEN_PREEMPT_SCAN_INTERVAL then
+					lastGoldenPreemptCheckAt = now
+					cachedLiveGoldenKind = Scanner.getLiveGoldenKind(gch)
+				end
+				if (cachedLiveGoldenKind == "PassageGift" and not wasPassageRoute)
+					or (cachedLiveGoldenKind ~= nil and not wasGoldenRoute)
+				then
+					goldenPreempted = true
+					return true
+				end
+
+				return false
+			end
 
 			-- Acquire Collecting Lease
 			local lease = MovementLease.acquire("Collecting")
@@ -877,9 +900,7 @@ local function runLoop(controller)
 			if mode == PIPELINE_MODE then
 				routeCompleted, routeStats = PipelinedCollector.collectRoute(controller, hrp, route, range, {
 					NormalPacingBatchSize = normalPacingBatchSize,
-					AbortCheck = function()
-						return not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision
-					end,
+					AbortCheck = shouldAbortRoute,
 				}, lease, mySessionToken)
 			else
 				-- Normal mode collection loop
@@ -888,7 +909,7 @@ local function runLoop(controller)
 				local tailPrecision = isTailPrecision(candidates, scanInfo, normalRatio)
 
 				for index, step in ipairs(route) do
-					if not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision then
+					if shouldAbortRoute() then
 						routeCompleted = false
 						break
 					end
@@ -916,9 +937,7 @@ local function runLoop(controller)
 						PrecisionMode = precisionMode,
 						TailMode = tailPrecision,
 						NormalPacingBatchSize = normalPacingBatchSize,
-						AbortCheck = function()
-							return not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision
-						end,
+						AbortCheck = shouldAbortRoute,
 					}, lease, mySessionToken)
 
 					if collectResult then
@@ -926,6 +945,9 @@ local function runLoop(controller)
 						routeStats.Accepted += collectResult.Accepted
 						routeStats.Failed += collectResult.Rejected
 					end
+				end
+				if shouldAbortRoute() then
+					routeCompleted = false
 				end
 			end
 
@@ -936,6 +958,10 @@ local function runLoop(controller)
 			lease:release({ KeepFootholdDuration = 2.5, OnlyKeepFootholdIfAirborne = true })
 
 			if not isSessionActive() then continue end
+			if goldenPreempted then
+				transitionTo(controller, "Scanning", "Golden gifts detected; preempting normal route")
+				continue
+			end
 
 			if (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision then
 				transitionTo(controller, "Paused", "Range changed; recalculating")
@@ -943,7 +969,7 @@ local function runLoop(controller)
 				continue
 			end
 
-			if shouldHoldForGoldenWait then
+			if routeCompleted and shouldHoldForGoldenWait then
 				if typeof(GoldenWait.startNormalClearWindow) == "function" then
 					GoldenWait.startNormalClearWindow()
 				else
