@@ -56,6 +56,7 @@ local REASSERTED_VFX_ROOT_NAMES = {
 	FireArea = true,
 	OblivionAmbient = true,
 	OblivionAttack = true,
+	VoidbreakerVisualizers = true,
 	VoidboundNeck = true,
 	VoidboundSlam = true,
 }
@@ -73,6 +74,36 @@ local function optionSelected(options, option)
 		end
 	end
 	return false
+end
+
+local VALID_OPTIONS = {
+	["Low Graphics"] = true,
+	VFX = true,
+	Enemies = true,
+	Map = true,
+}
+
+local function normalizeSelections(selections)
+	local normalized = {}
+	if typeof(selections) ~= "table" then
+		return normalized
+	end
+	for key, value in pairs(selections) do
+		local option = value == true and key or value
+		if VALID_OPTIONS[option] then
+			normalized[option] = true
+		end
+	end
+	return normalized
+end
+
+local function selectionsEqual(a, b)
+	for option in pairs(VALID_OPTIONS) do
+		if (a[option] == true) ~= (b[option] == true) then
+			return false
+		end
+	end
+	return true
 end
 
 local function disconnectConnections()
@@ -396,9 +427,7 @@ local function bindEnemies(token)
 			return
 		end
 		local function hideEnemyVisual(instance)
-			if not hasVoidbreakerAncestor(instance) then
-				hideVisual(instance, FPSBoost.OriginalEnemyVisuals)
-			end
+			hideVisual(instance, FPSBoost.OriginalEnemyVisuals)
 		end
 		scan(folder, function(instance)
 			hideEnemyVisual(instance)
@@ -515,8 +544,9 @@ local function bindMap(token)
 end
 
 function FPSBoost.setSelections(selections)
-	if typeof(selections) ~= "table" then
-		selections = {}
+	local normalized = normalizeSelections(selections)
+	if selectionsEqual(FPSBoost.Selections, normalized) then
+		return next(FPSBoost.Selections) ~= nil
 	end
 
 	FPSBoost.ScanToken += 1
@@ -527,11 +557,8 @@ function FPSBoost.setSelections(selections)
 	restoreLowGraphics()
 	table.clear(FPSBoost.Selections)
 
-	for key, value in pairs(selections) do
-		local option = value == true and key or value
-		if option == "Low Graphics" or option == "VFX" or option == "Enemies" or option == "Map" then
-			FPSBoost.Selections[option] = true
-		end
+	for option in pairs(normalized) do
+		FPSBoost.Selections[option] = true
 	end
 
 	local token = FPSBoost.ScanToken

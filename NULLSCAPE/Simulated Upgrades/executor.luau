@@ -1,6 +1,5 @@
 --!nocheck
 
-local Logic = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Radar logic.luau")
 local Magnet = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Magnet logic.luau")
 local Barrier = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Defuse Kits.luau")
 local ClientUpgradeInjector = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau")
@@ -74,20 +73,6 @@ function Executor.clearVirtualGrapplerUpgradeVisuals()
 		ClientUpgradeInjector.clear(upgrades)
 	end
 	return true
-end
-
-function Executor.clearVisuals(gc, keepArrows)
-	local clearVisuals = getCallable(Logic, "clearVisuals", "RadarLogic")
-	if clearVisuals then
-		clearVisuals(gc, keepArrows)
-	end
-end
-
-function Executor.updateESPStyles(controller, gc, hrp)
-	local updateESPStyles = getCallable(Logic, "updateESPStyles", "RadarLogic")
-	if updateESPStyles then
-		updateESPStyles(controller, gc, hrp)
-	end
 end
 
 function Executor.updateMagnet(controller, hrp)

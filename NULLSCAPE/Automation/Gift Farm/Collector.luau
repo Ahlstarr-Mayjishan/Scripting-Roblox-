@@ -65,6 +65,16 @@ local function isGiftAccepted(gift)
 	return gift.Destroyed == true or gift.Collected == true
 end
 
+local function countRejectedAttempts(attemptedGifts)
+	local rejected = 0
+	for _, gift in ipairs(attemptedGifts) do
+		if not isGiftAccepted(gift) then
+			rejected += 1
+		end
+	end
+	return rejected
+end
+
 local function clearVelocity(hrp)
 	if not (hrp and hrp.Parent) then
 		return
@@ -159,7 +169,7 @@ local function updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
 	end
 
 	local accepted = 0
-	local failed = tonumber(observedRejects) or 0
+	local failed = math.clamp(tonumber(observedRejects) or 0, 0, #attemptedGifts)
 	for _, gift in ipairs(attemptedGifts) do
 		if isGiftAccepted(gift) then
 			accepted += 1
@@ -381,6 +391,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 	local result = {
 		Attempted = 0,
 		Rejected = 0,
+		TransientRejects = 0,
 		Accepted = 0,
 		Precision = precisionMode,
 		CleanupPulses = 0,
@@ -450,13 +461,15 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			return
 		end
 
-		local needsValidation = precisionMode and #attemptedGifts > 0
+		local needsValidation = #attemptedGifts > 0
 		if #attemptedGifts > 0 then
 			waitForNativeFlush()
 		end
 		if needsValidation then
 			task.wait(getValidationWait(controller, precisionMode))
 		end
+		local initialRejects = countRejectedAttempts(attemptedGifts)
+		result.TransientRejects = initialRejects
 
 		local retryPasses = needsValidation and (precisionMode and MAX_PRECISION_RETRY_PASSES or MAX_RETRY_PASSES) or 0
 		for _ = 1, retryPasses do
@@ -512,20 +525,14 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 		end
 
 		if needsValidation then
-			updateAdaptiveTiming(controller, attemptedGifts, observedRejects)
+			updateAdaptiveTiming(controller, attemptedGifts, initialRejects)
 		end
 		result.Attempted = #attemptedGifts
 		result.Rejected = observedRejects
-		if needsValidation then
-			for _, gift in ipairs(attemptedGifts) do
-				if isGiftAccepted(gift) then
-					result.Accepted += 1
-				end
+		for _, gift in ipairs(attemptedGifts) do
+			if isGiftAccepted(gift) then
+				result.Accepted += 1
 			end
-		else
-			-- Native collection is optimistic and restores rejected gifts through
-			-- Collection.OnClientEvent. The next scan naturally retries those gifts.
-			result.Accepted = #attemptedGifts
 		end
 	end)
 
@@ -535,10 +542,9 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 
 	if lease
 		and typeof(lease.reportCollectResult) == "function"
-		and precisionMode
 		and result.Attempted > 0
 	then
-		lease:reportCollectResult(result.Attempted, result.Rejected)
+		lease:reportCollectResult(result.Attempted, result.TransientRejects)
 	end
 
 	return result

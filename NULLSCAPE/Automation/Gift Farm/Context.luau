@@ -51,10 +51,6 @@ function Context.getGiftClientHandler()
 	return nil
 end
 
-function Context.resetGiftClientHandler()
-	-- No-op
-end
-
 function Context.getCollectedGiftEvent()
 	local movement = ReplicatedStorage:FindFirstChild("Movement")
 	local events = movement and movement:FindFirstChild("Events")

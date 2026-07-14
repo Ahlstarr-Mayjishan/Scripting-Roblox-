@@ -147,10 +147,7 @@ local function rememberGrapple(grapple)
 end
 
 local function packValues(...)
-	return {
-		n = select("#", ...),
-		...,
-	}
+	return table.pack(...)
 end
 
 local function canRunTechnique(grapple, name, intent, options)

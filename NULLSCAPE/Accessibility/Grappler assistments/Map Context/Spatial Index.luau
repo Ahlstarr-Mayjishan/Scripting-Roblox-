@@ -5,8 +5,9 @@
 -- ]]
 
 local SpatialIndex = {}
-local sharedGlobals = getgenv()._NULLSCAPE_Globals or {}
-getgenv()._NULLSCAPE_Globals = sharedGlobals
+local env = getgenv()
+local sharedGlobals = env._NULLSCAPE_Globals or {}
+env._NULLSCAPE_Globals = sharedGlobals
 
 local DEFAULT_BUCKET_SIZE = 128
 

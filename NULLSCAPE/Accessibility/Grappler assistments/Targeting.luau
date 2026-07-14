@@ -489,7 +489,7 @@ local function scoreOptimalHit(hit, part, origin, distance, dot, controller, int
 	return score
 end
 
-local function applySafety(grapple, hit, part, controller, intent, context)
+local function applySafety(grapple, hit, _part, controller, intent, context)
 	if DecisionGateway and typeof(DecisionGateway.evaluate) == "function" then
 		local success, result = pcall(DecisionGateway.evaluate, grapple, hit, controller, {
 			Intent = intent,

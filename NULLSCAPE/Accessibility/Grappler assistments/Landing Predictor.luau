@@ -29,7 +29,7 @@ local function getVelocity(rootPart)
 	return rootPart.AssemblyLinearVelocity or rootPart.Velocity
 end
 
-function Predictor.evaluate(grapple, hit, candidatePart, controller, intent)
+function Predictor.evaluate(grapple, hit, candidatePart, _controller, intent)
 	local rootPart = grapple and grapple.RootPart
 	if not (rootPart and hit and hit.Position) then
 		return {

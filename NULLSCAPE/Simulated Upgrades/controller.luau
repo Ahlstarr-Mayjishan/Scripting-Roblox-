@@ -118,7 +118,7 @@ local function refreshUpgradeServerState()
 end
 
 local hasInRoundValue = false
-local folderConnections = {}
+local hookGeneration = 0
 
 local function getGlobals()
 	local env = getgenv()
@@ -138,25 +138,6 @@ local function claimActiveController(controller)
 	end
 
 	return globals.activeUpgradeController == controller
-end
-
--- Stubs for backward/compatibility reference
-local function triggerInstantUpdate() end
-local function updateRunningState() end
-local function stopRenderStepped() end
-local function checkActiveState()
-	return false
-end
-local startMatchLoops
-local instantUpdateQueued = false
-local matchLoopsActive = false
-
-local function disconnectFolderObservations()
-	table.clear(folderConnections)
-end
-
-local function startObservingFolders()
-	disconnectFolderObservations()
 end
 
 local function hasUtilityWork()
@@ -188,46 +169,6 @@ end
 
 local function hasAirJumpSelection(option)
 	return typeof(Controller.AirJumpSelectionMap) == "table" and Controller.AirJumpSelectionMap[option] == true
-end
-
--- RenderStepped connection management
-stopRenderStepped = function() end
-
--- Vòng lặp cập nhật styles hiển thị (Dot <-> Highlight) cực nhanh mỗi 0.15 giây
-startMatchLoops = function()
-	if matchLoopsActive then
-		return
-	end
-	matchLoopsActive = true
-
-	task.spawn(function()
-		while not Controller.Destroyed and checkActiveState() do
-			if not isControllerActiveOrUnclaimed(Controller) then
-				safeControllerCleanUp()
-				break
-			end
-			claimActiveController(Controller)
-			local char = LocalPlayer.Character
-			local hrp = char and char:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				pcall(function()
-					Executor.updateESPStyles(Controller, GC, hrp)
-				end)
-			end
-			task.wait(hasUtilityWork() and 0.12 or 0.6)
-		end
-		matchLoopsActive = false
-		-- Xóa visuals cũ khi dừng loop (hủy cả các mũi tên chỉ hướng)
-		pcall(function()
-			Executor.clearVisuals(GC, false)
-		end)
-	end)
-end
-
-updateRunningState = function()
-	if checkActiveState() then
-		startMatchLoops()
-	end
 end
 
 local utilityLoopActive = false
@@ -322,41 +263,10 @@ local function setInLobby(val)
 	end
 	inLobby = val
 	Controller.inLobby = val
-	if val then
-		if not Controller.RadarEnabled then
-			pcall(function()
-				Executor.clearVisuals(GC, false)
-			end)
-			stopRenderStepped()
-		end
-	else
-		startObservingFolders()
-		updateRunningState()
+	if not val then
 		startUtilityLoop()
 		Controller:ReapplyRespawnFeatures()
 	end
-end
-
--- Hàm trigger cập nhật ESP tức thì khi thay đổi cấu hình
-triggerInstantUpdate = function()
-	if instantUpdateQueued then
-		return
-	end
-	instantUpdateQueued = true
-	task.defer(function()
-		instantUpdateQueued = false
-		if Controller.Destroyed then
-			return
-		end
-		updateRunningState()
-		local char = LocalPlayer.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp and checkActiveState() then
-			pcall(function()
-				Executor.updateESPStyles(Controller, GC, hrp)
-			end)
-		end
-	end)
 end
 
 -- Bật/tắt radar tổng
@@ -845,72 +755,74 @@ end
 
 local function restoreHooks()
 	local globals = getgenv()._NULLSCAPE_Globals
+	hookGeneration += 1
 	if not globals then
 		return
 	end
 
-	-- Restore GiftClientHandler hooks
-	pcall(function()
-		local PlayerScripts = LocalPlayer:FindFirstChild("PlayerScripts")
-		local GiftClientHandlerModule = PlayerScripts and PlayerScripts:FindFirstChild("GiftClientHandler")
-		if GiftClientHandlerModule then
-			local success, GiftClientHandler = pcall(require, GiftClientHandlerModule)
-			if success and typeof(GiftClientHandler) == "table" then
-				if globals.GiftClientNewHooked and globals.OriginalGiftClientNew then
-					GiftClientHandler.new = globals.OriginalGiftClientNew
-					globals.GiftClientNewHooked = nil
-					globals.OriginalGiftClientNew = nil
-				end
-				if globals.GiftClientDestroyHooked and globals.OriginalGiftClientDestroy then
-					GiftClientHandler.DestroyGift = globals.OriginalGiftClientDestroy
-					globals.GiftClientDestroyHooked = nil
-					globals.OriginalGiftClientDestroy = nil
-				end
-			end
-		end
-	end)
-
 	-- Restore UpgradeHandler hooks
-	pcall(function()
-		local ClientModules = ReplicatedFirst:FindFirstChild("ClientModules")
-		local UpgradeHandlerModule = ClientModules and ClientModules:FindFirstChild("UpgradeHandler")
-		if UpgradeHandlerModule then
-			local success, UpgradeHandler = pcall(require, UpgradeHandlerModule)
-			if success and typeof(UpgradeHandler) == "table" then
-				if globals.IsUpgradeEnabledHooked and globals.OriginalIsUpgradeEnabled then
-					if typeof(hookfunction) == "function" then
-						pcall(hookfunction, UpgradeHandler.IsUpgradeEnabled, globals.OriginalIsUpgradeEnabled)
-					else
-						UpgradeHandler.IsUpgradeEnabled = globals.OriginalIsUpgradeEnabled
+	local ownsUpgradeHooks = globals.UpgradeHandlerHookOwner == nil or globals.UpgradeHandlerHookOwner == Controller
+	if ownsUpgradeHooks then
+		pcall(function()
+			local ClientModules = ReplicatedFirst:FindFirstChild("ClientModules")
+			local UpgradeHandlerModule = ClientModules and ClientModules:FindFirstChild("UpgradeHandler")
+			if UpgradeHandlerModule then
+				local success, UpgradeHandler = pcall(require, UpgradeHandlerModule)
+				if success and typeof(UpgradeHandler) == "table" then
+					if globals.IsUpgradeEnabledHooked and globals.OriginalIsUpgradeEnabled then
+						if typeof(hookfunction) == "function" then
+							pcall(hookfunction, UpgradeHandler.IsUpgradeEnabled, globals.OriginalIsUpgradeEnabled)
+						else
+							UpgradeHandler.IsUpgradeEnabled = globals.OriginalIsUpgradeEnabled
+						end
+						globals.IsUpgradeEnabledHooked = nil
+						globals.OriginalIsUpgradeEnabled = nil
 					end
-					globals.IsUpgradeEnabledHooked = nil
-					globals.OriginalIsUpgradeEnabled = nil
-				end
-				if globals.GetUpgradeStackHooked and globals.OriginalGetUpgradeStack then
-					if typeof(hookfunction) == "function" then
-						pcall(hookfunction, UpgradeHandler.GetUpgradeStack, globals.OriginalGetUpgradeStack)
-					else
-						UpgradeHandler.GetUpgradeStack = globals.OriginalGetUpgradeStack
+					if globals.GetUpgradeStackHooked and globals.OriginalGetUpgradeStack then
+						if typeof(hookfunction) == "function" then
+							pcall(hookfunction, UpgradeHandler.GetUpgradeStack, globals.OriginalGetUpgradeStack)
+						else
+							UpgradeHandler.GetUpgradeStack = globals.OriginalGetUpgradeStack
+						end
+						globals.GetUpgradeStackHooked = nil
+						globals.OriginalGetUpgradeStack = nil
 					end
-					globals.GetUpgradeStackHooked = nil
-					globals.OriginalGetUpgradeStack = nil
-				end
-				if globals.GetUpgradeChangedSignalHooked and globals.OriginalGetUpgradeChangedSignal then
-					if typeof(hookfunction) == "function" then
-						pcall(
-							hookfunction,
-							UpgradeHandler.GetUpgradeChangedSignal,
-							globals.OriginalGetUpgradeChangedSignal
-						)
-					else
-						UpgradeHandler.GetUpgradeChangedSignal = globals.OriginalGetUpgradeChangedSignal
+					if globals.GetUpgradeChangedSignalHooked and globals.OriginalGetUpgradeChangedSignal then
+						if typeof(hookfunction) == "function" then
+							pcall(
+								hookfunction,
+								UpgradeHandler.GetUpgradeChangedSignal,
+								globals.OriginalGetUpgradeChangedSignal
+							)
+						else
+							UpgradeHandler.GetUpgradeChangedSignal = globals.OriginalGetUpgradeChangedSignal
+						end
+						globals.GetUpgradeChangedSignalHooked = nil
+						globals.OriginalGetUpgradeChangedSignal = nil
 					end
-					globals.GetUpgradeChangedSignalHooked = nil
-					globals.OriginalGetUpgradeChangedSignal = nil
 				end
 			end
+		end)
+
+		for _, connection in pairs(globals.customUpgradeEventConnections or {}) do
+			pcall(function()
+				connection:Disconnect()
+			end)
 		end
-	end)
+		for _, event in pairs(globals.customUpgradeEvents or {}) do
+			pcall(function()
+				event:Destroy()
+			end)
+		end
+		globals.customUpgradeEventConnections = nil
+		globals.customUpgradeEvents = nil
+		globals.UpgradeHandlerHookOwner = nil
+	end
+	if globals.UpgradeSimulationCallbackOwner == Controller then
+		globals.isUpgradeEnabledCheck = nil
+		globals.getUpgradeStackCheck = nil
+		globals.UpgradeSimulationCallbackOwner = nil
+	end
 end
 
 -- Hàm dọn dẹp tài nguyên (GC) khi tắt hoặc hủy UI
@@ -918,8 +830,6 @@ function Controller:CleanUp()
 	local globals = getGlobals()
 	local finalCleanup = self.Destroyed
 		or (globals.activeUpgradeController ~= nil and globals.activeUpgradeController ~= self)
-	disconnectFolderObservations()
-	stopRenderStepped()
 	if Logic and typeof(Logic.unbindUpgradeWatcher) == "function" then
 		Logic.unbindUpgradeWatcher(self)
 	end
@@ -1017,14 +927,12 @@ function Controller:CleanUp()
 	end
 
 	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
-	if self.Destroyed and globals and globals.activeUpgradeController == self then
+	if finalCleanup and globals and globals.activeUpgradeController == self then
 		globals.activeUpgradeController = nil
 	end
 end
 
-getgenv()._NULLSCAPE_Globals.onGiftCreated = function(_giftObj) end
-getgenv()._NULLSCAPE_Globals.onGiftDestroyed = function(_id) end
-
+getgenv()._NULLSCAPE_Globals.UpgradeSimulationCallbackOwner = Controller
 getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local args = { ... }
 	local isTetrahedron = false
@@ -1176,13 +1084,7 @@ Controller.GiftMagnetBlocked = autoCtrl and autoCtrl.GiftFarmEnabled == true or 
 
 -- Khởi tạo ban đầu khi nạp script
 Logic.syncSimulatedUpgradeHud(Controller)
-Logic.bindUpgradeWatcher(Controller, function()
-	if triggerInstantUpdate then
-		triggerInstantUpdate()
-	end
-end)
-startObservingFolders()
-updateRunningState()
+Logic.bindUpgradeWatcher(Controller)
 startUtilityLoop()
 syncVirtualGrapplerVisuals()
 
@@ -1218,7 +1120,6 @@ if ClassContext and typeof(ClassContext.subscribe) == "function" then
 	local classConnection = ClassContext.subscribe(function()
 		if not Controller.Destroyed then
 			syncVirtualGrapplerVisuals()
-			updateRunningState()
 		end
 	end)
 	if classConnection then
@@ -1263,7 +1164,7 @@ local function handleEnemyAdded(enemy)
 						end)
 					end
 				end)
-				table.insert(Controller.PermanentConnections, espConn)
+				GC.registerEntityConnection(enemy, espConn)
 
 				-- Sửa ngay nếu ESP đã được sinh ra trước khi kết nối sự kiện
 				for _, child in ipairs(enemy:GetChildren()) do
@@ -1349,12 +1250,23 @@ task.spawn(function()
 end)
 
 local function hookUpgradeHandler()
-	getgenv()._NULLSCAPE_Globals.customUpgradeEvents = getgenv()._NULLSCAPE_Globals.customUpgradeEvents or {}
+	hookGeneration += 1
+	local myHookGeneration = hookGeneration
+	local globals = getGlobals()
+	globals.UpgradeHandlerHookOwner = Controller
+	globals.customUpgradeEvents = globals.customUpgradeEvents or {}
+	globals.customUpgradeEventConnections = globals.customUpgradeEventConnections or {}
 	task.spawn(function()
 		local ClientModules = ReplicatedFirst:WaitForChild("ClientModules", 15)
 		local UpgradeHandlerModule = ClientModules and ClientModules:WaitForChild("UpgradeHandler", 15)
+		if Controller.Destroyed or hookGeneration ~= myHookGeneration then
+			return
+		end
 		if UpgradeHandlerModule then
 			local success, UpgradeHandler = pcall(require, UpgradeHandlerModule)
+			if Controller.Destroyed or hookGeneration ~= myHookGeneration then
+				return
+			end
 			if success and typeof(UpgradeHandler) == "table" then
 				if UpgradeHandler.IsUpgradeEnabled then
 					if typeof(hookfunction) == "function" then
@@ -1406,7 +1318,7 @@ local function hookUpgradeHandler()
 										customEvent = Instance.new("BindableEvent")
 										customUpgradeEvents[upgradeName] = customEvent
 										if originalEvent then
-											originalEvent:Connect(function(...)
+											getgenv()._NULLSCAPE_Globals.customUpgradeEventConnections[upgradeName] = originalEvent:Connect(function(...)
 												customEvent:Fire(...)
 											end)
 										end
@@ -1430,7 +1342,7 @@ local function hookUpgradeHandler()
 									customEvent = Instance.new("BindableEvent")
 									customUpgradeEvents[upgradeName] = customEvent
 									if originalEvent then
-										originalEvent:Connect(function(...)
+											getgenv()._NULLSCAPE_Globals.customUpgradeEventConnections[upgradeName] = originalEvent:Connect(function(...)
 											customEvent:Fire(...)
 										end)
 									end

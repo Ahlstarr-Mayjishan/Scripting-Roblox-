@@ -22,6 +22,8 @@ local PendingCalls = {}
 local PendingAttempts = {}
 local Executor = {}
 local callModule
+local shutdownGeneration = 0
+local shuttingDown = false
 
 local LOAD_RETRY_COOLDOWN = 1.5
 local CALL_RETRY_COOLDOWN = 0.75
@@ -55,6 +57,9 @@ local function clearFailure(name)
 end
 
 local function loadAccessibilityModule(name)
+	if shuttingDown then
+		return nil, "shutdown"
+	end
 	if typeof(Modules[name]) == "table" then
 		return Modules[name], "ready"
 	end
@@ -103,21 +108,26 @@ local function schedulePendingCall(name, methodName, args, attempt)
 
 	PendingCalls[key] = true
 	PendingAttempts[key] = attempt
+	local generation = shutdownGeneration
 	task.delay(PENDING_RETRY_DELAY, function()
 		PendingCalls[key] = nil
+		if shuttingDown or generation ~= shutdownGeneration then
+			PendingAttempts[key] = nil
+			return
+		end
 		callModule(name, methodName, table.unpack(args, 1, args.n))
 	end)
 end
 
 function callModule(name, methodName, ...)
+	if shuttingDown then
+		return false
+	end
 	if isQuarantined(name, "call") then
 		return false
 	end
 
-	local args = {
-		n = select("#", ...),
-		...,
-	}
+	local args = table.pack(...)
 	local module, state = loadAccessibilityModule(name)
 	if state == "loading" then
 		schedulePendingCall(name, methodName, args)
@@ -239,6 +249,30 @@ end
 
 function Executor.triggerGrappleReelSaver(controller)
 	return callModule("GrappleAssist", "triggerReelSaver", controller)
+end
+
+function Executor.resume()
+	shutdownGeneration += 1
+	shuttingDown = false
+end
+
+function Executor.shutdown()
+	shutdownGeneration += 1
+	shuttingDown = true
+	table.clear(PendingCalls)
+	table.clear(PendingAttempts)
+	table.clear(LoadingModules)
+	table.clear(ModuleFailures)
+
+	for _, module in pairs(Modules) do
+		if typeof(module) == "table" then
+			local cleanup = module.disable or module.CleanUp
+			if typeof(cleanup) == "function" then
+				pcall(cleanup)
+			end
+		end
+	end
+	table.clear(Modules)
 end
 
 return Executor

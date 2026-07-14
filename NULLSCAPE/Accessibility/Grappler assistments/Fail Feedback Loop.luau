@@ -59,7 +59,7 @@ local function noteGood(entry)
 	end
 end
 
-function Feedback.step(grapple, dt, controller)
+function Feedback.step(grapple, _dt, controller)
 	if controller and controller.GrappleAssistFailFeedbackEnabled == false then
 		Feedback.Pending[grapple] = nil
 		return false

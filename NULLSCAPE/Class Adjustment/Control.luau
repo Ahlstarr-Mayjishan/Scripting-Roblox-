@@ -32,10 +32,16 @@ local Control = {
 	GrappleCatapultMultiplier = 1,
 	GrappleMomentumTransferPercent = 0,
 	Destroyed = false,
+	Initialized = false,
 	PermanentConnections = {},
 }
 
 local ClassContext = getgenv().loadModule("NULLSCAPE/Core/Class Context.luau")
+local Executor = getgenv().loadModule("NULLSCAPE/Class Adjustment/Executor.luau")
+local GC = getgenv().loadModule("NULLSCAPE/Class Adjustment/GC.luau")
+local pendingSettingsSave = nil
+local settingsDirty = false
+local SETTINGS_SAVE_DEBOUNCE = 0.25
 
 local function getGlobals()
 	local env = getgenv()
@@ -127,9 +133,9 @@ local function readSettings()
 	end
 end
 
-local function saveSettings()
+local function writeSettings()
 	if not (makefolder and writefile and readfile and isfile) then
-		return
+		return false
 	end
 
 	local data = {}
@@ -164,9 +170,37 @@ local function saveSettings()
 	data.ChargerTripmineBatchDistanceSlider = Control.ChargerTripmineBatchDistance
 	data.ChargerTripmineJitterSlider = Control.ChargerTripmineJitter
 
-	pcall(function()
-		makefolder(SETTINGS_FOLDER)
+	pcall(makefolder, SETTINGS_FOLDER)
+
+	local success = pcall(function()
 		writefile(SETTINGS_FILE, HttpService:JSONEncode(data))
+	end)
+	if success then
+		settingsDirty = false
+	end
+	return success
+end
+
+local function flushSettings()
+	if pendingSettingsSave then
+		pcall(task.cancel, pendingSettingsSave)
+		pendingSettingsSave = nil
+	end
+	if settingsDirty then
+		writeSettings()
+	end
+end
+
+local function saveSettings()
+	settingsDirty = true
+	if pendingSettingsSave then
+		pcall(task.cancel, pendingSettingsSave)
+	end
+	pendingSettingsSave = task.delay(SETTINGS_SAVE_DEBOUNCE, function()
+		pendingSettingsSave = nil
+		if not Control.Destroyed then
+			writeSettings()
+		end
 	end)
 end
 
@@ -174,15 +208,18 @@ function Control:initialize()
 	if self.Destroyed then
 		return false
 	end
+	if self.Initialized then
+		return true
+	end
 
 	if not claimActiveController(self) then
 		warn("[NULLSCAPE] Class Adjustment control already claimed by another instance")
 		return false
 	end
+	getGlobals().ClassAdjustmentHookOwner = self
 
 	readSettings()
 
-	local Executor = getgenv().loadModule("NULLSCAPE/Class Adjustment/Executor.luau")
 	if Executor and typeof(Executor.enable) == "function" then
 		Executor.enable()
 	end
@@ -200,6 +237,7 @@ function Control:initialize()
 		end
 	end
 
+	self.Initialized = true
 	return true
 end
 
@@ -207,24 +245,27 @@ function Control:CleanUp()
 	local globals = getGlobals()
 	local finalCleanup = self.Destroyed
 		or (globals.activeClassAdjustmentController ~= nil and globals.activeClassAdjustmentController ~= self)
+	local ownsHooks = globals.ClassAdjustmentHookOwner == nil or globals.ClassAdjustmentHookOwner == self
 
 	if finalCleanup then
-		local Executor = getgenv().loadModule("NULLSCAPE/Class Adjustment/Executor.luau")
+		flushSettings()
+	end
+	if finalCleanup and ownsHooks then
 		if Executor then
-			if self.Destroyed and typeof(Executor.restore) == "function" then
+			if typeof(Executor.restore) == "function" then
 				pcall(Executor.restore)
 			elseif typeof(Executor.disable) == "function" then
 				pcall(Executor.disable)
 			end
 		end
+		globals.ClassAdjustmentHookOwner = nil
 	end
 
-	local GC = getgenv().loadModule("NULLSCAPE/Class Adjustment/GC.luau")
 	if GC and typeof(GC.cleanAll) == "function" then
 		pcall(GC.cleanAll)
 	end
 
-	if self.Destroyed and self.PermanentConnections then
+	if finalCleanup and self.PermanentConnections then
 		for _, conn in ipairs(self.PermanentConnections) do
 			if conn then
 				pcall(function()
@@ -235,7 +276,10 @@ function Control:CleanUp()
 		table.clear(self.PermanentConnections)
 	end
 
-	if self.Destroyed and globals and globals.activeClassAdjustmentController == self then
+	if finalCleanup then
+		self.Initialized = false
+	end
+	if finalCleanup and globals and globals.activeClassAdjustmentController == self then
 		globals.activeClassAdjustmentController = nil
 	end
 end
@@ -303,7 +347,6 @@ function Control:SetChargerTripmineAssist(value)
 	self.ChargerTripmineAssistEnabled = value == true
 	saveSettings()
 
-	local Executor = getgenv().loadModule("NULLSCAPE/Class Adjustment/Executor.luau")
 	if Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
 		Executor.updateChargerTripmineAssist(self)
 	end
@@ -313,7 +356,6 @@ function Control:SetChargerTripmineMode(value)
 	self.ChargerTripmineMode = normalizeChargerTripmineMode(value)
 	saveSettings()
 
-	local Executor = getgenv().loadModule("NULLSCAPE/Class Adjustment/Executor.luau")
 	if Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
 		Executor.updateChargerTripmineAssist(self)
 	end

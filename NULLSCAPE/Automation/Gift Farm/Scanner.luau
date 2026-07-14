@@ -117,7 +117,8 @@ function Scanner.reset()
 end
 
 function Scanner.scan(controller, gch)
-	local gifts = {}
+	local goldenGifts = {}
+	local normalGifts = {}
 	local now = os.clock()
 	local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 	local goldenCollected, goldenMax, goldenRatio = Progress.getGoldenGiftProgress(gch)
@@ -129,21 +130,6 @@ function Scanner.scan(controller, gch)
 	local collapseTiles = if Collapse and typeof(Collapse.prepareScan) == "function"
 		then Collapse.prepareScan()
 		else nil
-	local preferGolden = false
-
-	for _, gift in pairs(gch.Gifts or {}) do
-		if gift
-			and not gift.Destroyed
-			and not gift.Collected
-			and not gift.Tripmine
-			and gift.Golden == true
-			and Context.getGiftPosition(gift) ~= nil
-		then
-			preferGolden = true
-			break
-		end
-	end
-
 	for _, gift in pairs(gch.Gifts or {}) do
 		if gift and not gift.Destroyed and not gift.Collected and not gift.Tripmine then
 			local pos = Context.getGiftPosition(gift)
@@ -166,14 +152,12 @@ function Scanner.scan(controller, gch)
 						settledNormal += 1
 					end
 
-					if isGolden ~= preferGolden then
-						continue
-					end
 					local collapsePriority = 0
 					if Collapse and typeof(Collapse.getGiftUrgency) == "function" then
 						collapsePriority = Collapse.getGiftUrgency(pos, collapseTiles)
 					end
-					gifts[#gifts + 1] = {
+					local candidates = if isGolden then goldenGifts else normalGifts
+					candidates[#candidates + 1] = {
 						rawObj = gift,
 						pos = pos,
 						priority = priority,
@@ -189,6 +173,7 @@ function Scanner.scan(controller, gch)
 
 	peakRawGolden = math.max(peakRawGolden, rawGolden)
 	peakRawNormal = math.max(peakRawNormal, rawNormal)
+	local gifts = if rawGolden > 0 then goldenGifts else normalGifts
 
 	return gifts, {
 		Golden = settledGolden,

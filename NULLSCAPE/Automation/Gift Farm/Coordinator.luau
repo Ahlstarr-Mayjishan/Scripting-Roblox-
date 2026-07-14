@@ -400,9 +400,6 @@ local function observeCharacter(controller, gc)
 			controller.GiftFarmGoldenComplete = false
 		end
 
-		if Context and typeof(Context.resetGiftClientHandler) == "function" then
-			Context.resetGiftClientHandler()
-		end
 		if GoldenWait and typeof(GoldenWait.reset) == "function" then
 			GoldenWait.reset()
 		end

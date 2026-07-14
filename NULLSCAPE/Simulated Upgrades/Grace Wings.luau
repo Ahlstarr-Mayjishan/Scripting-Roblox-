@@ -35,7 +35,7 @@ local function getMultiplier(controller)
 	return math.clamp(tonumber(controller.GraceWingsAirControlMultiplier) or Logic.AirControlMultiplier, 1, 5)
 end
 
-function Logic.start(controller, gc)
+function Logic.start(controller, _gc)
 	local HumanoidMovementModule = getHumanoidMovement()
 	if not HumanoidMovementModule then
 		return

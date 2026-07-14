@@ -328,8 +328,4 @@ function Logic.disableRadarSimulation()
 	end
 end
 
--- Stubs to keep compatibility with executor/controller calls
-function Logic.clearVisuals() end
-function Logic.updateESPStyles() end
-
 return Logic

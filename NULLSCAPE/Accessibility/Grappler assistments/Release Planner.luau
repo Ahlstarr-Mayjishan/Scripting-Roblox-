@@ -13,7 +13,7 @@ local function emergency(reason, metadata)
 	return intent == "VoidRescue" or reason == "SharkVoid" or reason == "SharkEscape"
 end
 
-function Planner.suggestHoldTime(grapple, reason, holdTime, metadata)
+function Planner.suggestHoldTime(grapple, reason, holdTime, _metadata)
 	local velocity = grapple
 		and grapple.RootPart
 		and (grapple.RootPart.AssemblyLinearVelocity or grapple.RootPart.Velocity)

@@ -7,6 +7,7 @@
 local Logic = {}
 
 local SHUTDOWN_ORDER = {
+	"RuntimeUpdater",
 	"CharacterActions",
 	"FPSBoost",
 	"AutomationController",
@@ -14,7 +15,6 @@ local SHUTDOWN_ORDER = {
 	"EntitiesController",
 	"UnlockController",
 	"ClassAdjustmentController",
-	"RuntimeUpdater",
 }
 
 local function runStep(safeStep, label, callback)

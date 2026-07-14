@@ -76,7 +76,7 @@ local function ensureRemoteListener()
 		return
 	end
 
-	Logic.Connection = bellRemote.OnClientEvent:Connect(function(...)
+	Logic.Connection = bellRemote.OnClientEvent:Connect(function()
 		if not Logic.ActiveBell then
 			return
 		end
@@ -107,7 +107,7 @@ function Logic.beforeStep(grapple)
 	return false
 end
 
-function Logic.afterStep(grapple)
+function Logic.afterStep(_grapple)
 	return Logic.ActiveBell ~= nil
 end
 

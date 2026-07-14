@@ -49,7 +49,7 @@ local function makeHit(part, position, origin)
 	}
 end
 
-function VoidCastAssist.find(grapple, direction, maxRange)
+function VoidCastAssist.find(grapple, direction, _maxRange)
 	local ease = getEase()
 	if ease <= 0 then
 		return nil
@@ -94,7 +94,7 @@ end
 
 -- Used by emergency systems after the player is already falling toward KillVoid.
 -- It deliberately does not require a camera ray to strike the non-collidable void part.
-function VoidCastAssist.findEmergency(grapple, maxRange)
+function VoidCastAssist.findEmergency(grapple, _maxRange)
 	if getEase() <= 0 then
 		return nil
 	end

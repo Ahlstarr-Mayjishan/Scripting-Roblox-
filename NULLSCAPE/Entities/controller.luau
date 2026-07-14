@@ -178,7 +178,6 @@ local Controller = {
 
 	EnemiesFolder = nil,
 	PermanentConnections = {},
-	StartSkinwalkerEvasion = nil,
 	CadenceAutoCollectLoopActive = false,
 }
 GC.Controller = Controller
@@ -260,6 +259,9 @@ local function restoreHooks()
 	if not globals then
 		return
 	end
+	if globals.EntitiesHookOwner ~= nil and globals.EntitiesHookOwner ~= Controller then
+		return
+	end
 
 	-- Restore namecall
 	if globals.NamecallHooked and globals.OriginalNamecall then
@@ -277,6 +279,30 @@ local function restoreHooks()
 	if globals.StatusEffectHooked then
 		globals.StatusEffectLoopToken = nil
 	end
+
+	globals.BellBlindnessHookPending = nil
+	if globals.BellRingWrapper and _G.RingBell == globals.BellRingWrapper and globals.OriginalRingBell then
+		_G.RingBell = globals.OriginalRingBell
+	end
+	if typeof(hookfunction) == "function" then
+		for hookedFunction, originalFunction in pairs(globals.BellHookedFunctions or {}) do
+			pcall(hookfunction, hookedFunction, originalFunction)
+		end
+		if globals.BellConnectHookInstalled and globals.OriginalBellConnect then
+			local events = ReplicatedStorage:FindFirstChild("Events")
+			local bellEvent = events and events:FindFirstChild("Bell")
+			if bellEvent and bellEvent:IsA("RemoteEvent") then
+				pcall(hookfunction, bellEvent.OnClientEvent.Connect, globals.OriginalBellConnect)
+			end
+		end
+	end
+	globals.BellBlindnessHookInstalled = nil
+	globals.BellConnectHookInstalled = nil
+	globals.OriginalBellConnect = nil
+	globals.BellRingWrapper = nil
+	globals.OriginalRingBell = nil
+	globals.BellHookedFunctions = nil
+	globals.BellOriginalFunctions = nil
 
 	-- Restore SettingsHandler hooks
 	if globals.SettingsHooked then
@@ -300,6 +326,7 @@ local function restoreHooks()
 		globals.OriginalSettingsGet = nil
 		globals.OriginalGetSettings = nil
 	end
+	globals.EntitiesHookOwner = nil
 end
 
 function Controller:SetTelefraggerAutoDodge(value)
@@ -575,6 +602,10 @@ end
 
 -- HÃ m dá»n dáº¹p tÃ i nguyÃªn (Garbage Collection - GC) giáº£i phÃ³ng bá»™ nhá»›
 function Controller:CleanUp()
+	local globals = getgenv()._NULLSCAPE_Globals
+	local finalCleanup = self.Destroyed
+		or (globals and globals.activeEntitiesController ~= nil and globals.activeEntitiesController ~= self)
+
 	-- Há»§y táº¥t cáº£ cÃ¡c luá»“ng chá» vÃ  dá»n dáº¹p danh sÃ¡ch active
 	for _, thread in pairs(self.TelefraggerActiveThreads) do
 		pcall(task.cancel, thread)
@@ -646,10 +677,10 @@ function Controller:CleanUp()
 	GC.cleanAll()
 	self.EnemiesFolder = nil
 
-	pcall(if self.Destroyed then CadenceStatus.cleanup else CadenceStatus.clearRuntime)
+	pcall(if finalCleanup then CadenceStatus.cleanup else CadenceStatus.clearRuntime)
 
 	-- Náº¿u bá»‹ há»§y hoÃ n toÃ n (Destroyed = true), giáº£i phÃ³ng cÃ¡c káº¿t ná»‘i vÄ©nh viá»…n
-	if self.Destroyed and self.PermanentConnections then
+	if finalCleanup and self.PermanentConnections then
 		for _, conn in ipairs(self.PermanentConnections) do
 			if conn then
 				pcall(function()
@@ -660,17 +691,19 @@ function Controller:CleanUp()
 		table.clear(self.PermanentConnections)
 	end
 
-	if self.Destroyed then
+	if finalCleanup then
 		local StatusImmunity = getStatusImmunity()
 		if StatusImmunity and typeof(StatusImmunity.disable) == "function" then
 			pcall(StatusImmunity.disable)
 		end
 		pcall(restoreHooks)
+		if globals and globals.NullscapeEntitiesGC == GC then
+			globals.NullscapeEntitiesGC = nil
+		end
 	end
 
 	-- Keep the active controller during lobby cleanup; only full destroy may release it.
-	local globals = getgenv()._NULLSCAPE_Globals
-	if self.Destroyed and globals and globals.activeEntitiesController == self then
+	if finalCleanup and globals and globals.activeEntitiesController == self then
 		globals.activeEntitiesController = nil
 	end
 end
@@ -1089,8 +1122,6 @@ function Controller:RestoreSpringerShockwaves()
 		restoreShockwave(part)
 	end
 end
-
-function Controller:StartSkinwalkerEvasion() end
 
 -- Tá»‘i Æ°u hÃ³a xá»­ lÃ½ tá»«ng thá»±c thá»ƒ (Sá»­ dá»¥ng Event thay vÃ¬ Loop)
 local function findNativeEnemyESPTemplate()
@@ -1816,6 +1847,9 @@ initializeBellBlindnessHook = function()
 		local originalRingBell
 		local deadline = time() + 30
 		repeat
+			if not globals.BellBlindnessHookPending or Controller.Destroyed then
+				return
+			end
 			originalRingBell = _G.RingBell
 			if typeof(originalRingBell) == "function" then
 				break
@@ -1823,6 +1857,9 @@ initializeBellBlindnessHook = function()
 			task.wait(0.25)
 		until time() >= deadline
 
+		if not globals.BellBlindnessHookPending or Controller.Destroyed then
+			return
+		end
 		if typeof(originalRingBell) ~= "function" then
 			globals.BellBlindnessHookPending = nil
 			return
@@ -1836,10 +1873,15 @@ initializeBellBlindnessHook = function()
 
 	-- Hook OnClientEvent cá»§a Bell Ä‘á»ƒ trÃ¡nh mÃ¹ khi ngÆ°á»i chÆ¡i khÃ¡c gÃµ chuÃ´ng trong phÃ²ng
 	task.spawn(function()
-		while globals.BellBlindnessHookPending and not globals.BellRingWrapper do
+		while
+			globals.BellBlindnessHookPending
+			and not globals.BellRingWrapper
+			and not Controller.Destroyed
+			and globals.EntitiesHookOwner == Controller
+		do
 			task.wait(0.25)
 		end
-		if not globals.BellRingWrapper then
+		if Controller.Destroyed or globals.EntitiesHookOwner ~= Controller or not globals.BellRingWrapper then
 			return
 		end
 
@@ -1883,6 +1925,7 @@ initializeBellBlindnessHook = function()
 						end
 						return oldConnect(self, callback)
 					end)
+					globals.OriginalBellConnect = oldConnect
 					globals.BellConnectHookInstalled = true
 				end
 		end
@@ -2005,6 +2048,7 @@ end
 
 -- ÄÄƒng kÃ½ active controller hiá»‡n táº¡i Ä‘á»ƒ tá»± Ä‘á»™ng dá»«ng cÃ¡c phiÃªn báº£n cÅ©
 getgenv()._NULLSCAPE_Globals.activeEntitiesController = Controller
+getgenv()._NULLSCAPE_Globals.EntitiesHookOwner = Controller
 
 -- Khá»Ÿi táº¡o ban Ä‘áº§u khi náº¡p script
 if not inLobby then

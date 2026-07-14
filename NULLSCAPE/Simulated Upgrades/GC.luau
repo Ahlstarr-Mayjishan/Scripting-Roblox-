@@ -1,29 +1,13 @@
--- [[
---  NULLSCAPE - Simulated Upgrades Garbage Collector (GC)
---  Vai trò: Chuyên phụ trách quản lý kết nối sự kiện (Connections), bộ nhớ đệm visual (SavedVisuals)
---  và gọi dọn dẹp giải phóng tài nguyên để tối ưu hóa hiệu năng, giảm tải cho Controller.
--- ]]
-
-local Logic = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Radar logic.luau")
 local GC = {
 	ActiveConnections = {},
-	SavedVisuals = {
-		Highlights = {}, -- Danh sách phát sáng
-		Beams = {}, -- Danh sách tia sáng chỉ dẫn
-		Attachments = {}, -- Danh sách các attachment đính kèm
-		Dots = {},
-		ActiveTargets = {}, -- Cache lưu các vật thể đang được vẽ ESP để tái sử dụng
-		ArrowGift = nil, -- Mũi tên chỉ hộp quà (Màu trắng)
-		ArrowCadence = nil, -- Mũi tên chỉ nhạc cụ Cadence (Màu đỏ)
-		ArrowAltar = nil, -- Mũi tên chỉ đàn tế / Altar (Màu cam)
-	},
+	EntityConnections = setmetatable({}, { __mode = "k" }),
 }
 
--- Hàm phụ trợ ngắt kết nối/dọn dẹp đa dạng đối tượng
 local function cleanupItem(item)
 	if not item then
 		return
 	end
+
 	local itemType = typeof(item)
 	if itemType == "RBXScriptConnection" then
 		pcall(function()
@@ -52,28 +36,54 @@ local function cleanupItem(item)
 	end
 end
 
--- Đăng ký một kết nối sự kiện chung vào danh sách dọn dẹp
-function GC.registerConnection(conn)
-	if conn then
-		table.insert(GC.ActiveConnections, conn)
+function GC.registerConnection(connection)
+	if connection then
+		table.insert(GC.ActiveConnections, connection)
 	end
 end
 
--- Thực hiện dọn dẹp và giải phóng tài nguyên cực hạn (GC)
-function GC.cleanAll()
-	-- Xóa toàn bộ tia sáng & Highlight khỏi game qua Logic module
-	local success, err = pcall(function()
-		Logic.clearVisuals(GC, false)
-	end)
-	if not success then
-		warn("[Simulated Upgrades GC] Lỗi khi dọn dẹp Visuals: " .. tostring(err))
+function GC.cleanupEntity(instance)
+	local connections = GC.EntityConnections[instance]
+	if not connections then
+		return
 	end
 
-	-- Ngắt toàn bộ kết nối sự kiện
-	for _, conn in ipairs(GC.ActiveConnections) do
-		cleanupItem(conn)
+	GC.EntityConnections[instance] = nil
+	for _, connection in ipairs(connections) do
+		cleanupItem(connection)
+	end
+	table.clear(connections)
+end
+
+function GC.registerEntityConnection(instance, connection)
+	if not instance or not connection then
+		return
+	end
+
+	local connections = GC.EntityConnections[instance]
+	if not connections then
+		connections = {}
+		GC.EntityConnections[instance] = connections
+		table.insert(connections, instance.Destroying:Connect(function()
+			GC.cleanupEntity(instance)
+		end))
+	end
+	table.insert(connections, connection)
+end
+
+function GC.cleanAll()
+	for _, connection in ipairs(GC.ActiveConnections) do
+		cleanupItem(connection)
 	end
 	table.clear(GC.ActiveConnections)
+
+	local instances = {}
+	for instance in pairs(GC.EntityConnections) do
+		table.insert(instances, instance)
+	end
+	for _, instance in ipairs(instances) do
+		GC.cleanupEntity(instance)
+	end
 end
 
 return GC

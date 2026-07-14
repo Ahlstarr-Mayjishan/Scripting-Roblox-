@@ -99,7 +99,7 @@ local function isCadenceChasing(enemy)
 	return cadenceChasing[enemy] == true
 end
 
-function Policy.shouldIgnore(threat, controller, technique)
+function Policy.shouldIgnore(threat, controller, _technique)
 	local enemy = threat and threat.Enemy
 	local name = threat and threat.Name or enemy and enemy.Name
 	local lowerName = normalise(name)

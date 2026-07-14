@@ -12,6 +12,7 @@ local Updater = {
 	StateFolder = "NULLSCAPE",
 	StateFile = "NULLSCAPE/update_state.json",
 	Destroyed = false,
+	OperationGeneration = 0,
 }
 
 local checking = false
@@ -284,6 +285,8 @@ function Updater:initialize(client, options)
 		return true
 	end
 	self.Client = client
+	self.Destroyed = false
+	self.OperationGeneration += 1
 	options = options or {}
 	self.GithubRawRoot = options.GithubRawRoot or self.GithubRawRoot
 	self.ManifestPath = options.ManifestPath or self.ManifestPath
@@ -356,7 +359,7 @@ function Updater:fetchManifest()
 	return manifest
 end
 
-function Updater:installFile(fileInfo, changes, backups)
+function Updater:installFile(fileInfo, changes, backups, operationGeneration)
 	local path = fileInfo.Path or fileInfo.path
 	if typeof(path) ~= "string" or path == "" then
 		return false, "Missing file path"
@@ -365,6 +368,9 @@ function Updater:installFile(fileInfo, changes, backups)
 	local source, err = self:fetchText(sourcePath)
 	if not source then
 		return false, "Download failed for " .. path .. ": " .. tostring(err)
+	end
+	if self.Destroyed or self.OperationGeneration ~= operationGeneration then
+		return false, "Update cancelled"
 	end
 	local expectedHash = fileInfo.Sha256 or fileInfo.sha256 or fileInfo.Hash or fileInfo.hash
 	if typeof(expectedHash) ~= "string" or expectedHash == "" then
@@ -426,23 +432,28 @@ function Updater:rollback(backups)
 end
 
 function Updater:restartAfterInstall()
+	if self.Destroyed then
+		return false
+	end
+
 	local client = self.Client
-	if client and typeof(client.InvalidateModulePrefix) == "function" then
-		client:InvalidateModulePrefix("NULLSCAPE/")
-	end
-	if client and typeof(client.PrepareForRuntimeUpdate) == "function" then
-		pcall(function()
-			client:PrepareForRuntimeUpdate("RuntimeUpdate")
-		end)
-	end
 	if client and typeof(client.HotRestart) == "function" then
-		client:HotRestart("RuntimeUpdate")
+		return client:HotRestart("RuntimeUpdate")
 	else
+		if client and typeof(client.PrepareForRuntimeUpdate) == "function" then
+			pcall(function()
+				client:PrepareForRuntimeUpdate("RuntimeUpdate")
+			end)
+		end
 		notify("Runtime Updater", "Update installed. Reload UI to use the new code.", 8)
 	end
+	return false
 end
 
 function Updater:checkAndInstall(manual)
+	if self.Destroyed then
+		return false
+	end
 	if checking then
 		if manual then
 			notify("Runtime Updater", "Update check is already running", 4)
@@ -450,6 +461,10 @@ function Updater:checkAndInstall(manual)
 		return false
 	end
 	checking = true
+	local operationGeneration = self.OperationGeneration
+	local function isCurrent()
+		return not self.Destroyed and self.OperationGeneration == operationGeneration
+	end
 
 	local ok, result = pcall(function()
 		if not (writefile and readfile and isfile) then
@@ -458,6 +473,9 @@ function Updater:checkAndInstall(manual)
 		end
 
 		local manifest, err = self:fetchManifest()
+		if not isCurrent() then
+			return false
+		end
 		if not manifest then
 			if manual then
 				notify("Runtime Updater", "Manifest unavailable: " .. tostring(err), 6)
@@ -482,12 +500,18 @@ function Updater:checkAndInstall(manual)
 		end
 
 		local pendingFiles, pendingErr = getPendingFiles(files)
+		if not isCurrent() then
+			return false
+		end
 		if not pendingFiles then
 			notify("Runtime Updater", tostring(pendingErr), 7)
 			return false
 		end
 
 		if #pendingFiles == 0 then
+			if not isCurrent() then
+				return false
+			end
 			if not writeJson(self.ManifestPath, manifest) then
 				notify("Runtime Updater", "Unable to store release manifest", 7)
 				return false
@@ -523,16 +547,26 @@ function Updater:checkAndInstall(manual)
 		local backups = {}
 
 		for _, fileInfo in ipairs(pendingFiles) do
+			if not isCurrent() then
+				self:rollback(backups)
+				return false
+			end
 			if typeof(fileInfo) == "table" then
-				local installed, installState = self:installFile(fileInfo, changes, backups)
+				local installed, installState = self:installFile(fileInfo, changes, backups, operationGeneration)
 				if not installed then
 					self:rollback(backups)
-					notify("Runtime Updater", tostring(installState) .. " | rollback done", 8)
+					if isCurrent() then
+						notify("Runtime Updater", tostring(installState) .. " | rollback done", 8)
+					end
 					return false
 				end
 			end
 		end
 
+		if not isCurrent() then
+			self:rollback(backups)
+			return false
+		end
 		if not writeJson(self.ManifestPath, manifest) then
 			self:rollback(backups)
 			notify("Runtime Updater", "Unable to store release manifest | rollback done", 8)
@@ -549,10 +583,10 @@ function Updater:checkAndInstall(manual)
 			return true
 		end
 
-			self.State = self.State or {}
-			self.State.LastVersion = changes.Version
-			self.State.LastUpdatedAt = os.time()
-			self.LocalIntegrityVerifiedVersion = changes.Version
+		self.State = self.State or {}
+		self.State.LastVersion = changes.Version
+		self.State.LastUpdatedAt = os.time()
+		self.LocalIntegrityVerifiedVersion = changes.Version
 		writeJson(self.StateFile, self.State)
 
 		local menuText = #changes.Menus > 0 and joinShort(changes.Menus, 6) or "Code modules"
@@ -562,7 +596,10 @@ function Updater:checkAndInstall(manual)
 			9
 		)
 
-		self:restartAfterInstall(changes)
+		if not isCurrent() then
+			return false
+		end
+		self:restartAfterInstall()
 		return true
 	end)
 
@@ -576,6 +613,7 @@ end
 
 function Updater:CleanUp()
 	self.Destroyed = true
+	self.OperationGeneration += 1
 end
 
 function Updater:Destroy()

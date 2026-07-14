@@ -749,6 +749,7 @@ local remoteSourceFetches = {}
 local NIL_MODULE = {}
 local GITHUB_RAW_ROOT = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
 local REMOTE_PREFETCH_CONCURRENCY = 4
+local REMOTE_FETCH_WAIT_TIMEOUT = 20
 
 function Client:Destroy(reason)
 	if self.Destroying or self.Destroyed then
@@ -917,11 +918,15 @@ local function fetchRemoteSource(path)
 
 	local fetch = remoteSourceFetches[path]
 	if fetch then
+		local deadline = time() + REMOTE_FETCH_WAIT_TIMEOUT
 		repeat
 			task.wait()
-		until fetch.Done
+		until fetch.Done or Client.Destroyed or time() >= deadline
 		if fetch.Source then
 			return fetch.Source
+		end
+		if not fetch.Done then
+			error(Client.Destroyed and "Client destroyed" or ("Timed out downloading " .. tostring(path)))
 		end
 		error(fetch.Error or ("Failed to download " .. tostring(path)))
 	end

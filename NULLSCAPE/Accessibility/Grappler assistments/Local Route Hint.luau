@@ -21,7 +21,7 @@ local function eligible(intent)
 	return mode == "Pilot" or mode == "Emergency" or mode == "Technique"
 end
 
-function Hint.score(grapple, hit, part, intent)
+function Hint.score(_grapple, hit, part, intent)
 	local special = SpecialAnchors and typeof(SpecialAnchors.isSpecial) == "function" and SpecialAnchors.isSpecial(part)
 	local rail = RailMemory and typeof(RailMemory.isRailPart) == "function" and RailMemory.isRailPart(part)
 	if not (eligible(intent) and hit and hit.Position and part and (special or rail)) then

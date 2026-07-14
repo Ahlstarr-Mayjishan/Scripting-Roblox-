@@ -14,7 +14,6 @@ if not executorLoaded or typeof(Executor) ~= "table" then
 	warn("[NULLSCAPE] Accessibility executor failed; using fallback dispatcher: " .. tostring(Executor))
 	Executor = {}
 end
-
 local function callExecutor(methodName, ...)
 	local method = Executor and Executor[methodName]
 	if typeof(method) ~= "function" then
@@ -181,16 +180,20 @@ function Controller:CleanUp()
 		self.AntiBonkEnabled = false
 		self.GrapplerStaminaMode = "Off"
 		self.StaminaMode = "Off"
-		callExecutor("disableStaminaAssist")
-		callExecutor("disableRailAssist")
-		callExecutor("disableAntiBonk")
-		callExecutor("disableCurseVisualAssist")
-		callExecutor("disableMirageSafety")
-		callExecutor("disableMomentumGuard")
-		callExecutor("disableGrappleAssist")
-		callExecutor("disablePhysicalInteractionRange")
+		if typeof(Executor.shutdown) == "function" then
+			pcall(Executor.shutdown)
+		else
+			callExecutor("disableStaminaAssist")
+			callExecutor("disableRailAssist")
+			callExecutor("disableAntiBonk")
+			callExecutor("disableCurseVisualAssist")
+			callExecutor("disableMirageSafety")
+			callExecutor("disableMomentumGuard")
+			callExecutor("disableGrappleAssist")
+			callExecutor("disablePhysicalInteractionRange")
+		end
 	end
-	if self.Destroyed and self.PermanentConnections then
+	if finalCleanup and self.PermanentConnections then
 		for _, conn in ipairs(self.PermanentConnections) do
 			if conn then
 				pcall(function()
@@ -202,7 +205,7 @@ function Controller:CleanUp()
 	end
 
 	-- Giải phóng biến môi trường để hỗ trợ dọn dẹp bộ nhớ (GC)
-	if self.Destroyed and globals and globals.activeAccessibilityController == self then
+	if finalCleanup and globals and globals.activeAccessibilityController == self then
 		globals.activeAccessibilityController = nil
 	end
 end
@@ -856,6 +859,9 @@ local function scheduleRespawnFeatureRefresh()
 end
 
 getGlobals().activeAccessibilityController = Controller
+if typeof(Executor.resume) == "function" then
+	Executor.resume()
+end
 callExecutor("initializeMirageSafety")
 
 -- Khởi tạo ban đầu khi nạp script

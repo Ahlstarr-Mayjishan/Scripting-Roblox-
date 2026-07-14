@@ -8,9 +8,7 @@ local Workspace = game:GetService("Workspace")
 
 local AnchorMemory = {}
 local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau")
-local PerformanceBudget = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Performance Budget.luau")
 
-local DEFAULT_SCAN_BUDGET = 250
 local RESCAN_COOLDOWN = 0.75
 local BUCKET_SIZE = 96
 
@@ -217,7 +215,7 @@ function AnchorMemory.noteCastResult(part, success)
 	end
 end
 
-function AnchorMemory.refreshBudgeted(_scanBudget, controller)
+function AnchorMemory.refreshBudgeted(_scanBudget, _controller)
 	local now = time()
 	if now - lastRefreshAt < RESCAN_COOLDOWN then
 		return
