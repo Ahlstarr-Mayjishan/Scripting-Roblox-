@@ -220,6 +220,7 @@ pcall(function()
 			ChargerTripmineJitterSlider = 2,
 			ChargerSteeringAssistToggle = false,
 			ChargerSteeringAssistStrengthSlider = 50,
+			ChargerCollisionGuardToggle = false,
 			GraceWingsToggle = false,
 			GraceWingsAirControlSlider = 1,
 			AdvancedGravityCoilToggle = false,

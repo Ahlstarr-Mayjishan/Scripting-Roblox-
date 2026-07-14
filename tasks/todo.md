@@ -7,3 +7,9 @@
 - [ ] Validate a native Charger cooldown hook exists before adding no-cooldown.
   - Acceptance: do not ship a non-functional toggle.
   - Verify: inspect available native modules/runtime interfaces in a Charger session.
+- [x] Add a Charger collision guard for players and small movable obstacles.
+  - Acceptance: preserve walls/terrain while restoring all temporary collision changes.
+  - Verify: lint, format check, and Rojo build.
+- [ ] Runtime-validate Charger collision guard in a live Charger session.
+  - Acceptance: player and small-prop impacts do not end charge; walls and terrain still stop it.
+  - Verify: an in-game collision pass covering toggle disable and charge-end restoration.
