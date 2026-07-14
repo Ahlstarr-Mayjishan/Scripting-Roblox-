@@ -161,7 +161,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "fcbaaea60b1e9bedda1e47771e77cd3d9068d253a7c261c6fc4d1d37ab0fe110"
+                      "Sha256":  "3258c86f2461d667c523e7b28c1ad95eb6c6cc47ad88153020e62d7ab465f129"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/tab.luau",
@@ -448,7 +448,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "9e2dfbafcc7374e56fc235c7b90e5a2ad6d2dfe025425cf8e9244b1716f608f0"
+                      "Sha256":  "c9dfa0ba08250e688c3ab39b0f5f0c584dc34cf28b58a884428cf59bacfee4e3"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau",
@@ -462,7 +462,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "2eaccefc388f68781ca837b0d3e05db4fc5b9ab786f90eb3611fd4e613923aef"
+                      "Sha256":  "b538de77fc3c0d73780b96cbde909f44771267d2d04efe5c8aecb9b4851fa0bf"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Technique Arbiter.luau",
@@ -595,7 +595,7 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "84eb388a9e048527f0996637c8fedbb07302ced651d16f1ce8561835512d0bbb"
+                      "Sha256":  "350e09e2e82c644a931a98de15b714ebdd62f73e7d84df453906984e111feb30"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/GC.luau",
@@ -637,7 +637,7 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "33587051183e7f27548d0551dba6af3a4bdc19f592a9b95a7561e797efc35ec6"
+                      "Sha256":  "20b9f2d9c3b5b5e0ad14400172094e371ba702e39b2751da5cfdf8dabbee7e6d"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Recovery.luau",
@@ -819,7 +819,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "8738c23053480fb6295ef13b5cfacc1937d5be306d560d7feca0a40468aa9520"
+                      "Sha256":  "c2c305944c9fbdc76de7c60b0ca59136c54ca26181eab0761fe082f506e9c897"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Defuse Kits.luau",

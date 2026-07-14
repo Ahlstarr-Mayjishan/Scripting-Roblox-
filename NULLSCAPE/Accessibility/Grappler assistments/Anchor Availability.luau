@@ -9,6 +9,7 @@ local Workspace = game:GetService("Workspace")
 
 local SpecialAnchors = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Special Anchors.luau")
 local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
+local ClassControl = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
 
 local Availability = {}
 
@@ -66,6 +67,7 @@ function Availability.evaluate(grapple, part)
 		and anchorName ~= "JumpPad"
 		and humanoid
 		and humanoid:GetState() == Enum.HumanoidStateType.Running
+		and not (ClassControl and ClassControl.GrappleInstantGroundCast == true)
 	then
 		-- Native Grapple.Start rejects every named target except JumpPad while
 		-- Running. Do not let targeting present an impossible Bell cast.

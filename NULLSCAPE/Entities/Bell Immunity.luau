@@ -1,3 +1,4 @@
+--!nocheck
 -- [[
 --  NULLSCAPE - Bell Immunity
 --  Blocks native bell screen effects and removes Mighty Gong's client-authored impulse.
