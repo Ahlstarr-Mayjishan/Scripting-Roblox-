@@ -98,8 +98,9 @@ function Capture.resolve(part, origin, aimDirection, grappleParams, manualAngle)
 
 	local captureAngle = SpecialAnchors.getCaptureAngle(anchorName)
 	if manualAngle then
-		-- Manual casts stay deliberate, but special anchors should not require pixel-perfect aim.
-		captureAngle = math.max(math.min(captureAngle, 52), manualAngle)
+		-- Manual angle is a ceiling: native auto-capture cones must not widen a
+		-- deliberate player cast behind their back or onto adjacent terrain.
+		captureAngle = math.min(captureAngle, manualAngle)
 	end
 
 	local centerDirection = centerOffset.Unit

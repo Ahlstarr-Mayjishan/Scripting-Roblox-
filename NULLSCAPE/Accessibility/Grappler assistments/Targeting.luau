@@ -41,6 +41,14 @@ local DEFAULT_VOID_PROTECTION_HEIGHT = 24
 local DEFAULT_VOID_PROTECTION_FALL_SPEED = 85
 local MAX_FALLBACK_AXIS = 160
 local HIT_OVERSHOOT = 2
+local MAX_TERRAIN_OVERRIDE_DEPTH = 6
+
+local MANUAL_TERRAIN_OVERRIDE_ANGLE = {
+	JumpPad = 7,
+	GrapplePoint = 9,
+	TriaOrb = 6,
+	Bell = 10,
+}
 
 local CandidateCache = {
 	UpdatedAt = -1000,
@@ -208,6 +216,84 @@ local function syncGrappleFilter(grapple)
 	then
 		grapple.grappleParams.FilterDescendantsInstances = grapple.Movement.moveCastParams.FilterDescendantsInstances
 	end
+end
+
+local function getDirectAimHit(grapple, maxRange, aimDirection)
+	local rootPart = grapple and grapple.RootPart
+	local currentCamera = Workspace.CurrentCamera
+	if not (rootPart and currentCamera and grapple.grappleParams and aimDirection) then
+		return nil
+	end
+
+	if usesCameraAim(grapple) then
+		local humanoid = grapple.Humanoid
+		local cameraOffset = grapple.cameraOffset
+		if not (humanoid and cameraOffset) then
+			return Workspace:Raycast(rootPart.Position, aimDirection * maxRange, grapple.grappleParams)
+		end
+
+		local rayOrigin = (currentCamera.CFrame * cameraOffset).Position
+			+ currentCamera.CFrame.LookVector
+				* (currentCamera.CFrame.Position - (rootPart.Position + humanoid.CameraOffset)).Magnitude
+		return Workspace:Raycast(rayOrigin, aimDirection * maxRange, grapple.grappleParams)
+	end
+
+	local mouse = LocalPlayer and LocalPlayer:GetMouse()
+	local unitRay = mouse and mouse.UnitRay
+	if not unitRay then
+		return nil
+	end
+
+	local mouseHit = Workspace:Raycast(unitRay.Origin, aimDirection * 2048, grapple.grappleParams)
+	if not mouseHit then
+		return nil
+	end
+
+	return Workspace:Raycast(
+		rootPart.Position,
+		CFrame.lookAt(rootPart.Position, mouseHit.Position).LookVector * maxRange,
+		grapple.grappleParams
+	)
+end
+
+local function isSameTarget(a, b)
+	return a and b and (a == b or a:IsDescendantOf(b) or b:IsDescendantOf(a))
+end
+
+local function canOverrideDirectTerrain(grapple, specialHit, directHit, aimDirection)
+	if not directHit then
+		return true
+	end
+	if not (specialHit and specialHit.Instance and directHit.Instance) then
+		return false
+	end
+	if isSameTarget(specialHit.Instance, directHit.Instance) then
+		return true
+	end
+
+	-- A directly aimed special anchor always owns its own cast. A nearby special
+	-- candidate must not replace it through scoring or bias.
+	if getSpecialTargetName(directHit.Instance) then
+		return false
+	end
+
+	local rootPart = grapple and grapple.RootPart
+	local specialName = getSpecialTargetName(specialHit.Instance)
+	if not (rootPart and specialName and aimDirection) then
+		return false
+	end
+
+	local specialOffset = specialHit.Position - rootPart.Position
+	local directOffset = directHit.Position - rootPart.Position
+	if specialOffset.Magnitude <= 3 or directOffset.Magnitude <= 0.001 then
+		return false
+	end
+	if specialOffset.Magnitude > directOffset.Magnitude + MAX_TERRAIN_OVERRIDE_DEPTH then
+		return false
+	end
+
+	local overrideAngle = MANUAL_TERRAIN_OVERRIDE_ANGLE[specialName] or 7
+	return aimDirection.Unit:Dot(specialOffset.Unit) >= math.cos(math.rad(overrideAngle))
 end
 
 local function isOptimalCandidate(part)
@@ -588,7 +674,7 @@ local function getOptimalMinDot(part, controller, intent)
 	if isManualIntent(intent) and isPriorityAnchor(part, specialName) then
 		if specialName then
 			local captureAngle = SpecialAnchors and SpecialAnchors.getCaptureAngle(specialName) or 45
-			return math.cos(math.rad(math.max(getManualAnchorAngle(controller), math.min(captureAngle, 52))))
+			return math.cos(math.rad(math.min(getManualAnchorAngle(controller), captureAngle)))
 		end
 		return math.cos(math.rad(getManualAnchorAngle(controller)))
 	end
@@ -738,7 +824,18 @@ function Targeting.findSpecialAnchorHit(grapple, controller, context)
 	context.SpecialOnly = true
 	context.ManualCast = context.ManualCast ~= false
 	context.AssistiveManual = context.AssistiveManual ~= false
-	return Targeting.findOptimalHit(grapple, controller, context)
+
+	local specialHit = Targeting.findOptimalHit(grapple, controller, context)
+	if not specialHit or context.EntityIntent == "RazorbloomEscape" then
+		return specialHit
+	end
+
+	local aimDirection = Targeting.getAimDirection(grapple)
+	if not aimDirection then
+		return nil
+	end
+	local directHit = getDirectAimHit(grapple, getRange(controller), aimDirection)
+	return canOverrideDirectTerrain(grapple, specialHit, directHit, aimDirection) and specialHit or nil
 end
 
 local function validateFallbackHit(grapple, hit, controller, aimDirection)
@@ -763,51 +860,19 @@ end
 
 function Targeting.fallbackCast(grapple, controller)
 	local rootPart = grapple and grapple.RootPart
-	local currentCamera = Workspace.CurrentCamera
-	if not (rootPart and currentCamera and grapple.grappleParams) then
+	if not (rootPart and Workspace.CurrentCamera and grapple.grappleParams) then
 		return nil
 	end
 
 	syncGrappleFilter(grapple)
 
 	local maxRange = getRange(controller)
-	local position = rootPart.Position
 	local aimDirection = Targeting.getAimDirection(grapple)
 	if not aimDirection then
 		return nil
 	end
 
-	if usesCameraAim(grapple) then
-		local humanoid = grapple.Humanoid
-		local cameraOffset = grapple.cameraOffset
-		if not (humanoid and cameraOffset) then
-			local hit = Workspace:Raycast(position, aimDirection * maxRange, grapple.grappleParams)
-			return validateFallbackHit(grapple, hit, controller, aimDirection)
-		end
-
-		local rayOrigin = (currentCamera.CFrame * cameraOffset).Position
-			+ currentCamera.CFrame.LookVector
-				* (currentCamera.CFrame.Position - (position + humanoid.CameraOffset)).Magnitude
-		local hit = Workspace:Raycast(rayOrigin, aimDirection * maxRange, grapple.grappleParams)
-		return validateFallbackHit(grapple, hit, controller, aimDirection)
-	end
-
-	local mouse = LocalPlayer and LocalPlayer:GetMouse()
-	local unitRay = mouse and mouse.UnitRay
-	if not unitRay then
-		return nil, aimDirection
-	end
-
-	local mouseHit = Workspace:Raycast(unitRay.Origin, aimDirection * 2048, grapple.grappleParams)
-	if not mouseHit then
-		return nil, aimDirection
-	end
-
-	local hit = Workspace:Raycast(
-		position,
-		CFrame.lookAt(position, mouseHit.Position).LookVector * maxRange,
-		grapple.grappleParams
-	)
+	local hit = getDirectAimHit(grapple, maxRange, aimDirection)
 	return validateFallbackHit(grapple, hit, controller, aimDirection)
 end
 
