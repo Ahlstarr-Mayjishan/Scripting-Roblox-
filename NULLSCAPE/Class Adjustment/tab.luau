@@ -58,6 +58,13 @@ local createControllerProxy = function(Client, Controller)
 		ChargerSteeringAssistStrength = 50,
 		ChargerCollisionGuardEnabled = false,
 		ChargerAirPlatformDuration = 1,
+		ChargerChargeChainAssistEnabled = false,
+		ChargerChargeChainBuffer = 0.25,
+		ChargerSharkTailTimingAssistEnabled = false,
+		ChargerSharkTailTimingWindow = 0.25,
+		ChargerAirPlatformAssistEnabled = false,
+		ChargerLongJumpGuardEnabled = false,
+		ChargerLongJumpGuardDistance = 18,
 	}
 
 	return setmetatable({ __ClassAdjustmentProxy = true }, {
@@ -320,6 +327,80 @@ return function(Client, Controller)
 		Flag = "ChargerAirPlatformDurationSlider",
 		Callback = function(Value)
 			Controller:SetChargerAirPlatformDuration(Value)
+		end,
+	})
+
+	Tab:CreateDivider()
+	Tab:CreateToggle({
+		Name = "Charge Chain Assist",
+		Info = "Buffers a charge input near landing and retries it inside Ninja Belt's native chain window.",
+		CurrentValue = Controller.ChargerChargeChainAssistEnabled or false,
+		Flag = "ChargerChargeChainAssistToggle",
+		Callback = function(Value)
+			Controller:SetChargerChargeChainAssist(Value)
+		end,
+	})
+	Tab:CreateSlider({
+		Name = "Charge Chain Buffer",
+		Info = "How long a recent ability press remains eligible for an automatic landing retry.",
+		Range = { 0.05, 0.5 },
+		Increment = 0.05,
+		Suffix = "s",
+		CurrentValue = Controller.ChargerChargeChainBuffer or 0.25,
+		Flag = "ChargerChargeChainBufferSlider",
+		Callback = function(Value)
+			Controller:SetChargerChargeChainBuffer(Value)
+		end,
+	})
+	Tab:CreateToggle({
+		Name = "Shark Tail Timing Assist",
+		Info = "Retries an early ability press when charge enters the native Shark Tail endlag window.",
+		CurrentValue = Controller.ChargerSharkTailTimingAssistEnabled or false,
+		Flag = "ChargerSharkTailTimingAssistToggle",
+		Callback = function(Value)
+			Controller:SetChargerSharkTailTimingAssist(Value)
+		end,
+	})
+	Tab:CreateSlider({
+		Name = "Shark Tail Timing Window",
+		Info = "Maximum age of an early Shark Tail input that may be retried after charge ends.",
+		Range = { 0.05, 0.6 },
+		Increment = 0.05,
+		Suffix = "s",
+		CurrentValue = Controller.ChargerSharkTailTimingWindow or 0.25,
+		Flag = "ChargerSharkTailTimingWindowSlider",
+		Callback = function(Value)
+			Controller:SetChargerSharkTailTimingWindow(Value)
+		end,
+	})
+	Tab:CreateToggle({
+		Name = "Air Platform Assist",
+		Info = "Keeps the primary/alt input pair alive until both keys are released and inserts primary before a midair alt cast.",
+		CurrentValue = Controller.ChargerAirPlatformAssistEnabled or false,
+		Flag = "ChargerAirPlatformAssistToggle",
+		Callback = function(Value)
+			Controller:SetChargerAirPlatformAssist(Value)
+		end,
+	})
+	Tab:CreateToggle({
+		Name = "Long Jump Guard",
+		Info = "Cancels a just-released long jump when the projected route has no collidable floor.",
+		CurrentValue = Controller.ChargerLongJumpGuardEnabled or false,
+		Flag = "ChargerLongJumpGuardToggle",
+		Callback = function(Value)
+			Controller:SetChargerLongJumpGuard(Value)
+		end,
+	})
+	Tab:CreateSlider({
+		Name = "Long Jump Guard Distance",
+		Info = "Forward distance sampled for safe floor before allowing a long jump.",
+		Range = { 8, 40 },
+		Increment = 1,
+		Suffix = " studs",
+		CurrentValue = Controller.ChargerLongJumpGuardDistance or 18,
+		Flag = "ChargerLongJumpGuardDistanceSlider",
+		Callback = function(Value)
+			Controller:SetChargerLongJumpGuardDistance(Value)
 		end,
 	})
 
