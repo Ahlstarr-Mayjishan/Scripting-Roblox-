@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.14.53",
+    "Version":  "2026.07.14.58",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "8b083b551fcb11879e6c1028072b545fd311132a735121e261b49732a9934178"
+                      "Sha256":  "4b5b3fa179ea3d25faadab712e16165ee80e0f22f96c3d8eba805ca30385e04b"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -147,7 +147,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "356723cfadf0eba332f7a61da7a22cacaed9f7d7fd685eb7f0e6b6467d72323b"
+                      "Sha256":  "3967ff8b699070e3db93de2b28709ae9b73add74a9d9cff83213f9e0ab98e87e"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/RemoteBlocking.luau",
@@ -161,7 +161,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "dd2eda8baf4337de68534c600ce1e40acbaaab57715c2e49c845ede9199424e8"
+                      "Sha256":  "f9560feeecb15abd4ef919c776134f5b26158a535e2d3d4f1bd733e4eefdb3af"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau",
@@ -798,7 +798,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "c1baf03276526be184e26f8714c55ed945e615e684066b8c1398ad9ea2593a17"
+                      "Sha256":  "fdc831e05f7740640043474e00e0bc30c23f0114cc9866c58063f3236eed9ffc"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/StatusImmunity.luau",
@@ -965,7 +965,14 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "51a743cbdd8ed9a4773b0669dedfa1cacc2703f37ab4b298278c6c176a402360"
+                      "Sha256":  "4ed48e6ed84ac1c9afa0afa87a9154b31f183616fe76bf74e5debc047ba9895a"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Entities/Razorbloom Auto Disable.luau",
+                      "Menu":  [
+                                   "Entities"
+                               ],
+                      "Sha256":  "d08edf41b5d6dd7c9f8750059301b0eafa3eb42798a39aade0444082652fcc60"
                   }
               ]
 }

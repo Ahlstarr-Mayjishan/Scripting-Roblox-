@@ -60,6 +60,7 @@ local CelestialImmunity = getgenv().loadModule("NULLSCAPE/Entities/Celestial Imm
 local VoidImplosionImmunity = getgenv().loadModule("NULLSCAPE/Entities/Void Implosion Immunity.luau")
 local CadenceStatus = getgenv().loadModule("NULLSCAPE/Entities/Cadence Status.luau")
 local OperatorAutoDisable = getgenv().loadModule("NULLSCAPE/Entities/Operator Auto Disable.luau")
+local RazorbloomAutoDisable = getgenv().loadModule("NULLSCAPE/Entities/Razorbloom Auto Disable.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 local BackTrick = getgenv().loadModule("NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau")
 local KolonaAutoQTE = nil
@@ -142,6 +143,7 @@ local Controller = {
 	SlicerImmune = false,
 	VoidbreakerImmune = false,
 	RazorbloomImmune = false,
+	RazorbloomAutoDisable = false,
 	CadenceImmune = false,
 	CadenceAutoCollectInstruments = false,
 	CadenceCheckStatus = false,
@@ -418,6 +420,7 @@ function Controller:ReconcileImmunityState()
 	Executor.reconcile(GC)
 	updateSourceEventImmunity(self)
 	OperatorAutoDisable.setEnabled(self.OperatorAutoDisable == true)
+	RazorbloomAutoDisable.setEnabled(self.RazorbloomAutoDisable == true and self.inLobby ~= true)
 	if self.VoidImplosionImmune == true and self.inLobby ~= true then
 		VoidImplosionImmunity.enable()
 	else
@@ -634,6 +637,13 @@ function Controller:CleanUp()
 			SpringerAutoJump.disable()
 		end
 	end)
+	pcall(function()
+		if finalCleanup then
+			RazorbloomAutoDisable.disable()
+		else
+			RazorbloomAutoDisable.setEnabled(false)
+		end
+	end)
 	if finalCleanup then
 		pcall(OperatorAutoDisable.disable)
 	end
@@ -701,7 +711,6 @@ local SPECIAL_IMMUNITY_FLAGS = {
 	Sigil = "SigilImmune",
 	Slicer = "SlicerImmune",
 	Voidbreaker = "VoidbreakerImmune",
-	Razorbloom = "RazorbloomImmune",
 }
 
 local function isSpecialImmunityEntity(entityName)
@@ -826,6 +835,8 @@ function Controller:SetImmunity(entityName, value)
 		self.CatalystImmune = value
 	elseif entityName == "Seamine" then
 		self.SeamineImmune = value == true
+	elseif entityName == "Razorbloom" then
+		self.RazorbloomImmune = value == true
 	elseif entityName == "nilEnemy" then
 		self.nilEnemyImmune = value
 	elseif entityName == "nilMirage" then
@@ -976,6 +987,20 @@ function Controller:SetOperatorOptions(options)
 
 	self:SetImmunity("Operator", hasOption("Immunity"))
 	return self:SetOperatorAutoDisable(hasOption("Auto Disable"))
+end
+
+function Controller:SetRazorbloomAutoDisable(enabled)
+	self.RazorbloomAutoDisable = enabled == true
+	return RazorbloomAutoDisable.setEnabled(self.RazorbloomAutoDisable and self.inLobby ~= true)
+end
+
+function Controller:SetRazorbloomOptions(options)
+	local hasOption = function(option)
+		return typeof(options) == "table" and (options[option] == true or table.find(options, option) ~= nil)
+	end
+
+	self:SetImmunity("Razorbloom", hasOption("Immunity"))
+	return self:SetRazorbloomAutoDisable(hasOption("Auto Disable"))
 end
 
 function Controller:SetPondererSilentLookat(enabled)

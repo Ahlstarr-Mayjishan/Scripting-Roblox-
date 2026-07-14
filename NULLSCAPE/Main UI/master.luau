@@ -118,7 +118,7 @@ pcall(function()
 			ImmunitySigilToggle = false,
 			ImmunitySlicerToggle = false,
 			ImmunityVoidbreakerToggle = false,
-			ImmunityRazorbloomToggle = false,
+			RazorbloomHackDropdown = {},
 			ImmunityVoidImplosionToggle = false,
 			ImmunityCadenceToggle = false,
 			ImmunityCatalystToggle = false,
@@ -292,6 +292,16 @@ pcall(function()
 		end
 		if type(currentSettings.KolonaHackDropdown) ~= "table" then
 			currentSettings.KolonaHackDropdown = {}
+			updated = true
+		end
+		if type(currentSettings.RazorbloomHackDropdown) ~= "table" then
+			currentSettings.RazorbloomHackDropdown = currentSettings.ImmunityRazorbloomToggle == true
+				and { "Immunity" }
+				or {}
+			updated = true
+		end
+		if currentSettings.ImmunityRazorbloomToggle ~= nil then
+			currentSettings.ImmunityRazorbloomToggle = nil
 			updated = true
 		end
 		if type(currentSettings.PerformanceCullingDropdown) ~= "table" then

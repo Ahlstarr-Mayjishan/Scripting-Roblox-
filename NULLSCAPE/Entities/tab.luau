@@ -557,12 +557,27 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
-		Name = "Razorbloom Phase",
-		CurrentValue = getFlag(Controller, "RazorbloomImmune"),
-		Flag = "ImmunityRazorbloomToggle",
-		Callback = function(Value)
-			setImmunity(Controller, "Razorbloom", Value)
+	local currentRazorbloomOptions = {}
+	if getFlag(Controller, "RazorbloomImmune") then
+		table.insert(currentRazorbloomOptions, "Immunity")
+	end
+	if getFlag(Controller, "RazorbloomAutoDisable") then
+		table.insert(currentRazorbloomOptions, "Auto Disable")
+	end
+
+	Tab:CreateDropdown({
+		Name = "Razorbloom",
+		Options = { "Immunity", "Auto Disable" },
+		CurrentOption = currentRazorbloomOptions,
+		MultipleOptions = true,
+		Flag = "RazorbloomHackDropdown",
+		Callback = function(Options)
+			local activeController = resolveController(nil, Controller)
+			if activeController and typeof(activeController.SetRazorbloomOptions) == "function" then
+				activeController:SetRazorbloomOptions(Options)
+			else
+				warn("[NULLSCAPE] Entities controller is not ready; ignored Razorbloom change")
+			end
 		end,
 	})
 

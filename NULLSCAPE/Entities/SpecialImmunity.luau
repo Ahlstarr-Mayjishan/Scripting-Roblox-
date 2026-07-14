@@ -5,17 +5,11 @@
 -- ]]
 
 local Workspace = game:GetService("Workspace")
-local Players = game:GetService("Players")
-
-local RAZORBLOOM_CLEANUP_DELAY = 1.0
-local RAZORBLOOM_RETRY_WINDOW = 2.5
-local RAZORBLOOM_RETRY_STEP = 0.1
 
 local Logic = {
     Connections = {},
     SavedVoidbreakerHitbox = nil,
     SavedGuardianHitbox = nil,
-    RazorbloomDisabled = setmetatable({}, { __mode = "k" }),
     LoopToken = nil,
 }
 
@@ -27,7 +21,6 @@ local SPECIAL_FLAGS = {
     Sigil = "SigilImmune",
     Slicer = "SlicerImmune",
     Voidbreaker = "VoidbreakerImmune",
-    Razorbloom = "RazorbloomImmune",
 }
 
 local function getController()
@@ -158,166 +151,6 @@ local function applyGuardianProjectileBypass()
     end
 end
 
-local function isDescendantOrSelf(instance, root)
-    if not (instance and root) then
-        return false
-    end
-
-    local current = instance
-    while current do
-        if current == root then
-            return true
-        end
-        current = current.Parent
-    end
-
-    return false
-end
-
-local function detachRazorbloom(razorbloom)
-    local character = Players.LocalPlayer and Players.LocalPlayer.Character
-    if not (character and razorbloom) then
-        return
-    end
-
-    for _, child in ipairs(character:GetDescendants()) do
-        if child:IsA("Weld") or child:IsA("WeldConstraint") or child:IsA("Motor6D") then
-            local part0 = child.Part0
-            local part1 = child.Part1
-            if isDescendantOrSelf(part0, razorbloom) or isDescendantOrSelf(part1, razorbloom) then
-                pcall(function()
-                    child:Destroy()
-                end)
-            end
-        end
-    end
-end
-
-local function cleanupRazorbloom(razorbloom)
-    if not (razorbloom and razorbloom.Parent) then
-        return
-    end
-
-    pcall(function()
-        detachRazorbloom(razorbloom)
-        razorbloom:Destroy()
-    end)
-end
-
-local function findRazorbloomBindable(razorbloom)
-    local bindable = razorbloom:FindFirstChild("ClientBindable")
-    if bindable and bindable:IsA("BindableEvent") then
-        return bindable
-    end
-
-    bindable = razorbloom:FindFirstChild("ClientBindable", true)
-    if bindable and bindable:IsA("BindableEvent") then
-        return bindable
-    end
-
-    return nil
-end
-
-local function disableRazorbloom(razorbloom)
-    if not isEnabled("Razorbloom") then
-        return
-    end
-    if not (razorbloom and razorbloom.Parent) then
-        return
-    end
-    if Logic.RazorbloomDisabled[razorbloom] then
-        return
-    end
-
-    Logic.RazorbloomDisabled[razorbloom] = true
-
-    task.spawn(function()
-        local startedAt = time()
-        local firedNativeDisable = false
-        while razorbloom and razorbloom.Parent and time() - startedAt <= RAZORBLOOM_RETRY_WINDOW do
-            if not isEnabled("Razorbloom") then
-                Logic.RazorbloomDisabled[razorbloom] = nil
-                return
-            end
-
-            local bindable = findRazorbloomBindable(razorbloom)
-            if bindable then
-                pcall(function()
-                    bindable:Fire("Disable")
-                end)
-                firedNativeDisable = true
-                break
-            end
-
-            task.wait(RAZORBLOOM_RETRY_STEP)
-        end
-
-        if firedNativeDisable then
-            task.delay(RAZORBLOOM_CLEANUP_DELAY, function()
-                cleanupRazorbloom(razorbloom)
-            end)
-        else
-            cleanupRazorbloom(razorbloom)
-        end
-    end)
-end
-
-local function scanCharacterForRazorbloom(character)
-    if not character then
-        return
-    end
-
-    local existing = character:FindFirstChild("Razorbloom")
-    if existing then
-        task.defer(disableRazorbloom, existing)
-    end
-
-    for _, child in ipairs(character:GetDescendants()) do
-        if child.Name == "Razorbloom" then
-            task.defer(disableRazorbloom, child)
-        end
-    end
-end
-
-local function applyRazorbloomBypass()
-    if not isEnabled("Razorbloom") then
-        return
-    end
-
-    local player = Players.LocalPlayer
-    local character = player and player.Character
-    scanCharacterForRazorbloom(character)
-end
-
-local function watchCharacter(character)
-    if not character then
-        return
-    end
-
-    scanCharacterForRazorbloom(character)
-
-    table.insert(Logic.Connections, character.ChildAdded:Connect(function(child)
-        if child.Name == "Razorbloom" then
-            task.defer(disableRazorbloom, child)
-        end
-    end))
-
-    table.insert(Logic.Connections, character.DescendantAdded:Connect(function(child)
-        if child.Name == "Razorbloom" then
-            task.defer(disableRazorbloom, child)
-        elseif child.Name == "ClientBindable" then
-            local current = child.Parent
-            while current and current ~= character do
-                if current.Name == "Razorbloom" then
-                    task.defer(disableRazorbloom, current)
-                    break
-                end
-                current = current.Parent
-            end
-        end
-    end))
-end
-
 function Logic.enable()
     if Logic.Enabled then
         return true
@@ -332,7 +165,6 @@ function Logic.enable()
             if active then
                 applyVoidbreakerHitboxBypass()
                 applyGuardianProjectileBypass()
-                applyRazorbloomBypass()
             end
             task.wait(active and 0.25 or 1.0)
         end
@@ -343,14 +175,6 @@ function Logic.enable()
             task.defer(applyVoidbreakerHitboxBypass)
         end
     end))
-
-    local player = Players.LocalPlayer
-    if player then
-        watchCharacter(player.Character)
-        table.insert(Logic.Connections, player.CharacterAdded:Connect(function(character)
-            task.defer(watchCharacter, character)
-        end))
-    end
 
     return true
 end
@@ -401,7 +225,6 @@ function Logic.disable()
     Logic.LoopToken = nil
     Logic.restoreVoidbreakerHitbox()
     Logic.restoreGuardianHitbox()
-    Logic.RazorbloomDisabled = setmetatable({}, { __mode = "k" })
 end
 
 function Logic.disableForType(entityName)

@@ -1,12 +1,19 @@
 --!nocheck
 
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
 local Logic = {
 	Enabled = false,
 	HookedTarget = nil,
+	HookedScript = nil,
 	OriginalStationary = nil,
+	EnemiesRoot = nil,
+	InstallGeneration = 0,
+	Connections = {},
 }
+
+local INSTALL_RETRY_DELAYS = { 0, 0.05, 0.15, 0.35, 0.75 }
 
 local REQUIRED_CONSTANTS = {
 	PlayerMoveDirection = true,
@@ -61,15 +68,19 @@ local function getFunctionEnvironment(fn)
 	return success and environment or nil
 end
 
-local function isOperatorFunction(fn)
+local function getOperatorScript(fn)
 	local environment = getFunctionEnvironment(fn)
 	local sourceScript = environment and environment.script
 	if typeof(sourceScript) ~= "Instance" or sourceScript.Name ~= "Operator_AI" then
-		return false
+		return nil
 	end
 
 	local parent = sourceScript.Parent
-	return parent ~= nil and parent.Name == "Operator"
+	return parent ~= nil and parent.Name == "Operator" and sourceScript or nil
+end
+
+local function isOperatorFunction(fn)
+	return getOperatorScript(fn) ~= nil
 end
 
 local function getUpvalues(fn)
@@ -149,7 +160,7 @@ local function findStationaryPredicate()
 			local upvalues = getUpvalues(callback)
 			for _, upvalue in pairs(upvalues or {}) do
 				if isStationaryPredicate(upvalue) then
-					return upvalue
+					return upvalue, getOperatorScript(callback)
 				end
 			end
 		end
@@ -173,19 +184,27 @@ local function restoreHook()
 		pcall(hookFunction, Logic.HookedTarget, Logic.OriginalStationary)
 	end
 	Logic.HookedTarget = nil
+	Logic.HookedScript = nil
 	Logic.OriginalStationary = nil
 end
 
 local function installHook()
-	if Logic.HookedTarget and Logic.OriginalStationary then
+	if
+		Logic.HookedTarget
+		and Logic.HookedScript
+		and Logic.HookedScript:IsDescendantOf(Workspace)
+		and Logic.OriginalStationary
+	then
 		return true
 	end
+	restoreHook()
+
 	local hookFunction = getExecutorFunction("hookfunction")
 	if not hookFunction then
 		return false
 	end
 
-	local target = findStationaryPredicate()
+	local target, sourceScript = findStationaryPredicate()
 	if not target then
 		return false
 	end
@@ -204,22 +223,126 @@ local function installHook()
 	end
 
 	Logic.HookedTarget = target
+	Logic.HookedScript = sourceScript
 	Logic.OriginalStationary = original
 	return true
 end
 
+local function disconnect(name)
+	local connection = Logic.Connections[name]
+	if connection then
+		connection:Disconnect()
+		Logic.Connections[name] = nil
+	end
+end
+
+local function isOperatorScript(instance)
+	return instance:IsA("BaseScript")
+		and instance.Name == "Operator_AI"
+		and instance.Parent ~= nil
+		and instance.Parent.Name == "Operator"
+end
+
+local function scheduleInstall()
+	Logic.InstallGeneration += 1
+	local generation = Logic.InstallGeneration
+
+	task.spawn(function()
+		for _, delaySeconds in ipairs(INSTALL_RETRY_DELAYS) do
+			if delaySeconds > 0 then
+				task.wait(delaySeconds)
+			end
+			if not Logic.Enabled or generation ~= Logic.InstallGeneration then
+				return
+			end
+			if installHook() then
+				return
+			end
+		end
+	end)
+end
+
+local function attachEnemiesRoot(enemiesRoot)
+	if Logic.EnemiesRoot == enemiesRoot then
+		return
+	end
+
+	disconnect("OperatorAdded")
+	disconnect("OperatorRemoving")
+	Logic.EnemiesRoot = enemiesRoot
+	Logic.Connections.OperatorAdded = enemiesRoot.DescendantAdded:Connect(function(instance)
+		if isOperatorScript(instance) then
+			scheduleInstall()
+		end
+	end)
+	Logic.Connections.OperatorRemoving = enemiesRoot.DescendantRemoving:Connect(function(instance)
+		if instance == Logic.HookedScript then
+			Logic.InstallGeneration += 1
+			restoreHook()
+		end
+	end)
+
+	local operator = enemiesRoot:FindFirstChild("Operator")
+	local operatorScript = operator and operator:FindFirstChild("Operator_AI", true)
+	if operatorScript and isOperatorScript(operatorScript) then
+		scheduleInstall()
+	end
+end
+
+local function startLifecycle()
+	local enemiesRoot = Workspace:FindFirstChild("Enemies")
+	if enemiesRoot then
+		attachEnemiesRoot(enemiesRoot)
+	else
+		scheduleInstall()
+	end
+
+	Logic.Connections.EnemiesRootAdded = Workspace.ChildAdded:Connect(function(child)
+		if child.Name == "Enemies" then
+			attachEnemiesRoot(child)
+		end
+	end)
+end
+
+local function stopLifecycle()
+	Logic.InstallGeneration += 1
+	disconnect("OperatorAdded")
+	disconnect("OperatorRemoving")
+	disconnect("EnemiesRootAdded")
+	Logic.EnemiesRoot = nil
+end
+
 function Logic.setEnabled(enabled)
-	Logic.Enabled = enabled == true
+	enabled = enabled == true
+	if enabled and Logic.Enabled then
+		return true
+	end
+
+	Logic.Enabled = enabled
 	if not Logic.Enabled then
+		stopLifecycle()
 		restoreHook()
 		return true
 	end
 
-	return installHook()
+	if
+		not getExecutorFunction("hookfunction")
+		or not getExecutorFunction("getconnections")
+		or not getExecutorFunction("getconstants")
+		or not getExecutorFunction("getfenv")
+		or (not getExecutorFunction("getupvalues") and not getExecutorFunction("getupvalue"))
+	then
+		Logic.Enabled = false
+		return false
+	end
+
+	startLifecycle()
+	return true
 end
 
 function Logic.disable()
 	Logic.Enabled = false
+	stopLifecycle()
 	restoreHook()
 
 	local globals = getGlobals()
