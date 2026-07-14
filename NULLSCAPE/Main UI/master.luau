@@ -218,6 +218,8 @@ pcall(function()
 			ChargerTripmineDistanceSlider = 15,
 			ChargerTripmineBatchDistanceSlider = 60,
 			ChargerTripmineJitterSlider = 2,
+			ChargerSteeringAssistToggle = false,
+			ChargerSteeringAssistStrengthSlider = 50,
 			GraceWingsToggle = false,
 			GraceWingsAirControlSlider = 1,
 			AdvancedGravityCoilToggle = false,
