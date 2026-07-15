@@ -151,13 +151,25 @@ local function hasActivePylon()
 	return false
 end
 
+local function getPylonProgress()
+	local completed = tonumber(ReplicatedStorage:GetAttribute("PylonsDone")) or 0
+	local maximum = tonumber(ReplicatedStorage:GetAttribute("MaxPylons")) or 0
+	return completed, maximum
+end
+
 local function shouldWaitForPylons(controller)
 	if not (controller and controller.PylonActivatorEnabled) then
 		return false
 	end
+
+	local completed, maximum = getPylonProgress()
+	if maximum > 0 then
+		return completed < maximum
+	end
 	if controller.PylonActivatorComplete then
 		return false
 	end
+
 	return getLevel() >= PYLON_LEVEL and hasActivePylon()
 end
 
@@ -801,6 +813,20 @@ local function runLoop(controller)
 
 				if isHoldingMedalBeforeGoldenComplete(controller) then
 					transitionTo(controller, "Paused", "Holding medal; waiting for golden gifts")
+					task.wait(0.2)
+					continue
+				end
+
+				if shouldWaitForPylons(controller) then
+					local completed, maximum = getPylonProgress()
+					local detail = if maximum > 0
+						then string.format("Waiting for pylons %d/%d", completed, maximum)
+						else "Waiting for pylons"
+					transitionTo(
+						controller,
+						"Paused",
+						detail
+					)
 					task.wait(0.2)
 					continue
 				end

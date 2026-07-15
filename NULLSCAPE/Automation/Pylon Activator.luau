@@ -19,7 +19,6 @@ local ROOT_OFFSET = Vector3.new(0, 2, 0)
 local enabled = false
 local running = false
 local savedCFrame = nil
-local completedThisRound = 0
 
 local function setStatus(controller, status, detail)
 	if controller then
@@ -66,6 +65,25 @@ end
 
 local function isCompleted(model)
 	return not (model and model:IsDescendantOf(workspace)) or model:GetAttribute("Completed") == true
+end
+
+local function getPylonProgress()
+	local completed = tonumber(ReplicatedStorage:GetAttribute("PylonsDone")) or 0
+	local maximum = tonumber(ReplicatedStorage:GetAttribute("MaxPylons")) or 0
+	return completed, maximum
+end
+
+local function areAllPylonsComplete()
+	local completed, maximum = getPylonProgress()
+	return maximum > 0 and completed >= maximum
+end
+
+local function getPylonProgressDetail(prefix)
+	local completed, maximum = getPylonProgress()
+	if maximum > 0 then
+		return string.format("%s | %d/%d", prefix, completed, maximum)
+	end
+	return prefix
 end
 
 local function getProgressDetail(model)
@@ -136,7 +154,6 @@ local function run(controller)
 			if not isInRound() then
 				controller.PylonActivatorHolding = false
 				controller.PylonActivatorComplete = false
-				completedThisRound = 0
 				restorePosition(controller)
 				setStatus(controller, "WaitingForRound")
 				task.wait(0.5)
@@ -145,6 +162,7 @@ local function run(controller)
 
 			if getLevel() < TARGET_LEVEL then
 				controller.PylonActivatorHolding = false
+				controller.PylonActivatorComplete = false
 				setStatus(controller, "WaitingForLevel", "Level " .. tostring(getLevel()) .. "/" .. tostring(TARGET_LEVEL))
 				task.wait(0.75)
 				continue
@@ -169,9 +187,13 @@ local function run(controller)
 			local candidates = getCandidates(hrp)
 			if #candidates == 0 then
 				controller.PylonActivatorHolding = false
-				restorePosition(controller)
-				controller.PylonActivatorComplete = completedThisRound > 0
-				setStatus(controller, "WaitingForPylons")
+				controller.PylonActivatorComplete = areAllPylonsComplete()
+				if controller.PylonActivatorComplete then
+					restorePosition(controller)
+					setStatus(controller, "Completed", getPylonProgressDetail("All pylons activated"))
+				else
+					setStatus(controller, "WaitingForPylons", getPylonProgressDetail("Waiting for remaining pylons"))
+				end
 				task.wait(0.5)
 				continue
 			end
@@ -204,8 +226,8 @@ local function run(controller)
 
 			controller.PylonActivatorHolding = false
 			if isCompleted(target.Model) then
-				completedThisRound += 1
-				setStatus(controller, "Completed", "Pylon activated")
+				controller.PylonActivatorComplete = areAllPylonsComplete()
+				setStatus(controller, "Completed", getPylonProgressDetail("Pylon activated"))
 			end
 			task.wait(0.2)
 		end
