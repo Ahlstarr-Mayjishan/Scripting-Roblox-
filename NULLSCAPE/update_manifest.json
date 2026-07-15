@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.15.68",
+    "Version":  "2026.07.15.70",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -21,7 +21,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "7c57d17ea5bcc1e8303a8d83c90cc103ff6867d7684d5642a75d568d8d449cd4"
+                      "Sha256":  "8c44c2dc3b9f561951b8dd528530ef18a1273883444c0608d69f5e11d1b671f0"
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/tab.luau",
@@ -944,7 +944,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "98d961014207c22156f42ab3dd03935ba57f458e271838eab52627bcd7bfbd4d"
+                      "Sha256":  "78f8888d72f62daf4d30d8ba12a609bdeb2080bed2c4976efd52ac2a7028363e"
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/Character Actions.luau",

@@ -13,6 +13,7 @@ local Updater = {
 	StateFile = "NULLSCAPE/update_state.json",
 	Destroyed = false,
 	OperationGeneration = 0,
+	FetchToken = nil,
 }
 
 local checking = false
@@ -329,12 +330,17 @@ function Updater:setSilentInstall(value)
 	notify("Runtime Updater", self.SilentInstall and "Silent install enabled" or "Silent install disabled", 4)
 end
 
-function Updater:fetchText(pathOrUrl)
+function Updater:fetchText(pathOrUrl, cacheToken)
 	local url = tostring(pathOrUrl or "")
 	if not string.find(url, "^https?://") then
 		url = self.GithubRawRoot .. url
 	end
 	url = encodePath(url)
+	local token = cacheToken or self.FetchToken
+	if typeof(token) == "string" and token ~= "" then
+		local separator = string.find(url, "?", 1, true) and "&" or "?"
+		url = url .. separator .. "nullscape_fetch=" .. HttpService:UrlEncode(token)
+	end
 	local ok, result = pcall(function()
 		local httpGet = (game :: any).HttpGet
 		return httpGet(game, url)
@@ -381,7 +387,18 @@ function Updater:installFile(fileInfo, changes, backups, operationGeneration)
 		return false, "Hash check unavailable for " .. path
 	end
 	if actualHash ~= string.lower(expectedHash) then
-		return false, "Hash mismatch for " .. path
+		local retryToken = tostring(self.FetchToken or operationGeneration)
+			.. "-retry-"
+			.. HttpService:GenerateGUID(false)
+		local retrySource, retryError = self:fetchText(sourcePath, retryToken)
+		if not retrySource then
+			return false, "Hash retry failed for " .. path .. ": " .. tostring(retryError)
+		end
+		local retryHash = getHash(retrySource)
+		if retryHash ~= string.lower(expectedHash) then
+			return false, "Hash mismatch for " .. path
+		end
+		source = retrySource
 	end
 	if sameContent(path, source) then
 		return true, "unchanged"
@@ -462,6 +479,7 @@ function Updater:checkAndInstall(manual)
 	end
 	checking = true
 	local operationGeneration = self.OperationGeneration
+	self.FetchToken = tostring(os.time()) .. "-" .. HttpService:GenerateGUID(false)
 	local function isCurrent()
 		return not self.Destroyed and self.OperationGeneration == operationGeneration
 	end
@@ -604,6 +622,7 @@ function Updater:checkAndInstall(manual)
 	end)
 
 	checking = false
+	self.FetchToken = nil
 	if not ok then
 		notify("Runtime Updater", "Update failed: " .. tostring(result), 8)
 		return false
