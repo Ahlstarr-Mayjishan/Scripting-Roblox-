@@ -365,44 +365,73 @@ function Updater:fetchManifest()
 	return manifest
 end
 
-function Updater:installFile(fileInfo, changes, backups, operationGeneration)
+function Updater:stageFile(fileInfo, operationGeneration)
 	local path = fileInfo.Path or fileInfo.path
 	if typeof(path) ~= "string" or path == "" then
 		return false, "Missing file path"
 	end
 	local sourcePath = fileInfo.Url or fileInfo.url or path
-	local source, err = self:fetchText(sourcePath)
-	if not source then
-		return false, "Download failed for " .. path .. ": " .. tostring(err)
-	end
-	if self.Destroyed or self.OperationGeneration ~= operationGeneration then
-		return false, "Update cancelled"
-	end
 	local expectedHash = fileInfo.Sha256 or fileInfo.sha256 or fileInfo.Hash or fileInfo.hash
 	if typeof(expectedHash) ~= "string" or expectedHash == "" then
 		return false, "Missing SHA-256 for " .. path
 	end
-	local actualHash = getHash(source)
-	if not actualHash then
-		return false, "Hash check unavailable for " .. path
-	end
-	if actualHash ~= string.lower(expectedHash) then
-		local retryToken = tostring(self.FetchToken or operationGeneration)
-			.. "-retry-"
+	expectedHash = string.lower(expectedHash)
+
+	local source = nil
+	local lastError = nil
+	for attempt = 1, 3 do
+		if self.Destroyed or self.OperationGeneration ~= operationGeneration then
+			return false, "Update cancelled"
+		end
+
+		local fetchToken = tostring(self.FetchToken or operationGeneration)
+			.. "-stage-"
+			.. tostring(attempt)
+			.. "-"
 			.. HttpService:GenerateGUID(false)
-		local retrySource, retryError = self:fetchText(sourcePath, retryToken)
-		if not retrySource then
-			return false, "Hash retry failed for " .. path .. ": " .. tostring(retryError)
+		local candidate, fetchError = self:fetchText(sourcePath, fetchToken)
+		if candidate then
+			local candidateHash = getHash(candidate)
+			if not candidateHash then
+				return false, "Hash check unavailable for " .. path
+			end
+			if candidateHash == expectedHash then
+				source = candidate
+				break
+			end
+			lastError = "hash mismatch"
+		else
+			lastError = tostring(fetchError)
 		end
-		local retryHash = getHash(retrySource)
-		if retryHash ~= string.lower(expectedHash) then
-			return false, "Hash mismatch for " .. path
+
+		if attempt < 3 then
+			task.wait(0.15 * attempt)
 		end
-		source = retrySource
 	end
-	if sameContent(path, source) then
-		return true, "unchanged"
+
+	if not source then
+		return false, "Release source is not ready for " .. path .. ": " .. tostring(lastError)
 	end
+
+	return true, {
+		FileInfo = fileInfo,
+		Path = path,
+		Source = source,
+		ExpectedHash = expectedHash,
+		Changed = not sameContent(path, source),
+	}
+end
+
+function Updater:commitStagedFile(staged, changes, backups, operationGeneration)
+	if self.Destroyed or self.OperationGeneration ~= operationGeneration then
+		return false, "Update cancelled"
+	end
+	if staged.Changed ~= true then
+		return true
+	end
+
+	local path = staged.Path
+	local source = staged.Source
 
 	local backup = nil
 	if isfile and readfile and isfile(path) then
@@ -424,7 +453,14 @@ function Updater:installFile(fileInfo, changes, backups, operationGeneration)
 		return false, "Write failed for " .. path .. ": " .. tostring(writeErr)
 	end
 
+	local readOk, installedSource = pcall(readfile, path)
+	local installedHash = readOk and getHash(installedSource) or nil
+	if installedHash ~= staged.ExpectedHash then
+		return false, "Post-write verification failed for " .. path
+	end
+
 	table.insert(changes.Files, path)
+	local fileInfo = staged.FileInfo
 	for _, menuName in ipairs(normalizeList(fileInfo.Menu or fileInfo.menu or fileInfo.MenuChanges or fileInfo.menuChanges)) do
 		if not table.find(changes.Menus, menuName) then
 			table.insert(changes.Menus, menuName)
@@ -563,28 +599,44 @@ function Updater:checkAndInstall(manual)
 			Menus = changedMenus,
 		}
 		local backups = {}
+		local stagedFiles = {}
 
 		for _, fileInfo in ipairs(pendingFiles) do
 			if not isCurrent() then
-				self:rollback(backups)
 				return false
 			end
 			if typeof(fileInfo) == "table" then
-				local installed, installState = self:installFile(fileInfo, changes, backups, operationGeneration)
-				if not installed then
-					self:rollback(backups)
+				local staged, stageResult = self:stageFile(fileInfo, operationGeneration)
+				if not staged then
 					if isCurrent() then
-						notify("Runtime Updater", tostring(installState) .. " | rollback done", 8)
+						notify("Runtime Updater", tostring(stageResult) .. " | local files unchanged", 8)
 					end
 					return false
 				end
+				table.insert(stagedFiles, stageResult)
 			end
 		end
 
 		if not isCurrent() then
-			self:rollback(backups)
 			return false
 		end
+
+		for _, stagedFile in ipairs(stagedFiles) do
+			local installed, installError = self:commitStagedFile(
+				stagedFile,
+				changes,
+				backups,
+				operationGeneration
+			)
+			if not installed then
+				self:rollback(backups)
+				if isCurrent() then
+					notify("Runtime Updater", tostring(installError) .. " | rollback done", 8)
+				end
+				return false
+			end
+		end
+
 		if not writeJson(self.ManifestPath, manifest) then
 			self:rollback(backups)
 			notify("Runtime Updater", "Unable to store release manifest | rollback done", 8)
@@ -606,6 +658,11 @@ function Updater:checkAndInstall(manual)
 		self.State.LastUpdatedAt = os.time()
 		self.LocalIntegrityVerifiedVersion = changes.Version
 		writeJson(self.StateFile, self.State)
+		if self.Client and typeof(self.Client.InvalidateModule) == "function" then
+			for _, path in ipairs(changes.Files) do
+				self.Client:InvalidateModule(path)
+			end
+		end
 
 		local menuText = #changes.Menus > 0 and joinShort(changes.Menus, 6) or "Code modules"
 		notify(

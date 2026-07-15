@@ -9,50 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
 local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
-local SpecialImmunity = getgenv().loadModule("NULLSCAPE/Entities/SpecialImmunity.luau")
-local Executor = {
-	enableImmunity = function(gc, enemy)
-		if TouchInterest then
-			TouchInterest.enableImmunity(gc, enemy)
-		end
-	end,
-	disableImmunityForType = function(gc, entityName)
-		if TouchInterest then
-			TouchInterest.disableImmunityForType(gc, entityName)
-		end
-		if SpecialImmunity then
-			SpecialImmunity.disableForType(entityName)
-		end
-	end,
-	restoreAll = function(gc)
-		if TouchInterest then
-			TouchInterest.restoreAll(gc)
-		end
-		if SpecialImmunity then
-			SpecialImmunity.disable()
-		end
-	end,
-	reconcile = function(gc)
-		if TouchInterest and typeof(TouchInterest.reconcile) == "function" then
-			TouchInterest.reconcile(gc)
-		end
-	end,
-	enableSpecialImmunity = function()
-		if SpecialImmunity then
-			return SpecialImmunity.enable()
-		end
-	end,
-	disableSpecialImmunityForType = function(entityName)
-		if SpecialImmunity then
-			SpecialImmunity.disableForType(entityName)
-		end
-	end,
-	disableSpecialImmunity = function()
-		if SpecialImmunity then
-			SpecialImmunity.disable()
-		end
-	end,
-}
+local Executor = getgenv().loadModule("NULLSCAPE/Entities/executor.luau")
 local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
 local RemoteBlocking = getgenv().loadModule("NULLSCAPE/Entities/RemoteBlocking.luau")
 local CelestialImmunity = getgenv().loadModule("NULLSCAPE/Entities/Celestial Immunity.luau")
@@ -61,6 +18,7 @@ local CadenceStatus = getgenv().loadModule("NULLSCAPE/Entities/Cadence Status.lu
 local OperatorAutoDisable = getgenv().loadModule("NULLSCAPE/Entities/Operator Auto Disable.luau")
 local RazorbloomAutoDisable = getgenv().loadModule("NULLSCAPE/Entities/Razorbloom Auto Disable.luau")
 local BellImmunity = getgenv().loadModule("NULLSCAPE/Entities/Bell Immunity.luau")
+local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 local KolonaAutoQTE = nil
 local SpringerAutoJump = nil
@@ -156,6 +114,7 @@ local Controller = {
 	ShieldBaitChance = 0,
 	LastShieldBaitAt = 0,
 	Destroyed = false,
+	StatusImmunity = StatusImmunity,
 
 	EnemiesFolder = nil,
 	PermanentConnections = {},
@@ -183,8 +142,7 @@ end
 
 local inLobby = not isInMatch()
 local function getStatusImmunity()
-	local globals = getgenv()._NULLSCAPE_Globals
-	return globals and globals.NullscapeStatusImmunity or nil
+	return StatusImmunity
 end
 
 Controller.inLobby = inLobby
@@ -331,9 +289,9 @@ end
 
 function Controller:SetFleshConcussionImmune(value)
 	self.FleshConcussionImmune = value == true
-	local StatusImmunity = getStatusImmunity()
-	if StatusImmunity and typeof(StatusImmunity.RefreshActiveEffects) == "function" then
-		StatusImmunity.RefreshActiveEffects()
+	local activeStatusImmunity = getStatusImmunity()
+	if activeStatusImmunity and typeof(activeStatusImmunity.RefreshActiveEffects) == "function" then
+		activeStatusImmunity.RefreshActiveEffects()
 	end
 end
 
@@ -445,9 +403,9 @@ function Controller:CleanUp()
 	end
 
 	if finalCleanup then
-		local StatusImmunity = getStatusImmunity()
-		if StatusImmunity and typeof(StatusImmunity.disable) == "function" then
-			pcall(StatusImmunity.disable)
+		local activeStatusImmunity = getStatusImmunity()
+		if activeStatusImmunity and typeof(activeStatusImmunity.disable) == "function" then
+			pcall(activeStatusImmunity.disable)
 		end
 		pcall(restoreHooks)
 		if globals and globals.NullscapeEntitiesGC == GC then
@@ -1396,7 +1354,6 @@ end
 
 local function initializeStatusEffectHook()
 	local globals = getgenv()._NULLSCAPE_Globals
-	local StatusImmunity = getStatusImmunity() or getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
 	if StatusImmunity then
 		StatusImmunity.initialize()
 	end

@@ -91,17 +91,11 @@ pcall(function()
 		local defaultSettings = {
 			RadarEnabledToggle = false,
 			RadarFeaturesDropdown = { "Gift", "Tripmine", "Cadance", "Altar", "Player", "Enemy" },
-			ESPSelectionDropdown = {},
-			ESPStyleDropdown = "Highlight",
-			AltarFilterDropdown = "All",
 			ImmunityBabyToggle = false,
-			ImmunityBellToggle = false,
-			BellHackDropdown = {},
 			BellHackDropdownV2 = {},
 			FleshHackDropdown = {},
 			ImmunityMartToggle = false,
 			ImmunityTelefraggerToggle = false,
-			ImmunityICBMToggle = false,
 			ICBMHackDropdown = {},
 			ImmunityGuardianToggle = false,
 			OperatorHackDropdown = {},
@@ -119,7 +113,8 @@ pcall(function()
 			ImmunityVoidbreakerToggle = false,
 			RazorbloomHackDropdown = {},
 			ImmunityVoidImplosionToggle = false,
-			ImmunityCadenceToggle = false,
+			CadenceOptionsDropdown = {},
+			CadenceInstrumentRangeSlider = 0,
 			ImmunityCatalystToggle = false,
 			ImmunityCelestialToggle = false,
 			ImmunityScrapmawToggle = false,
@@ -150,6 +145,7 @@ pcall(function()
 			GrappleAssistFailFeedbackToggle = true,
 			GrappleAssistSafetyToggle = true,
 			GrappleAssistSafetyRejectPenaltySlider = 74,
+			GrappleBrakeProfileSpeedSlider = 300,
 			GrappleAssistAnchorBiasToggle = true,
 			GrappleAssistSpecialPriorityToggle = true,
 			GrappleAnchorTargetingStyleDropdown = "Auto",
@@ -158,13 +154,16 @@ pcall(function()
 			GrappleAnchorPriorityTriaOrbSlider = 620,
 			GrappleAnchorPriorityBellSlider = 550,
 			GrappleAssistTerrainPrioritySlider = 140,
+			GrappleIntentHighSpeedSlider = 120,
+			GrappleIntentRailRangeSlider = 14,
 			GrappleAssistSecondaryCastToggle = false,
 			GrappleAssistSecondaryCastKeybind = "Q",
 			GrappleVoidProtectionToggle = false,
 			GrappleVoidProtectionHeightSlider = 24,
 			GrappleVoidProtectionFallSpeedSlider = 85,
-			GrappleTechniqueDropdown = {},
+			GrappleVoidRescueToggle = false,
 			GrappleReelSaverKeybind = "E",
+			GrappleReelSaverToggle = false,
 			GrappleReelSaverSideRangeSlider = 26,
 			GrappleReelSaverMinHeightSlider = 5,
 			GrappleReelSaverMaxHeightSlider = 14,
@@ -176,9 +175,16 @@ pcall(function()
 			GrappleVoidRescueReelHoldSlider = 0.12,
 			GrappleDodgeThreatRangeSlider = 42,
 			GrappleDodgeDangerRadiusSlider = 10,
+			GrappleDodgeHorizonSlider = 0.45,
 			GrappleDodgeRangeSlider = 92,
 			GrappleDodgeStrengthSlider = 1,
+			GrappleDodgeRailBonusSlider = 34,
+			GrappleDodgeToggle = false,
+			GrappleDodgeModeDropdown = "Auto",
+			GrappleThreatWhitelistDropdown = { "Bell" },
+			GrappleThreatBlacklistDropdown = {},
 			GrappleSharkEscapeToggle = false,
+			GrappleSharkEscapeModeDropdown = "Auto",
 			GrappleSharkEscapeRangeSlider = 26,
 			GrappleSharkEscapeReelHoldSlider = 0.12,
 			RailAssistSuiteToggle = false,
@@ -197,6 +203,13 @@ pcall(function()
 			GrappleMaxRangeSlider = 90,
 			GrappleCatapultMultiplierSlider = 1,
 			GrappleEasierVoidCastToggle = false,
+			GrappleNoReelCooldownToggle = false,
+			GrappleSharkTailNoCooldownToggle = false,
+			GrappleInstantGroundCastToggle = false,
+			GrappleWallGlideToggle = false,
+			GrappleInstantMaxPullToggle = false,
+			GrappleMomentumTransferSlider = 0,
+			GrappleSharkTailWindowSlider = 0.25,
 			MatrixTetrahedronToggle = false,
 			MomentumReductionSlider = 100,
 			SpeedBuffSelectionsDropdown = {},
@@ -208,7 +221,7 @@ pcall(function()
 			AutoCollectRangeSlider = 20,
 			AutoCollectInstrumentRangeSlider = 0,
 			CollectMedalKeybind = "V",
-			CollectMedalKeybindKeybind = "V",
+			MedalESPToggle = false,
 			TripmineBarrierModeDropdown = "Off",
 			TripmineBarrierCollectDelaySlider = 0.08,
 			AutoCollectModeDropdown = "Legit",
@@ -237,14 +250,22 @@ pcall(function()
 			InfiniteJumpToggle = false,
 			AutomationGiftFarmToggle = false,
 			AutomationCollectMedalToggle = false,
+			AutomationAutoChooseThingsToggle = false,
+			AutomationGiftFarmModeDropdown = "Normal (teleport)",
 			AutomationGiftFarmRangeSlider = 60,
 			AutomationGiftFarmReturnBeaconToggle = true,
+			AutomationAutoChooseThingSelectionsDropdown = {},
 			AutomationAltarSelectionsDropdown = {},
 			AutomationPylonActivatorToggle = false,
 			AutomationPylonActivatorReturnToggle = true,
 			RuntimeUpdaterEnabledToggle = false,
 			RuntimeUpdaterSilentToggle = false,
 			PerformanceCullingDropdown = {},
+			UltimateFPSBoosterToggle = false,
+			UnlockResetButtonToggle = false,
+			PondererHackDropdown = {},
+			ImmunityRealityBreakToggle = false,
+			ImmunitySeamineToggle = false,
 		}
 
 		local currentSettings = {}
@@ -274,15 +295,11 @@ pcall(function()
 			currentSettings.BellHackDropdownV2 = { "Immunity" }
 			updated = true
 		end
-		if type(currentSettings.TelefraggerHackDropdown) == "table" then
-			local immunitySelected = false
-			for key, value in pairs(currentSettings.TelefraggerHackDropdown) do
-				if value == "Immunity" or (key == "Immunity" and value == true) then
-					immunitySelected = true
-					break
-				end
-			end
-			currentSettings.ImmunityTelefraggerToggle = immunitySelected
+		if currentSettings.CadenceOptionsDropdown == nil and currentSettings.ImmunityCadenceToggle == true then
+			currentSettings.CadenceOptionsDropdown = { "Immunity" }
+			updated = true
+		end
+		if currentSettings.TelefraggerHackDropdown ~= nil then
 			currentSettings.TelefraggerHackDropdown = nil
 			updated = true
 		end
@@ -321,6 +338,22 @@ pcall(function()
 		if currentSettings.ImmunityRazorbloomToggle ~= nil then
 			currentSettings.ImmunityRazorbloomToggle = nil
 			updated = true
+		end
+		for _, legacyKey in ipairs({
+			"AltarFilterDropdown",
+			"BellHackDropdown",
+			"CollectMedalKeybindKeybind",
+			"ESPSelectionDropdown",
+			"ESPStyleDropdown",
+			"GrappleTechniqueDropdown",
+			"ImmunityBellToggle",
+			"ImmunityCadenceToggle",
+			"ImmunityICBMToggle",
+		}) do
+			if currentSettings[legacyKey] ~= nil then
+				currentSettings[legacyKey] = nil
+				updated = true
+			end
 		end
 		if type(currentSettings.PerformanceCullingDropdown) ~= "table" then
 			currentSettings.PerformanceCullingDropdown = currentSettings.FPSBoostToggle == true
@@ -875,6 +908,7 @@ function Client:InvalidateModule(path)
 	end
 	moduleCache[path] = nil
 	moduleLoading[path] = nil
+	remoteSourceCache[path] = nil
 	return true
 end
 
@@ -890,6 +924,11 @@ function Client:InvalidateModulePrefix(prefix)
 	for path in pairs(moduleLoading) do
 		if typeof(path) == "string" and string.sub(path, 1, #prefix) == prefix then
 			moduleLoading[path] = nil
+		end
+	end
+	for path in pairs(remoteSourceCache) do
+		if typeof(path) == "string" and string.sub(path, 1, #prefix) == prefix then
+			remoteSourceCache[path] = nil
 		end
 	end
 	return true

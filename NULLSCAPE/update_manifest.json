@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.15.70",
+    "Version":  "2026.07.15.72",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,14 +14,14 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "a23976ed50475bc0240b4a5be1950b3b6712186e0b08d4f9e2be7822d8d2008a"
+                      "Sha256":  "7a67e8d86d6ab08b6608656dcac9a86ec02cb4ff0b68885e36e31a1971064e1c"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "8c44c2dc3b9f561951b8dd528530ef18a1273883444c0608d69f5e11d1b671f0"
+                      "Sha256":  "ebcdef92802f6033339e623f4416ba548e849f7bd89f2cf206294dcdc3c94a0d"
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/tab.luau",
@@ -147,7 +147,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "6b04827c37229657e998fef209de21366ca56ed598023fa512f5620676802910"
+                      "Sha256":  "b9d778d90014ff82d7556a052dc1fc5ba56ea96996eabd592e56a2ffb846e181"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/RemoteBlocking.luau",
@@ -168,7 +168,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "80798df3f0a95fdc68d0028415a3090b9ccffb1d6068a40d4ac99ee35df8dff7"
+                      "Sha256":  "479b2dcb69c306ad9293c155fd4ca8944671ddc6c6becbfaae6a6a466f50f85a"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/controller.luau",
@@ -294,7 +294,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "ac1bdcc6db4f9c819c281aadb7ef5e0cea42f5813abf0ecd47f0b736d9840a32"
+                      "Sha256":  "312e870a9c383b2a2693bf8b6120c4ecd13ff2bfb51a2bc145d98b7666029710"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Adaptive Anchor Style.luau",
@@ -707,7 +707,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "4e8f15bc596634d545c94f04f06c002d2dcf7ebc0ebdc34b744489f3bfbe66fa"
+                      "Sha256":  "7b2ea7fe02a904f4542a85364c04e1a9dec72fc03d4332a90a6456846b3c78bf"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Altar.luau",
