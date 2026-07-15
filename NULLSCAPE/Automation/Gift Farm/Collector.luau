@@ -34,6 +34,7 @@ local comboCount = 0
 local lastCollectTick = 0
 local adaptiveSuccessRate = 1
 local adaptiveValidationWait = BASE_VALIDATION_WAIT
+local manualCollectDepth = 0
 
 local function collectGift(gift, collectedEvent)
 	local now = tick()
@@ -43,9 +44,11 @@ local function collectGift(gift, collectedEvent)
 	comboCount += 1
 	lastCollectTick = now
 
+	manualCollectDepth += 1
 	local success = pcall(function()
 		gift:Collect(false, true, comboCount)
 	end)
+	manualCollectDepth -= 1
 	if not success then
 		return false
 	end
@@ -139,7 +142,7 @@ local function withNativePickupSuppressed(callback)
 		local original = typeof(class) == "table" and rawget(class, "Collect") or nil
 		if typeof(original) == "function" then
 			local wrapper = function(gift, alternate, clientCollect, ...)
-				if clientCollect == true then
+				if clientCollect == true and manualCollectDepth <= 0 then
 					return
 				end
 				return original(gift, alternate, clientCollect, ...)
@@ -381,12 +384,10 @@ local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, c
 
 		clearVelocity(hrp)
 		if (hrp.Position - standingPosition).Magnitude > PRECISION_ARRIVAL_TOLERANCE then
-			withNativePickupSuppressed(function()
-				waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
-				if not isAborted(options, lease, currentSessionToken) then
-					waitForServerPosition()
-				end
-			end)
+			waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
+			if not isAborted(options, lease, currentSessionToken) then
+				waitForServerPosition()
+			end
 		end
 
 		local currentPos = hrp.Position
@@ -443,7 +444,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 		CleanupPulses = 0,
 	}
 
-	local ok, err = pcall(function()
+	local ok, err = pcall(withNativePickupSuppressed, function()
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
@@ -455,31 +456,27 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 
 		hrp.Anchored = false
 		lease:placeFoothold(standingPosition)
-		local moved = false
-		local arrived = false
-		withNativePickupSuppressed(function()
-			moved = jumpToWaypoint(hrp, standingPosition, lease)
-			if not moved or isAborted(options, lease, currentSessionToken) then
-				return
-			end
-			clearVelocity(hrp)
-			arrived = waitForArrival(
-				hrp,
-				standingPosition,
-				tailMode and "tail" or precisionMode,
-				lease,
-				currentSessionToken,
-				options
-			)
-			if not isAborted(options, lease, currentSessionToken)
-				and (arrived or hasCollectableNearby(cluster, hrp.Position, clientCollectRange))
-			then
-				waitForServerPosition()
-			end
-		end)
+		local moved = jumpToWaypoint(hrp, standingPosition, lease)
 		if not moved then
 			result.Rejected = #cluster
 			return
+		end
+		if isAborted(options, lease, currentSessionToken) then
+			return
+		end
+		clearVelocity(hrp)
+		local arrived = waitForArrival(
+			hrp,
+			standingPosition,
+			tailMode and "tail" or precisionMode,
+			lease,
+			currentSessionToken,
+			options
+		)
+		if not isAborted(options, lease, currentSessionToken)
+			and (arrived or hasCollectableNearby(cluster, hrp.Position, clientCollectRange))
+		then
+			waitForServerPosition()
 		end
 		if isAborted(options, lease, currentSessionToken) then
 			return
@@ -534,12 +531,10 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			end
 
 			comboCount = 0
-			withNativePickupSuppressed(function()
-				waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
-				if not isAborted(options, lease, currentSessionToken) then
-					waitForServerPosition()
-				end
-			end)
+			waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
+			if not isAborted(options, lease, currentSessionToken) then
+				waitForServerPosition()
+			end
 			if isAborted(options, lease, currentSessionToken) then
 				return
 			end

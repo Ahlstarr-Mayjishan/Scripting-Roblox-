@@ -8,7 +8,7 @@ local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.lua
 
 local Altar = {}
 
-local POLICY_ORDER = { "Purgatory", "Chance", "Protection", "Passage", "Purification", "Chaos" }
+local POLICY_ORDER = { "Passage", "Purgatory", "Chance", "Protection", "Purification", "Chaos" }
 local POLICY_PRIORITY = {}
 local PRIMARY_ECHO_SOURCES = {
 	Purgatory = true,
@@ -319,10 +319,10 @@ local function findBestTarget(controller, hrp)
 		return nil, true
 	end
 
-	if isValidTarget(currentTarget, selected) and (currentTarget.Name ~= "Echo" or rememberedEchoSource ~= nil) then
-		return currentTarget
-	end
-
+	local previousTarget = if isValidTarget(currentTarget, selected)
+		and (currentTarget.Name ~= "Echo" or rememberedEchoSource ~= nil)
+		then currentTarget
+		else nil
 	currentTarget = nil
 	local primaryBest = nil
 	local echoBest = nil
@@ -376,12 +376,20 @@ local function findBestTarget(controller, hrp)
 
 	local shouldRepeatRemembered = rememberedEchoSource ~= nil and echoBest ~= nil
 
-	if shouldRepeatRemembered then
+	if passageBest then
+		currentTarget = passageBest
+	elseif previousTarget then
+		currentTarget = previousTarget
+	elseif shouldRepeatRemembered then
 		currentTarget = echoBest
 	else
-		currentTarget = primaryBest or passageBest or deferredBest
+		currentTarget = primaryBest or deferredBest
 	end
-	currentTargetStartedAt = currentTarget and os.clock() or 0
+	if not currentTarget then
+		currentTargetStartedAt = 0
+	elseif not previousTarget or previousTarget.Root ~= currentTarget.Root then
+		currentTargetStartedAt = os.clock()
+	end
 	return currentTarget
 end
 

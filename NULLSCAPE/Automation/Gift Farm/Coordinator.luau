@@ -185,6 +185,9 @@ local function tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActiv
 	if not (pendingGoldenReturnSince and scanInfo and tonumber(scanInfo.RawGolden) == 0) then
 		return false
 	end
+	if (tonumber(scanInfo.RawNormal) or 0) > 0 then
+		return false
+	end
 
 	local pendingDuration = os.clock() - pendingGoldenReturnSince
 	local rawGoldenExhausted = (tonumber(scanInfo.PeakRawGolden) or 0) > 0
@@ -977,10 +980,12 @@ local function runLoop(controller)
 				end
 			end
 
-			if routeCompleted and wasGoldenRoute then
+			if routeCompleted and wasGoldenRoute and not wasPassageRoute then
 				pendingGoldenReturnSince = os.clock()
 				transitionTo(controller, "Scanning", "Verifying golden complete")
 				verifyGoldenRouteComplete(controller, hrp, isSessionActive)
+			elseif routeCompleted and wasPassageRoute then
+				transitionTo(controller, "Scanning", "Passage gifts cleared; resuming route")
 			end
 
 			task.wait(0.04)

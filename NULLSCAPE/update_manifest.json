@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.15.65",
+    "Version":  "2026.07.15.67",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "ecf12fc4ce1fac78638ee7beb96ea6178176303a975cc1dd59fe2f35ab7636c7"
+                      "Sha256":  "2414089de9d85182d94fcd3b7d58d51f5a07c2ab77b3ea2137cb239075a896f0"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/MovementLease.luau",
@@ -82,7 +82,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "0022261e8c616c401dc46649ae8b417b21f0eb26fca74f831682b61fde546b25"
+                      "Sha256":  "f0bbcb927443da71f5d86bf0deba0161452253c02b8e1dc88c6a575cf4b743b2"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Beacon.luau",
@@ -714,7 +714,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "38bb68ca4acd6271829bac450d31d08985cc75efb7a5834661bd8114f5318afb"
+                      "Sha256":  "1f373defb384d8d66e6eda9834ff85f1af9592a17c1ad5f15f0783db2e0c7648"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Cluster Planner.luau",
@@ -742,7 +742,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "ad8b4cccfd4e91d543addab23164f65ebf3bd318d1af45855babf7936c715b66"
+                      "Sha256":  "a4e3db69ff11da53245e2f4d96b7a97afcbc9af526563994168a367496e16b15"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Medal.luau",
