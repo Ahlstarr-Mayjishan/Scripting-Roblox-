@@ -1,28 +1,135 @@
 --!nocheck
--- [[
---  NULLSCAPE - Pipelined Collector Submodule
---  Runs a route through the shared, server-validated collector.
--- ]]
+--[[
+	NULLSCAPE - Pipelined Network Collector
+	Overlaps native ACK latency with movement while preserving precision barriers.
+]]
 
-local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 local Collector = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Collector.luau")
+local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
+local NetworkDispatch = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Pipelined Collector/NetworkDispatch.luau")
 
 local PipelinedCollector = {}
+
+local MIN_WINDOW = 1
+local INITIAL_WINDOW = 2
+local MAX_WINDOW = 4
+local CLEAN_TICKETS_TO_GROW = 3
+local MIN_ACK_TIMEOUT = 0.18
+local MAX_ACK_TIMEOUT = 0.7
+
 local pipelineToken = 0
+local adaptiveWindow = INITIAL_WINDOW
+local cleanTickets = 0
+local latencyEstimate = 0.12
 
 local function isAborted(options)
 	return options and typeof(options.AbortCheck) == "function" and options.AbortCheck() == true
 end
 
-function PipelinedCollector.cancelPending()
+local function getAckTimeout()
+	local ping = NetworkDispatch.getPingSeconds() or 0.08
+	return math.clamp(math.max(latencyEstimate * 1.5, ping * 2.8 + 0.08), MIN_ACK_TIMEOUT, MAX_ACK_TIMEOUT)
+end
+
+local function isPrecisionBarrier(step)
+	local info = step and step.Info
+	local score = info and info.Score
+	if info and info.TailCleanup == true then
+		return true, "tail"
+	end
+	if score and (tonumber(score.CollapseCount) or 0) > 0 then
+		return true, "collapse"
+	end
+	for _, item in ipairs(step and step.Cluster or {}) do
+		local gift = item.rawObj
+		if item.passage == true or (gift and gift.Type == "PassageGift") then
+			return true, "passage"
+		end
+		if item.golden == true or (gift and gift.Golden == true) then
+			return true, "golden"
+		end
+	end
+	return false, nil
+end
+
+local function updateController(controller, inFlight, stats)
+	if not controller then
+		return
+	end
+	controller.GiftFarmPipelineWindow = adaptiveWindow
+	controller.GiftFarmPipelineInFlight = inFlight
+	controller.GiftFarmPipelineDispatched = stats.Attempted
+	controller.GiftFarmPipelineAccepted = stats.Accepted
+	controller.GiftFarmPipelineUnresolved = stats.Unresolved
+	controller.GiftFarmPipelineTransientRejects = stats.TransientRejected
+	controller.GiftFarmPipelineRejected = stats.Failed
+	controller.GiftFarmPipelineRetries = stats.Retried
+	controller.GiftFarmPipelineAckLatency = latencyEstimate
+end
+
+local function adaptFromSettlement(result)
+	local attempted = math.max(0, tonumber(result and result.Attempted) or 0)
+	local rejected = math.clamp(tonumber(result and result.Rejected) or 0, 0, attempted)
+	local unresolved = math.clamp(tonumber(result and result.Unresolved) or 0, 0, attempted)
+	local latency = tonumber(result and result.Latency)
+	if latency and latency > 0 then
+		latencyEstimate = latencyEstimate * 0.75 + latency * 0.25
+	end
+	if attempted <= 0 then
+		return
+	end
+	if rejected > 0 then
+		cleanTickets = 0
+		adaptiveWindow = math.max(MIN_WINDOW, math.floor(adaptiveWindow * 0.5))
+		return
+	end
+	if unresolved > 0 then
+		cleanTickets = 0
+		adaptiveWindow = math.max(MIN_WINDOW, adaptiveWindow - 1)
+		return
+	end
+	cleanTickets += 1
+	if cleanTickets >= CLEAN_TICKETS_TO_GROW then
+		cleanTickets = 0
+		adaptiveWindow = math.min(MAX_WINDOW, adaptiveWindow + 1)
+	end
+end
+
+local function mergeCollectorResult(stats, result)
+	if not result then
+		return
+	end
+	stats.Attempted += tonumber(result.Attempted) or 0
+	stats.Accepted += tonumber(result.Accepted) or 0
+	stats.Failed += tonumber(result.Rejected) or 0
+end
+
+function PipelinedCollector.cancelPending(controller)
 	pipelineToken += 1
+	NetworkDispatch.stopTracking()
+	if controller then
+		controller.GiftFarmPipelineInFlight = 0
+	end
 end
 
-function PipelinedCollector.resetAdaptive()
-	-- Collector owns the shared adaptive network timing for both farm modes.
+function PipelinedCollector.resetAdaptive(controller)
+	adaptiveWindow = INITIAL_WINDOW
+	cleanTickets = 0
+	latencyEstimate = 0.12
+	if controller then
+		controller.GiftFarmPipelineWindow = adaptiveWindow
+		controller.GiftFarmPipelineInFlight = 0
+		controller.GiftFarmPipelineDispatched = 0
+		controller.GiftFarmPipelineAccepted = 0
+		controller.GiftFarmPipelineUnresolved = 0
+		controller.GiftFarmPipelineTransientRejects = 0
+		controller.GiftFarmPipelineRejected = 0
+		controller.GiftFarmPipelineRetries = 0
+		controller.GiftFarmPipelineAckLatency = latencyEstimate
+	end
 end
 
-function PipelinedCollector.collectRoute(_controller, hrp, route, range, options, lease, _currentSessionToken)
+function PipelinedCollector.collectRoute(controller, hrp, route, range, options, lease, _currentSessionToken)
 	if not (hrp and hrp.Parent and route and route[1]) then
 		return false
 	end
@@ -30,59 +137,149 @@ function PipelinedCollector.collectRoute(_controller, hrp, route, range, options
 	options = options or {}
 	pipelineToken += 1
 	local routeToken = pipelineToken
+	local inFlight = {}
+	local retryQueue = {}
 	local stats = {
 		Attempted = 0,
 		Accepted = 0,
 		Failed = 0,
+		Unresolved = 0,
+		TransientRejected = 0,
+		Retried = 0,
+		Barriers = 0,
 	}
-	
+
 	local function shouldAbort()
-		return routeToken ~= pipelineToken
-			or not lease:isValid()
-			or Context.getRootPart() ~= hrp
-			or isAborted(options)
+		return routeToken ~= pipelineToken or not lease:isValid() or Context.getRootPart() ~= hrp or isAborted(options)
 	end
 
-	local ok, err = pcall(function()
+	local function settleOldest()
+		local ticket = table.remove(inFlight, 1)
+		if not ticket then
+			return true
+		end
+		local result = NetworkDispatch.settle(ticket, getAckTimeout(), shouldAbort)
+		if not result then
+			return false
+		end
+		stats.Attempted += tonumber(result.Attempted) or 0
+		stats.Accepted += tonumber(result.Accepted) or 0
+		stats.Unresolved += tonumber(result.Unresolved) or 0
+		stats.TransientRejected += tonumber(result.Rejected) or 0
+		if result.RejectedItems and #result.RejectedItems > 0 then
+			retryQueue[#retryQueue + 1] = {
+				Items = result.RejectedItems,
+				Ticket = ticket,
+			}
+		end
+		adaptFromSettlement(result)
+		if lease and typeof(lease.reportCollectResult) == "function" and result.Attempted > 0 then
+			lease:reportCollectResult(result.Attempted, result.Rejected)
+		end
+		updateController(controller, #inFlight, stats)
+		return true
+	end
+
+	local function drainPipeline()
+		while #inFlight > 0 do
+			if not settleOldest() then
+				return false
+			end
+		end
+		return true
+	end
+
+	local function collectBarrier(step, reason)
+		if not drainPipeline() then
+			return false
+		end
+		NetworkDispatch.stopTracking()
+		local info = step.Info
+		local tailMode = reason == "tail" or reason == "passage"
+		local result = Collector.collectCluster(controller, hrp, step.Cluster, range, {
+			SafeRange = info and info.SafeRange,
+			TargetPosition = info and info.TargetPosition,
+			PrecisionMode = true,
+			TailMode = tailMode,
+			NormalPacingBatchSize = options.NormalPacingBatchSize,
+			AbortCheck = shouldAbort,
+		}, lease, _currentSessionToken)
+		mergeCollectorResult(stats, result)
+		stats.Barriers += 1
+		if shouldAbort() then
+			return false
+		end
+		return NetworkDispatch.beginTracking()
+	end
+
+	local ok, err = xpcall(function()
+		if not NetworkDispatch.beginTracking() then
+			error("native gift tracking unavailable")
+		end
 		for _, step in ipairs(route) do
 			if shouldAbort() then
 				return
 			end
-
 			local cluster = step.Cluster or {}
 			if #cluster == 0 then
 				continue
 			end
 
-			local planInfo = step.Info
-			local tailMode = planInfo and planInfo.TailCleanup == true
-			local result = Collector.collectCluster(_controller, hrp, cluster, range, {
-				SafeRange = planInfo and planInfo.SafeRange,
-				TargetPosition = planInfo and planInfo.TargetPosition,
-				PrecisionMode = tailMode,
-				TailMode = tailMode,
-				NormalPacingBatchSize = options.NormalPacingBatchSize,
-				AbortCheck = shouldAbort,
-			}, lease, _currentSessionToken)
-			if result then
-				stats.Attempted += tonumber(result.Attempted) or 0
-				stats.Accepted += tonumber(result.Accepted) or 0
-				stats.Failed += tonumber(result.Rejected) or 0
+			local barrier, reason = isPrecisionBarrier(step)
+			if barrier then
+				if not collectBarrier(step, reason) then
+					return
+				end
+			else
+				while #inFlight >= adaptiveWindow do
+					if shouldAbort() or not settleOldest() then
+						return
+					end
+				end
+				local info = step.Info
+				local ticket = NetworkDispatch.dispatchCluster(hrp, cluster, range, {
+					SafeRange = info and info.SafeRange,
+					TargetPosition = info and info.TargetPosition,
+					PacingBatchSize = options.NormalPacingBatchSize,
+					AbortCheck = shouldAbort,
+				}, lease)
+				if ticket and ticket.Attempted > 0 then
+					inFlight[#inFlight + 1] = ticket
+				end
+				updateController(controller, #inFlight, stats)
 			end
+		end
+
+		if not drainPipeline() or shouldAbort() then
+			return
+		end
+		NetworkDispatch.stopTracking()
+
+		for _, retry in ipairs(retryQueue) do
 			if shouldAbort() then
 				return
 			end
+			local ticket = retry.Ticket
+			local result = Collector.collectCluster(controller, hrp, retry.Items, range, {
+				SafeRange = ticket.SafeRange,
+				TargetPosition = ticket.TargetPosition,
+				PrecisionMode = true,
+				TailMode = false,
+				AbortCheck = shouldAbort,
+			}, lease, _currentSessionToken)
+			stats.Retried += #retry.Items
+			mergeCollectorResult(stats, result)
 		end
-	end)
+	end, debug.traceback)
 
+	NetworkDispatch.stopTracking()
+	updateController(controller, 0, stats)
 	if not ok then
 		error(err, 0)
 	end
-
 	if shouldAbort() then
 		return false, stats
 	end
-
 	return true, stats
 end
 

@@ -494,6 +494,9 @@ local function observeInRound(controller, gc)
 		sessionToken += 1
 		MovementLease.invalidateActive()
 		MovementLease.resetTransport()
+		if PipelinedCollector and typeof(PipelinedCollector.cancelPending) == "function" then
+			PipelinedCollector.cancelPending(controller)
+		end
 		pendingGoldenReturnSince = nil
 		giftsStabilized = false
 		startWaitAt = nil
@@ -527,7 +530,7 @@ local function observeInRound(controller, gc)
 			Collector.resetAdaptive(controller)
 		end
 		if PipelinedCollector and typeof(PipelinedCollector.resetAdaptive) == "function" then
-			PipelinedCollector.resetAdaptive()
+			PipelinedCollector.resetAdaptive(controller)
 		end
 		if Medal and typeof(Medal.reset) == "function" then
 			Medal.reset()
@@ -584,6 +587,9 @@ local function runLoop(controller)
 				transitionTo(controller, "HydratingConfig", "Updating configuration options")
 				sessionToken += 1
 				MovementLease.invalidateActive()
+				if PipelinedCollector and typeof(PipelinedCollector.cancelPending) == "function" then
+					PipelinedCollector.cancelPending(controller)
+				end
 				mySessionToken = sessionToken
 
 				range = getGiftFarmRange(controller)
@@ -1107,10 +1113,10 @@ local function restartStalledWorker(controller, detail)
 		Collector.resetAdaptive(controller)
 	end
 	if PipelinedCollector and typeof(PipelinedCollector.cancelPending) == "function" then
-		PipelinedCollector.cancelPending()
+		PipelinedCollector.cancelPending(controller)
 	end
 	if PipelinedCollector and typeof(PipelinedCollector.resetAdaptive) == "function" then
-		PipelinedCollector.resetAdaptive()
+		PipelinedCollector.resetAdaptive(controller)
 	end
 	Context.releaseCharacterControl({
 		SkipVelocityClear = true,
@@ -1232,6 +1238,9 @@ function Coordinator.disable(controller)
 	loopActive = false
 	sessionToken += 1
 	MovementLease.invalidateActive()
+	if PipelinedCollector and typeof(PipelinedCollector.cancelPending) == "function" then
+		PipelinedCollector.cancelPending(controller)
+	end
 
 	if Context and typeof(Context.restoreMovementInteractions) == "function" then
 		local restored, restoreError = pcall(Context.restoreMovementInteractions)
@@ -1272,6 +1281,18 @@ function Coordinator.getStatus(controller)
 	return {
 		Status = controller and controller.GiftFarmStatus or "Idle",
 		Detail = controller and controller.GiftFarmDetail or "",
+		Mode = controller and controller.GiftFarmMode or NORMAL_MODE,
+		Pipeline = {
+			Window = controller and controller.GiftFarmPipelineWindow or 0,
+			InFlight = controller and controller.GiftFarmPipelineInFlight or 0,
+			Dispatched = controller and controller.GiftFarmPipelineDispatched or 0,
+			Accepted = controller and controller.GiftFarmPipelineAccepted or 0,
+			Unresolved = controller and controller.GiftFarmPipelineUnresolved or 0,
+			TransientRejects = controller and controller.GiftFarmPipelineTransientRejects or 0,
+			Rejected = controller and controller.GiftFarmPipelineRejected or 0,
+			Retries = controller and controller.GiftFarmPipelineRetries or 0,
+			AckLatency = controller and controller.GiftFarmPipelineAckLatency or 0,
+		},
 	}
 end
 
