@@ -15,10 +15,16 @@ local PylonActivator = {}
 local TARGET_LEVEL = 35
 local HOLD_INTERVAL = 0.12
 local ROOT_OFFSET = Vector3.new(0, 2, 0)
+local STREAM_REQUEST_TIMEOUT = 1.25
+local STREAM_RETRY_INTERVAL = 0.75
+local PYLON_MATCH_RADIUS = 8
+local COMPLETION_SETTLE_TIMEOUT = 0.75
 
 local enabled = false
 local running = false
 local savedCFrame = nil
+local knownPylons = {}
+local pylonAddedConnection = nil
 
 local function setStatus(controller, status, detail)
 	if controller then
@@ -64,7 +70,7 @@ local function getPylonRoot(model)
 end
 
 local function isCompleted(model)
-	return not (model and model:IsDescendantOf(workspace)) or model:GetAttribute("Completed") == true
+	return model ~= nil and model:GetAttribute("Completed") == true
 end
 
 local function getPylonProgress()
@@ -86,6 +92,120 @@ local function getPylonProgressDetail(prefix)
 	return prefix
 end
 
+local function getPylonPosition(model)
+	local root = getPylonRoot(model)
+	if root then
+		return root.Position
+	end
+
+	if model and model:IsA("Model") then
+		local ok, pivot = pcall(model.GetPivot, model)
+		if ok then
+			return pivot.Position
+		end
+	end
+
+	return nil
+end
+
+local function findKnownPylon(model, position)
+	for _, record in ipairs(knownPylons) do
+		if record.Model == model then
+			return record
+		end
+	end
+
+	if position then
+		for _, record in ipairs(knownPylons) do
+			local liveModel = record.Model
+			if
+				not (liveModel and liveModel:IsDescendantOf(workspace))
+				and record.Position
+				and (record.Position - position).Magnitude <= PYLON_MATCH_RADIUS
+			then
+				return record
+			end
+		end
+	end
+
+	return nil
+end
+
+local function rememberPylon(model)
+	if not (model and model:IsDescendantOf(workspace)) then
+		return nil
+	end
+
+	local position = getPylonPosition(model)
+	if not position then
+		return nil
+	end
+
+	local record = findKnownPylon(model, position)
+	if not record then
+		record = {
+			Model = model,
+			Position = position,
+			Completed = false,
+			NextStreamAt = 0,
+		}
+		table.insert(knownPylons, record)
+	else
+		record.Model = model
+		record.Position = position
+	end
+	record.Completed = record.Completed or isCompleted(model)
+	return record
+end
+
+local function refreshKnownPylons()
+	for _, model in ipairs(CollectionService:GetTagged("Pylon")) do
+		rememberPylon(model)
+	end
+
+	for _, record in ipairs(knownPylons) do
+		local model = record.Model
+		if model and model:IsDescendantOf(workspace) then
+			record.Position = getPylonPosition(model) or record.Position
+			record.Completed = record.Completed or isCompleted(model)
+		elseif model then
+			record.Completed = record.Completed or isCompleted(model)
+			record.Model = nil
+		end
+	end
+end
+
+local function resetKnownPylons()
+	table.clear(knownPylons)
+end
+
+local function startPylonObserver()
+	if pylonAddedConnection then
+		return
+	end
+
+	pylonAddedConnection = CollectionService:GetInstanceAddedSignal("Pylon"):Connect(function(model)
+		task.spawn(function()
+			for _ = 1, 20 do
+				if not enabled then
+					return
+				end
+				if isInRound() and rememberPylon(model) then
+					return
+				end
+				task.wait(0.1)
+			end
+		end)
+	end)
+end
+
+local function stopPylonObserver()
+	if pylonAddedConnection then
+		pylonAddedConnection:Disconnect()
+		pylonAddedConnection = nil
+	end
+end
+
 local function getProgressDetail(model)
 	local elapsed = tonumber(model:GetAttribute("TimeElapsed")) or 0
 	local required = tonumber(model:GetAttribute("TimeRequired")) or 0
@@ -94,7 +214,12 @@ local function getProgressDetail(model)
 
 	if required > 0 then
 		local percent = math.clamp(elapsed / required, 0, 1) * 100
-		return string.format("%.0f%% | players %d | %s", percent, currentPlayers, progressing and "charging" or "waiting")
+		return string.format(
+			"%.0f%% | players %d | %s",
+			percent,
+			currentPlayers,
+			progressing and "charging" or "waiting"
+		)
 	end
 
 	return currentPlayers > 0 and ("players " .. tostring(currentPlayers)) or ""
@@ -102,23 +227,81 @@ end
 
 local function getCandidates(hrp)
 	local candidates = {}
-	for _, model in ipairs(CollectionService:GetTagged("Pylon")) do
-		if model and model:IsDescendantOf(workspace) and not isCompleted(model) then
-			local root = getPylonRoot(model)
-			if root then
-				table.insert(candidates, {
-					Model = model,
-					Root = root,
-					Distance = (root.Position - hrp.Position).Magnitude,
-				})
-			end
+	refreshKnownPylons()
+	for _, record in ipairs(knownPylons) do
+		if not record.Completed and record.Position then
+			local model = record.Model
+			local root = model and model:IsDescendantOf(workspace) and getPylonRoot(model) or nil
+			table.insert(candidates, {
+				Record = record,
+				Model = model,
+				Root = root,
+				Position = root and root.Position or record.Position,
+				Distance = (record.Position - hrp.Position).Magnitude,
+				Loaded = root ~= nil,
+			})
 		end
 	end
 
 	table.sort(candidates, function(a, b)
+		if a.Loaded ~= b.Loaded then
+			return a.Loaded
+		end
 		return a.Distance < b.Distance
 	end)
 	return candidates
+end
+
+local function resolveCandidate(controller, candidate)
+	local record = candidate.Record
+	local model = record and record.Model or candidate.Model
+	local root = model and model:IsDescendantOf(workspace) and getPylonRoot(model) or nil
+	if root then
+		return model, root
+	end
+
+	local now = os.clock()
+	if not (record and record.Position) or now < (record.NextStreamAt or 0) then
+		return nil, nil
+	end
+
+	record.NextStreamAt = now + STREAM_RETRY_INTERVAL
+	setStatus(controller, "StreamingPylon", getPylonProgressDetail("Loading remaining pylon"))
+	if Context and typeof(Context.requestStreamAround) == "function" then
+		Context.requestStreamAround(record.Position, STREAM_REQUEST_TIMEOUT)
+	end
+	refreshKnownPylons()
+
+	model = record.Model
+	root = model and model:IsDescendantOf(workspace) and getPylonRoot(model) or nil
+	return model, root
+end
+
+local function confirmTargetCompletion(candidate, completedBefore)
+	local deadline = os.clock() + COMPLETION_SETTLE_TIMEOUT
+	repeat
+		local record = candidate.Record
+		local model = record and record.Model or candidate.Model
+		if isCompleted(model) then
+			if record then
+				record.Completed = true
+			end
+			return true
+		end
+
+		local completed = getPylonProgress()
+		if completed > completedBefore then
+			if record then
+				record.Completed = true
+			end
+			return true
+		end
+
+		if os.clock() >= deadline then
+			return false
+		end
+		task.wait(HOLD_INTERVAL)
+	until false
 end
 
 local function holdAtRoot(hrp, root)
@@ -154,6 +337,7 @@ local function run(controller)
 			if not isInRound() then
 				controller.PylonActivatorHolding = false
 				controller.PylonActivatorComplete = false
+				resetKnownPylons()
 				restorePosition(controller)
 				setStatus(controller, "WaitingForRound")
 				task.wait(0.5)
@@ -163,19 +347,34 @@ local function run(controller)
 			if getLevel() < TARGET_LEVEL then
 				controller.PylonActivatorHolding = false
 				controller.PylonActivatorComplete = false
-				setStatus(controller, "WaitingForLevel", "Level " .. tostring(getLevel()) .. "/" .. tostring(TARGET_LEVEL))
+				setStatus(
+					controller,
+					"WaitingForLevel",
+					"Level " .. tostring(getLevel()) .. "/" .. tostring(TARGET_LEVEL)
+				)
 				task.wait(0.75)
 				continue
 			end
 
+			refreshKnownPylons()
+
 			if controller.GiftFarmGoldenComplete ~= true then
 				controller.PylonActivatorHolding = false
-				restorePosition(controller)
 				setStatus(controller, "WaitingForGolden", "Gift Farm must clear golden gifts first")
 				task.wait(0.5)
 				continue
 			end
 
+			if areAllPylonsComplete() then
+				controller.PylonActivatorHolding = false
+				controller.PylonActivatorComplete = true
+				restorePosition(controller)
+				setStatus(controller, "Completed", getPylonProgressDetail("All pylons activated"))
+				task.wait(0.5)
+				continue
+			end
+
+			controller.PylonActivatorComplete = false
 			local hrp = getRootPart()
 			if not hrp then
 				controller.PylonActivatorHolding = false
@@ -199,10 +398,20 @@ local function run(controller)
 			end
 
 			local target = candidates[1]
+			local targetModel, targetRoot = resolveCandidate(controller, target)
+			if not (targetModel and targetRoot) then
+				controller.PylonActivatorHolding = false
+				task.wait(0.2)
+				continue
+			end
+			target.Model = targetModel
+			target.Root = targetRoot
 			savedCFrame = savedCFrame or hrp.CFrame
 			controller.PylonActivatorHolding = true
+			local completedBefore = getPylonProgress()
 
-			while enabled
+			while
+				enabled
 				and controller
 				and not controller.Destroyed
 				and isInRound()
@@ -215,7 +424,11 @@ local function run(controller)
 
 				local root = getPylonRoot(target.Model)
 				hrp = getRootPart()
-				if not (root and hrp) then
+				if not root and target.Record then
+					target.Record.Model = nil
+					target.Model, root = resolveCandidate(controller, target)
+				end
+				if not (target.Model and root and hrp) then
 					break
 				end
 
@@ -225,9 +438,11 @@ local function run(controller)
 			end
 
 			controller.PylonActivatorHolding = false
-			if isCompleted(target.Model) then
+			if confirmTargetCompletion(target, completedBefore) then
 				controller.PylonActivatorComplete = areAllPylonsComplete()
 				setStatus(controller, "Completed", getPylonProgressDetail("Pylon activated"))
+			else
+				setStatus(controller, "WaitingForPylons", getPylonProgressDetail("Pylon not confirmed; retrying"))
 			end
 			task.wait(0.2)
 		end
@@ -244,6 +459,8 @@ function PylonActivator.update(controller)
 	enabled = controller and controller.PylonActivatorEnabled == true
 	if enabled then
 		controller.PylonActivatorComplete = false
+		startPylonObserver()
+		refreshKnownPylons()
 		run(controller)
 	else
 		if controller then
@@ -258,6 +475,8 @@ end
 
 function PylonActivator.disable(controller)
 	enabled = false
+	stopPylonObserver()
+	resetKnownPylons()
 	if controller then
 		controller.PylonActivatorHolding = false
 		controller.PylonActivatorComplete = false

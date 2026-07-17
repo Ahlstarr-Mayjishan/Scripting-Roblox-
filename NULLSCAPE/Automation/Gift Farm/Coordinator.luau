@@ -16,6 +16,7 @@ local Medal = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Medal.luau")
 local Beacon = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Beacon.luau")
 local GoldenWait = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Golden Wait.luau")
 local MovementLease = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/MovementLease.luau")
+local RunPolicy = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Run Policy.luau")
 
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
@@ -597,6 +598,18 @@ local function runLoop(controller)
 				break
 			end
 
+			local lifecyclePolicy = RunPolicy and RunPolicy.step(controller)
+			if lifecyclePolicy and lifecyclePolicy.Hold then
+				transitionTo(
+					controller,
+					lifecyclePolicy.Status or "Paused",
+					lifecyclePolicy.Detail or "Gift Farm policy hold",
+					true
+				)
+				task.wait(0.1)
+				continue
+			end
+
 			-- 2. Basic environment checks
 			local hrp = Context.getRootPart()
 			local inRound = Context.isInRound()
@@ -691,6 +704,18 @@ local function runLoop(controller)
 
 			local candidates, scanInfo = Scanner.scan(controller, gch)
 			if not isSessionActive() then continue end
+
+			local efficiencyPolicy = RunPolicy and RunPolicy.step(controller, scanInfo)
+			if efficiencyPolicy and efficiencyPolicy.Hold then
+				transitionTo(
+					controller,
+					efficiencyPolicy.Status or "Paused",
+					efficiencyPolicy.Detail or "Gift Farm policy hold",
+					true
+				)
+				task.wait(0.1)
+				continue
+			end
 
 			local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
 			if rawGolden > 0 then
@@ -1136,6 +1161,7 @@ local function startWatchdog(controller)
 			local progressStalled = liveGiftCount ~= nil
 				and liveGiftCount > 0
 				and controller.PylonActivatorHolding ~= true
+				and controller.GiftFarmPolicyHolding ~= true
 				and now - lastProgressAt >= LOGICAL_STALL_TIMEOUT
 			if Context.isInRound() and (workerStalled or progressStalled) then
 				local detail = if progressStalled
@@ -1161,6 +1187,9 @@ function Coordinator.enable(controller, gc)
 
 	enabled = true
 	configDirty = true
+	if RunPolicy and typeof(RunPolicy.enable) == "function" then
+		RunPolicy.enable(controller)
+	end
 
 	if Context and typeof(Context.suppressMovementInteractions) == "function" then
 		Context.suppressMovementInteractions()
@@ -1209,6 +1238,9 @@ function Coordinator.disable(controller)
 		if not restored then
 			warn("[NULLSCAPE] Gift Farm interaction restore failed: " .. tostring(restoreError))
 		end
+	end
+	if RunPolicy and typeof(RunPolicy.disable) == "function" then
+		RunPolicy.disable(controller)
 	end
 
 	if wasEnabled then

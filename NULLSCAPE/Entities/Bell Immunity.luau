@@ -92,31 +92,6 @@ local function getBellVignette()
 	return vignette
 end
 
-local function hasActiveScreenEffect()
-	local vignette = getBellVignette()
-	if
-		vignette
-		and (vignette:IsA("ImageLabel") or vignette:IsA("ImageButton"))
-		and vignette.ImageTransparency < 0.999
-	then
-		return true
-	end
-
-	local strength = getBellStrength()
-	if strength and strength.Value > 0.01 then
-		return true
-	end
-
-	local colorCorrection = Lighting:FindFirstChild("ColorCorrection")
-	local bloom = Lighting:FindFirstChild("Bloom")
-	return colorCorrection ~= nil
-		and colorCorrection:IsA("ColorCorrectionEffect")
-		and colorCorrection.Contrast >= 3.5
-		and bloom ~= nil
-		and bloom:IsA("BloomEffect")
-		and bloom.Intensity > 1
-end
-
 local function neutralizeScreenEffect()
 	local vignette = getBellVignette()
 	if vignette and (vignette:IsA("ImageLabel") or vignette:IsA("ImageButton")) then
@@ -150,14 +125,25 @@ local function neutralizeScreenEffect()
 	end
 end
 
-local function recoverActiveScreenEffect()
-	if not isBlindnessImmune() or not hasActiveScreenEffect() then
+local function getScreenRecoveryDuration(intensity)
+	local scale = typeof(intensity) == "number" and intensity or 1.5
+	local difficulty = ReplicatedStorage:FindFirstChild("Difficulty")
+	if difficulty and difficulty:IsA("ValueBase") and difficulty.Value == 3 then
+		scale *= 1.3
+	end
+
+	scale = math.clamp(scale, 0.1, 3)
+	return math.max(SCREEN_RECOVERY_DURATION, 0.75 + scale * 3)
+end
+
+local function recoverActiveScreenEffect(intensity)
+	if not isBlindnessImmune() then
 		return
 	end
 
 	BellImmunity.ScreenRecoveryToken += 1
 	local token = BellImmunity.ScreenRecoveryToken
-	local deadline = time() + SCREEN_RECOVERY_DURATION
+	local deadline = time() + getScreenRecoveryDuration(intensity)
 
 	task.spawn(function()
 		repeat
@@ -327,11 +313,9 @@ function BellImmunity.initialize(controller)
 		local events = ReplicatedStorage:FindFirstChild("Events")
 		local bellEvent = events and events:FindFirstChild("Bell")
 		if bellEvent and bellEvent:IsA("RemoteEvent") then
-			BellImmunity.BellEventConnection = bellEvent.OnClientEvent:Connect(function()
+			BellImmunity.BellEventConnection = bellEvent.OnClientEvent:Connect(function(intensity)
 				if isBlindnessImmune() then
-					task.defer(function()
-						recoverActiveScreenEffect()
-					end)
+					recoverActiveScreenEffect(intensity)
 				end
 			end)
 		end
@@ -368,6 +352,8 @@ function BellImmunity.attachEnemy(enemy, gc)
 	local connection = clientEvent.OnClientEvent:Connect(function(action)
 		if action == "WarpIn" then
 			armMightyGong(enemy)
+		elseif action == "BellHit" then
+			recoverActiveScreenEffect()
 		end
 	end)
 	BellImmunity.AttachedEnemies[enemy] = connection
