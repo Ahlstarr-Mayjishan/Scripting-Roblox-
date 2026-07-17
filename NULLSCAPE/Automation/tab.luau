@@ -133,31 +133,50 @@ return function(Client, Controller)
 		end,
 	})
 
-	local function createChoicePolicyDropdown(name, info, indexName, options, field, flag, setter)
-		Tab:CreateDropdown({
+	local function createChoicePolicyDropdown(name, info, indexName, field, flag, setter)
+		local dropdown
+		local correctingSelection = false
+		local function selectionsMatch(left, right)
+			if typeof(left) ~= "table" or #left ~= #right then
+				return false
+			end
+			for index, value in ipairs(left) do
+				if value ~= right[index] then
+					return false
+				end
+			end
+			return true
+		end
+
+		dropdown = Tab:CreateDropdown({
 			Name = name,
 			Info = info,
-			Options = options,
+			Options = ChoicePolicy.getOptions(indexName),
 			CurrentOption = ChoicePolicy.normalizeSelections(indexName, Controller and Controller[field] or {}),
 			MultipleOptions = true,
 			Flag = flag,
 			Callback = function(Options)
+				local normalized = ChoicePolicy.normalizeSelections(indexName, Options)
 				if Controller and typeof(Controller[setter]) == "function" then
-					Controller[setter](Controller, Options)
+					Controller[setter](Controller, normalized)
+				end
+				if not correctingSelection and not selectionsMatch(Options, normalized) then
+					correctingSelection = true
+					task.defer(function()
+						if dropdown and typeof(dropdown.Set) == "function" then
+							dropdown:Set(normalized)
+						end
+						correctingSelection = false
+					end)
 				end
 			end,
 		})
 	end
 
-	local enemyOptions = ChoicePolicy.getOptions("EnemyIndex")
-	local curseOptions = ChoicePolicy.getOptions("CurseIndex")
-	local greaterCurseOptions = ChoicePolicy.getOptions("GreaterCurseIndex")
-
 	createChoicePolicyDropdown(
 		"Enemy Whitelist",
 		"Preferred enemies. The first matching available enemy is selected.",
 		"EnemyIndex",
-		enemyOptions,
 		"EnemyChoiceWhitelist",
 		"AutomationEnemyChoiceWhitelistDropdown",
 		"SetEnemyChoiceWhitelist"
@@ -166,7 +185,6 @@ return function(Client, Controller)
 		"Enemy Blacklist",
 		"Avoided. If every enemy choice is blacklisted, native rerolls are used until an allowed choice appears or rerolls run out.",
 		"EnemyIndex",
-		enemyOptions,
 		"EnemyChoiceBlacklist",
 		"AutomationEnemyChoiceBlacklistDropdown",
 		"SetEnemyChoiceBlacklist"
@@ -175,7 +193,6 @@ return function(Client, Controller)
 		"Curse Whitelist",
 		"Preferred normal curses. The first matching available curse is selected.",
 		"CurseIndex",
-		curseOptions,
 		"CurseChoiceWhitelist",
 		"AutomationCurseChoiceWhitelistDropdown",
 		"SetCurseChoiceWhitelist"
@@ -184,7 +201,6 @@ return function(Client, Controller)
 		"Curse Blacklist",
 		"Avoided. If every normal curse is blacklisted, native rerolls are used until an allowed choice appears or rerolls run out.",
 		"CurseIndex",
-		curseOptions,
 		"CurseChoiceBlacklist",
 		"AutomationCurseChoiceBlacklistDropdown",
 		"SetCurseChoiceBlacklist"
@@ -193,7 +209,6 @@ return function(Client, Controller)
 		"Greater Curse Whitelist",
 		"Preferred greater curses. The first matching available greater curse is selected.",
 		"GreaterCurseIndex",
-		greaterCurseOptions,
 		"GreaterCurseChoiceWhitelist",
 		"AutomationGreaterCurseChoiceWhitelistDropdown",
 		"SetGreaterCurseChoiceWhitelist"
@@ -202,7 +217,6 @@ return function(Client, Controller)
 		"Greater Curse Blacklist",
 		"Avoided. If every greater curse is blacklisted, native rerolls are used until an allowed choice appears or rerolls run out.",
 		"GreaterCurseIndex",
-		greaterCurseOptions,
 		"GreaterCurseChoiceBlacklist",
 		"AutomationGreaterCurseChoiceBlacklistDropdown",
 		"SetGreaterCurseChoiceBlacklist"

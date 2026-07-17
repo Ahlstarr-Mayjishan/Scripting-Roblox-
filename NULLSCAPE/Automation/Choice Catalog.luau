@@ -134,9 +134,9 @@ function ChoiceCatalog.toDisplaySelections(indexName, values)
 	end
 
 	local function add(value)
-		local key = catalog.KeyByAlias[normalize(value)] or normalize(value)
-		local display = catalog.DisplayByKey[key] or tostring(value)
-		if display ~= "" and not table.find(selections, display) then
+		local key = catalog.KeyByAlias[normalize(value)]
+		local display = key and catalog.DisplayByKey[key] or nil
+		if display and display ~= "" and not table.find(selections, display) then
 			selections[#selections + 1] = display
 		end
 	end
