@@ -3,6 +3,8 @@
 --  NULLSCAPE - Automation UI Tab
 -- ]]
 
+local ChoicePolicy = getgenv().loadModule("NULLSCAPE/Automation/Choice Policy.luau")
+
 local function resolveController(Client, fallbackController)
 	if Client and typeof(Client.Modules) == "table" and typeof(Client.Modules.AutomationController) == "table" then
 		return Client.Modules.AutomationController
@@ -28,39 +30,6 @@ local function resolveController(Client, fallbackController)
 	end
 
 	return nil
-end
-
-local function getChoicePolicyOptions()
-	local names = {}
-	local seen = {}
-	local sharedModules = game:GetService("ReplicatedStorage"):FindFirstChild("SharedModules")
-	local core = sharedModules and sharedModules:FindFirstChild("Core")
-	local indexRoot = core and core:FindFirstChild("Index")
-
-	for _, indexName in ipairs({ "EnemyIndex", "CurseIndex", "GreaterCurseIndex", "UpgradeIndex" }) do
-		local indexModule = indexRoot and indexRoot:FindFirstChild(indexName)
-		if indexModule and indexModule:IsA("ModuleScript") then
-			local loaded, index = pcall(require, indexModule)
-			local items = loaded and typeof(index) == "table" and index.Items or nil
-			if typeof(items) == "table" then
-				for itemName in pairs(items) do
-					local name = tostring(itemName)
-					if name ~= "" and not seen[name] then
-						seen[name] = true
-						table.insert(names, name)
-					end
-				end
-			end
-		end
-	end
-
-	if #names == 0 then
-		names = { "FannyPack", "BusinessLicense", "Paycheck" }
-	end
-	table.sort(names, function(left, right)
-		return string.lower(left) < string.lower(right)
-	end)
-	return names
 end
 
 return function(Client, Controller)
@@ -90,7 +59,6 @@ return function(Client, Controller)
 			"Continue",
 			"Selection - Medal Curses",
 			"Selection - Curses",
-			"Upgrades",
 			"Enemies",
 			"Curses",
 			"Greater Curses",
@@ -172,34 +140,74 @@ return function(Client, Controller)
 		end,
 	})
 
-	local choicePolicyOptions = getChoicePolicyOptions()
-	Tab:CreateDropdown({
-		Name = "Choice Whitelist",
-		Info = "Preferred ChoiceName values. A matching available choice wins before normal priority.",
-		Options = choicePolicyOptions,
-		CurrentOption = Controller and Controller.ChoiceWhitelist or {},
-		MultipleOptions = true,
-		Flag = "AutomationChoiceWhitelistDropdown",
-		Callback = function(Options)
-			if Controller and typeof(Controller.SetChoiceWhitelist) == "function" then
-				Controller:SetChoiceWhitelist(Options)
-			end
-		end,
-	})
+	local function createChoicePolicyDropdown(name, info, options, field, flag, setter)
+		Tab:CreateDropdown({
+			Name = name,
+			Info = info,
+			Options = options,
+			CurrentOption = Controller and Controller[field] or {},
+			MultipleOptions = true,
+			Flag = flag,
+			Callback = function(Options)
+				if Controller and typeof(Controller[setter]) == "function" then
+					Controller[setter](Controller, Options)
+				end
+			end,
+		})
+	end
 
-	Tab:CreateDropdown({
-		Name = "Choice Blacklist",
-		Info = "Avoided unless every available primary choice is blacklisted.",
-		Options = choicePolicyOptions,
-		CurrentOption = Controller and Controller.ChoiceBlacklist or {},
-		MultipleOptions = true,
-		Flag = "AutomationChoiceBlacklistDropdown",
-		Callback = function(Options)
-			if Controller and typeof(Controller.SetChoiceBlacklist) == "function" then
-				Controller:SetChoiceBlacklist(Options)
-			end
-		end,
-	})
+	local enemyOptions = ChoicePolicy.getOptions("EnemyIndex")
+	local curseOptions = ChoicePolicy.getOptions("CurseIndex")
+	local greaterCurseOptions = ChoicePolicy.getOptions("GreaterCurseIndex")
+
+	createChoicePolicyDropdown(
+		"Enemy Whitelist",
+		"Preferred enemies. The first matching available enemy is selected.",
+		enemyOptions,
+		"EnemyChoiceWhitelist",
+		"AutomationEnemyChoiceWhitelistDropdown",
+		"SetEnemyChoiceWhitelist"
+	)
+	createChoicePolicyDropdown(
+		"Enemy Blacklist",
+		"Avoided unless every available enemy choice is blacklisted.",
+		enemyOptions,
+		"EnemyChoiceBlacklist",
+		"AutomationEnemyChoiceBlacklistDropdown",
+		"SetEnemyChoiceBlacklist"
+	)
+	createChoicePolicyDropdown(
+		"Curse Whitelist",
+		"Preferred normal curses. The first matching available curse is selected.",
+		curseOptions,
+		"CurseChoiceWhitelist",
+		"AutomationCurseChoiceWhitelistDropdown",
+		"SetCurseChoiceWhitelist"
+	)
+	createChoicePolicyDropdown(
+		"Curse Blacklist",
+		"Avoided unless every available normal curse is blacklisted.",
+		curseOptions,
+		"CurseChoiceBlacklist",
+		"AutomationCurseChoiceBlacklistDropdown",
+		"SetCurseChoiceBlacklist"
+	)
+	createChoicePolicyDropdown(
+		"Greater Curse Whitelist",
+		"Preferred greater curses. The first matching available greater curse is selected.",
+		greaterCurseOptions,
+		"GreaterCurseChoiceWhitelist",
+		"AutomationGreaterCurseChoiceWhitelistDropdown",
+		"SetGreaterCurseChoiceWhitelist"
+	)
+	createChoicePolicyDropdown(
+		"Greater Curse Blacklist",
+		"Avoided unless every available greater curse is blacklisted.",
+		greaterCurseOptions,
+		"GreaterCurseChoiceBlacklist",
+		"AutomationGreaterCurseChoiceBlacklistDropdown",
+		"SetGreaterCurseChoiceBlacklist"
+	)
 
 	Tab:CreateSlider({
 		Name = "Gift Farm Range",

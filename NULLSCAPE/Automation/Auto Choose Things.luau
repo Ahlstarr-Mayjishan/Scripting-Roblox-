@@ -9,6 +9,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
+local ChoicePolicy = getgenv().loadModule("NULLSCAPE/Automation/Choice Policy.luau")
 
 local AutoChooseThings = {}
 
@@ -132,61 +133,6 @@ end
 
 local function getUpgradeBuyPriority(choiceName)
 	return PRIORITY_UPGRADES[normalizeUpgradeName(choiceName)] or 999
-end
-
-local function buildNamePolicy(values)
-	local selected, priority = {}, {}
-	if typeof(values) ~= "table" then
-		return selected, priority
-	end
-
-	for index, value in ipairs(values) do
-		local key = normalizeUpgradeName(value)
-		if key ~= "" then
-			selected[key] = true
-			priority[key] = priority[key] or index
-		end
-	end
-	for value, enabled in pairs(values) do
-		if typeof(value) == "string" and enabled == true then
-			selected[normalizeUpgradeName(value)] = true
-		end
-	end
-	return selected, priority
-end
-
-local function applyChoiceNamePolicy(controller, candidates)
-	if not controller or controller.GiftFarmRulesEnabled ~= true then
-		return candidates
-	end
-
-	local whitelist, whitelistPriority = buildNamePolicy(controller and controller.ChoiceWhitelist)
-	local blacklist = buildNamePolicy(controller and controller.ChoiceBlacklist)
-	local preferred = {}
-	local allowed = {}
-	local hasPrimary = false
-
-	for _, candidate in ipairs(candidates) do
-		if candidate.Category ~= "Continue" then
-			hasPrimary = true
-			local key = normalizeUpgradeName(candidate.ChoiceName)
-			if whitelist[key] then
-				candidate.PolicyPriority = whitelistPriority[key] or 999
-				table.insert(preferred, candidate)
-			end
-			if not blacklist[key] then
-				table.insert(allowed, candidate)
-			end
-		end
-	end
-
-	if #preferred > 0 then
-		return preferred
-	end
-	if hasPrimary and #allowed > 0 then
-		return allowed
-	end
-	return candidates
 end
 
 local function isContinuePromptRoot(root, prompt)
@@ -319,6 +265,8 @@ local function buildSelectionPriority(controller)
 			priority[category] = index
 		end
 	end
+	selected.Upgrades = true
+	priority.Upgrades = 0
 	return selected, priority
 end
 
@@ -464,7 +412,7 @@ local function collectTarget(controller, hrp)
 			end
 		end
 	end
-	candidates = applyChoiceNamePolicy(controller, candidates)
+	candidates = ChoicePolicy.apply(controller, candidates)
 
 	table.sort(candidates, function(a, b)
 		local aPolicy = tonumber(a.PolicyPriority) or 999

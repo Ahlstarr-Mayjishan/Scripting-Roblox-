@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.18.85",
+    "Version":  "2026.07.18.86",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "6f6469579bbdc7172a2d9e227b7fc3f8b8da0ffd7622cc3890b3f9636f592d5e"
+                      "Sha256":  "b6b84542807618cc118b0f38d7a65a838be0631e62c58a53f21e15af868f9665"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -147,7 +147,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "f2892685a91a14c1ec14e310b12b14c4695e7476da15f1fbd73105200c106c7c"
+                      "Sha256":  "bdd3366b078eb82ce489d12e26b82eb4fa15a7a3f4841278e4b5de352a53d8e3"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Kolona Auto QTE.luau",
@@ -748,7 +748,14 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "5c6dfafa71d0dbf021247de2f7c1efe7981ad8319635f4c63451bf19374639a3"
+                      "Sha256":  "68ee23098544ce1004546cce768d4f8eff67d7099df5a506013ed86de102bf86"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Automation/Choice Policy.luau",
+                      "Menu":  [
+                                   "Automation"
+                               ],
+                      "Sha256":  "c8ad64c2cab8ae68ec65f89b15fed85ecb7c1387040a485ecca084002f6713f4"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/executor.luau",
@@ -783,7 +790,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "861b79f2d7f86c7133ce3bc29c4fc716017e3ae37fa5c70d1b93b993929aec57"
+                      "Sha256":  "9f2ffc20440632b7a295975149cd7c6fa3bbd9460e2e7d91a45ff3b64d079d1a"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Altar.luau",

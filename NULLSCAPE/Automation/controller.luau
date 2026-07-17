@@ -124,8 +124,12 @@ local Controller = {
 	AltarSelections = {},
 	GiftFarmRulesEnabled = false,
 	GiftFarmNoTrackingEnabled = false,
-	ChoiceWhitelist = {},
-	ChoiceBlacklist = {},
+	EnemyChoiceWhitelist = {},
+	EnemyChoiceBlacklist = {},
+	CurseChoiceWhitelist = {},
+	CurseChoiceBlacklist = {},
+	GreaterCurseChoiceWhitelist = {},
+	GreaterCurseChoiceBlacklist = {},
 	GiftFarmGoalMode = "Reach to Levels",
 	GiftFarmTargetLevel = 100,
 	GiftFarmMinLevel = 10,
@@ -344,14 +348,38 @@ function Controller:SetGiftFarmNoTrackingEnabled(value)
 	return true
 end
 
-function Controller:SetChoiceWhitelist(value)
-	self.ChoiceWhitelist = normalizeSelections(value)
+function Controller:SetEnemyChoiceWhitelist(value)
+	self.EnemyChoiceWhitelist = normalizeSelections(value)
 	self.ConfigChanged:Fire()
 	return true
 end
 
-function Controller:SetChoiceBlacklist(value)
-	self.ChoiceBlacklist = normalizeSelections(value)
+function Controller:SetEnemyChoiceBlacklist(value)
+	self.EnemyChoiceBlacklist = normalizeSelections(value)
+	self.ConfigChanged:Fire()
+	return true
+end
+
+function Controller:SetCurseChoiceWhitelist(value)
+	self.CurseChoiceWhitelist = normalizeSelections(value)
+	self.ConfigChanged:Fire()
+	return true
+end
+
+function Controller:SetCurseChoiceBlacklist(value)
+	self.CurseChoiceBlacklist = normalizeSelections(value)
+	self.ConfigChanged:Fire()
+	return true
+end
+
+function Controller:SetGreaterCurseChoiceWhitelist(value)
+	self.GreaterCurseChoiceWhitelist = normalizeSelections(value)
+	self.ConfigChanged:Fire()
+	return true
+end
+
+function Controller:SetGreaterCurseChoiceBlacklist(value)
+	self.GreaterCurseChoiceBlacklist = normalizeSelections(value)
 	self.ConfigChanged:Fire()
 	return true
 end
