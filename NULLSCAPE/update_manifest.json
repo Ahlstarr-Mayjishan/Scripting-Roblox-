@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.18.91",
+    "Version":  "2026.07.18.92",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -755,7 +755,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "137c2675601d45255dfc42ea3c8659af12b75bf10f1a6a29f2b4a8ca28c247ec"
+                      "Sha256":  "9da77e9db41eb6e9f569c47cd1040bead0a2b7641b1e323d7f7951e734329e9c"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Choice Policy.luau",

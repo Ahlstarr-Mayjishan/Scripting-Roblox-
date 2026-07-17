@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ChoiceCatalog = {}
 local catalogs = {}
+local loadCatalog
 
 local function normalize(value)
 	return string.lower(tostring(value or "")):gsub("[%s%p_]+", "")
@@ -21,7 +22,22 @@ local function getIndexModule(indexName)
 	return indexModule and indexModule:IsA("ModuleScript") and indexModule or nil
 end
 
-local function loadCatalog(indexName)
+local function getEnemyGroup(indexName, item)
+	if indexName ~= "CurseIndex" and indexName ~= "GreaterCurseIndex" then
+		return nil
+	end
+	local prerequisites = item and item.Prerequisites
+	local enemies = prerequisites and prerequisites.Enemies
+	local enemyKey = typeof(enemies) == "table" and enemies[1] or nil
+	if typeof(enemyKey) ~= "string" or enemyKey == "" then
+		return nil
+	end
+
+	local enemyCatalog = loadCatalog("EnemyIndex")
+	return enemyCatalog.DisplayByKey[normalize(enemyKey)] or enemyKey
+end
+
+function loadCatalog(indexName)
 	if catalogs[indexName] then
 		return catalogs[indexName]
 	end
@@ -54,11 +70,17 @@ local function loadCatalog(indexName)
 			catalog.Entries[#catalog.Entries + 1] = {
 				Key = key,
 				Display = display,
+				Group = getEnemyGroup(indexName, item),
 			}
 		end
 	end
 
 	table.sort(catalog.Entries, function(left, right)
+		local leftGroup = left.Group and ("0|" .. string.lower(left.Group)) or "1|"
+		local rightGroup = right.Group and ("0|" .. string.lower(right.Group)) or "1|"
+		if leftGroup ~= rightGroup then
+			return leftGroup < rightGroup
+		end
 		return string.lower(left.Display) < string.lower(right.Display)
 	end)
 	catalogs[indexName] = catalog
