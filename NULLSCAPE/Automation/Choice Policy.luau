@@ -27,6 +27,31 @@ local CATEGORY_FIELDS = {
 	},
 }
 
+function ChoicePolicy.applyMedalChoiceMode(controller, candidates)
+	local configured = controller and controller.MedalChoiceMode
+	if typeof(configured) ~= "string" or configured == "" then
+		return candidates, true
+	end
+
+	local matching = {}
+	local hasMedalChoices = false
+	for _, candidate in ipairs(candidates) do
+		if candidate.Category == "Selection - Medal Curses" then
+			hasMedalChoices = true
+			if candidate.MedalChoiceMode == configured then
+				matching[#matching + 1] = candidate
+			end
+		end
+	end
+	if not hasMedalChoices then
+		return candidates, true
+	end
+	if #matching > 0 then
+		return matching, true
+	end
+	return {}, false
+end
+
 local function normalizeName(value)
 	return string.lower(tostring(value or "")):gsub("[%s%p_]+", "")
 end

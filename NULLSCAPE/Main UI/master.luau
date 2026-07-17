@@ -250,6 +250,7 @@ pcall(function()
 			InfiniteJumpToggle = false,
 			AutomationGiftFarmToggle = false,
 			AutomationCollectMedalToggle = false,
+			AutomationMedalChoiceModeDropdown = "Rerolls (No Golden Gifts)",
 			AutomationAutoChooseThingsToggle = false,
 			AutomationGiftFarmModeDropdown = "Normal (teleport)",
 			AutomationGiftFarmRangeSlider = 60,

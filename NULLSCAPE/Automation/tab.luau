@@ -52,6 +52,21 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateDropdown({
+		Name = "Medal Intermission Choice",
+		Info = "Chooses between the immediate Golden Gifts reward and the option that keeps native rerolls available.",
+		Options = { "Golden Gifts (No Rerolls)", "Rerolls (No Golden Gifts)" },
+		CurrentOption = Controller and Controller.MedalChoiceMode or "Rerolls (No Golden Gifts)",
+		MultipleOptions = false,
+		Flag = "AutomationMedalChoiceModeDropdown",
+		Callback = function(Value)
+			local selected = typeof(Value) == "table" and Value[1] or Value
+			if Controller and typeof(Controller.SetMedalChoiceMode) == "function" then
+				Controller:SetMedalChoiceMode(selected)
+			end
+		end,
+	})
+
 	Tab:CreateSection("Auto Farm")
 
 	Tab:CreateToggle({

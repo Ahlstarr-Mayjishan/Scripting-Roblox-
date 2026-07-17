@@ -37,6 +37,8 @@ local PRIORITY_UPGRADES = {
 	businesslicense = 2,
 	paycheck = 3,
 }
+local MEDAL_MODE_REWARD = "Golden Gifts (No Rerolls)"
+local MEDAL_MODE_REROLLS = "Rerolls (No Golden Gifts)"
 
 local enabled = false
 local running = false
@@ -196,6 +198,50 @@ local function activateButton(button)
 	end) == true
 end
 
+local function classifyMedalChoice(root, prompt, itemIndex)
+	for _, instance in ipairs({ root, prompt }) do
+		if instance then
+			for name, value in pairs(instance:GetAttributes()) do
+				if textContains(name, "reroll") then
+					if value == true or (tonumber(value) or 0) > 0 then
+						return MEDAL_MODE_REROLLS
+					elseif value == false or tonumber(value) == 0 then
+						return MEDAL_MODE_REWARD
+					end
+				end
+			end
+		end
+	end
+
+	local visibleText = table.concat({
+		tostring(root and root.Name or ""),
+		tostring(prompt and prompt.ActionText or ""),
+		tostring(prompt and prompt.ObjectText or ""),
+	}, " ")
+	if textContains(visibleText, "no reroll") or textContains(visibleText, "without reroll") then
+		return MEDAL_MODE_REWARD
+	end
+	if textContains(visibleText, "reroll") or textContains(visibleText, "curse") then
+		return MEDAL_MODE_REROLLS
+	end
+	if
+		textContains(visibleText, "golden gift")
+		or textContains(visibleText, "reward")
+		or textContains(visibleText, "money")
+	then
+		return MEDAL_MODE_REWARD
+	end
+
+	local indexText = tostring(itemIndex or "")
+	if textContains(indexText, "reroll") then
+		return MEDAL_MODE_REROLLS
+	end
+	if textContains(indexText, "golden") or textContains(indexText, "reward") then
+		return MEDAL_MODE_REWARD
+	end
+	return nil
+end
+
 local function tryContinue(controller)
 	if os.clock() - lastContinueAt < CONTINUE_COOLDOWN then
 		return false
@@ -300,6 +346,9 @@ local function addCandidate(candidates, seen, root, selected, priority, hrp)
 		Category = category,
 		ChoiceName = choiceName,
 		ItemIndex = itemIndex,
+		MedalChoiceMode = category == "Selection - Medal Curses"
+			and classifyMedalChoice(root, prompt, itemIndex)
+			or nil,
 		Cost = tonumber(prompt:GetAttribute("Cost")) or 0,
 		UpgradeBuyPriority = category == "Upgrades" and getUpgradeBuyPriority(choiceName) or 999,
 		Priority = priority[category] or 999,
@@ -392,6 +441,11 @@ local function collectTarget(controller, hrp)
 				table.remove(candidates, index)
 			end
 		end
+	end
+	local medalModeResolved
+	candidates, medalModeResolved = ChoicePolicy.applyMedalChoiceMode(controller, candidates)
+	if medalModeResolved == false then
+		return nil, "WaitingForMedalChoiceMetadata"
 	end
 	local signature = ChoiceReroll.getSignature(candidates)
 	if ChoiceReroll.isWaitingForRefresh(signature) then
@@ -517,7 +571,7 @@ local function run(controller)
 				elseif fired and target.Category ~= "Continue" then
 					lastPrimaryChoiceAt = os.clock()
 				end
-				local name = tostring(target.ChoiceName or target.Root.Name)
+				local name = tostring(target.MedalChoiceMode or target.ChoiceName or target.Root.Name)
 				if fired and target.Category == "Reroll" then
 					setStatus(
 						controller,
