@@ -5,18 +5,23 @@
 	name policies because every affordable upgrade should be purchased.
 ]]
 
+local ChoiceCatalog = getgenv().loadModule("NULLSCAPE/Automation/Choice Catalog.luau")
+
 local ChoicePolicy = {}
 
 local CATEGORY_FIELDS = {
 	Enemies = {
+		Index = "EnemyIndex",
 		Whitelist = "EnemyChoiceWhitelist",
 		Blacklist = "EnemyChoiceBlacklist",
 	},
 	Curses = {
+		Index = "CurseIndex",
 		Whitelist = "CurseChoiceWhitelist",
 		Blacklist = "CurseChoiceBlacklist",
 	},
 	["Greater Curses"] = {
+		Index = "GreaterCurseIndex",
 		Whitelist = "GreaterCurseChoiceWhitelist",
 		Blacklist = "GreaterCurseChoiceBlacklist",
 	},
@@ -26,14 +31,14 @@ local function normalizeName(value)
 	return string.lower(tostring(value or "")):gsub("[%s%p_]+", "")
 end
 
-local function buildNamePolicy(values)
+local function buildNamePolicy(values, indexName)
 	local selected, priority = {}, {}
 	if typeof(values) ~= "table" then
 		return selected, priority
 	end
 
 	for index, value in ipairs(values) do
-		local key = normalizeName(value)
+		local key = ChoiceCatalog.resolveKey(indexName, value)
 		if key ~= "" then
 			selected[key] = true
 			priority[key] = priority[key] or index
@@ -41,7 +46,7 @@ local function buildNamePolicy(values)
 	end
 	for value, active in pairs(values) do
 		if typeof(value) == "string" and active == true then
-			selected[normalizeName(value)] = true
+			selected[ChoiceCatalog.resolveKey(indexName, value)] = true
 		end
 	end
 	return selected, priority
@@ -53,8 +58,8 @@ local function getCategoryPolicy(controller, category)
 		return nil
 	end
 
-	local whitelist, whitelistPriority = buildNamePolicy(controller and controller[fields.Whitelist])
-	local blacklist = buildNamePolicy(controller and controller[fields.Blacklist])
+	local whitelist, whitelistPriority = buildNamePolicy(controller and controller[fields.Whitelist], fields.Index)
+	local blacklist = buildNamePolicy(controller and controller[fields.Blacklist], fields.Index)
 	return whitelist, whitelistPriority, blacklist
 end
 
@@ -130,38 +135,11 @@ function ChoicePolicy.apply(controller, candidates)
 end
 
 function ChoicePolicy.getOptions(indexName)
-	local names = {}
-	local ReplicatedStorage = game:GetService("ReplicatedStorage")
-	local sharedModules = ReplicatedStorage:FindFirstChild("SharedModules")
-	local core = sharedModules and sharedModules:FindFirstChild("Core")
-	local indexRoot = core and core:FindFirstChild("Index")
-	local indexModule = indexRoot and indexRoot:FindFirstChild(indexName)
-	if indexModule and indexModule:IsA("ModuleScript") then
-		local loaded, index = pcall(require, indexModule)
-		local items = loaded and typeof(index) == "table" and index.Items or nil
-		if typeof(items) == "table" then
-			for itemName in pairs(items) do
-				local name = tostring(itemName)
-				if name ~= "" then
-					table.insert(names, name)
-				end
-			end
-		end
-		if #names == 0 then
-			-- Native indexes populate Items in a deferred task. Child module names are
-			-- the same ChoiceName keys and are available immediately.
-			for _, child in ipairs(indexModule:GetChildren()) do
-				if child:IsA("ModuleScript") and child.Name ~= "Template" then
-					table.insert(names, child.Name)
-				end
-			end
-		end
-	end
+	return ChoiceCatalog.getDisplayOptions(indexName)
+end
 
-	table.sort(names, function(left, right)
-		return string.lower(left) < string.lower(right)
-	end)
-	return names
+function ChoicePolicy.normalizeSelections(indexName, values)
+	return ChoiceCatalog.toDisplaySelections(indexName, values)
 end
 
 return ChoicePolicy

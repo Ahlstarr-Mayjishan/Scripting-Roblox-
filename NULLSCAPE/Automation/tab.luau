@@ -118,12 +118,12 @@ return function(Client, Controller)
 		end,
 	})
 
-	local function createChoicePolicyDropdown(name, info, options, field, flag, setter)
+	local function createChoicePolicyDropdown(name, info, indexName, options, field, flag, setter)
 		Tab:CreateDropdown({
 			Name = name,
 			Info = info,
 			Options = options,
-			CurrentOption = Controller and Controller[field] or {},
+			CurrentOption = ChoicePolicy.normalizeSelections(indexName, Controller and Controller[field] or {}),
 			MultipleOptions = true,
 			Flag = flag,
 			Callback = function(Options)
@@ -141,6 +141,7 @@ return function(Client, Controller)
 	createChoicePolicyDropdown(
 		"Enemy Whitelist",
 		"Preferred enemies. The first matching available enemy is selected.",
+		"EnemyIndex",
 		enemyOptions,
 		"EnemyChoiceWhitelist",
 		"AutomationEnemyChoiceWhitelistDropdown",
@@ -149,6 +150,7 @@ return function(Client, Controller)
 	createChoicePolicyDropdown(
 		"Enemy Blacklist",
 		"Avoided. If every enemy choice is blacklisted, native rerolls are used until an allowed choice appears or rerolls run out.",
+		"EnemyIndex",
 		enemyOptions,
 		"EnemyChoiceBlacklist",
 		"AutomationEnemyChoiceBlacklistDropdown",
@@ -157,6 +159,7 @@ return function(Client, Controller)
 	createChoicePolicyDropdown(
 		"Curse Whitelist",
 		"Preferred normal curses. The first matching available curse is selected.",
+		"CurseIndex",
 		curseOptions,
 		"CurseChoiceWhitelist",
 		"AutomationCurseChoiceWhitelistDropdown",
@@ -165,6 +168,7 @@ return function(Client, Controller)
 	createChoicePolicyDropdown(
 		"Curse Blacklist",
 		"Avoided. If every normal curse is blacklisted, native rerolls are used until an allowed choice appears or rerolls run out.",
+		"CurseIndex",
 		curseOptions,
 		"CurseChoiceBlacklist",
 		"AutomationCurseChoiceBlacklistDropdown",
@@ -173,6 +177,7 @@ return function(Client, Controller)
 	createChoicePolicyDropdown(
 		"Greater Curse Whitelist",
 		"Preferred greater curses. The first matching available greater curse is selected.",
+		"GreaterCurseIndex",
 		greaterCurseOptions,
 		"GreaterCurseChoiceWhitelist",
 		"AutomationGreaterCurseChoiceWhitelistDropdown",
@@ -181,6 +186,7 @@ return function(Client, Controller)
 	createChoicePolicyDropdown(
 		"Greater Curse Blacklist",
 		"Avoided. If every greater curse is blacklisted, native rerolls are used until an allowed choice appears or rerolls run out.",
+		"GreaterCurseIndex",
 		greaterCurseOptions,
 		"GreaterCurseChoiceBlacklist",
 		"AutomationGreaterCurseChoiceBlacklistDropdown",
