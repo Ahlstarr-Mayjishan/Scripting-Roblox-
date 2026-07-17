@@ -58,7 +58,12 @@ local function getCategoryPolicy(controller, category)
 	return whitelist, whitelistPriority, blacklist
 end
 
-function ChoicePolicy.apply(controller, candidates)
+function ChoicePolicy.applyWithDecision(controller, candidates)
+	local decision = {
+		AllBlacklisted = false,
+		Category = nil,
+		CandidateCount = 0,
+	}
 	local upgrades = {}
 	for _, candidate in ipairs(candidates) do
 		if candidate.Category == "Upgrades" then
@@ -66,43 +71,62 @@ function ChoicePolicy.apply(controller, candidates)
 		end
 	end
 	if #upgrades > 0 then
-		return upgrades
+		return upgrades, decision
 	end
 
 	if not controller or controller.GiftFarmRulesEnabled ~= true then
-		return candidates
+		return candidates, decision
 	end
 
 	local preferred = {}
 	local allowed = {}
 	local hasPolicyCandidate = false
+	local allCandidatesUsePolicy = #candidates > 0
+	local allPolicyCandidatesBlacklisted = true
 	for _, candidate in ipairs(candidates) do
 		local whitelist, whitelistPriority, blacklist = getCategoryPolicy(controller, candidate.Category)
 		if whitelist then
 			hasPolicyCandidate = true
+			decision.CandidateCount += 1
+			if decision.Category == nil then
+				decision.Category = candidate.Category
+			elseif decision.Category ~= candidate.Category then
+				decision.Category = false
+			end
 			local key = normalizeName(candidate.ChoiceName)
 			if whitelist[key] then
 				candidate.PolicyPriority = whitelistPriority[key] or 999
 				table.insert(preferred, candidate)
 			end
 			if not blacklist[key] then
+				allPolicyCandidatesBlacklisted = false
 				table.insert(allowed, candidate)
 			end
 		else
+			allCandidatesUsePolicy = false
 			table.insert(allowed, candidate)
 		end
 	end
 
 	if #preferred > 0 then
-		return preferred
+		return preferred, decision
 	end
 	if #allowed > 0 then
-		return allowed
+		return allowed, decision
 	end
 	if hasPolicyCandidate then
-		return candidates
+		decision.AllBlacklisted = allCandidatesUsePolicy and allPolicyCandidatesBlacklisted
+		if decision.Category == false then
+			decision.Category = nil
+		end
+		return candidates, decision
 	end
-	return allowed
+	return allowed, decision
+end
+
+function ChoicePolicy.apply(controller, candidates)
+	local filtered = ChoicePolicy.applyWithDecision(controller, candidates)
+	return filtered
 end
 
 function ChoicePolicy.getOptions(indexName)

@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 local ChoicePolicy = getgenv().loadModule("NULLSCAPE/Automation/Choice Policy.luau")
+local ChoiceReroll = getgenv().loadModule("NULLSCAPE/Automation/Choice Reroll.luau")
 
 local AutoChooseThings = {}
 
@@ -298,6 +299,7 @@ local function addCandidate(candidates, seen, root, selected, priority, hrp)
 		Part = part,
 		Category = category,
 		ChoiceName = choiceName,
+		ItemIndex = itemIndex,
 		Cost = tonumber(prompt:GetAttribute("Cost")) or 0,
 		UpgradeBuyPriority = category == "Upgrades" and getUpgradeBuyPriority(choiceName) or 999,
 		Priority = priority[category] or 999,
@@ -337,6 +339,7 @@ local function collectTarget(controller, hrp)
 		lastSelectFolder = selectFolder
 		attemptedAt = {}
 		lastPrimaryChoiceAt = 0
+		ChoiceReroll.reset()
 	end
 	if not selectFolder then
 		return nil, "WaitingForSelect"
@@ -390,7 +393,21 @@ local function collectTarget(controller, hrp)
 			end
 		end
 	end
-	candidates = ChoicePolicy.apply(controller, candidates)
+	local signature = ChoiceReroll.getSignature(candidates)
+	if ChoiceReroll.isWaitingForRefresh(signature) then
+		return nil, "WaitingForRerollRefresh"
+	end
+
+	local decision
+	candidates, decision = ChoicePolicy.applyWithDecision(controller, candidates)
+	if decision.AllBlacklisted == true then
+		local reroll = ChoiceReroll.find(selectFolder, hrp)
+		if reroll then
+			reroll.BatchSignature = signature
+			reroll.RerollCategory = decision.Category
+			return reroll
+		end
+	end
 
 	table.sort(candidates, function(a, b)
 		local aPolicy = tonumber(a.PolicyPriority) or 999
@@ -469,6 +486,7 @@ local function run(controller)
 
 			if isInRound() then
 				attemptedAt, lastSelectFolder = {}, nil
+				ChoiceReroll.reset()
 				setStatus(controller, "WaitingForIntermission")
 				task.wait(0.4)
 				continue
@@ -494,11 +512,21 @@ local function run(controller)
 				lastActionAt = os.clock()
 				attemptedAt[target.Key] = os.clock()
 				local fired = firePrompt(target.Prompt)
-				if fired and target.Category ~= "Continue" then
+				if fired and target.Category == "Reroll" then
+					ChoiceReroll.markFired(target.BatchSignature)
+				elseif fired and target.Category ~= "Continue" then
 					lastPrimaryChoiceAt = os.clock()
 				end
 				local name = tostring(target.ChoiceName or target.Root.Name)
-				setStatus(controller, fired and "Chosen" or "PromptFailed", target.Category .. " | " .. name)
+				if fired and target.Category == "Reroll" then
+					setStatus(
+						controller,
+						"Rerolled",
+						ChoiceReroll.getDetail(target.RerollCategory, target.Remaining)
+					)
+				else
+					setStatus(controller, fired and "Chosen" or "PromptFailed", target.Category .. " | " .. name)
+				end
 			end
 			task.wait(LOOP_INTERVAL)
 		end
@@ -520,6 +548,7 @@ end
 function AutoChooseThings.disable(controller)
 	enabled = false
 	attemptedAt, lastSelectFolder = {}, nil
+	ChoiceReroll.reset()
 	setStatus(controller, "Idle")
 	return true
 end

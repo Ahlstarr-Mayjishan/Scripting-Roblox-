@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.18.88",
+    "Version":  "2026.07.18.89",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -748,14 +748,21 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "23442b22c9cb2a202cc4e6218e33fd3f615ba8a36acc75ece6ba6f84385cb482"
+                      "Sha256":  "4abd4053e58ef4b2bb49ce4b28e9b4bedb109a3c0308e3ff3e3f3d4f5952d68a"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Choice Policy.luau",
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "c8ad64c2cab8ae68ec65f89b15fed85ecb7c1387040a485ecca084002f6713f4"
+                      "Sha256":  "5435c786ca3c22d8b7a1138ae54f8939bf260468fa27252023346b1237a1ca94"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Automation/Choice Reroll.luau",
+                      "Menu":  [
+                                   "Automation"
+                               ],
+                      "Sha256":  "7d09c919d6e8dca99ea539c0c79becd5f0238b0c09dc3b5e9c65e3e88ce03058"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/executor.luau",
@@ -790,7 +797,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "150a497d83b7624b024026618765056622971386107b0e16ad268a4e959b7d9c"
+                      "Sha256":  "764c22d22fbb4944c65d90b40c48c8f7f16bab35f95c04d91537b03da2357a4d"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Altar.luau",
