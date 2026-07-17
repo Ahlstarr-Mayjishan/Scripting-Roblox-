@@ -155,19 +155,7 @@ local function buildNamePolicy(values)
 	return selected, priority
 end
 
-local function removeExcludedChoices(candidates)
-	local filtered = {}
-	for _, candidate in ipairs(candidates) do
-		local key = normalizeUpgradeName(candidate.ChoiceName)
-		if key ~= "goldentripmine" and key ~= "goldentripmines" then
-			table.insert(filtered, candidate)
-		end
-	end
-	return filtered
-end
-
 local function applyChoiceNamePolicy(controller, candidates)
-	candidates = removeExcludedChoices(candidates)
 	if not controller or controller.GiftFarmRulesEnabled ~= true then
 		return candidates
 	end

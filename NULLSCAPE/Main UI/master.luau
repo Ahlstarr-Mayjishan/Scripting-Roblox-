@@ -352,30 +352,6 @@ pcall(function()
 			currentSettings.ImmunityRazorbloomToggle = nil
 			updated = true
 		end
-		for _, selectionKey in ipairs({
-			"AutomationChoiceWhitelistDropdown",
-			"AutomationChoiceBlacklistDropdown",
-		}) do
-			local selections = currentSettings[selectionKey]
-			if type(selections) == "table" then
-				for index = #selections, 1, -1 do
-					local normalized = string.lower(tostring(selections[index] or "")):gsub("[%s%p_]+", "")
-					if normalized == "goldentripmine" or normalized == "goldentripmines" then
-						table.remove(selections, index)
-						updated = true
-					end
-				end
-				for name in pairs(selections) do
-					if type(name) == "string" then
-						local normalized = string.lower(name):gsub("[%s%p_]+", "")
-						if normalized == "goldentripmine" or normalized == "goldentripmines" then
-							selections[name] = nil
-							updated = true
-						end
-					end
-				end
-			end
-		end
 		for _, legacyKey in ipairs({
 			"AltarFilterDropdown",
 			"BellHackDropdown",

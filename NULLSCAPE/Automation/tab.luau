@@ -30,11 +30,6 @@ local function resolveController(Client, fallbackController)
 	return nil
 end
 
-local function isExcludedChoiceName(value)
-	local normalized = string.lower(tostring(value or "")):gsub("[%s%p_]+", "")
-	return normalized == "goldentripmine" or normalized == "goldentripmines"
-end
-
 local function getChoicePolicyOptions()
 	local names = {}
 	local seen = {}
@@ -50,7 +45,7 @@ local function getChoicePolicyOptions()
 			if typeof(items) == "table" then
 				for itemName in pairs(items) do
 					local name = tostring(itemName)
-					if name ~= "" and not isExcludedChoiceName(name) and not seen[name] then
+					if name ~= "" and not seen[name] then
 						seen[name] = true
 						table.insert(names, name)
 					end

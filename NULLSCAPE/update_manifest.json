@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.17.83",
+    "Version":  "2026.07.17.82",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "b5e056309cb03b648957a6605edfb96921880e3dad0d13a459f691d95e96df98"
+                      "Sha256":  "6f6469579bbdc7172a2d9e227b7fc3f8b8da0ffd7622cc3890b3f9636f592d5e"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -739,7 +739,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "6fc2b2690c461788eb5f296c8678ee22c747dd01f0ab20dd8a0965ffe184b312"
+                      "Sha256":  "28cf0b8f487215c3c4957a4513727a11a22bf4502f0a1bbd301597cdbdb56ca2"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/executor.luau",
@@ -774,7 +774,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "675b4e1685381eb2671ff2f294b4cfff30ef6be93bfe50410838c929aae78e5e"
+                      "Sha256":  "861b79f2d7f86c7133ce3bc29c4fc716017e3ae37fa5c70d1b93b993929aec57"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Altar.luau",
