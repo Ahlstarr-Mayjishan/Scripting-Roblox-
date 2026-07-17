@@ -10,8 +10,27 @@ local ChoiceCatalog = {}
 local catalogs = {}
 local loadCatalog
 
+local RICH_TEXT_ENTITIES = {
+	["&amp;"] = "&",
+	["&apos;"] = "'",
+	["&gt;"] = ">",
+	["&lt;"] = "<",
+	["&quot;"] = '"',
+}
+
 local function normalize(value)
 	return string.lower(tostring(value or "")):gsub("[%s%p_]+", "")
+end
+
+local function cleanDisplayName(value)
+	local display = tostring(value or "")
+	display = display:gsub("<[bB][rR]%s*/?>", " ")
+	display = display:gsub("<[^>]*>", "")
+	display = display:gsub("&[%a]+;", function(entity)
+		return RICH_TEXT_ENTITIES[string.lower(entity)] or entity
+	end)
+	display = display:gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
+	return display
 end
 
 local function getIndexModule(indexName)
@@ -62,9 +81,14 @@ function loadCatalog(indexName)
 				local itemLoaded, result = pcall(require, child)
 				item = itemLoaded and typeof(result) == "table" and result or nil
 			end
-			local display = tostring(item and item.Name or key)
+			local rawDisplay = tostring(item and item.Name or key)
+			local display = cleanDisplayName(rawDisplay)
+			if display == "" then
+				display = key
+			end
 			local normalizedKey = normalize(key)
 			catalog.KeyByAlias[normalizedKey] = normalizedKey
+			catalog.KeyByAlias[normalize(rawDisplay)] = normalizedKey
 			catalog.KeyByAlias[normalize(display)] = normalizedKey
 			catalog.DisplayByKey[normalizedKey] = display
 			catalog.Entries[#catalog.Entries + 1] = {
