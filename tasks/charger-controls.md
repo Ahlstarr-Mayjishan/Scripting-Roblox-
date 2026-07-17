@@ -2,7 +2,7 @@
 
 ## Objective
 
-Add an opt-in Charger steering assist that blends an active charge toward the player's WASD direction, falling back to the camera direction when no movement input exists. The user can choose a 0–100% strength. Investigate an actual Charger no-cooldown implementation without adding a cosmetic-only toggle.
+Add an opt-in Charger steering assist that blends an active charge toward the player's WASD direction, falling back to the camera direction when no movement input exists. The user can choose a 0-100% strength. Investigate an actual Charger no-cooldown implementation without adding a cosmetic-only toggle.
 
 Add an opt-in collision guard that ignores other player characters and small movable parts only while charging, while retaining terrain and anchored map collision.
 
@@ -20,7 +20,7 @@ Add an opt-in collision guard that ignores other player characters and small mov
 
 ## Success criteria
 
-- Charger UI exposes a steering toggle and 0–100% strength slider.
+- Charger UI exposes a steering toggle and 0-100% strength slider.
 - During a native charge, WASD takes precedence over camera forward; camera forward is used when WASD is idle.
 - Disabling the feature or changing class stops the assist and disconnects it on cleanup.
 - Collision guard restores every modified part after the charge, class change, toggle disable, or cleanup.

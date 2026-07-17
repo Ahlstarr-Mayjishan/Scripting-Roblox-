@@ -789,7 +789,7 @@ function Client:LoadModule(moduleName, tabIcon, callback)
 	end)
 
 	if not success then
-		warn("Lỗi khi tải module [" .. tostring(moduleName) .. "]: " .. tostring(err))
+		warn("Failed to load module [" .. tostring(moduleName) .. "]: " .. tostring(err))
 	end
 end
 
@@ -1207,7 +1207,7 @@ local success0, err0 = pcall(function()
 end)
 
 if not success0 then
-	warn("[NULLSCAPE] Lá»—i khi náº¡p module Automation: " .. tostring(err0))
+	warn("[NULLSCAPE] Failed to load Automation module: " .. tostring(err0))
 end
 
 local success, err = pcall(function()
@@ -1219,7 +1219,7 @@ local success, err = pcall(function()
 end)
 
 if not success then
-	warn("[NULLSCAPE] Lỗi khi nạp module Entities: " .. tostring(err))
+	warn("[NULLSCAPE] Failed to load Entities module: " .. tostring(err))
 end
 
 local success2, err2 = pcall(function()
@@ -1231,7 +1231,7 @@ local success2, err2 = pcall(function()
 end)
 
 if not success2 then
-	warn("[NULLSCAPE] Lỗi khi nạp module Simulated Upgrades/Radar: " .. tostring(err2))
+	warn("[NULLSCAPE] Failed to load Simulated Upgrades/Radar module: " .. tostring(err2))
 end
 
 local success3, err3 = pcall(function()
@@ -1243,7 +1243,7 @@ local success3, err3 = pcall(function()
 end)
 
 if not success3 then
-	warn("[NULLSCAPE] Lỗi khi nạp module Accessibility: " .. tostring(err3))
+	warn("[NULLSCAPE] Failed to load Accessibility module: " .. tostring(err3))
 end
 
 local success4, err4 = pcall(function()
@@ -1256,7 +1256,7 @@ local success4, err4 = pcall(function()
 end)
 
 if not success4 then
-	warn("[NULLSCAPE] Lỗi khi nạp module Class Adjustment: " .. tostring(err4))
+	warn("[NULLSCAPE] Failed to load Class Adjustment module: " .. tostring(err4))
 end
 
 local destroyLogicLoaded, destroyLogicError = pcall(function()
