@@ -16,6 +16,7 @@ local Medal = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Medal.luau")
 local Beacon = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Beacon.luau")
 local GoldenWait = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Golden Wait.luau")
 local MovementLease = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/MovementLease.luau")
+local RunPolicy = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Run Policy.luau")
 
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
@@ -40,6 +41,7 @@ local WATCHDOG_INTERVAL = 1
 local WORKER_STALL_TIMEOUT = 6
 local LOGICAL_STALL_TIMEOUT = 8
 local WATCHDOG_MOVEMENT_EPSILON = 2
+local GOLDEN_PREEMPT_SCAN_INTERVAL = 0.03
 
 local enabled = false
 local configDirty = false
@@ -150,13 +152,25 @@ local function hasActivePylon()
 	return false
 end
 
+local function getPylonProgress()
+	local completed = tonumber(ReplicatedStorage:GetAttribute("PylonsDone")) or 0
+	local maximum = tonumber(ReplicatedStorage:GetAttribute("MaxPylons")) or 0
+	return completed, maximum
+end
+
 local function shouldWaitForPylons(controller)
 	if not (controller and controller.PylonActivatorEnabled) then
 		return false
 	end
+
+	local completed, maximum = getPylonProgress()
+	if maximum > 0 then
+		return completed < maximum
+	end
 	if controller.PylonActivatorComplete then
 		return false
 	end
+
 	return getLevel() >= PYLON_LEVEL and hasActivePylon()
 end
 
@@ -182,6 +196,9 @@ end
 
 local function tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActive)
 	if not (pendingGoldenReturnSince and scanInfo and tonumber(scanInfo.RawGolden) == 0) then
+		return false
+	end
+	if (tonumber(scanInfo.RawNormal) or 0) > 0 then
 		return false
 	end
 
@@ -581,6 +598,18 @@ local function runLoop(controller)
 				break
 			end
 
+			local lifecyclePolicy = RunPolicy and RunPolicy.step(controller)
+			if lifecyclePolicy and lifecyclePolicy.Hold then
+				transitionTo(
+					controller,
+					lifecyclePolicy.Status or "Paused",
+					lifecyclePolicy.Detail or "Gift Farm policy hold",
+					true
+				)
+				task.wait(0.1)
+				continue
+			end
+
 			-- 2. Basic environment checks
 			local hrp = Context.getRootPart()
 			local inRound = Context.isInRound()
@@ -675,6 +704,18 @@ local function runLoop(controller)
 
 			local candidates, scanInfo = Scanner.scan(controller, gch)
 			if not isSessionActive() then continue end
+
+			local efficiencyPolicy = RunPolicy and RunPolicy.step(controller, scanInfo)
+			if efficiencyPolicy and efficiencyPolicy.Hold then
+				transitionTo(
+					controller,
+					efficiencyPolicy.Status or "Paused",
+					efficiencyPolicy.Detail or "Gift Farm policy hold",
+					true
+				)
+				task.wait(0.1)
+				continue
+			end
 
 			local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
 			if rawGolden > 0 then
@@ -801,6 +842,20 @@ local function runLoop(controller)
 					continue
 				end
 
+				if shouldWaitForPylons(controller) then
+					local completed, maximum = getPylonProgress()
+					local detail = if maximum > 0
+						then string.format("Waiting for pylons %d/%d", completed, maximum)
+						else "Waiting for pylons"
+					transitionTo(
+						controller,
+						"Paused",
+						detail
+					)
+					task.wait(0.2)
+					continue
+				end
+
 				-- Try Medal step
 				local lease = MovementLease.acquire("MedalStep")
 				transitionTo(controller, "Collecting", "Medal check")
@@ -861,11 +916,33 @@ local function runLoop(controller)
 
 			local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
 			local wasGoldenRoute = scanInfo and scanInfo.GoldenLocked == true
+			local wasPassageRoute = scanInfo and scanInfo.PassageLocked == true
 			local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 			local normalPacingBatchSize = if wasGoldenRoute
 				then nil
 				else Progress.getNormalPacingBatchSize(normalRatio, scanInfo and scanInfo.RawNormal or #candidates)
 			local shouldHoldForGoldenWait = GoldenWait.shouldHoldAfterRoute(scanInfo, totalPlanned)
+			local goldenPreempted = false
+			local lastGoldenPreemptCheckAt = -math.huge
+			local cachedLiveGoldenKind = nil
+			local function shouldAbortRoute()
+				if not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision then
+					return true
+				end
+				local now = os.clock()
+				if now - lastGoldenPreemptCheckAt >= GOLDEN_PREEMPT_SCAN_INTERVAL then
+					lastGoldenPreemptCheckAt = now
+					cachedLiveGoldenKind = Scanner.getLiveGoldenKind(gch)
+				end
+				if (cachedLiveGoldenKind == "PassageGift" and not wasPassageRoute)
+					or (cachedLiveGoldenKind ~= nil and not wasGoldenRoute)
+				then
+					goldenPreempted = true
+					return true
+				end
+
+				return false
+			end
 
 			-- Acquire Collecting Lease
 			local lease = MovementLease.acquire("Collecting")
@@ -877,9 +954,7 @@ local function runLoop(controller)
 			if mode == PIPELINE_MODE then
 				routeCompleted, routeStats = PipelinedCollector.collectRoute(controller, hrp, route, range, {
 					NormalPacingBatchSize = normalPacingBatchSize,
-					AbortCheck = function()
-						return not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision
-					end,
+					AbortCheck = shouldAbortRoute,
 				}, lease, mySessionToken)
 			else
 				-- Normal mode collection loop
@@ -888,7 +963,7 @@ local function runLoop(controller)
 				local tailPrecision = isTailPrecision(candidates, scanInfo, normalRatio)
 
 				for index, step in ipairs(route) do
-					if not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision then
+					if shouldAbortRoute() then
 						routeCompleted = false
 						break
 					end
@@ -916,9 +991,7 @@ local function runLoop(controller)
 						PrecisionMode = precisionMode,
 						TailMode = tailPrecision,
 						NormalPacingBatchSize = normalPacingBatchSize,
-						AbortCheck = function()
-							return not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision
-						end,
+						AbortCheck = shouldAbortRoute,
 					}, lease, mySessionToken)
 
 					if collectResult then
@@ -926,6 +999,9 @@ local function runLoop(controller)
 						routeStats.Accepted += collectResult.Accepted
 						routeStats.Failed += collectResult.Rejected
 					end
+				end
+				if shouldAbortRoute() then
+					routeCompleted = false
 				end
 			end
 
@@ -936,6 +1012,10 @@ local function runLoop(controller)
 			lease:release({ KeepFootholdDuration = 2.5, OnlyKeepFootholdIfAirborne = true })
 
 			if not isSessionActive() then continue end
+			if goldenPreempted then
+				transitionTo(controller, "Scanning", "Golden gifts detected; preempting normal route")
+				continue
+			end
 
 			if (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision then
 				transitionTo(controller, "Paused", "Range changed; recalculating")
@@ -943,7 +1023,7 @@ local function runLoop(controller)
 				continue
 			end
 
-			if shouldHoldForGoldenWait then
+			if routeCompleted and shouldHoldForGoldenWait then
 				if typeof(GoldenWait.startNormalClearWindow) == "function" then
 					GoldenWait.startNormalClearWindow()
 				else
@@ -951,10 +1031,12 @@ local function runLoop(controller)
 				end
 			end
 
-			if routeCompleted and wasGoldenRoute then
+			if routeCompleted and wasGoldenRoute and not wasPassageRoute then
 				pendingGoldenReturnSince = os.clock()
 				transitionTo(controller, "Scanning", "Verifying golden complete")
 				verifyGoldenRouteComplete(controller, hrp, isSessionActive)
+			elseif routeCompleted and wasPassageRoute then
+				transitionTo(controller, "Scanning", "Passage gifts cleared; resuming route")
 			end
 
 			task.wait(0.04)
@@ -1079,6 +1161,7 @@ local function startWatchdog(controller)
 			local progressStalled = liveGiftCount ~= nil
 				and liveGiftCount > 0
 				and controller.PylonActivatorHolding ~= true
+				and controller.GiftFarmPolicyHolding ~= true
 				and now - lastProgressAt >= LOGICAL_STALL_TIMEOUT
 			if Context.isInRound() and (workerStalled or progressStalled) then
 				local detail = if progressStalled
@@ -1104,6 +1187,9 @@ function Coordinator.enable(controller, gc)
 
 	enabled = true
 	configDirty = true
+	if RunPolicy and typeof(RunPolicy.enable) == "function" then
+		RunPolicy.enable(controller)
+	end
 
 	if Context and typeof(Context.suppressMovementInteractions) == "function" then
 		Context.suppressMovementInteractions()
@@ -1152,6 +1238,9 @@ function Coordinator.disable(controller)
 		if not restored then
 			warn("[NULLSCAPE] Gift Farm interaction restore failed: " .. tostring(restoreError))
 		end
+	end
+	if RunPolicy and typeof(RunPolicy.disable) == "function" then
+		RunPolicy.disable(controller)
 	end
 
 	if wasEnabled then

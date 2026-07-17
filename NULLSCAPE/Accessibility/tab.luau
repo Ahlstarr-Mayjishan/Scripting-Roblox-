@@ -38,6 +38,8 @@ local DEFAULTS = {
 	GrappleAnchorPriorityTriaOrb = 620,
 	GrappleAnchorPriorityBell = 550,
 	GrappleAssistTerrainPriority = 140,
+	GrappleIntentHighSpeed = 120,
+	GrappleIntentRailRange = 14,
 	GrappleVoidProtectionEnabled = false,
 	GrappleVoidProtectionHeight = 24,
 	GrappleVoidProtectionFallSpeed = 85,
@@ -404,6 +406,30 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateSlider({
+		Name = "Minimum Confidence Score",
+		Info = "Minimum target score accepted by the confidence gate.",
+		Range = { -100, 80 },
+		Increment = 1,
+		CurrentValue = Controller.GrappleAssistMinConfidenceScore or -35,
+		Flag = "GrappleAssistMinConfidenceScoreSlider",
+		Callback = function(Value)
+			Controller:SetGrappleAssistMinConfidenceScore(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Confidence Margin",
+		Info = "Required score lead over the second-best target.",
+		Range = { 0, 50 },
+		Increment = 1,
+		CurrentValue = Controller.GrappleAssistConfidenceMargin or 5,
+		Flag = "GrappleAssistConfidenceMarginSlider",
+		Callback = function(Value)
+			Controller:SetGrappleAssistConfidenceMargin(Value)
+		end,
+	})
+
 	Tab:CreateDivider()
 
 	Tab:CreateToggle({
@@ -433,6 +459,18 @@ return function(Client, Controller)
 		Flag = "GrappleAssistSafetyToggle",
 		Callback = function(Value)
 			Controller:SetGrappleAssistSafety(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Safety Reject Penalty",
+		Info = "Penalty applied when a candidate fails a hard cast-safety check.",
+		Range = { 20, 140 },
+		Increment = 1,
+		CurrentValue = Controller.GrappleAssistSafetyRejectPenalty or 74,
+		Flag = "GrappleAssistSafetyRejectPenaltySlider",
+		Callback = function(Value)
+			Controller:SetGrappleAssistSafetyRejectPenalty(Value)
 		end,
 	})
 
@@ -479,6 +517,92 @@ return function(Client, Controller)
 		Callback = function(Option)
 			local selected = typeof(Option) == "table" and Option[1] or Option
 			Controller:SetGrappleAnchorTargetingStyle(selected)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "GrapplePoint Priority",
+		Info = "Custom ranking weight for native GrapplePoint anchors.",
+		Range = { 0, 1000 },
+		Increment = 10,
+		CurrentValue = Controller.GrappleAnchorPriorityGrapplePoint or 700,
+		Flag = "GrappleAnchorPriorityGrapplePointSlider",
+		Callback = function(Value)
+			Controller:SetGrappleAnchorPriorityGrapplePoint(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "JumpPad Priority",
+		Info = "Custom ranking weight for native JumpPad anchors.",
+		Range = { 0, 1000 },
+		Increment = 10,
+		CurrentValue = Controller.GrappleAnchorPriorityJumpPad or 650,
+		Flag = "GrappleAnchorPriorityJumpPadSlider",
+		Callback = function(Value)
+			Controller:SetGrappleAnchorPriorityJumpPad(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "TriaOrb Priority",
+		Info = "Custom ranking weight for native TriaOrb anchors.",
+		Range = { 0, 1000 },
+		Increment = 10,
+		CurrentValue = Controller.GrappleAnchorPriorityTriaOrb or 620,
+		Flag = "GrappleAnchorPriorityTriaOrbSlider",
+		Callback = function(Value)
+			Controller:SetGrappleAnchorPriorityTriaOrb(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Bell Priority",
+		Info = "Custom ranking weight for native Bell anchors.",
+		Range = { 0, 1000 },
+		Increment = 10,
+		CurrentValue = Controller.GrappleAnchorPriorityBell or 550,
+		Flag = "GrappleAnchorPriorityBellSlider",
+		Callback = function(Value)
+			Controller:SetGrappleAnchorPriorityBell(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Terrain Priority",
+		Info = "Custom ranking weight added to ordinary terrain anchors.",
+		Range = { -50, 300 },
+		Increment = 10,
+		CurrentValue = Controller.GrappleAssistTerrainPriority or 140,
+		Flag = "GrappleAssistTerrainPrioritySlider",
+		Callback = function(Value)
+			Controller:SetGrappleAssistTerrainPriority(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "High-Speed Intent Threshold",
+		Info = "Speed at which the intent resolver switches to high-speed targeting behavior.",
+		Range = { 40, 300 },
+		Increment = 5,
+		Suffix = " studs/s",
+		CurrentValue = Controller.GrappleIntentHighSpeed or 120,
+		Flag = "GrappleIntentHighSpeedSlider",
+		Callback = function(Value)
+			Controller:SetGrappleIntentHighSpeed(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Rail Intent Range",
+		Info = "Nearby rail distance used when resolving grapple travel intent.",
+		Range = { 4, 48 },
+		Increment = 1,
+		Suffix = " studs",
+		CurrentValue = Controller.GrappleIntentRailRange or 14,
+		Flag = "GrappleIntentRailRangeSlider",
+		Callback = function(Value)
+			Controller:SetGrappleIntentRailRange(Value)
 		end,
 	})
 
@@ -737,6 +861,19 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateSlider({
+		Name = "Dodge Prediction Horizon",
+		Info = "How far ahead enemy and player movement is projected before a dodge is triggered.",
+		Range = { 0.15, 0.9 },
+		Increment = 0.05,
+		Suffix = "s",
+		CurrentValue = Controller.GrappleDodgeHorizon or 0.45,
+		Flag = "GrappleDodgeHorizonSlider",
+		Callback = function(Value)
+			Controller:SetGrappleDodgeHorizon(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
 		Name = "Dodge Cast Range",
 		Info = "Maximum grapple distance Grapple Dodge can use for escape anchors.",
 		Range = { 30, 150 },
@@ -759,6 +896,18 @@ return function(Client, Controller)
 		Flag = "GrappleDodgeStrengthSlider",
 		Callback = function(Value)
 			Controller:SetGrappleDodgeStrength(Value)
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Dodge Rail Bonus",
+		Info = "Extra score given to reachable rail anchors during Grapple Dodge.",
+		Range = { 0, 120 },
+		Increment = 1,
+		CurrentValue = Controller.GrappleDodgeRailBonus or 34,
+		Flag = "GrappleDodgeRailBonusSlider",
+		Callback = function(Value)
+			Controller:SetGrappleDodgeRailBonus(Value)
 		end,
 	})
 

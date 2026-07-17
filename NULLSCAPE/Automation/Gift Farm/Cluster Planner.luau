@@ -24,6 +24,7 @@ local function getSafeRange(range)
 end
 
 local function scoreCluster(cluster, targetPosition, seed, origin, range)
+	local passage = 0
 	local golden = 0
 	local bonusTilePriority = 0
 	local collapseUrgency = 0
@@ -32,6 +33,9 @@ local function scoreCluster(cluster, targetPosition, seed, origin, range)
 	local edgeSq = range and (range * EDGE_PENALTY_RATIO) ^ 2 or nil
 
 	for _, item in ipairs(cluster) do
+		if item.passage then
+			passage += 1
+		end
 		if item.golden then
 			golden += 1
 		end
@@ -49,6 +53,7 @@ local function scoreCluster(cluster, targetPosition, seed, origin, range)
 	local targetRootPosition = Distance.getRootPosition(targetPosition or seed.pos)
 	local originDistance = origin and nativeDistanceSq(targetRootPosition, origin) or 0
 	return {
+		Passage = passage,
 		Golden = golden,
 		BonusTilePriority = bonusTilePriority,
 		CollapseUrgency = collapseUrgency,
@@ -63,6 +68,9 @@ end
 local function isBetterScore(score, bestScore)
 	if not bestScore then
 		return true
+	end
+	if score.Passage ~= bestScore.Passage then
+		return score.Passage > bestScore.Passage
 	end
 	if score.Golden ~= bestScore.Golden then
 		return score.Golden > bestScore.Golden
@@ -90,6 +98,9 @@ end
 
 local function sortCluster(cluster, targetPosition)
 	table.sort(cluster, function(a, b)
+		if a.passage ~= b.passage then
+			return a.passage == true
+		end
 		if a.golden ~= b.golden then
 			return a.golden == true
 		end
@@ -195,7 +206,7 @@ local function getWeightedCenter(cluster)
 	local weighted = Vector3.new(0, 0, 0)
 
 	for _, item in ipairs(cluster) do
-		local weight = item.golden and 3 or 1
+		local weight = item.passage and 5 or (item.golden and 3 or 1)
 		if (tonumber(item.collapsePriority) or 0) > 0 then
 			weight += math.min(4, item.collapsePriority)
 		end
@@ -224,6 +235,9 @@ end
 local function isBetterSeed(candidate, best, origin)
 	if not best then
 		return true
+	end
+	if candidate.passage ~= best.passage then
+		return candidate.passage == true
 	end
 	if candidate.golden ~= best.golden then
 		return candidate.golden == true

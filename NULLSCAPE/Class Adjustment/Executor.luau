@@ -55,6 +55,8 @@ local MODULE_PATHS = {
 }
 
 local ClassContext = getgenv().loadModule("NULLSCAPE/Core/Class Context.luau")
+local AnchorAvailability =
+	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Anchor Availability.luau")
 
 local function isGrapplerActive()
 	return HooksActive and ClassContext and ClassContext.is("Grappler")
@@ -758,6 +760,17 @@ function Executor.enable()
 		wrappedStart = function(self, p2, ...)
 			if not isGrapplerActive() then
 				return originalStart(self, p2, ...)
+			end
+			if
+				p2
+				and p2.Instance
+				and AnchorAvailability
+				and typeof(AnchorAvailability.evaluateBeacon) == "function"
+			then
+				local available = AnchorAvailability.evaluateBeacon(p2.Instance)
+				if not available then
+					return nil
+				end
 			end
 
 			local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")

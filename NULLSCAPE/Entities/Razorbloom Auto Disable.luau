@@ -10,6 +10,8 @@ local RunService = game:GetService("RunService")
 
 local ENDPOINT_WAIT_WINDOW = 2.5
 local ENDPOINT_RETRY_STEP = 0.05
+local START_PHASE_GRACE = 1
+local MAX_DISABLE_ATTEMPTS = 4
 
 local Logic = {
 	Enabled = false,
@@ -75,22 +77,6 @@ local function findEndpoints(razorbloom)
 	return clientEvent, clientBindable
 end
 
-local function disableAfterStart(target, razorbloom, clientBindable, generation, startDelay)
-	if target.DisableScheduled then
-		return
-	end
-	target.DisableScheduled = true
-
-	task.spawn(function()
-		task.wait(math.max(0, tonumber(startDelay) or 5))
-		RunService.Heartbeat:Wait()
-		RunService.Heartbeat:Wait()
-		if isRequested() and generation == Logic.Generation and razorbloom.Parent and clientBindable.Parent then
-			pcall(clientBindable.Fire, clientBindable, "Disable")
-		end
-	end)
-end
-
 local function isDangerTrack(track)
 	local name = string.lower(track.Name)
 	return name == "mad" or name == "spinloop"
@@ -126,6 +112,63 @@ local function isDangerPhaseActive(razorbloom)
 		end
 	end
 	return false
+end
+
+local function canDisable(razorbloom, clientBindable, generation)
+	return isRequested()
+		and generation == Logic.Generation
+		and razorbloom.Parent ~= nil
+		and clientBindable.Parent ~= nil
+end
+
+local function disableDangerPhase(target, razorbloom, clientBindable, generation)
+	if target.DisableActive or target.DisableComplete then
+		return
+	end
+	target.DisableActive = true
+
+	task.spawn(function()
+		-- Native starts the danger animation/sound immediately before setting its
+		-- active flag. Crossing one frame prevents Disable from being overwritten.
+		RunService.Heartbeat:Wait()
+		for _ = 1, MAX_DISABLE_ATTEMPTS do
+			if not canDisable(razorbloom, clientBindable, generation) then
+				break
+			end
+
+			pcall(clientBindable.Fire, clientBindable, "Disable")
+			RunService.Heartbeat:Wait()
+			if not isDangerPhaseActive(razorbloom) then
+				target.DisableComplete = true
+				break
+			end
+		end
+		target.DisableActive = nil
+	end)
+end
+
+local function scheduleStartFallback(target, razorbloom, clientBindable, generation, startDelay)
+	target.StartToken = (target.StartToken or 0) + 1
+	local startToken = target.StartToken
+	target.DisableComplete = nil
+
+	task.spawn(function()
+		task.wait(math.max(0, tonumber(startDelay) or 5))
+		local deadline = time() + START_PHASE_GRACE
+		while target.StartToken == startToken and not target.DisableComplete do
+			if not canDisable(razorbloom, clientBindable, generation) then
+				return
+			end
+			if isDangerPhaseActive(razorbloom) then
+				disableDangerPhase(target, razorbloom, clientBindable, generation)
+				return
+			end
+			if time() >= deadline then
+				return
+			end
+			RunService.Heartbeat:Wait()
+		end
+	end)
 end
 
 local function watchRazorbloom(razorbloom)
@@ -164,7 +207,7 @@ local function watchRazorbloom(razorbloom)
 		target.Pending = nil
 		target.ClientEvent = clientEvent.OnClientEvent:Connect(function(command, startDelay)
 			if command == "Start" then
-				disableAfterStart(target, razorbloom, clientBindable, generation, startDelay)
+				scheduleStartFallback(target, razorbloom, clientBindable, generation, startDelay)
 			end
 		end)
 		target.AncestryChanged = razorbloom.AncestryChanged:Connect(function(_, parent)
@@ -178,12 +221,12 @@ local function watchRazorbloom(razorbloom)
 		local screamHard = rootPart and rootPart:FindFirstChild("scream_hard")
 		if scream and scream:IsA("Sound") then
 			target.ScreamPlayed = scream.Played:Connect(function()
-				disableAfterStart(target, razorbloom, clientBindable, generation, 0)
+				disableDangerPhase(target, razorbloom, clientBindable, generation)
 			end)
 		end
 		if screamHard and screamHard:IsA("Sound") then
 			target.ScreamHardPlayed = screamHard.Played:Connect(function()
-				disableAfterStart(target, razorbloom, clientBindable, generation, 0)
+				disableDangerPhase(target, razorbloom, clientBindable, generation)
 			end)
 		end
 
@@ -192,14 +235,14 @@ local function watchRazorbloom(razorbloom)
 		if animator then
 			target.AnimationPlayed = animator.AnimationPlayed:Connect(function(track)
 				if isDangerTrack(track) then
-					disableAfterStart(target, razorbloom, clientBindable, generation, 0)
+					disableDangerPhase(target, razorbloom, clientBindable, generation)
 				end
 			end)
 		end
 
 		-- Covers enabling the option after the native Start event already fired.
 		if isDangerPhaseActive(razorbloom) then
-			disableAfterStart(target, razorbloom, clientBindable, generation, 0)
+			disableDangerPhase(target, razorbloom, clientBindable, generation)
 		end
 	end)
 end

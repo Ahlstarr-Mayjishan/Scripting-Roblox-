@@ -7,7 +7,6 @@ local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
 
 local Collector = {}
-local PRECISION_COLLECT_SETTLE = 0.05
 local BASE_VALIDATION_WAIT = 0.08
 local PRECISION_VALIDATION_WAIT = 0.12
 local PRECISION_VALIDATION_MAX = 0.2
@@ -26,14 +25,16 @@ local TAIL_CLEANUP_MAX_PULSES = 10
 local CLEANUP_PULSE_INTERVAL = 0.015
 local MAX_RETRY_PASSES = 2
 local MAX_PRECISION_RETRY_PASSES = 3
-local RETRY_SETTLE = 0.045
-local FAST_POSITION_SYNC_MIN = 0.05
-local FAST_POSITION_SYNC_MAX = 0.14
+local POSITION_SYNC_MIN = 0.065
+local POSITION_SYNC_MAX = 0.5
+local POSITION_SYNC_PING_MULTIPLIER = 1.2
+local POSITION_SYNC_MARGIN = 0.02
 
 local comboCount = 0
 local lastCollectTick = 0
 local adaptiveSuccessRate = 1
 local adaptiveValidationWait = BASE_VALIDATION_WAIT
+local manualCollectDepth = 0
 
 local function collectGift(gift, collectedEvent)
 	local now = tick()
@@ -43,9 +44,11 @@ local function collectGift(gift, collectedEvent)
 	comboCount += 1
 	lastCollectTick = now
 
+	manualCollectDepth += 1
 	local success = pcall(function()
 		gift:Collect(false, true, comboCount)
 	end)
+	manualCollectDepth -= 1
 	if not success then
 		return false
 	end
@@ -127,6 +130,46 @@ local function getPingSeconds()
 	return ok and normalizePingSeconds(result) or nil
 end
 
+local function withNativePickupSuppressed(callback)
+	local handler = Context.getGiftClientHandler()
+	local classes = handler and handler.GiftClasses
+	if typeof(classes) ~= "table" then
+		return callback()
+	end
+
+	local wrapped = {}
+	for _, class in pairs(classes) do
+		local original = typeof(class) == "table" and rawget(class, "Collect") or nil
+		if typeof(original) == "function" then
+			local wrapper = function(gift, alternate, clientCollect, ...)
+				if clientCollect == true and manualCollectDepth <= 0 then
+					return
+				end
+				return original(gift, alternate, clientCollect, ...)
+			end
+			class.Collect = wrapper
+			wrapped[#wrapped + 1] = {
+				Class = class,
+				Original = original,
+				Wrapper = wrapper,
+			}
+		end
+	end
+
+	local results = table.pack(xpcall(callback, debug.traceback))
+	for index = #wrapped, 1, -1 do
+		local entry = wrapped[index]
+		if entry.Class.Collect == entry.Wrapper then
+			entry.Class.Collect = entry.Original
+		end
+	end
+
+	if not results[1] then
+		error(results[2], 0)
+	end
+	return table.unpack(results, 2, results.n)
+end
+
 local function waitForNativeFlush()
 	-- GiftClient queues U16 ids and flushes the whole buffer on RenderStepped.
 	-- The following physics boundary guarantees the native callback has completed
@@ -137,7 +180,8 @@ end
 
 local function waitForServerPosition()
 	local ping = getPingSeconds() or 0.08
-	local waitTime = math.clamp(ping * 0.75 + 0.02, FAST_POSITION_SYNC_MIN, FAST_POSITION_SYNC_MAX)
+	local waitTime =
+		math.clamp(ping * POSITION_SYNC_PING_MULTIPLIER + POSITION_SYNC_MARGIN, POSITION_SYNC_MIN, POSITION_SYNC_MAX)
 	local startedAt = os.clock()
 
 	-- Context.moveCharacterTo writes the final CFrame after its own Heartbeat.
@@ -341,6 +385,9 @@ local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, c
 		clearVelocity(hrp)
 		if (hrp.Position - standingPosition).Magnitude > PRECISION_ARRIVAL_TOLERANCE then
 			waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
+			if not isAborted(options, lease, currentSessionToken) then
+				waitForServerPosition()
+			end
 		end
 
 		local currentPos = hrp.Position
@@ -397,7 +444,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 		CleanupPulses = 0,
 	}
 
-	local ok, err = pcall(function()
+	local ok, err = pcall(withNativePickupSuppressed, function()
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
@@ -409,7 +456,8 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 
 		hrp.Anchored = false
 		lease:placeFoothold(standingPosition)
-		if not jumpToWaypoint(hrp, standingPosition, lease) then
+		local moved = jumpToWaypoint(hrp, standingPosition, lease)
+		if not moved then
 			result.Rejected = #cluster
 			return
 		end
@@ -425,17 +473,17 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			currentSessionToken,
 			options
 		)
-		if not arrived and not hasCollectableNearby(cluster, hrp.Position, clientCollectRange) then
-			result.Rejected = #cluster
-			return
+		if not isAborted(options, lease, currentSessionToken)
+			and (arrived or hasCollectableNearby(cluster, hrp.Position, clientCollectRange))
+		then
+			waitForServerPosition()
 		end
 		if isAborted(options, lease, currentSessionToken) then
 			return
 		end
-		if precisionMode then
-			waitIfPositive(PRECISION_COLLECT_SETTLE)
-		else
-			waitForServerPosition()
+		if not arrived and not hasCollectableNearby(cluster, hrp.Position, clientCollectRange) then
+			result.Rejected = #cluster
+			return
 		end
 		if isAborted(options, lease, currentSessionToken) then
 			return
@@ -484,7 +532,9 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 
 			comboCount = 0
 			waitForArrival(hrp, standingPosition, tailMode and "tail" or true, lease, currentSessionToken, options)
-			task.wait(RETRY_SETTLE)
+			if not isAborted(options, lease, currentSessionToken) then
+				waitForServerPosition()
+			end
 			if isAborted(options, lease, currentSessionToken) then
 				return
 			end

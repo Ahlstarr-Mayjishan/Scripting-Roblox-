@@ -198,6 +198,18 @@ function Logic.getImmunityCheck(name, controller)
 	return nil
 end
 
+function Logic.canTemporarilyAllowPart(part, entityName)
+	if not (part and part:IsA("BasePart")) then
+		return false
+	end
+
+	local GC = getEntitiesGC()
+	local data = GC and GC.SavedPartsData and GC.SavedPartsData[part]
+	return data ~= nil
+		and data.originalCanTouch == true
+		and nameMatchesEntity(data.enemyName, entityName)
+end
+
 local function removeTouchFromPart(gc, enemy, part)
 	if not part or not part.Parent then
 		return

@@ -5,55 +5,11 @@
 
 local getgenv = getgenv
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 
 local TouchInterest = getgenv().loadModule("NULLSCAPE/Entities/TouchInterest.luau")
-local SpecialImmunity = getgenv().loadModule("NULLSCAPE/Entities/SpecialImmunity.luau")
-local Executor = {
-	enableImmunity = function(gc, enemy)
-		if TouchInterest then
-			TouchInterest.enableImmunity(gc, enemy)
-		end
-	end,
-	disableImmunityForType = function(gc, entityName)
-		if TouchInterest then
-			TouchInterest.disableImmunityForType(gc, entityName)
-		end
-		if SpecialImmunity then
-			SpecialImmunity.disableForType(entityName)
-		end
-	end,
-	restoreAll = function(gc)
-		if TouchInterest then
-			TouchInterest.restoreAll(gc)
-		end
-		if SpecialImmunity then
-			SpecialImmunity.disable()
-		end
-	end,
-	reconcile = function(gc)
-		if TouchInterest and typeof(TouchInterest.reconcile) == "function" then
-			TouchInterest.reconcile(gc)
-		end
-	end,
-	enableSpecialImmunity = function()
-		if SpecialImmunity then
-			return SpecialImmunity.enable()
-		end
-	end,
-	disableSpecialImmunityForType = function(entityName)
-		if SpecialImmunity then
-			SpecialImmunity.disableForType(entityName)
-		end
-	end,
-	disableSpecialImmunity = function()
-		if SpecialImmunity then
-			SpecialImmunity.disable()
-		end
-	end,
-}
+local Executor = getgenv().loadModule("NULLSCAPE/Entities/executor.luau")
 local HuskEvasion = getgenv().loadModule("NULLSCAPE/Entities/HuskEvasion.luau")
 local RemoteBlocking = getgenv().loadModule("NULLSCAPE/Entities/RemoteBlocking.luau")
 local CelestialImmunity = getgenv().loadModule("NULLSCAPE/Entities/Celestial Immunity.luau")
@@ -61,13 +17,11 @@ local VoidImplosionImmunity = getgenv().loadModule("NULLSCAPE/Entities/Void Impl
 local CadenceStatus = getgenv().loadModule("NULLSCAPE/Entities/Cadence Status.luau")
 local OperatorAutoDisable = getgenv().loadModule("NULLSCAPE/Entities/Operator Auto Disable.luau")
 local RazorbloomAutoDisable = getgenv().loadModule("NULLSCAPE/Entities/Razorbloom Auto Disable.luau")
+local BellImmunity = getgenv().loadModule("NULLSCAPE/Entities/Bell Immunity.luau")
+local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
-local BackTrick = getgenv().loadModule("NULLSCAPE/Entities/technique/BackTrick (TeleFragger).luau")
 local KolonaAutoQTE = nil
 local SpringerAutoJump = nil
-local startBellGongKnockbackGuard
-local stopBellGongKnockbackGuard
-local initializeBellBlindnessHook
 
 local function getKolonaAutoQTE()
 	if KolonaAutoQTE then
@@ -102,8 +56,6 @@ local function getSpringerAutoJump()
 	warn("[NULLSCAPE] Springer Auto Jump failed to load: " .. tostring(result))
 	return nil
 end
-
-local hookedTelefraggers = setmetatable({}, { __mode = "k" })
 
 local function shouldBlockWithShieldPolicy(controller, allowShieldBait)
 	if RemoteBlocking and typeof(RemoteBlocking.shouldBlockWithShieldPolicy) == "function" then
@@ -161,20 +113,8 @@ local Controller = {
 	ShieldBaitEnabled = false,
 	ShieldBaitChance = 0,
 	LastShieldBaitAt = 0,
-	TelefraggerAutoDodge = false,
-	TelefraggerAutoDodgeRequested = false,
-	TelefraggerBackTrick = false,
-	TelefraggerBackTrickMode = "180",
-	TelefraggerDesyncDelay = 0.44,
-	TelefraggerActiveThreads = {},
-	TelefraggerActiveDesyncs = {},
-	TelefraggerConnection = nil,
-	WasRedirectingTelefragger = false,
-	RedirectRootJoint = nil,
-	RedirectOriginalC0 = nil,
-	BellGongKnockbackConnection = nil,
-	LastBellDebuffAt = 0,
 	Destroyed = false,
+	StatusImmunity = StatusImmunity,
 
 	EnemiesFolder = nil,
 	PermanentConnections = {},
@@ -202,8 +142,7 @@ end
 
 local inLobby = not isInMatch()
 local function getStatusImmunity()
-	local globals = getgenv()._NULLSCAPE_Globals
-	return globals and globals.NullscapeStatusImmunity or nil
+	return StatusImmunity
 end
 
 Controller.inLobby = inLobby
@@ -277,30 +216,6 @@ local function restoreHooks()
 		globals.StatusEffectLoopToken = nil
 	end
 
-	globals.BellBlindnessHookPending = nil
-	if globals.BellRingWrapper and _G.RingBell == globals.BellRingWrapper and globals.OriginalRingBell then
-		_G.RingBell = globals.OriginalRingBell
-	end
-	if typeof(hookfunction) == "function" then
-		for hookedFunction, originalFunction in pairs(globals.BellHookedFunctions or {}) do
-			pcall(hookfunction, hookedFunction, originalFunction)
-		end
-		if globals.BellConnectHookInstalled and globals.OriginalBellConnect then
-			local events = ReplicatedStorage:FindFirstChild("Events")
-			local bellEvent = events and events:FindFirstChild("Bell")
-			if bellEvent and bellEvent:IsA("RemoteEvent") then
-				pcall(hookfunction, bellEvent.OnClientEvent.Connect, globals.OriginalBellConnect)
-			end
-		end
-	end
-	globals.BellBlindnessHookInstalled = nil
-	globals.BellConnectHookInstalled = nil
-	globals.OriginalBellConnect = nil
-	globals.BellRingWrapper = nil
-	globals.OriginalRingBell = nil
-	globals.BellHookedFunctions = nil
-	globals.BellOriginalFunctions = nil
-
 	-- Restore SettingsHandler hooks
 	if globals.SettingsHooked then
 		local ReplicatedFirst = game:GetService("ReplicatedFirst")
@@ -324,25 +239,6 @@ local function restoreHooks()
 		globals.OriginalGetSettings = nil
 	end
 	globals.EntitiesHookOwner = nil
-end
-
-function Controller:SetTelefraggerAutoDodge(value)
-	self.TelefraggerAutoDodge = false
-	self.TelefraggerAutoDodgeRequested = value == true
-	self:UpdateTelefraggerConnection()
-end
-
-function Controller:SetTelefraggerBackTrick(value)
-	self.TelefraggerBackTrick = value
-	self:UpdateTelefraggerConnection()
-end
-
-function Controller:SetTelefraggerBackTrickMode(value)
-	self.TelefraggerBackTrickMode = value
-end
-
-function Controller:SetTelefraggerDesyncDelay(value)
-	self.TelefraggerDesyncDelay = value
 end
 
 function Controller:SetSeamineImmune(value)
@@ -378,19 +274,13 @@ end
 
 function Controller:SetBellCurseImmune(value)
 	self.BellCurseImmune = value == true
-	if self.BellCurseImmune then
-		startBellGongKnockbackGuard(self)
-	elseif not self.BellKnockbackImmune then
-		stopBellGongKnockbackGuard(self)
-	end
+	BellImmunity.update(self)
 	Executor.reconcile(GC)
 end
 
 function Controller:SetBellBlindnessImmune(value)
 	self.BellBlindnessImmune = value == true
-	if self.BellBlindnessImmune and initializeBellBlindnessHook then
-		initializeBellBlindnessHook()
-	end
+	BellImmunity.update(self)
 end
 
 function Controller:SetBellOvertunedKillImmune(value)
@@ -399,9 +289,9 @@ end
 
 function Controller:SetFleshConcussionImmune(value)
 	self.FleshConcussionImmune = value == true
-	local StatusImmunity = getStatusImmunity()
-	if StatusImmunity and typeof(StatusImmunity.RefreshActiveEffects) == "function" then
-		StatusImmunity.RefreshActiveEffects()
+	local activeStatusImmunity = getStatusImmunity()
+	if activeStatusImmunity and typeof(activeStatusImmunity.RefreshActiveEffects) == "function" then
+		activeStatusImmunity.RefreshActiveEffects()
 	end
 end
 
@@ -445,163 +335,10 @@ function Controller:ReconcileImmunityState()
 	end
 end
 
-function Controller:UpdateTelefraggerConnection()
-	if self.TelefraggerConnection then
-		pcall(function()
-			self.TelefraggerConnection:Disconnect()
-		end)
-		self.TelefraggerConnection = nil
-	end
-
-	if not self.TelefraggerBackTrick and self.WasRedirectingTelefragger then
-		BackTrick.revert(self)
-	end
-
-	if not self.TelefraggerAutoDodge then
-		return
-	end
-
-	local LocalPlayer = game.Players.LocalPlayer
-
-	local function getDistanceToSegment(p, a, b)
-		local ab = b - a
-		local ap = p - a
-		local abLenSq = ab:Dot(ab)
-		if abLenSq < 1e-5 then
-			return (p - a).Magnitude, a
-		end
-		local t = ap:Dot(ab) / abLenSq
-		t = math.clamp(t, 0, 1)
-		local closest = a + t * ab
-		return (p - closest).Magnitude, closest
-	end
-
-	self.TelefraggerConnection = RunService.Heartbeat:Connect(function()
-		local char = LocalPlayer.Character
-		local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-		local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-		if not (humanoid and rootPart and humanoid.Health > 0) then
-			return
-		end
-
-		local enemiesFolder = workspace:FindFirstChild("Enemies")
-		if not enemiesFolder then
-			return
-		end
-
-		local dangerSegment = nil
-		local minSegmentDist = math.huge
-
-		for _, enemy in ipairs(enemiesFolder:GetChildren()) do
-			if string.find(string.lower(enemy.Name), "telefragger") then
-				local indicatorPart = enemy:FindFirstChild("IndicatorPart", true)
-				if indicatorPart then
-					local attachments = {}
-					for _, child in ipairs(indicatorPart:GetChildren()) do
-						if child:IsA("Attachment") then
-							table.insert(attachments, child)
-						end
-					end
-					if #attachments >= 2 then
-						local startPos = attachments[1].WorldPosition
-						local endPos = attachments[2].WorldPosition
-						local dist, closest = getDistanceToSegment(rootPart.Position, startPos, endPos)
-						if dist < 15 and dist < minSegmentDist then
-							minSegmentDist = dist
-							dangerSegment = { Start = startPos, End = endPos, Closest = closest }
-						end
-					end
-				end
-			end
-		end
-
-		if self.TelefraggerAutoDodge and dangerSegment then
-			local startPos = dangerSegment.Start
-			local endPos = dangerSegment.End
-			local dir = (endPos - startPos).Unit
-			local perp = Vector3.new(-dir.Z, 0, dir.X).Unit
-
-			local moveDir = humanoid.MoveDirection
-			local slideDir = perp
-			if moveDir.Magnitude > 0.1 then
-				if moveDir:Dot(perp) < 0 then
-					slideDir = -perp
-				end
-			else
-				local camera = workspace.CurrentCamera
-				if camera then
-					if camera.CFrame.RightVector:Dot(perp) < 0 then
-						slideDir = -perp
-					end
-				end
-			end
-
-			self.TelefraggerSuggestedDodgeDirection = slideDir
-			self.TelefraggerSuggestedDodgeAt = os.clock()
-		end
-	end)
-end
-
-function Controller:TriggerSilentBackTrick(enemy)
-	if not enemy then
-		return
-	end
-
-	if self.TelefraggerActiveThreads[enemy] then
-		pcall(task.cancel, self.TelefraggerActiveThreads[enemy])
-		self.TelefraggerActiveThreads[enemy] = nil
-	end
-
-	self.TelefraggerActiveThreads[enemy] = task.delay(self.TelefraggerDesyncDelay or 0.44, function()
-		self.TelefraggerActiveThreads[enemy] = nil
-
-		local wasEmpty = (next(self.TelefraggerActiveDesyncs) == nil)
-		self.TelefraggerActiveDesyncs[enemy] = true
-
-		if wasEmpty then
-			BackTrick.trigger(self)
-		end
-	end)
-end
-
-function Controller:CancelSilentBackTrick(enemy)
-	if not enemy then
-		return
-	end
-
-	if self.TelefraggerActiveThreads[enemy] then
-		pcall(task.cancel, self.TelefraggerActiveThreads[enemy])
-		self.TelefraggerActiveThreads[enemy] = nil
-	end
-
-	if self.TelefraggerActiveDesyncs[enemy] then
-		self.TelefraggerActiveDesyncs[enemy] = nil
-
-		if next(self.TelefraggerActiveDesyncs) == nil then
-			BackTrick.revert(self)
-		end
-	end
-
-	Executor.reconcile(GC)
-	if not self.BellImmune and not self.SpringerImmune then
-		restoreCharacterTouchStates()
-	end
-end
-
 function Controller:CleanUp()
 	local globals = getgenv()._NULLSCAPE_Globals
 	local finalCleanup = self.Destroyed
 		or (globals and globals.activeEntitiesController ~= nil and globals.activeEntitiesController ~= self)
-
-	for _, thread in pairs(self.TelefraggerActiveThreads) do
-		pcall(task.cancel, thread)
-	end
-	table.clear(self.TelefraggerActiveThreads)
-	table.clear(self.TelefraggerActiveDesyncs)
-
-	pcall(function()
-		BackTrick.cleanup(self)
-	end)
 
 	for part, state in pairs(originalTouchStates) do
 		if part and part.Parent then
@@ -647,28 +384,7 @@ function Controller:CleanUp()
 	if finalCleanup then
 		pcall(OperatorAutoDisable.disable)
 	end
-
-	if self.TelefraggerRedirectConnection then
-		pcall(function()
-			self.TelefraggerRedirectConnection:Disconnect()
-		end)
-		self.TelefraggerRedirectConnection = nil
-	end
-	if self.TelefraggerConnection then
-		pcall(function()
-			self.TelefraggerConnection:Disconnect()
-		end)
-		self.TelefraggerConnection = nil
-	end
-	if self.BellGongKnockbackConnection then
-		pcall(function()
-			self.BellGongKnockbackConnection:Disconnect()
-		end)
-		self.BellGongKnockbackConnection = nil
-	end
-	if self.WasRedirectingTelefragger then
-		BackTrick.revert(self)
-	end
+	pcall(if finalCleanup then BellImmunity.disable else BellImmunity.clearRuntime)
 
 	GC.cleanAll()
 	self.EnemiesFolder = nil
@@ -687,9 +403,9 @@ function Controller:CleanUp()
 	end
 
 	if finalCleanup then
-		local StatusImmunity = getStatusImmunity()
-		if StatusImmunity and typeof(StatusImmunity.disable) == "function" then
-			pcall(StatusImmunity.disable)
+		local activeStatusImmunity = getStatusImmunity()
+		if activeStatusImmunity and typeof(activeStatusImmunity.disable) == "function" then
+			pcall(activeStatusImmunity.disable)
 		end
 		pcall(restoreHooks)
 		if globals and globals.NullscapeEntitiesGC == GC then
@@ -1067,51 +783,6 @@ function Controller:SetSpringerOptions(options)
 	return self:SetSpringerAutoJump(hasOption("Auto Jump"))
 end
 
-stopBellGongKnockbackGuard = function(controller)
-	if controller.BellGongKnockbackConnection then
-		pcall(function()
-			controller.BellGongKnockbackConnection:Disconnect()
-		end)
-		controller.BellGongKnockbackConnection = nil
-	end
-	controller.BellPendingRoot = nil
-	controller.BellVelocityBeforeDebuff = nil
-	controller.BellVelocityRestoreUntil = nil
-end
-
-startBellGongKnockbackGuard = function(controller)
-	if controller.BellGongKnockbackConnection then
-		return
-	end
-
-	controller.BellGongKnockbackConnection = RunService.Heartbeat:Connect(function()
-		if controller.Destroyed or not (controller.BellCurseImmune or controller.BellKnockbackImmune) then
-			stopBellGongKnockbackGuard(controller)
-			return
-		end
-
-		local character = Players.LocalPlayer.Character
-		local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-		if not rootPart then
-			return
-		end
-
-		local now = time()
-		local restoreUntil = controller.BellVelocityRestoreUntil or 0
-		local savedVelocity = controller.BellVelocityBeforeDebuff
-		if controller.BellPendingRoot == rootPart and savedVelocity and now <= restoreUntil then
-			pcall(function()
-				rootPart.AssemblyLinearVelocity = savedVelocity
-				rootPart.Velocity = savedVelocity
-			end)
-		elseif restoreUntil > 0 then
-			controller.BellPendingRoot = nil
-			controller.BellVelocityBeforeDebuff = nil
-			controller.BellVelocityRestoreUntil = nil
-		end
-	end)
-end
-
 function Controller:SetBellKnockbackImmune(enabled)
 	self.BellKnockbackImmune = enabled == true
 	if enabled then
@@ -1122,15 +793,12 @@ function Controller:SetBellKnockbackImmune(enabled)
 				end
 			end
 		end
-		startBellGongKnockbackGuard(self)
 	else
-		if not self.BellCurseImmune then
-			stopBellGongKnockbackGuard(self)
-		end
 		if not self.BellImmune then
 			TouchInterest.disableImmunityForType(GC, "Bell")
 		end
 	end
+	BellImmunity.update(self)
 	Executor.reconcile(GC)
 end
 
@@ -1435,21 +1103,8 @@ local function processEntity(enemy)
 			CadenceStatus.attach(enemy)
 		end
 
-		if string.find(string.lower(name), "telefragger") and not hookedTelefraggers[enemy] then
-			hookedTelefraggers[enemy] = true
-			task.spawn(function()
-				local clientEvent = enemy:WaitForChild("ClientEvent", 5)
-				if clientEvent and clientEvent:IsA("RemoteEvent") then
-					local telefraggerConn = clientEvent.OnClientEvent:Connect(function(actionName)
-						if actionName == "SetTeleport" then
-							Controller:TriggerSilentBackTrick(enemy)
-						elseif actionName == "Indicator" then
-							Controller:CancelSilentBackTrick(enemy)
-						end
-					end)
-					GC.registerEntityConnection(enemy, telefraggerConn)
-				end
-			end)
+		if string.find(name, "Bell", 1, true) then
+			BellImmunity.attachEnemy(enemy, GC)
 		end
 	end
 
@@ -1505,13 +1160,10 @@ end
 
 local function removeEntity(enemy)
 	processedEntities[enemy] = nil
+	BellImmunity.detachEnemy(enemy)
 	GC.removeEntityConnections(enemy)
 	if SpringerAutoJump then
 		SpringerAutoJump.releaseEnemy(enemy)
-	end
-
-	if string.find(string.lower(enemy.Name), "telefragger") then
-		Controller:CancelSilentBackTrick(enemy)
 	end
 
 	for part, data in pairs(disabledShockwaves) do
@@ -1702,7 +1354,6 @@ end
 
 local function initializeStatusEffectHook()
 	local globals = getgenv()._NULLSCAPE_Globals
-	local StatusImmunity = getStatusImmunity() or getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
 	if StatusImmunity then
 		StatusImmunity.initialize()
 	end
@@ -1797,123 +1448,6 @@ local function initializeStatusEffectHook()
 			end
 			task.wait(suppressFleshScreenEffects and 0.2 or 1.0)
 		end
-	end)
-end
-
-initializeBellBlindnessHook = function()
-	local globals = getgenv()._NULLSCAPE_Globals
-	if globals.BellBlindnessHookPending then
-		return
-	end
-	if globals.BellRingWrapper and _G.RingBell == globals.BellRingWrapper then
-		return
-	end
-	if globals.BellRingWrapper ~= _G.RingBell then
-		globals.BellRingWrapper = nil
-	end
-	globals.BellBlindnessHookPending = true
-	globals.BellHookedFunctions = globals.BellHookedFunctions or setmetatable({}, { __mode = "k" })
-	globals.BellOriginalFunctions = globals.BellOriginalFunctions or setmetatable({}, { __mode = "k" })
-
-	local function shouldBlockRingBell()
-		local activeCtrl = getgenv()._NULLSCAPE_Globals.activeEntitiesController
-		return activeCtrl and activeCtrl.BellBlindnessImmune == true
-	end
-
-	local function makeRingBellWrapper(callback)
-		return function(...)
-			if shouldBlockRingBell() then
-				return
-			end
-			return callback(...)
-		end
-	end
-
-	task.spawn(function()
-		local originalRingBell
-		local deadline = time() + 30
-		repeat
-			if not globals.BellBlindnessHookPending or Controller.Destroyed then
-				return
-			end
-			originalRingBell = _G.RingBell
-			if typeof(originalRingBell) == "function" then
-				break
-			end
-			task.wait(0.25)
-		until time() >= deadline
-
-		if not globals.BellBlindnessHookPending or Controller.Destroyed then
-			return
-		end
-		if typeof(originalRingBell) ~= "function" then
-			globals.BellBlindnessHookPending = nil
-			return
-		end
-
-		globals.OriginalRingBell = originalRingBell
-		globals.BellOriginalFunctions[originalRingBell] = true
-		globals.BellRingWrapper = makeRingBellWrapper(originalRingBell)
-		_G.RingBell = globals.BellRingWrapper
-	end)
-
-	task.spawn(function()
-		while
-			globals.BellBlindnessHookPending
-			and not globals.BellRingWrapper
-			and not Controller.Destroyed
-			and globals.EntitiesHookOwner == Controller
-		do
-			task.wait(0.25)
-		end
-		if Controller.Destroyed or globals.EntitiesHookOwner ~= Controller or not globals.BellRingWrapper then
-			return
-		end
-
-		local events = ReplicatedStorage:WaitForChild("Events", 15)
-		local bellEvent = events and events:WaitForChild("Bell", 15)
-		if not (bellEvent and bellEvent:IsA("RemoteEvent")) then
-			globals.BellBlindnessHookPending = nil
-			return
-		end
-
-		if typeof(getconnections) == "function" and typeof(hookfunction) == "function" then
-				local function hookBellConnections()
-					for _, connection in ipairs(getconnections(bellEvent.OnClientEvent)) do
-						local originalFunction = connection.Function
-						if
-							typeof(originalFunction) == "function"
-							and globals.BellOriginalFunctions[originalFunction]
-							and not globals.BellHookedFunctions[originalFunction]
-						then
-							local oldFunc
-							oldFunc = hookfunction(originalFunction, function(...)
-								if shouldBlockRingBell() then
-									return
-								end
-								return oldFunc(...)
-							end)
-							globals.BellHookedFunctions[originalFunction] = oldFunc
-						end
-					end
-				end
-
-				hookBellConnections()
-
-				if not globals.BellConnectHookInstalled then
-					local oldConnect
-					oldConnect = hookfunction(bellEvent.OnClientEvent.Connect, function(self, callback)
-						if typeof(callback) == "function" and globals.BellOriginalFunctions[callback] then
-							return oldConnect(self, makeRingBellWrapper(callback))
-						end
-						return oldConnect(self, callback)
-					end)
-					globals.OriginalBellConnect = oldConnect
-					globals.BellConnectHookInstalled = true
-				end
-		end
-		globals.BellBlindnessHookInstalled = true
-		globals.BellBlindnessHookPending = nil
 	end)
 end
 
@@ -2087,29 +1621,8 @@ task.spawn(function()
 	end
 end)
 
-local bellCharacterConnection = Players.LocalPlayer.CharacterAdded:Connect(function()
-	if Controller.Destroyed or Controller.BellBlindnessImmune ~= true then
-		return
-	end
-	local previousRingBell = _G.RingBell
-	task.spawn(function()
-		local deadline = time() + 5
-		repeat
-			task.wait(0.1)
-		until _G.RingBell ~= previousRingBell or time() >= deadline
-		if
-			not Controller.Destroyed
-			and Controller.BellBlindnessImmune == true
-			and getgenv()._NULLSCAPE_Globals.activeEntitiesController == Controller
-		then
-			initializeBellBlindnessHook()
-		end
-	end)
-end)
-table.insert(Controller.PermanentConnections, bellCharacterConnection)
-
 task.spawn(initializeICBMHook)
 task.spawn(initializeStatusEffectHook)
-task.spawn(initializeBellBlindnessHook)
+BellImmunity.initialize(Controller)
 
 return Controller

@@ -32,6 +32,11 @@ local function getFlag(Controller, flagName)
 	return activeController and activeController[flagName] == true
 end
 
+local function getStatusImmunity(Controller)
+	local activeController = resolveController(nil, Controller)
+	return activeController and activeController.StatusImmunity or nil
+end
+
 local function setImmunity(Controller, entityName, value)
 	local activeController = resolveController(nil, Controller)
 	if activeController and typeof(activeController.SetImmunity) == "function" then
@@ -196,50 +201,12 @@ return function(Client, Controller)
 		end,
 	})
 
-	local currentTelefraggerOptions = {}
-	if getFlag(Controller, "TelefraggerImmune") then
-		table.insert(currentTelefraggerOptions, "Immunity")
-	end
-	if getFlag(Controller, "TelefraggerAutoDodge") then
-		table.insert(currentTelefraggerOptions, "Auto-Dodge")
-	end
-	if getFlag(Controller, "TelefraggerBackTrick") then
-		table.insert(currentTelefraggerOptions, "BackTrick")
-	end
-
-	Tab:CreateDropdown({
-		Name = "Telefragger Hack Mode",
-		Options = { "Immunity", "Auto-Dodge", "BackTrick" },
-		CurrentOption = currentTelefraggerOptions,
-		MultipleOptions = true,
-		Flag = "TelefraggerHackDropdown",
-		Callback = function(Options)
-			local hasImmunity = false
-			local hasAutoDodge = false
-			local hasBackTrick = false
-			for _, opt in ipairs(Options) do
-				if opt == "Immunity" then
-					hasImmunity = true
-				elseif opt == "Auto-Dodge" then
-					hasAutoDodge = true
-				elseif opt == "BackTrick" then
-					hasBackTrick = true
-				end
-			end
-			local activeController = resolveController(nil, Controller)
-			if activeController then
-				if typeof(activeController.SetImmunity) == "function" then
-					activeController:SetImmunity("Telefragger", hasImmunity)
-				end
-				if typeof(activeController.SetTelefraggerAutoDodge) == "function" then
-					activeController:SetTelefraggerAutoDodge(hasAutoDodge)
-				end
-				if typeof(activeController.SetTelefraggerBackTrick) == "function" then
-					activeController:SetTelefraggerBackTrick(hasBackTrick)
-				end
-			else
-				warn("[NULLSCAPE] Entities controller is not ready; ignored Telefragger Hack Mode change")
-			end
+	Tab:CreateToggle({
+		Name = "Telefragger",
+		CurrentValue = getFlag(Controller, "TelefraggerImmune"),
+		Flag = "ImmunityTelefraggerToggle",
+		Callback = function(Value)
+			setImmunity(Controller, "Telefragger", Value)
 		end,
 	})
 
@@ -633,7 +600,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+	local StatusImmunity = getStatusImmunity(Controller)
 
 	Tab:CreateDropdown({
 		Name = "Immunity Effect",
@@ -642,8 +609,9 @@ return function(Client, Controller)
 		MultipleOptions = true,
 		Flag = "StatusImmunityDropdownV2",
 		Callback = function(Options)
-			if StatusImmunity and typeof(StatusImmunity.SetActiveImmunities) == "function" then
-				StatusImmunity.SetActiveImmunities(Options)
+			local activeStatusImmunity = getStatusImmunity(Controller)
+			if activeStatusImmunity and typeof(activeStatusImmunity.SetActiveImmunities) == "function" then
+				activeStatusImmunity.SetActiveImmunities(Options)
 			end
 		end,
 	})

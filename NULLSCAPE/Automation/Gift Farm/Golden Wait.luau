@@ -97,9 +97,9 @@ function GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, setStatus, 
 		return false
 	end
 
-	-- Producer windows run in the background. Existing normal gifts must keep the
-	-- route active; Scanner will preempt them as soon as a golden gift appears.
-	if (tonumber(scanInfo.RawNormal) or 0) > 0 then
+	-- Passage tiles collapse independently, so their spawn window owns the route.
+	-- Other producers may remain in the background while normal gifts are active.
+	if not passageActive and (tonumber(scanInfo.RawNormal) or 0) > 0 then
 		return false
 	end
 
@@ -121,10 +121,11 @@ function GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, setStatus, 
 	local elapsed = os.clock() - goldenMissingSince
 	if elapsed < waitTime then
 		if typeof(setStatus) == "function" then
+			local waitReason = if passageActive then "Waiting for Passage gifts" else reason or "Golden settle"
 			setStatus(
 				controller,
 				"WaitingForGoldenSpawn",
-				string.format("%s %.1fs/%.1fs", reason or "Golden settle", elapsed, waitTime)
+				string.format("%s %.1fs/%.1fs", waitReason, elapsed, waitTime)
 			)
 		end
 		return true

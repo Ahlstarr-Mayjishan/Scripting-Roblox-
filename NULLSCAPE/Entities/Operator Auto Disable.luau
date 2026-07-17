@@ -13,7 +13,7 @@ local Logic = {
 	Connections = {},
 }
 
-local INSTALL_RETRY_DELAYS = { 0, 0.05, 0.15, 0.35, 0.75 }
+local INSTALL_RETRY_DELAYS = { 0, 0.05, 0.15, 0.35, 0.75, 1.5, 3 }
 
 local REQUIRED_CONSTANTS = {
 	PlayerMoveDirection = true,
@@ -26,6 +26,7 @@ local DIRECT_EXECUTOR_FUNCTIONS = {
 	getconnections = getconnections,
 	getconstants = getconstants,
 	getfenv = getfenv,
+	getgc = getgc,
 	getupvalue = getupvalue,
 	getupvalues = getupvalues,
 	hookfunction = hookfunction,
@@ -143,7 +144,7 @@ local function isStationaryPredicate(fn)
 	return false
 end
 
-local function findStationaryPredicate()
+local function findStationaryFromRenderStep()
 	local getConnections = getExecutorFunction("getconnections")
 	if not getConnections then
 		return nil
@@ -169,13 +170,46 @@ local function findStationaryPredicate()
 	return nil
 end
 
+local function findStationaryFromGarbageCollector()
+	local getGarbage = getExecutorFunction("getgc")
+	if not getGarbage then
+		return nil
+	end
+
+	local success, objects = pcall(getGarbage)
+	if not success then
+		success, objects = pcall(getGarbage, true)
+	end
+	if not success or typeof(objects) ~= "table" then
+		return nil
+	end
+
+	for _, object in pairs(objects) do
+		if isStationaryPredicate(object) then
+			return object, getOperatorScript(object)
+		end
+	end
+
+	return nil
+end
+
+local function findStationaryPredicate()
+	local target, sourceScript = findStationaryFromRenderStep()
+	if target then
+		return target, sourceScript
+	end
+
+	return findStationaryFromGarbageCollector()
+end
+
 local function shouldReportStationary()
-	if not Logic.Enabled or shared.OperatorActive ~= true then
+	if not Logic.Enabled then
 		return false
 	end
 
+	-- This closure belongs only to Operator_AI; native code owns the active phase.
 	local controller = getGlobals().activeEntitiesController
-	return controller ~= nil and controller.OperatorAutoDisable == true
+	return controller ~= nil and controller.Destroyed ~= true and controller.OperatorAutoDisable == true
 end
 
 local function restoreHook()
@@ -192,7 +226,7 @@ local function installHook()
 	if
 		Logic.HookedTarget
 		and Logic.HookedScript
-		and Logic.HookedScript:IsDescendantOf(Workspace)
+		and Logic.HookedScript:IsDescendantOf(game)
 		and Logic.OriginalStationary
 	then
 		return true
@@ -290,11 +324,11 @@ local function attachEnemiesRoot(enemiesRoot)
 end
 
 local function startLifecycle()
+	scheduleInstall()
+
 	local enemiesRoot = Workspace:FindFirstChild("Enemies")
 	if enemiesRoot then
 		attachEnemiesRoot(enemiesRoot)
-	else
-		scheduleInstall()
 	end
 
 	Logic.Connections.EnemiesRootAdded = Workspace.ChildAdded:Connect(function(child)
@@ -315,6 +349,9 @@ end
 function Logic.setEnabled(enabled)
 	enabled = enabled == true
 	if enabled and Logic.Enabled then
+		if not Logic.HookedTarget then
+			scheduleInstall()
+		end
 		return true
 	end
 
@@ -325,12 +362,14 @@ function Logic.setEnabled(enabled)
 		return true
 	end
 
+	local canScanGarbage = getExecutorFunction("getgc") ~= nil
+	local canScanRenderStep = getExecutorFunction("getconnections") ~= nil
+		and (getExecutorFunction("getupvalues") ~= nil or getExecutorFunction("getupvalue") ~= nil)
 	if
 		not getExecutorFunction("hookfunction")
-		or not getExecutorFunction("getconnections")
 		or not getExecutorFunction("getconstants")
 		or not getExecutorFunction("getfenv")
-		or (not getExecutorFunction("getupvalues") and not getExecutorFunction("getupvalue"))
+		or not (canScanGarbage or canScanRenderStep)
 	then
 		Logic.Enabled = false
 		return false

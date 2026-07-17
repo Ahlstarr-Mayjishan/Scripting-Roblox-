@@ -230,35 +230,6 @@ local function localPlayerHasStatus(statusName)
 	return okStatusOnly and hasStatusOnly == true
 end
 
-local function noteBellDebuff(controller)
-	controller.LastBellDebuffAt = time()
-	if not (controller.BellCurseImmune or controller.BellKnockbackImmune) then
-		return
-	end
-
-	local character = Players.LocalPlayer and Players.LocalPlayer.Character
-	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
-	if not rootPart then
-		return
-	end
-
-	controller.BellPendingRoot = rootPart
-	controller.BellVelocityBeforeDebuff = rootPart.AssemblyLinearVelocity
-	controller.BellVelocityRestoreUntil = time() + 0.15
-	task.defer(function()
-		if
-			(controller.BellCurseImmune or controller.BellKnockbackImmune)
-			and controller.BellVelocityRestoreUntil
-			and time() <= controller.BellVelocityRestoreUntil
-			and controller.BellPendingRoot == rootPart
-			and rootPart.Parent
-		then
-			rootPart.AssemblyLinearVelocity = controller.BellVelocityBeforeDebuff
-			rootPart.Velocity = controller.BellVelocityBeforeDebuff
-		end
-	end)
-end
-
 local SHIELD_NAME_KEYWORDS = {
 	"shield",
 	"barrier",
@@ -639,7 +610,6 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 	if remote.ClassName == "RemoteEvent" and remote.Name == "ClientEvent" and args[1] == "Debuff" then
 		local parent = remote.Parent
 		if parent and string.find(parent.Name, "Bell", 1, true) then
-			noteBellDebuff(controller)
 			if controller.BellCurseImmune == true then
 				return Logic.shouldBlockWithShieldPolicy(controller, false)
 			end

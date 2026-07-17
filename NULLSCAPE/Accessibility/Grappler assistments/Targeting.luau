@@ -47,7 +47,11 @@ local MANUAL_TERRAIN_OVERRIDE_ANGLE = {
 	JumpPad = 7,
 	GrapplePoint = 9,
 	TriaOrb = 6,
-	Bell = 10,
+	Bell = 14,
+}
+
+local MAX_MANUAL_TERRAIN_OVERRIDE_MISS = {
+	Bell = 24,
 }
 
 local CandidateCache = {
@@ -293,7 +297,16 @@ local function canOverrideDirectTerrain(grapple, specialHit, directHit, aimDirec
 	end
 
 	local overrideAngle = MANUAL_TERRAIN_OVERRIDE_ANGLE[specialName] or 7
-	return aimDirection.Unit:Dot(specialOffset.Unit) >= math.cos(math.rad(overrideAngle))
+	local aimUnit = aimDirection.Unit
+	local aimDot = aimUnit:Dot(specialOffset.Unit)
+	if aimDot < math.cos(math.rad(overrideAngle)) then
+		return false
+	end
+
+	local maxMiss = MAX_MANUAL_TERRAIN_OVERRIDE_MISS[specialName]
+	local projectedDistance = specialOffset:Dot(aimUnit)
+	local missDistance = (specialOffset - aimUnit * projectedDistance).Magnitude
+	return not maxMiss or missDistance <= maxMiss
 end
 
 local function isOptimalCandidate(part)

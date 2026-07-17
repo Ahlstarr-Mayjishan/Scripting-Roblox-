@@ -113,6 +113,22 @@ local Controller = {
 	GiftFarmGoldenComplete = false,
 	GiftFarmReturnToBeaconAfterGolden = true,
 	AltarSelections = {},
+	GiftFarmRulesEnabled = false,
+	GiftFarmNoTrackingEnabled = false,
+	ChoiceWhitelist = {},
+	ChoiceBlacklist = {},
+	GiftFarmGoalMode = "Reach to Levels",
+	GiftFarmTargetLevel = 100,
+	GiftFarmMinLevel = 10,
+	GiftFarmMaxLevel = 50,
+	GiftFarmGoldenEfficiency = 100,
+	GiftFarmWaitMinutes10To24 = 5,
+	GiftFarmWaitMinutes25To49 = 10,
+	GiftFarmWaitMinutes50Plus = 20,
+	GiftFarmRepeatCount = 0,
+	GiftFarmCompletedRuns = 0,
+	GiftFarmActiveTargetLevel = nil,
+	GiftFarmPolicyHolding = false,
 	GiftFarmStatus = "Idle",
 	GiftFarmDetail = "",
 	PylonActivatorEnabled = false,
@@ -162,6 +178,32 @@ end
 
 local function clampGiftRange(value)
 	return math.clamp(tonumber(value) or 60, 5, 60)
+end
+
+local function normalizeSelections(value)
+	local selections = {}
+	if typeof(value) ~= "table" then
+		return selections
+	end
+
+	for _, selection in ipairs(value) do
+		if typeof(selection) == "string" and selection ~= "" and not table.find(selections, selection) then
+			table.insert(selections, selection)
+		end
+	end
+	for selection, enabled in pairs(value) do
+		if typeof(selection) == "string" and enabled == true and not table.find(selections, selection) then
+			table.insert(selections, selection)
+		end
+	end
+	return selections
+end
+
+local function setConfigNumber(controller, key, value, minimum, maximum, fallback)
+	local nextValue = math.clamp(math.floor(tonumber(value) or fallback), minimum, maximum)
+	controller[key] = nextValue
+	controller.ConfigChanged:Fire()
+	return true
 end
 
 function Controller:initialize()
@@ -276,22 +318,71 @@ function Controller:SetGiftFarmReturnToBeaconAfterGolden(value)
 end
 
 function Controller:SetAltarSelections(value)
-	local selections = {}
-	if typeof(value) == "table" then
-		for _, altarName in ipairs(value) do
-			if not table.find(selections, altarName) then
-				table.insert(selections, altarName)
-			end
-		end
-		for altarName, enabled in pairs(value) do
-			if typeof(altarName) == "string" and enabled == true and not table.find(selections, altarName) then
-				table.insert(selections, altarName)
-			end
-		end
-	end
-	self.AltarSelections = selections
+	self.AltarSelections = normalizeSelections(value)
 	self.ConfigChanged:Fire()
 	return true
+end
+
+function Controller:SetGiftFarmRulesEnabled(value)
+	self.GiftFarmRulesEnabled = value == true
+	self.ConfigChanged:Fire()
+	return true
+end
+
+function Controller:SetGiftFarmNoTrackingEnabled(value)
+	self.GiftFarmNoTrackingEnabled = value == true
+	self.ConfigChanged:Fire()
+	return true
+end
+
+function Controller:SetChoiceWhitelist(value)
+	self.ChoiceWhitelist = normalizeSelections(value)
+	self.ConfigChanged:Fire()
+	return true
+end
+
+function Controller:SetChoiceBlacklist(value)
+	self.ChoiceBlacklist = normalizeSelections(value)
+	self.ConfigChanged:Fire()
+	return true
+end
+
+function Controller:SetGiftFarmGoalMode(value)
+	self.GiftFarmGoalMode = value == "Min-Max" and "Min-Max" or "Reach to Levels"
+	self.ConfigChanged:Fire()
+	return true
+end
+
+function Controller:SetGiftFarmTargetLevel(value)
+	return setConfigNumber(self, "GiftFarmTargetLevel", value, 0, 1000000000, 100)
+end
+
+function Controller:SetGiftFarmMinLevel(value)
+	return setConfigNumber(self, "GiftFarmMinLevel", value, 0, 1000000000, 10)
+end
+
+function Controller:SetGiftFarmMaxLevel(value)
+	return setConfigNumber(self, "GiftFarmMaxLevel", value, 0, 1000000000, 50)
+end
+
+function Controller:SetGiftFarmGoldenEfficiency(value)
+	return setConfigNumber(self, "GiftFarmGoldenEfficiency", value, 0, 100, 100)
+end
+
+function Controller:SetGiftFarmWaitMinutes10To24(value)
+	return setConfigNumber(self, "GiftFarmWaitMinutes10To24", value, 0, 30, 5)
+end
+
+function Controller:SetGiftFarmWaitMinutes25To49(value)
+	return setConfigNumber(self, "GiftFarmWaitMinutes25To49", value, 0, 30, 10)
+end
+
+function Controller:SetGiftFarmWaitMinutes50Plus(value)
+	return setConfigNumber(self, "GiftFarmWaitMinutes50Plus", value, 0, 30, 20)
+end
+
+function Controller:SetGiftFarmRepeatCount(value)
+	return setConfigNumber(self, "GiftFarmRepeatCount", value, 0, 1000000, 0)
 end
 
 function Controller:SetCollectMedalEnabled(value)
@@ -316,21 +407,7 @@ function Controller:SetAutoChooseThingsEnabled(value)
 end
 
 function Controller:SetAutoChooseThingSelections(value)
-	local selections = {}
-	if typeof(value) == "table" then
-		for _, selection in ipairs(value) do
-			if typeof(selection) == "string" and not table.find(selections, selection) then
-				table.insert(selections, selection)
-			end
-		end
-		for selection, selected in pairs(value) do
-			if typeof(selection) == "string" and selected == true and not table.find(selections, selection) then
-				table.insert(selections, selection)
-			end
-		end
-	end
-
-	self.AutoChooseThingSelections = selections
+	self.AutoChooseThingSelections = normalizeSelections(value)
 	return self:update()
 end
 
