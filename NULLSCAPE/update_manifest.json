@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.18.89",
+    "Version":  "2026.07.18.90",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "0f5650aabb9228660b3ae62ef6ddbcd330e20de23a34d85ea4a6763f248efc87"
+                      "Sha256":  "a99e9ee314c3d2d563373d562081c08d087c3f8990a5900e8024f1af168922e7"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Run Policy.luau",
@@ -131,7 +131,7 @@
                                    "Gift Farm",
                                    "Pipelining"
                                ],
-                      "Sha256":  "74c8d8874b812a64f3d15d5531324c02ae168be81b7e2de1110b6fdd6ae6a86f"
+                      "Sha256":  "2b562a100e27f50aa3de0443421c5f52f099133619b95cd06f2de2da3f3eb291"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Pipelined Collector/NetworkDispatch.luau",
@@ -147,7 +147,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "1429c1e13e2eb893dd02d5ffc5feb6882640a2fce2fe85e559e738320900e3bc"
+                      "Sha256":  "fd2a247aaa1514a3df56bd545e577644b14583e22e2821835d3f60e1a3a06e46"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Kolona Auto QTE.luau",

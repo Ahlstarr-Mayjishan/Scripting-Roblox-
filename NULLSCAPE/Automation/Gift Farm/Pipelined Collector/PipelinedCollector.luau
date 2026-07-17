@@ -11,9 +11,9 @@ local NetworkDispatch = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Pip
 local PipelinedCollector = {}
 
 local MIN_WINDOW = 1
-local INITIAL_WINDOW = 2
-local MAX_WINDOW = 4
-local CLEAN_TICKETS_TO_GROW = 3
+local INITIAL_WINDOW = 3
+local MAX_WINDOW = 8
+local CLEAN_TICKETS_TO_GROW = 2
 local MIN_ACK_TIMEOUT = 0.18
 local MAX_ACK_TIMEOUT = 0.7
 
@@ -45,9 +45,6 @@ local function isPrecisionBarrier(step)
 		if item.passage == true or (gift and gift.Type == "PassageGift") then
 			return true, "passage"
 		end
-		if item.golden == true or (gift and gift.Golden == true) then
-			return true, "golden"
-		end
 	end
 	return false, nil
 end
@@ -58,7 +55,7 @@ local function updateController(controller, inFlight, stats)
 	end
 	controller.GiftFarmPipelineWindow = adaptiveWindow
 	controller.GiftFarmPipelineInFlight = inFlight
-	controller.GiftFarmPipelineDispatched = stats.Attempted
+	controller.GiftFarmPipelineDispatched = stats.Dispatched or stats.Attempted
 	controller.GiftFarmPipelineAccepted = stats.Accepted
 	controller.GiftFarmPipelineUnresolved = stats.Unresolved
 	controller.GiftFarmPipelineTransientRejects = stats.TransientRejected
@@ -140,6 +137,7 @@ function PipelinedCollector.collectRoute(controller, hrp, route, range, options,
 	local inFlight = {}
 	local retryQueue = {}
 	local stats = {
+		Dispatched = 0,
 		Attempted = 0,
 		Accepted = 0,
 		Failed = 0,
@@ -148,6 +146,23 @@ function PipelinedCollector.collectRoute(controller, hrp, route, range, options,
 		Retried = 0,
 		Barriers = 0,
 	}
+	local routeIndex = 0
+
+	local function reportProgress(stage)
+		if typeof(options.ProgressCallback) ~= "function" then
+			return
+		end
+		pcall(options.ProgressCallback, {
+			Stage = stage,
+			Index = routeIndex,
+			Total = #route,
+			InFlight = #inFlight,
+			Window = adaptiveWindow,
+			Dispatched = stats.Dispatched,
+			Accepted = stats.Accepted,
+			Rejected = stats.TransientRejected,
+		})
+	end
 
 	local function shouldAbort()
 		return routeToken ~= pipelineToken or not lease:isValid() or Context.getRootPart() ~= hrp or isAborted(options)
@@ -177,6 +192,7 @@ function PipelinedCollector.collectRoute(controller, hrp, route, range, options,
 			lease:reportCollectResult(result.Attempted, result.Rejected)
 		end
 		updateController(controller, #inFlight, stats)
+		reportProgress("settling")
 		return true
 	end
 
@@ -190,6 +206,7 @@ function PipelinedCollector.collectRoute(controller, hrp, route, range, options,
 	end
 
 	local function collectBarrier(step, reason)
+		reportProgress("precision barrier")
 		if not drainPipeline() then
 			return false
 		end
@@ -216,7 +233,8 @@ function PipelinedCollector.collectRoute(controller, hrp, route, range, options,
 		if not NetworkDispatch.beginTracking() then
 			error("native gift tracking unavailable")
 		end
-		for _, step in ipairs(route) do
+		for index, step in ipairs(route) do
+			routeIndex = index
 			if shouldAbort() then
 				return
 			end
@@ -240,16 +258,18 @@ function PipelinedCollector.collectRoute(controller, hrp, route, range, options,
 				local ticket = NetworkDispatch.dispatchCluster(hrp, cluster, range, {
 					SafeRange = info and info.SafeRange,
 					TargetPosition = info and info.TargetPosition,
-					PacingBatchSize = options.NormalPacingBatchSize,
 					AbortCheck = shouldAbort,
 				}, lease)
 				if ticket and ticket.Attempted > 0 then
 					inFlight[#inFlight + 1] = ticket
+					stats.Dispatched += ticket.Attempted
 				end
 				updateController(controller, #inFlight, stats)
+				reportProgress("streaming")
 			end
 		end
 
+		reportProgress("draining")
 		if not drainPipeline() or shouldAbort() then
 			return
 		end

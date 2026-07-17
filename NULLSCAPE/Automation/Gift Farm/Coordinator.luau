@@ -961,6 +961,21 @@ local function runLoop(controller)
 				routeCompleted, routeStats = PipelinedCollector.collectRoute(controller, hrp, route, range, {
 					NormalPacingBatchSize = normalPacingBatchSize,
 					AbortCheck = shouldAbortRoute,
+					ProgressCallback = function(progress)
+						transitionTo(
+							controller,
+							"Collecting",
+							string.format(
+								"Network pipeline %d/%d | %s | ACK %d/%d | sent %d",
+								tonumber(progress.Index) or 0,
+								tonumber(progress.Total) or #route,
+								tostring(progress.Stage or "streaming"),
+								tonumber(progress.InFlight) or 0,
+								tonumber(progress.Window) or 0,
+								tonumber(progress.Dispatched) or 0
+							)
+						)
+					end,
 				}, lease, mySessionToken)
 			else
 				-- Normal mode collection loop
