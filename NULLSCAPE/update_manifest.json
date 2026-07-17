@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.18.84",
+    "Version":  "2026.07.18.85",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -188,7 +188,7 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "b9d778d90014ff82d7556a052dc1fc5ba56ea96996eabd592e56a2ffb846e181"
+                      "Sha256":  "807e386db2f716fbe5a5d041f47453620e6d6aa18ed91c8b0fe899b3a6efe407"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/RemoteBlocking.luau",
@@ -923,7 +923,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "39f08cc6a55364f0314c0e999a25a4e32478b0c00da3a2cea7e1f1f4b8971902"
+                      "Sha256":  "0072ebc6c4d390eb12af5462265f910a6f7888d7be197a56012d343e33d9aeb0"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Speed Buffs.luau",
