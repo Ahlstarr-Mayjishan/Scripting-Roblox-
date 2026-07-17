@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.18.95",
+    "Version":  "2026.07.18.96",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -58,7 +58,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "194684116d2f45e01adebcd8f66a6716823b7f55f948abee047e98448b48d323"
+                      "Sha256":  "1577e1594dc3a4e6d0fde9a744f57fe62c9f686f0bd71e52e0369171d04adbfc"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/No Tracking.luau",
@@ -147,7 +147,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "3eeccfd4b39a5922270337996de4d22e3695ca6a0a675f02a0ef0afa154c318b"
+                      "Sha256":  "9276884a86d7fa28baf8b5ed3cf4a8d9754754caaa8a8b3adc38880c1b5bd27a"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Kolona Auto QTE.luau",
@@ -748,7 +748,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "c8b7708a4a9e682b390be8632b36f5c31a216d346a3e22cff671dceb37c472da"
+                      "Sha256":  "67a3a35b15df95dac0c2b9c0f9e5e5d0e538f07d0420fb1fedf71659017ecf1e"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Choice Catalog.luau",

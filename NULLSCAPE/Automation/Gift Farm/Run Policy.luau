@@ -28,6 +28,7 @@ local state = {
 	RestedLevels = {},
 	LastObservedLevel = nil,
 	WaitUntil = nil,
+	WaitRemaining = nil,
 	WaitLevel = nil,
 	Leaving = false,
 	LeaveThread = nil,
@@ -101,6 +102,7 @@ local function resetRunState(controller, resetCompletedRuns)
 	state.DeathConfirmed = false
 	state.AwaitingRunReset = false
 	state.WaitUntil = nil
+	state.WaitRemaining = nil
 	state.WaitLevel = nil
 	NoTracking.reset()
 	table.clear(state.RestedLevels)
@@ -110,6 +112,7 @@ local function resetRunState(controller, resetCompletedRuns)
 	end
 	controller.GiftFarmCompletedRuns = state.CompletedRuns
 	controller.GiftFarmPolicyHolding = false
+	controller.GiftFarmRestPending = false
 	chooseTarget(controller)
 	RuleOverlay.hide()
 end
@@ -256,7 +259,9 @@ local function stepTargetLifecycle(controller)
 	state.CompletedRuns += 1
 	state.CompletedTarget = state.ActiveTarget
 	state.WaitUntil = nil
+	state.WaitRemaining = nil
 	state.WaitLevel = nil
+	controller.GiftFarmRestPending = false
 	controller.GiftFarmCompletedRuns = state.CompletedRuns
 	ImmunityHandoff.disable()
 	performRuntimeGC()
@@ -281,13 +286,38 @@ local function stepTargetLifecycle(controller)
 end
 
 local function stepWait(controller)
-	if not state.WaitUntil then
+	if not state.WaitLevel then
 		return nil
 	end
-	local remaining = state.WaitUntil - os.clock()
+
+	local now = os.clock()
+	if Context.isInRound() then
+		if state.WaitUntil then
+			state.WaitRemaining = math.max(0, state.WaitUntil - now)
+			state.WaitUntil = nil
+		end
+		controller.GiftFarmRestPending = true
+		return nil
+	end
+
+	if not state.WaitUntil then
+		local remaining = math.max(0, tonumber(state.WaitRemaining) or 0)
+		if remaining <= 0 then
+			state.WaitRemaining = nil
+			state.WaitLevel = nil
+			controller.GiftFarmRestPending = false
+			return release(controller)
+		end
+		state.WaitUntil = now + remaining
+		performRuntimeGC()
+	end
+
+	local remaining = state.WaitUntil - now
 	if remaining <= 0 then
 		state.WaitUntil = nil
+		state.WaitRemaining = nil
 		state.WaitLevel = nil
+		controller.GiftFarmRestPending = false
 		return release(controller)
 	end
 
@@ -337,8 +367,9 @@ local function stepEfficiency(controller, scanInfo)
 	end
 
 	state.WaitLevel = level
-	state.WaitUntil = os.clock() + waitMinutes * 60
-	performRuntimeGC()
+	state.WaitRemaining = waitMinutes * 60
+	state.WaitUntil = nil
+	controller.GiftFarmRestPending = true
 	return stepWait(controller)
 end
 
@@ -358,6 +389,7 @@ local function suspendRules(controller)
 		state.DeathConfirmed = false
 		state.AwaitingRunReset = false
 		state.WaitUntil = nil
+		state.WaitRemaining = nil
 		state.WaitLevel = nil
 		state.Leaving = false
 		NoTracking.reset()
@@ -367,6 +399,7 @@ local function suspendRules(controller)
 	end
 	controller.GiftFarmCompletedRuns = 0
 	controller.GiftFarmActiveTargetLevel = nil
+	controller.GiftFarmRestPending = false
 	return release(controller)
 end
 
@@ -404,7 +437,9 @@ function RunPolicy.step(controller, scanInfo)
 	end
 	if noTracking and noTracking.Hold then
 		state.WaitUntil = nil
+		state.WaitRemaining = nil
 		state.WaitLevel = nil
+		controller.GiftFarmRestPending = false
 		return hold(controller, noTracking.Status, noTracking.Detail, noTracking.OverlayText)
 	end
 	local lifecycle = stepTargetLifecycle(controller)
@@ -438,6 +473,7 @@ function RunPolicy.disable(controller)
 	state.DeathConfirmed = false
 	state.AwaitingRunReset = false
 	state.WaitUntil = nil
+	state.WaitRemaining = nil
 	state.WaitLevel = nil
 	state.Leaving = false
 	state.RulesSuspended = false
@@ -448,6 +484,7 @@ function RunPolicy.disable(controller)
 		controller.GiftFarmCompletedRuns = 0
 		controller.GiftFarmActiveTargetLevel = nil
 		controller.GiftFarmPolicyHolding = false
+		controller.GiftFarmRestPending = false
 	end
 	return true
 end

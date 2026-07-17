@@ -528,13 +528,13 @@ local function run(controller)
 	running = true
 	task.spawn(function()
 		while enabled and controller and not controller.Destroyed do
-			if tryContinue(controller) then
-				task.wait(LOOP_INTERVAL)
-				continue
-			end
-			if controller.GiftFarmPolicyHolding == true then
+			if controller.GiftFarmPolicyHolding == true or controller.GiftFarmRestPending == true then
 				setStatus(controller, "WaitingForGiftFarmPolicy", controller.GiftFarmDetail)
 				task.wait(0.25)
+				continue
+			end
+			if tryContinue(controller) then
+				task.wait(LOOP_INTERVAL)
 				continue
 			end
 

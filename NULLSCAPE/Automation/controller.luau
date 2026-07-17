@@ -143,6 +143,7 @@ local Controller = {
 	GiftFarmCompletedRuns = 0,
 	GiftFarmActiveTargetLevel = nil,
 	GiftFarmPolicyHolding = false,
+	GiftFarmRestPending = false,
 	GiftFarmStatus = "Idle",
 	GiftFarmDetail = "",
 	PylonActivatorEnabled = false,
