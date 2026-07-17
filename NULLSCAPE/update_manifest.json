@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.18.86",
+    "Version":  "2026.07.18.87",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "b6b84542807618cc118b0f38d7a65a838be0631e62c58a53f21e15af868f9665"
+                      "Sha256":  "afd02893a7b4ba8d2f40ce26bc68362139781a7170a5b0e11d36a2d601eab7e3"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -147,7 +147,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "bdd3366b078eb82ce489d12e26b82eb4fa15a7a3f4841278e4b5de352a53d8e3"
+                      "Sha256":  "1429c1e13e2eb893dd02d5ffc5feb6882640a2fce2fe85e559e738320900e3bc"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Kolona Auto QTE.luau",
@@ -748,7 +748,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "68ee23098544ce1004546cce768d4f8eff67d7099df5a506013ed86de102bf86"
+                      "Sha256":  "23442b22c9cb2a202cc4e6218e33fd3f615ba8a36acc75ece6ba6f84385cb482"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Choice Policy.luau",
@@ -790,7 +790,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "9f2ffc20440632b7a295975149cd7c6fa3bbd9460e2e7d91a45ff3b64d079d1a"
+                      "Sha256":  "150a497d83b7624b024026618765056622971386107b0e16ad268a4e959b7d9c"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Altar.luau",

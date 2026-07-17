@@ -271,7 +271,6 @@ pcall(function()
 			AutomationGiftFarmWait25To49Slider = 10,
 			AutomationGiftFarmWait50PlusSlider = 20,
 			AutomationGiftFarmRepeatCountInput = "0",
-			AutomationAutoChooseThingSelectionsDropdown = {},
 			AutomationAltarSelectionsDropdown = {},
 			AutomationPylonActivatorToggle = false,
 			AutomationPylonActivatorReturnToggle = true,
@@ -358,6 +357,7 @@ pcall(function()
 		end
 		for _, legacyKey in ipairs({
 			"AltarFilterDropdown",
+			"AutomationAutoChooseThingSelectionsDropdown",
 			"AutomationChoiceBlacklistDropdown",
 			"AutomationChoiceWhitelistDropdown",
 			"BellHackDropdown",
@@ -371,18 +371,6 @@ pcall(function()
 		}) do
 			if currentSettings[legacyKey] ~= nil then
 				currentSettings[legacyKey] = nil
-				updated = true
-			end
-		end
-		if type(currentSettings.AutomationAutoChooseThingSelectionsDropdown) == "table" then
-			local filteredSelections = {}
-			for _, selection in ipairs(currentSettings.AutomationAutoChooseThingSelectionsDropdown) do
-				if selection ~= "Upgrades" then
-					table.insert(filteredSelections, selection)
-				end
-			end
-			if #filteredSelections ~= #currentSettings.AutomationAutoChooseThingSelectionsDropdown then
-				currentSettings.AutomationAutoChooseThingSelectionsDropdown = filteredSelections
 				updated = true
 			end
 		end

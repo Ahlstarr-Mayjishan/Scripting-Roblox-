@@ -151,7 +151,6 @@ local Controller = {
 	PylonActivatorStatus = "Idle",
 	PylonActivatorDetail = "",
 	AutoChooseThingsEnabled = false,
-	AutoChooseThingSelections = {},
 	AutoChooseThingsStatus = "Idle",
 	AutoChooseThingsDetail = "",
 }
@@ -440,11 +439,6 @@ end
 
 function Controller:SetAutoChooseThingsEnabled(value)
 	self.AutoChooseThingsEnabled = value == true
-	return self:update()
-end
-
-function Controller:SetAutoChooseThingSelections(value)
-	self.AutoChooseThingSelections = normalizeSelections(value)
 	return self:update()
 end
 

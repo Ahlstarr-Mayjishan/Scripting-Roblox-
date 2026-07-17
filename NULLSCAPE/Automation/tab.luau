@@ -52,28 +52,6 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateDropdown({
-		Name = "Auto Choose Categories",
-		Info = "Limits automatic choices to the selected native choice categories.",
-		Options = {
-			"Continue",
-			"Selection - Medal Curses",
-			"Selection - Curses",
-			"Enemies",
-			"Curses",
-			"Greater Curses",
-			"Chaos",
-		},
-		CurrentOption = Controller and Controller.AutoChooseThingSelections or {},
-		MultipleOptions = true,
-		Flag = "AutomationAutoChooseThingSelectionsDropdown",
-		Callback = function(Options)
-			if Controller and typeof(Controller.SetAutoChooseThingSelections) == "function" then
-				Controller:SetAutoChooseThingSelections(Options)
-			end
-		end,
-	})
-
 	Tab:CreateSection("Auto Farm")
 
 	Tab:CreateToggle({

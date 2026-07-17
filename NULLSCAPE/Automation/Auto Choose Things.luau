@@ -238,34 +238,12 @@ local function normalizeCategory(choiceType, choiceName, root, prompt)
 	return nil
 end
 
-local function buildSelectionPriority(controller)
+local function buildSelectionPriority()
 	local selected, priority = {}, {}
-	local selections = controller and controller.AutoChooseThingSelections
-	local anySelected = false
-	if typeof(selections) == "table" then
-		for index, category in ipairs(selections) do
-			if typeof(category) == "string" and category ~= "" then
-				selected[category] = true
-				priority[category] = priority[category] or index
-				anySelected = true
-			end
-		end
-		for category, active in pairs(selections) do
-			if typeof(category) == "string" and active == true then
-				selected[category] = true
-				anySelected = true
-			end
-		end
-	end
 	for index, category in ipairs(CATEGORY_ORDER) do
-		if not anySelected then
-			selected[category] = true
-			priority[category] = index
-		elseif selected[category] and not priority[category] then
-			priority[category] = index
-		end
+		selected[category] = true
+		priority[category] = index
 	end
-	selected.Upgrades = true
 	priority.Upgrades = 0
 	return selected, priority
 end
@@ -349,7 +327,7 @@ local function hasReadyPrimaryChoice(root, selected)
 end
 
 local function collectTarget(controller, hrp)
-	local selected, priority = buildSelectionPriority(controller)
+	local selected, priority = buildSelectionPriority()
 	if not hasAnySelection(selected) then
 		return nil, "NoCategories"
 	end
