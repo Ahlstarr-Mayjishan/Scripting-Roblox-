@@ -236,18 +236,17 @@ local function activateButton(button)
 	if not button then
 		return false
 	end
-	local activated = pcall(function()
-		button:Activate()
-	end) == true
-	if activated then
-		return true
-	end
 	if typeof(firesignal) == "function" then
-		return pcall(function()
+		local clicked = pcall(function()
 			firesignal(button.MouseButton1Click)
 		end) == true
+		if clicked then
+			return true
+		end
 	end
-	return false
+	return pcall(function()
+		button:Activate()
+	end) == true
 end
 
 local function tryContinue(controller)
@@ -532,13 +531,13 @@ local function run(controller)
 	running = true
 	task.spawn(function()
 		while enabled and controller and not controller.Destroyed do
+			if tryContinue(controller) then
+				task.wait(LOOP_INTERVAL)
+				continue
+			end
 			if controller.GiftFarmPolicyHolding == true then
 				setStatus(controller, "WaitingForGiftFarmPolicy", controller.GiftFarmDetail)
 				task.wait(0.25)
-				continue
-			end
-			if tryContinue(controller) then
-				task.wait(LOOP_INTERVAL)
 				continue
 			end
 

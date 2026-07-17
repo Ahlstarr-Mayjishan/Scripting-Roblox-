@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.17.82",
+    "Version":  "2026.07.17.83",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -739,7 +739,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "28cf0b8f487215c3c4957a4513727a11a22bf4502f0a1bbd301597cdbdb56ca2"
+                      "Sha256":  "5c6dfafa71d0dbf021247de2f7c1efe7981ad8319635f4c63451bf19374639a3"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/executor.luau",
