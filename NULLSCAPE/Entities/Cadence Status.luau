@@ -1,39 +1,34 @@
 --!nocheck
 --[[
 	NULLSCAPE - Cadence Status
-	Event-driven Cadence phase, chase, timer and instrument status display.
+	Compact multi-Cadence timeline. Each active Cadence owns one status row.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
-local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local View = getgenv().loadModule("NULLSCAPE/Entities/Cadence Status View.luau")
 
 local Status = {
 	Enabled = false,
-	Enemy = nil,
-	Gui = nil,
-	Labels = nil,
+	Entries = {},
 	Connections = {},
-	Stage = 1,
-	Chasing = false,
-	Stopped = false,
 	InstrumentCount = 0,
-	Remaining = nil,
-	RemainingIsServer = false,
-	LastUpdateAt = 0,
+	NextOrdinal = 0,
 }
 
 local UPDATE_INTERVAL = 0.25
 local RECOVERY_RATE = 2
 local TIMER_KEYS = { "Remaining", "TimeLeft", "Timer", "Countdown", "StageTime", "Time" }
 
-local function disconnectAll()
-	for _, connection in ipairs(Status.Connections) do
-		connection:Disconnect()
+local function disconnectList(connections)
+	for _, connection in ipairs(connections) do
+		pcall(function()
+			connection:Disconnect()
+		end)
 	end
-	table.clear(Status.Connections)
+	table.clear(connections)
 end
 
 local function getTimerProfile()
@@ -117,281 +112,252 @@ local function timeUntil(remaining, target)
 	return remaining - target
 end
 
-local function ensureGui()
-	if Status.Gui and Status.Gui.Parent then
-		return
+local function getPhaseColor(entry)
+	if entry.Stage == 2 then
+		return Color3.fromRGB(255, 190, 70)
+	elseif entry.Stage == 3 then
+		return Color3.fromRGB(255, 105, 45)
+	elseif entry.Stage >= 4 or entry.Chasing then
+		return Color3.fromRGB(255, 65, 65)
 	end
+	return Color3.fromRGB(100, 205, 255)
+end
 
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "NULLSCAPE_CadenceStatus"
-	gui.ResetOnSpawn = false
-	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-	local frame = Instance.new("Frame")
-	frame.Name = "MainFrame"
-	frame.Size = UDim2.fromOffset(330, 128)
-	frame.Position = UDim2.fromOffset(16, 115)
-	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 22)
-	frame.BackgroundTransparency = 0.12
-	frame.BorderSizePixel = 0
-	frame.Active = true
-	frame.Draggable = true
-	frame.Parent = gui
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 7)
-	corner.Parent = frame
-
-	local stroke = Instance.new("UIStroke")
-	stroke.Name = "StatusStroke"
-	stroke.Color = Color3.fromRGB(85, 85, 90)
-	stroke.Thickness = 1
-	stroke.Parent = frame
-
-	local title = Instance.new("TextLabel")
-	title.Size = UDim2.new(1, -20, 0, 25)
-	title.Position = UDim2.fromOffset(10, 7)
-	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBold
-	title.Text = "CADENCE STATUS"
-	title.TextColor3 = Color3.fromRGB(240, 240, 245)
-	title.TextSize = 13
-	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Parent = frame
-
-	local phase = Instance.new("TextLabel")
-	phase.Name = "Phase"
-	phase.Size = UDim2.new(1, -20, 0, 24)
-	phase.Position = UDim2.fromOffset(10, 34)
-	phase.BackgroundTransparency = 1
-	phase.Font = Enum.Font.GothamMedium
-	phase.TextColor3 = Color3.fromRGB(100, 205, 255)
-	phase.TextSize = 15
-	phase.TextXAlignment = Enum.TextXAlignment.Left
-	phase.Parent = frame
-
-	local eta = phase:Clone()
-	eta.Name = "ETA"
-	eta.Position = UDim2.fromOffset(10, 61)
-	eta.TextColor3 = Color3.fromRGB(205, 205, 210)
-	eta.TextSize = 12
-	eta.Parent = frame
-
-	local details = phase:Clone()
-	details.Name = "Details"
-	details.Position = UDim2.fromOffset(10, 88)
-	details.TextColor3 = Color3.fromRGB(180, 180, 185)
-	details.TextSize = 12
-	details.Parent = frame
-
-	local parented = pcall(function()
-		gui.Parent = CoreGui
+local function getSortedEntries()
+	local entries = {}
+	for enemy, entry in pairs(Status.Entries) do
+		if enemy and enemy.Parent then
+			table.insert(entries, entry)
+		end
+	end
+	table.sort(entries, function(left, right)
+		local leftRemaining = tonumber(left.Remaining) or math.huge
+		local rightRemaining = tonumber(right.Remaining) or math.huge
+		if leftRemaining ~= rightRemaining then
+			return leftRemaining < rightRemaining
+		end
+		return left.Ordinal < right.Ordinal
 	end)
-	if not parented then
-		local playerGui = Players.LocalPlayer and Players.LocalPlayer:FindFirstChildOfClass("PlayerGui")
-		gui.Parent = playerGui
+	return entries
+end
+
+local function getRowText(entry)
+	local estimated = not entry.RemainingIsServer
+	if entry.Chasing then
+		return string.format("Cadence #%d   |   CHASE ACTIVE", entry.Ordinal)
+	elseif entry.Stopped then
+		return string.format("Cadence #%d   |   Chase stopped   |   Timer: %s", entry.Ordinal, formatSeconds(entry.Remaining, estimated))
+	elseif Status.InstrumentCount < getInstrumentThreshold() then
+		return string.format(
+			"Cadence #%d   |   Phase %d   |   Timer recovering: %s",
+			entry.Ordinal,
+			entry.Stage,
+			formatSeconds(entry.Remaining, estimated)
+		)
 	end
 
-	Status.Gui = gui
-	Status.Labels = { Phase = phase, ETA = eta, Details = details, Stroke = stroke }
+	local profile = getTimerProfile()
+	return string.format(
+		"Cadence #%d   |   P%d   |   Timer %s   |   P2 %s   |   P3 %s   |   Chase %s",
+		entry.Ordinal,
+		entry.Stage,
+		formatSeconds(entry.Remaining, estimated),
+		formatSeconds(timeUntil(entry.Remaining, profile[2]), estimated),
+		formatSeconds(timeUntil(entry.Remaining, profile[3]), estimated),
+		formatSeconds(timeUntil(entry.Remaining, profile[5]), estimated)
+	)
 end
 
 local function render()
-	if not (Status.Enemy and Status.Enemy.Parent) then
-		if Status.Gui then
-			Status.Gui.Enabled = false
-		end
-		return
+	local entries = getSortedEntries()
+	local rows = table.create(#entries)
+	for index, entry in ipairs(entries) do
+		rows[index] = {
+			Text = getRowText(entry),
+			Color = getPhaseColor(entry),
+		}
 	end
+	View.render(rows, Status.InstrumentCount, getInstrumentThreshold())
+end
 
-	ensureGui()
-	Status.Gui.Enabled = true
-	local labels = Status.Labels
-	if not labels then
-		return
-	end
-
+local function resetEstimate(entry, stage)
 	local profile = getTimerProfile()
-	local estimated = not Status.RemainingIsServer
-	local countdownActive = Status.InstrumentCount >= getInstrumentThreshold()
-	local phaseColor = Color3.fromRGB(100, 205, 255)
-	if Status.Stage == 2 then
-		phaseColor = Color3.fromRGB(255, 190, 70)
-	elseif Status.Stage == 3 then
-		phaseColor = Color3.fromRGB(255, 105, 45)
-	elseif Status.Stage >= 4 or Status.Chasing then
-		phaseColor = Color3.fromRGB(255, 65, 65)
-	end
-
-	labels.Phase.Text = string.format(
-		"Phase %d   |   Timer: %s",
-		Status.Stage,
-		formatSeconds(Status.Remaining, estimated)
-	)
-	labels.Phase.TextColor3 = phaseColor
-
-	if Status.Chasing then
-		labels.ETA.Text = "Chase active"
-	elseif Status.Stopped then
-		labels.ETA.Text = "Chase stopped"
-	elseif not countdownActive then
-		labels.ETA.Text = "Safe: timer recovering"
-	else
-		local p2 = formatSeconds(timeUntil(Status.Remaining, profile[2]), estimated)
-		local p3 = formatSeconds(timeUntil(Status.Remaining, profile[3]), estimated)
-		local chase = formatSeconds(timeUntil(Status.Remaining, profile[5]), estimated)
-		labels.ETA.Text = string.format("P2: %s   |   P3: %s   |   Chase: %s", p2, p3, chase)
-	end
-
-	labels.Details.Text = string.format(
-		"Chase: %s   |   Instruments: %d   |   Danger at: %d",
-		Status.Chasing and "ACTIVE" or "Idle",
-		Status.InstrumentCount,
-		getInstrumentThreshold()
-	)
-	labels.Stroke.Color = if Status.Chasing then Color3.fromRGB(255, 65, 65) else phaseColor
+	entry.Stage = math.clamp(tonumber(stage) or 1, 1, 4)
+	entry.Remaining = profile[entry.Stage]
+	entry.RemainingIsServer = false
 end
 
-local function updateInstrumentCount()
-	Status.InstrumentCount = #CollectionService:GetTagged("CadenceOrb")
-	render()
-end
-
-local function resetEstimate(stage)
-	local profile = getTimerProfile()
-	Status.Stage = math.clamp(tonumber(stage) or 1, 1, 4)
-	Status.Remaining = profile[Status.Stage]
-	Status.RemainingIsServer = false
-end
-
-local function onClientEvent(action, payload)
+local function onClientEvent(entry, action, payload)
 	if action == "Stage" then
 		local stage = typeof(payload) == "table" and payload.Stage or payload
-		resetEstimate(stage)
+		resetEstimate(entry, stage)
 		local serverRemaining = readNumber(payload)
 		if serverRemaining then
-			Status.Remaining = serverRemaining
-			Status.RemainingIsServer = true
+			entry.Remaining = serverRemaining
+			entry.RemainingIsServer = true
 		end
-		Status.Chasing = false
-		Status.Stopped = false
+		entry.Chasing = false
+		entry.Stopped = false
 	elseif action == "Chase" then
-		Status.Chasing = true
-		Status.Stopped = false
-		Status.Remaining = 0
+		entry.Chasing = true
+		entry.Stopped = false
+		entry.Remaining = 0
 	elseif action == "ElasticStop" then
-		Status.Chasing = false
-		Status.Stopped = true
+		entry.Chasing = false
+		entry.Stopped = true
 	end
 	render()
 end
 
-local function findCadence()
+local function updateEntry(entry, elapsed)
+	local enemy = entry.Enemy
+	if not (enemy and enemy.Parent) then
+		return
+	end
+
+	local audioStage, audioChasing = readAudioState(enemy)
+	if audioChasing ~= entry.Chasing then
+		entry.Chasing = audioChasing
+		entry.Stopped = not audioChasing
+		if audioChasing then
+			entry.Remaining = 0
+		end
+	end
+	if not entry.Chasing and audioStage ~= entry.Stage then
+		resetEstimate(entry, audioStage)
+	end
+	if entry.Stopped and Status.InstrumentCount >= getInstrumentThreshold() then
+		entry.Stopped = false
+	end
+
+	local serverRemaining = readReplicatedTimer(enemy)
+	if serverRemaining then
+		entry.Remaining = serverRemaining
+		entry.RemainingIsServer = true
+	elseif not entry.Chasing and entry.Remaining then
+		entry.RemainingIsServer = false
+		local profile = getTimerProfile()
+		if Status.InstrumentCount >= getInstrumentThreshold() then
+			entry.Remaining = math.max(0, entry.Remaining - elapsed)
+		else
+			entry.Remaining = math.min(profile[1], entry.Remaining + elapsed * RECOVERY_RATE)
+		end
+	end
+end
+
+local function ensureRuntimeConnections()
+	if #Status.Connections > 0 then
+		return
+	end
+
+	local function updateInstrumentCount()
+		Status.InstrumentCount = #CollectionService:GetTagged("CadenceOrb")
+		render()
+	end
+	updateInstrumentCount()
+	table.insert(Status.Connections, CollectionService:GetInstanceAddedSignal("CadenceOrb"):Connect(updateInstrumentCount))
+	table.insert(Status.Connections, CollectionService:GetInstanceRemovedSignal("CadenceOrb"):Connect(updateInstrumentCount))
+	table.insert(Status.Connections, RunService.Heartbeat:Connect(function(deltaTime)
+		local changed = false
+		for _, entry in pairs(Status.Entries) do
+			entry.LastUpdateAt += deltaTime
+			if entry.LastUpdateAt >= UPDATE_INTERVAL then
+				local elapsed = entry.LastUpdateAt
+				entry.LastUpdateAt = 0
+				updateEntry(entry, elapsed)
+				changed = true
+			end
+		end
+		if changed then
+			render()
+		end
+	end))
+end
+
+local function findCadences()
+	local result = {}
 	local enemies = workspace:FindFirstChild("Enemies")
 	if not enemies then
-		return nil
+		return result
 	end
 	for _, enemy in ipairs(enemies:GetChildren()) do
 		if string.find(string.lower(enemy.Name), "cadence", 1, true) then
-			return enemy
+			table.insert(result, enemy)
 		end
 	end
-	return nil
+	return result
 end
 
 function Status.clearRuntime()
-	disconnectAll()
-	Status.Enemy = nil
-	Status.Labels = nil
-	if Status.Gui then
-		Status.Gui:Destroy()
-		Status.Gui = nil
+	disconnectList(Status.Connections)
+	for _, entry in pairs(Status.Entries) do
+		disconnectList(entry.Connections)
 	end
-	Status.Stage = 1
-	Status.Chasing = false
-	Status.Stopped = false
-	Status.Remaining = nil
-	Status.RemainingIsServer = false
-	Status.LastUpdateAt = 0
+	table.clear(Status.Entries)
+	Status.InstrumentCount = 0
+	Status.NextOrdinal = 0
+	View.clear()
 end
 
 function Status.attach(enemy)
 	if not (Status.Enabled and enemy and enemy.Parent) then
 		return false
 	end
-	if Status.Enemy == enemy then
+	if Status.Entries[enemy] then
 		return true
 	end
 
-	Status.clearRuntime()
-	Status.Enemy = enemy
-	local initialStage, initialChase = readAudioState(enemy)
-	resetEstimate(initialStage)
-	Status.Chasing = initialChase
-	if initialChase then
-		Status.Remaining = 0
+	ensureRuntimeConnections()
+	Status.NextOrdinal += 1
+	local stage, chasing = readAudioState(enemy)
+	local entry = {
+		Enemy = enemy,
+		Connections = {},
+		Ordinal = Status.NextOrdinal,
+		Stage = stage,
+		Chasing = chasing,
+		Stopped = false,
+		Remaining = nil,
+		RemainingIsServer = false,
+		LastUpdateAt = 0,
+	}
+	resetEstimate(entry, stage)
+	if chasing then
+		entry.Remaining = 0
 	end
-	updateInstrumentCount()
+	Status.Entries[enemy] = entry
 
 	local clientEvent = enemy:FindFirstChild("ClientEvent") or enemy:WaitForChild("ClientEvent", 5)
 	if clientEvent and clientEvent:IsA("RemoteEvent") then
-		table.insert(Status.Connections, clientEvent.OnClientEvent:Connect(onClientEvent))
+		table.insert(entry.Connections, clientEvent.OnClientEvent:Connect(function(action, payload)
+			onClientEvent(entry, action, payload)
+		end))
 	end
-	table.insert(Status.Connections, enemy.AttributeChanged:Connect(function()
+	table.insert(entry.Connections, enemy.AttributeChanged:Connect(function()
 		local serverRemaining = readReplicatedTimer(enemy)
 		if serverRemaining then
-			Status.Remaining = serverRemaining
-			Status.RemainingIsServer = true
+			entry.Remaining = serverRemaining
+			entry.RemainingIsServer = true
 			render()
 		end
 	end))
-	table.insert(Status.Connections, CollectionService:GetInstanceAddedSignal("CadenceOrb"):Connect(updateInstrumentCount))
-	table.insert(Status.Connections, CollectionService:GetInstanceRemovedSignal("CadenceOrb"):Connect(updateInstrumentCount))
-	table.insert(Status.Connections, RunService.Heartbeat:Connect(function(deltaTime)
-		Status.LastUpdateAt += deltaTime
-		if Status.LastUpdateAt < UPDATE_INTERVAL then
-			return
-		end
-		local elapsed = Status.LastUpdateAt
-		Status.LastUpdateAt = 0
-		local audioStage, audioChasing = readAudioState(enemy)
-		if audioChasing ~= Status.Chasing then
-			Status.Chasing = audioChasing
-			Status.Stopped = not audioChasing
-			if audioChasing then
-				Status.Remaining = 0
-			end
-		end
-		if not Status.Chasing and audioStage ~= Status.Stage then
-			resetEstimate(audioStage)
-		end
-		if Status.Stopped and Status.InstrumentCount >= getInstrumentThreshold() then
-			Status.Stopped = false
-		end
 
-		local serverRemaining = readReplicatedTimer(enemy)
-		if serverRemaining then
-			Status.Remaining = serverRemaining
-			Status.RemainingIsServer = true
-		elseif not Status.Chasing and Status.Remaining then
-			Status.RemainingIsServer = false
-			local profile = getTimerProfile()
-			if Status.InstrumentCount >= getInstrumentThreshold() then
-				Status.Remaining = math.max(0, Status.Remaining - elapsed)
-			else
-				Status.Remaining = math.min(profile[1], Status.Remaining + elapsed * RECOVERY_RATE)
-			end
-		end
-		render()
-	end))
 	render()
 	return true
 end
 
 function Status.detach(enemy)
-	if enemy == nil or Status.Enemy == enemy then
-		Status.clearRuntime()
+	local entry = enemy and Status.Entries[enemy]
+	if not entry then
+		return
 	end
+	disconnectList(entry.Connections)
+	Status.Entries[enemy] = nil
+	if next(Status.Entries) == nil then
+		disconnectList(Status.Connections)
+		Status.InstrumentCount = 0
+	end
+	render()
 end
 
 function Status.setEnabled(enabled)
@@ -400,8 +366,7 @@ function Status.setEnabled(enabled)
 	if not Status.Enabled then
 		return
 	end
-	local enemy = findCadence()
-	if enemy then
+	for _, enemy in ipairs(findCadences()) do
 		Status.attach(enemy)
 	end
 end
