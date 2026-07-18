@@ -40,6 +40,20 @@ local function getLevel()
 	return math.max(0, math.floor(tonumber(levelValue and levelValue.Value) or 0))
 end
 
+local function shouldBypassRest(controller)
+	local difficultyValue = ReplicatedStorage:FindFirstChild("Difficulty")
+	local difficulty = math.max(0, math.floor(tonumber(difficultyValue and difficultyValue.Value) or 0))
+	return controller.GiftFarmNoTrackingEnabled == true and difficulty == 1
+end
+
+local function clearPendingRest(controller)
+	state.CompletedRoundsSinceRest = 0
+	state.WaitUntil = nil
+	state.WaitRemaining = nil
+	state.WaitLevel = nil
+	controller.GiftFarmRestPending = false
+end
+
 local function getNativeGoldenProgress()
 	local counters = ReplicatedStorage:FindFirstChild("GiftCounters")
 	local golden = counters and counters:FindFirstChild("GoldenGift")
@@ -475,13 +489,17 @@ function RunPolicy.step(controller, scanInfo)
 	if lifecycle and lifecycle.Hold then
 		return lifecycle
 	end
-	local waiting = stepWait(controller)
-	if waiting and waiting.Hold then
-		return waiting
-	end
-	local completedRoundRest = stepCompletedRoundRest(controller, levelSnapshot.Completion)
-	if completedRoundRest and completedRoundRest.Hold then
-		return completedRoundRest
+	if shouldBypassRest(controller) then
+		clearPendingRest(controller)
+	else
+		local waiting = stepWait(controller)
+		if waiting and waiting.Hold then
+			return waiting
+		end
+		local completedRoundRest = stepCompletedRoundRest(controller, levelSnapshot.Completion)
+		if completedRoundRest and completedRoundRest.Hold then
+			return completedRoundRest
+		end
 	end
 	return release(controller)
 end

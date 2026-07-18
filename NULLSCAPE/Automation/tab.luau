@@ -134,7 +134,9 @@ return function(Client, Controller)
 	})
 
 	local policyDropdowns = {}
-	local policySelections = {}
+	local policyIndexNames = {}
+	local policyBaseOptions = {}
+	local syncingPolicyDropdowns = false
 	local oppositePolicyFields = {
 		CurseChoiceWhitelist = "CurseChoiceBlacklist",
 		CurseChoiceBlacklist = "CurseChoiceWhitelist",
@@ -142,61 +144,79 @@ return function(Client, Controller)
 		GreaterCurseChoiceBlacklist = "GreaterCurseChoiceWhitelist",
 	}
 
-	local function createChoicePolicyDropdown(name, info, indexName, field, flag, setter)
-		local dropdown
-		local correctingSelection = false
-		local function selectionsMatch(left, right)
-			if typeof(left) ~= "table" or #left ~= #right then
+	local function selectionsMatch(left, right)
+		if typeof(left) ~= "table" or #left ~= #right then
+			return false
+		end
+		for index, value in ipairs(left) do
+			if value ~= right[index] then
 				return false
 			end
-			for index, value in ipairs(left) do
-				if value ~= right[index] then
-					return false
-				end
-			end
-			return true
+		end
+		return true
+	end
+
+	local function refreshPolicyDropdown(field)
+		local dropdown = policyDropdowns[field]
+		local indexName = policyIndexNames[field]
+		if not (dropdown and indexName) then
+			return
 		end
 
-		dropdown = Tab:CreateDropdown({
+		local oppositeField = oppositePolicyFields[field]
+		local opposite = Controller and Controller[oppositeField] or {}
+		local options = ChoicePolicy.excludeSelections(indexName, policyBaseOptions[field] or {}, opposite)
+		local selected = ChoicePolicy.normalizeSelections(indexName, Controller and Controller[field] or {})
+
+		if typeof(dropdown.Refresh) == "function" then
+			dropdown:Refresh(options)
+		end
+		if not selectionsMatch(dropdown.CurrentOption or {}, selected) and typeof(dropdown.Set) == "function" then
+			dropdown:Set(selected)
+		end
+	end
+
+	local function refreshPolicyPair(field)
+		task.defer(function()
+			if syncingPolicyDropdowns then
+				return
+			end
+			syncingPolicyDropdowns = true
+			refreshPolicyDropdown(field)
+			refreshPolicyDropdown(oppositePolicyFields[field])
+			syncingPolicyDropdowns = false
+		end)
+	end
+
+	local function createChoicePolicyDropdown(name, info, indexName, field, flag, setter)
+		policyIndexNames[field] = indexName
+		policyBaseOptions[field] = ChoicePolicy.getOptions(indexName)
+		local oppositeField = oppositePolicyFields[field]
+		local initialOptions = ChoicePolicy.excludeSelections(
+			indexName,
+			policyBaseOptions[field],
+			Controller and Controller[oppositeField] or {}
+		)
+
+		local dropdown = Tab:CreateDropdown({
 			Name = name,
 			Info = info,
-			Options = ChoicePolicy.getOptions(indexName),
+			Options = initialOptions,
 			CurrentOption = ChoicePolicy.normalizeSelections(indexName, Controller and Controller[field] or {}),
 			MultipleOptions = true,
 			Flag = flag,
 			Callback = function(Options)
+				if syncingPolicyDropdowns then
+					return
+				end
 				local normalized = ChoicePolicy.normalizeSelections(indexName, Options)
 				if Controller and typeof(Controller[setter]) == "function" then
 					Controller[setter](Controller, normalized)
 				end
-				local selected = Controller and ChoicePolicy.normalizeSelections(indexName, Controller[field]) or normalized
-				policySelections[field] = selected
-				if not correctingSelection and not selectionsMatch(Options, selected) then
-					correctingSelection = true
-					task.defer(function()
-						if dropdown and typeof(dropdown.Set) == "function" then
-							dropdown:Set(selected)
-						end
-						correctingSelection = false
-					end)
-				end
-				local oppositeField = oppositePolicyFields[field]
-				local oppositeDropdown = oppositeField and policyDropdowns[oppositeField]
-				if oppositeDropdown and Controller then
-					local opposite = ChoicePolicy.normalizeSelections(indexName, Controller[oppositeField])
-					if not selectionsMatch(policySelections[oppositeField] or {}, opposite) then
-						policySelections[oppositeField] = opposite
-						task.defer(function()
-							if typeof(oppositeDropdown.Set) == "function" then
-								oppositeDropdown:Set(opposite)
-							end
-						end)
-					end
-				end
+				refreshPolicyPair(field)
 			end,
 		})
 		policyDropdowns[field] = dropdown
-		policySelections[field] = ChoicePolicy.normalizeSelections(indexName, Controller and Controller[field] or {})
 	end
 
 	createChoicePolicyDropdown(
@@ -209,7 +229,7 @@ return function(Client, Controller)
 	)
 	createChoicePolicyDropdown(
 		"Curse Blacklist",
-		"Always overrides the whitelist. If every normal curse is blacklisted, native rerolls are used; without rerolls, automation waits.",
+		"Avoided whenever possible. If every normal curse is blacklisted, native rerolls are used before choosing a fallback.",
 		"CurseIndex",
 		"CurseChoiceBlacklist",
 		"AutomationCurseChoiceBlacklistDropdown",
@@ -225,7 +245,7 @@ return function(Client, Controller)
 	)
 	createChoicePolicyDropdown(
 		"Greater Curse Blacklist",
-		"Always overrides the whitelist. If every greater curse is blacklisted, native rerolls are used; without rerolls, automation waits.",
+		"Avoided whenever possible. If every greater curse is blacklisted, native rerolls are used before choosing a fallback.",
 		"GreaterCurseIndex",
 		"GreaterCurseChoiceBlacklist",
 		"AutomationGreaterCurseChoiceBlacklistDropdown",
@@ -235,6 +255,8 @@ return function(Client, Controller)
 	if Controller and typeof(Controller.NormalizeChoicePolicies) == "function" then
 		Controller:NormalizeChoicePolicies()
 	end
+	refreshPolicyPair("CurseChoiceWhitelist")
+	refreshPolicyPair("GreaterCurseChoiceWhitelist")
 
 	Tab:CreateSlider({
 		Name = "Gift Farm Range",

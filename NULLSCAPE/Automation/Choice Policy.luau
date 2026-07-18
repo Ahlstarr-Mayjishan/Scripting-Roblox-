@@ -47,10 +47,6 @@ function ChoicePolicy.applyMedalChoiceMode(controller, candidates)
 	return {}, false
 end
 
-local function normalizeName(value)
-	return string.lower(tostring(value or "")):gsub("[%s%p_]+", "")
-end
-
 local function buildNamePolicy(values, indexName)
 	local selected, priority = {}, {}
 	if typeof(values) ~= "table" then
@@ -66,7 +62,10 @@ local function buildNamePolicy(values, indexName)
 	end
 	for value, active in pairs(values) do
 		if typeof(value) == "string" and active == true then
-			selected[ChoiceCatalog.resolveKey(indexName, value)] = true
+			local key = ChoiceCatalog.resolveKey(indexName, value)
+			if key ~= "" then
+				selected[key] = true
+			end
 		end
 	end
 	return selected, priority
@@ -80,7 +79,7 @@ local function getCategoryPolicy(controller, category)
 
 	local whitelist, whitelistPriority = buildNamePolicy(controller and controller[fields.Whitelist], fields.Index)
 	local blacklist = buildNamePolicy(controller and controller[fields.Blacklist], fields.Index)
-	return whitelist, whitelistPriority, blacklist
+	return whitelist, whitelistPriority, blacklist, fields.Index
 end
 
 function ChoicePolicy.applyWithDecision(controller, candidates)
@@ -110,7 +109,7 @@ function ChoicePolicy.applyWithDecision(controller, candidates)
 	local allCandidatesUsePolicy = #candidates > 0
 	local allPolicyCandidatesBlacklisted = true
 	for _, candidate in ipairs(candidates) do
-		local whitelist, whitelistPriority, blacklist = getCategoryPolicy(controller, candidate.Category)
+		local whitelist, whitelistPriority, blacklist, indexName = getCategoryPolicy(controller, candidate.Category)
 		if whitelist then
 			hasPolicyCandidate = true
 			decision.CandidateCount += 1
@@ -119,7 +118,7 @@ function ChoicePolicy.applyWithDecision(controller, candidates)
 			elseif decision.Category ~= candidate.Category then
 				decision.Category = false
 			end
-			local key = normalizeName(candidate.ChoiceName)
+			local key = ChoiceCatalog.resolveKey(indexName, candidate.ChoiceName)
 			local blacklisted = blacklist[key] == true
 			if whitelist[key] and not blacklisted then
 				candidate.PolicyPriority = whitelistPriority[key] or 999
@@ -163,6 +162,28 @@ end
 
 function ChoicePolicy.normalizeSelections(indexName, values)
 	return ChoiceCatalog.toDisplaySelections(indexName, values)
+end
+
+function ChoicePolicy.excludeSelections(indexName, options, excluded)
+	local excludedKeys = {}
+	if typeof(excluded) == "table" then
+		for _, value in ipairs(excluded) do
+			excludedKeys[ChoiceCatalog.resolveKey(indexName, value)] = true
+		end
+		for value, active in pairs(excluded) do
+			if typeof(value) == "string" and active == true then
+				excludedKeys[ChoiceCatalog.resolveKey(indexName, value)] = true
+			end
+		end
+	end
+
+	local filtered = {}
+	for _, option in ipairs(options or {}) do
+		if not excludedKeys[ChoiceCatalog.resolveKey(indexName, option)] then
+			filtered[#filtered + 1] = option
+		end
+	end
+	return filtered
 end
 
 return ChoicePolicy
