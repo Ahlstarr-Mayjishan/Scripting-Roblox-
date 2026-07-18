@@ -11,6 +11,7 @@ local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.lua
 local ImmunityHandoff = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Immunity Handoff.luau")
 local NoTracking = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/No Tracking.luau")
 local RuleOverlay = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Rule Overlay.luau")
+local RunLevelTracker = getgenv().loadModule("NULLSCAPE/Automation/RunLevelTracker.luau")
 
 local RunPolicy = {}
 local localPlayer = Players.LocalPlayer
@@ -25,7 +26,7 @@ local state = {
 	AwaitingDeath = false,
 	DeathConfirmed = false,
 	AwaitingRunReset = false,
-	RestedMilestones = {},
+	CompletedRoundsSinceRest = 0,
 	WaitUntil = nil,
 	WaitRemaining = nil,
 	WaitLevel = nil,
@@ -37,6 +38,33 @@ local state = {
 local function getLevel()
 	local levelValue = ReplicatedStorage:FindFirstChild("Level")
 	return math.max(0, math.floor(tonumber(levelValue and levelValue.Value) or 0))
+end
+
+local function getNativeGoldenProgress()
+	local counters = ReplicatedStorage:FindFirstChild("GiftCounters")
+	local golden = counters and counters:FindFirstChild("GoldenGift")
+	local handler = Context.getGiftClientHandler()
+	local giftCount = handler and handler.GiftCount and handler.GiftCount.GoldenGift
+	if not golden and not giftCount then
+		return nil
+	end
+
+	local maximum = math.max(
+		0,
+		tonumber(golden and golden:GetAttribute("MaxGifts")) or 0,
+		tonumber(giftCount and giftCount.Current) or 0,
+		tonumber(giftCount and giftCount.Collected) or 0
+	)
+	local collected = math.max(
+		0,
+		tonumber(golden and golden:GetAttribute("Collected")) or 0,
+		tonumber(giftCount and giftCount.Collected) or 0
+	)
+	return {
+		GoldenMax = maximum,
+		GoldenCollected = collected,
+		GoldenProgressRatio = maximum > 0 and math.clamp(collected / maximum, 0, 1) or 0,
+	}
 end
 
 local function getHumanoid()
@@ -104,7 +132,8 @@ local function resetRunState(controller, resetCompletedRuns)
 	state.WaitRemaining = nil
 	state.WaitLevel = nil
 	NoTracking.reset()
-	table.clear(state.RestedMilestones)
+	RunLevelTracker.reset()
+	state.CompletedRoundsSinceRest = 0
 	if resetCompletedRuns then
 		state.CompletedRuns = 0
 	end
@@ -134,22 +163,6 @@ local function getWaitMinutes(controller, level)
 		return math.clamp(tonumber(controller.GiftFarmWaitMinutes10To24) or 5, 0, 30)
 	end
 	return 0
-end
-
-local function getRestMilestone(controller, level)
-	if level < 10 then
-		return nil
-	end
-	if controller.GiftFarmRestMode == "Every Completed Level" then
-		return level
-	end
-
-	local interval = math.clamp(math.floor(tonumber(controller.GiftFarmRestIntervalLevels) or 5), 1, 30)
-	local bandStart = level >= 50 and 50 or (level >= 25 and 25 or 10)
-	if level < bandStart + interval then
-		return nil
-	end
-	return bandStart + math.floor((level - bandStart) / interval) * interval
 end
 
 local function hold(controller, status, detail, overlayText)
@@ -215,7 +228,7 @@ local function stepTargetLifecycle(controller)
 		if level < (state.CompletedTarget or math.huge) then
 			state.CompletedTarget = nil
 			state.AwaitingRunReset = false
-			table.clear(state.RestedMilestones)
+			state.CompletedRoundsSinceRest = 0
 			chooseTarget(controller)
 			return release(controller)
 		end
@@ -347,37 +360,47 @@ local function stepWait(controller)
 	)
 end
 
-local function stepEfficiency(controller, scanInfo)
-	if typeof(scanInfo) ~= "table" then
+local function stepCompletedRoundRest(controller, completion)
+	if typeof(completion) ~= "table" then
 		return nil
 	end
 
-	local level = getLevel()
-	local milestone = getRestMilestone(controller, level)
-	if not milestone or state.RestedMilestones[milestone] then
-		return nil
-	end
-
-	local threshold = math.clamp(tonumber(controller.GiftFarmGoldenEfficiency) or 100, 0, 100)
-	if threshold <= 0 then
-		state.RestedMilestones[milestone] = true
-		return nil
-	end
-
-	local maximum = tonumber(scanInfo.GoldenMax) or 0
-	local collected = tonumber(scanInfo.GoldenCollected) or 0
-	local ratio = tonumber(scanInfo.GoldenProgressRatio) or (maximum > 0 and collected / maximum or 0)
-	if maximum <= 0 or ratio + 1e-6 < threshold / 100 then
-		return nil
-	end
-
-	state.RestedMilestones[milestone] = true
+	local level = math.max(0, math.floor(tonumber(completion.Level) or 0))
 	local waitMinutes = getWaitMinutes(controller, level)
 	if waitMinutes <= 0 then
 		return nil
 	end
 
-	state.WaitLevel = milestone
+	local threshold = math.clamp(tonumber(controller.GiftFarmGoldenEfficiency) or 100, 0, 100)
+	if threshold <= 0 then
+		return nil
+	end
+
+	local maximum = tonumber(completion.GoldenMax) or 0
+	local collected = tonumber(completion.GoldenCollected) or 0
+	local ratio = tonumber(completion.GoldenProgressRatio) or (maximum > 0 and collected / maximum or 0)
+	if maximum <= 0 or ratio + 1e-6 < threshold / 100 then
+		return nil
+	end
+
+	local everyRound = controller.GiftFarmRestMode == "Every Completed Round"
+		or controller.GiftFarmRestMode == "Every Completed Level"
+	if everyRound then
+		state.CompletedRoundsSinceRest = 0
+	else
+		state.CompletedRoundsSinceRest += 1
+		local interval = math.clamp(
+			math.floor(tonumber(controller.GiftFarmRestIntervalRounds) or 5),
+			1,
+			30
+		)
+		if state.CompletedRoundsSinceRest < interval then
+			return nil
+		end
+		state.CompletedRoundsSinceRest = 0
+	end
+
+	state.WaitLevel = level
 	state.WaitRemaining = waitMinutes * 60
 	state.WaitUntil = nil
 	controller.GiftFarmRestPending = true
@@ -404,7 +427,8 @@ local function suspendRules(controller)
 		state.WaitLevel = nil
 		state.Leaving = false
 		NoTracking.reset()
-		table.clear(state.RestedMilestones)
+		RunLevelTracker.reset()
+		state.CompletedRoundsSinceRest = 0
 		state.RulesSuspended = true
 	end
 	controller.GiftFarmCompletedRuns = 0
@@ -438,9 +462,17 @@ function RunPolicy.step(controller, scanInfo)
 
 	state.RulesSuspended = false
 	syncConfiguration(controller)
+	local levelSnapshot = RunLevelTracker.update(
+		getLevel(),
+		Context.isInRound(),
+		scanInfo,
+		getNativeGoldenProgress()
+	)
+	controller.GiftFarmCurrentLevel = levelSnapshot.Level
 	local noTracking = NoTracking.step(controller)
 	if noTracking and noTracking.ResetComplete then
-		table.clear(state.RestedMilestones)
+		state.CompletedRoundsSinceRest = 0
+		RunLevelTracker.reset()
 		chooseTarget(controller)
 		return release(controller)
 	end
@@ -459,9 +491,9 @@ function RunPolicy.step(controller, scanInfo)
 	if waiting and waiting.Hold then
 		return waiting
 	end
-	local efficiency = stepEfficiency(controller, scanInfo)
-	if efficiency and efficiency.Hold then
-		return efficiency
+	local completedRoundRest = stepCompletedRoundRest(controller, levelSnapshot.Completion)
+	if completedRoundRest and completedRoundRest.Hold then
+		return completedRoundRest
 	end
 	return release(controller)
 end
@@ -487,10 +519,12 @@ function RunPolicy.disable(controller)
 	state.Leaving = false
 	state.RulesSuspended = false
 	NoTracking.reset()
-	table.clear(state.RestedMilestones)
+	RunLevelTracker.reset()
+	state.CompletedRoundsSinceRest = 0
 	if controller then
 		controller.GiftFarmCompletedRuns = 0
 		controller.GiftFarmActiveTargetLevel = nil
+		controller.GiftFarmCurrentLevel = 0
 		controller.GiftFarmPolicyHolding = false
 		controller.GiftFarmRestPending = false
 	end

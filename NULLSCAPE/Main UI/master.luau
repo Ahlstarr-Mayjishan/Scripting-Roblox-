@@ -269,7 +269,7 @@ pcall(function()
 			AutomationGiftFarmMaxLevelInput = "50",
 			AutomationGiftFarmGoldenEfficiencySlider = 100,
 			AutomationGiftFarmRestModeDropdown = "Interval",
-			AutomationGiftFarmRestIntervalLevelsSlider = 5,
+			AutomationGiftFarmRestIntervalRoundsSlider = 5,
 			AutomationGiftFarmWait10To24Slider = 5,
 			AutomationGiftFarmWait25To49Slider = 10,
 			AutomationGiftFarmWait50PlusSlider = 20,
@@ -303,6 +303,18 @@ pcall(function()
 		}
 
 		local updated = false
+		if
+			currentSettings.AutomationGiftFarmRestIntervalRoundsSlider == nil
+			and currentSettings.AutomationGiftFarmRestIntervalLevelsSlider ~= nil
+		then
+			currentSettings.AutomationGiftFarmRestIntervalRoundsSlider =
+				currentSettings.AutomationGiftFarmRestIntervalLevelsSlider
+			updated = true
+		end
+		if currentSettings.AutomationGiftFarmRestModeDropdown == "Every Completed Level" then
+			currentSettings.AutomationGiftFarmRestModeDropdown = "Every Completed Round"
+			updated = true
+		end
 		for newKey, oldKey in pairs(aliases) do
 			if currentSettings[newKey] == nil and currentSettings[oldKey] ~= nil then
 				currentSettings[newKey] = currentSettings[oldKey]
@@ -360,6 +372,7 @@ pcall(function()
 		end
 		for _, legacyKey in ipairs({
 			"AltarFilterDropdown",
+			"AutomationGiftFarmRestIntervalLevelsSlider",
 			"AutomationEnemyChoiceWhitelistDropdown",
 			"AutomationEnemyChoiceBlacklistDropdown",
 			"AutomationAutoChooseThingSelectionsDropdown",
