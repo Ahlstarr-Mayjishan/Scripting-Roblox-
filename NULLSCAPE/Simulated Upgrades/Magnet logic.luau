@@ -138,63 +138,56 @@ function Magnet.update(controller, hrp)
 		return
 	end
 
-	local targets = controller.AutoCollectTargets or {}
-	local hasGiftTarget = table.find(targets, "Gift/GoldenGift") ~= nil
-
 	local mode = controller.AutoCollectMode or "Legit"
 	local hrpPos = hrp.Position
+	local giftRange = controller.AutoCollectGiftRange or controller.AutoCollectRange or 20
+	if giftRange > 60 then
+		giftRange = 60 -- Server limit safety ceiling
+	end
 
-	-- 1. GIFT COLLECTION
-	if hasGiftTarget then
-		local giftRange = controller.AutoCollectGiftRange or controller.AutoCollectRange or 20
-		if giftRange > 60 then
-			giftRange = 60 -- Server limit safety ceiling
+	local canCollectGift = true
+	if mode == "Legit" and os.clock() - lastCollectTime < COLLECT_DELAY then
+		canCollectGift = false
+	end
+
+	if canCollectGift then
+		scanGeneration += 1
+		local generation = scanGeneration
+		local now = os.clock()
+		local collectedEvent = getCollectedGiftEvent()
+		local nearestGift = nil
+		local nearestDistance = math.huge
+
+		local function consider(rawObj)
+			local distance = getCandidateDistance(rawObj, hrpPos, giftRange, generation, now)
+			if not distance then
+				return
+			end
+
+			if mode == "Legit" then
+				if distance < nearestDistance then
+					nearestGift = rawObj
+					nearestDistance = distance
+				end
+			else
+				collectGift(rawObj, collectedEvent)
+			end
 		end
 
-		local canCollectGift = true
-		if mode == "Legit" and os.clock() - lastCollectTime < COLLECT_DELAY then
-			canCollectGift = false
+		for _, giftInfo in ipairs(controller.ActiveGifts or {}) do
+			consider(giftInfo.rawObj)
 		end
 
-		if canCollectGift then
-			scanGeneration += 1
-			local generation = scanGeneration
-			local now = os.clock()
-			local collectedEvent = getCollectedGiftEvent()
-			local nearestGift = nil
-			local nearestDistance = math.huge
-
-			local function consider(rawObj)
-				local distance = getCandidateDistance(rawObj, hrpPos, giftRange, generation, now)
-				if not distance then
-					return
-				end
-
-				if mode == "Legit" then
-					if distance < nearestDistance then
-						nearestGift = rawObj
-						nearestDistance = distance
-					end
-				else
-					collectGift(rawObj, collectedEvent)
-				end
+		local GCH = getGiftClientHandler()
+		if GCH and GCH.Gifts then
+			for _, rawObj in pairs(GCH.Gifts) do
+				consider(rawObj)
 			end
+		end
 
-			for _, giftInfo in ipairs(controller.ActiveGifts or {}) do
-				consider(giftInfo.rawObj)
-			end
-
-			local GCH = getGiftClientHandler()
-			if GCH and GCH.Gifts then
-				for _, rawObj in pairs(GCH.Gifts) do
-					consider(rawObj)
-				end
-			end
-
-			if nearestGift then
-				collectGift(nearestGift, collectedEvent)
-				lastCollectTime = now
-			end
+		if nearestGift then
+			collectGift(nearestGift, collectedEvent)
+			lastCollectTime = now
 		end
 	end
 end

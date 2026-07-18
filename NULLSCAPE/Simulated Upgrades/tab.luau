@@ -4,28 +4,6 @@
 --  Builds the Simulated Upgrades and Radar tab in the Rayfield interface.
 -- ]]
 
-local function makeLabelAutoResize(labelText)
-	local LocalPlayer = game.Players.LocalPlayer
-	local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 5)
-	if not PlayerGui then
-		return
-	end
-
-	task.spawn(function()
-		task.wait(0.2)
-		for _, desc in ipairs(PlayerGui:GetDescendants()) do
-			if desc:IsA("TextLabel") and string.find(desc.Text, labelText, 1, true) then
-				local labelFrame = desc.Parent
-				if labelFrame and labelFrame:IsA("Frame") then
-					desc.AutomaticSize = Enum.AutomaticSize.Y
-					desc.TextWrapped = true
-					labelFrame.AutomaticSize = Enum.AutomaticSize.Y
-				end
-			end
-		end
-	end)
-end
-
 return function(Client, Controller)
 	local Tab = Client.Window:CreateTab("Upgrade Simulations", 4483362458)
 
@@ -63,17 +41,6 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateDropdown({
-		Name = "Collection Targets",
-		Options = { "Gift/GoldenGift", "Instrument (Cadence)" },
-		CurrentOption = Controller.AutoCollectTargets or { "Gift/GoldenGift", "Instrument (Cadence)" },
-		MultipleOptions = true,
-		Flag = "AutoCollectTargetsDropdown",
-		Callback = function(Options)
-			Controller:SetAutoCollectTargets(Options)
-		end,
-	})
-
-	Tab:CreateDropdown({
 		Name = "Collection Mode",
 		Options = { "Legit", "Blatant" },
 		CurrentOption = Controller.AutoCollectMode or "Legit",
@@ -88,13 +55,6 @@ return function(Client, Controller)
 		end,
 	})
 
-	if Tab.CreateLabel then
-		local text =
-			"Note: 0 range represents Infinite (Map-wide) pick up.\n - Gifts have a server-side limit of 30 studs.\n - Instrument has no limit (0 = infinite range)."
-		Tab:CreateLabel(text)
-		makeLabelAutoResize("Note: 0 range represents Infinite")
-	end
-
 	Tab:CreateSlider({
 		Name = "Collection Gift Range",
 		Range = { 5, 60 },
@@ -104,18 +64,6 @@ return function(Client, Controller)
 		Flag = "AutoCollectRangeSlider",
 		Callback = function(Value)
 			Controller:SetAutoCollectGiftRange(Value)
-		end,
-	})
-
-	Tab:CreateSlider({
-		Name = "Collection Instrument Range",
-		Range = { 0, 30 },
-		CurrentValue = Controller.AutoCollectInstrumentRange or 0,
-		Increment = 1,
-		ValueName = "Studs (0=Inf)",
-		Flag = "AutoCollectInstrumentRangeSlider",
-		Callback = function(Value)
-			Controller:SetAutoCollectInstrumentRange(Value)
 		end,
 	})
 

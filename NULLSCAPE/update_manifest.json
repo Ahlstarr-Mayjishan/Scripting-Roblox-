@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.19.001",
+    "Version":  "2026.07.19.002",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "1e01843eb3e4727e3e9d5c8c71c73da88465ece3190c1af414f70ae170634422"
+                      "Sha256":  "f002b76b776391cb64ab91712b6eadfbfdd0c54a140bbf1cc1a80fd3cb35922b"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -232,7 +232,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "147ebf463af388daa6fbb3ac3151c48a3f3b67791bdb636a2a03667f026d7056"
+                      "Sha256":  "3d502208412a9bd0b327c8cf8a4ca6e460467551c92a68cd0855a84ec4050921"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/executor.luau",
@@ -960,7 +960,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "f8935cbc366bc1702a3945a2abe503c5a00ac82fdd789f645a0b3a3f26a7440c"
+                      "Sha256":  "98e0dd4e5f11610b77599cdfdb55075ca34dad6feb23e00509b0959bc67a45a3"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Radar logic.luau",
@@ -988,7 +988,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "820b3dcd14e48faf5e1a3066fa845b4f8a5b0c0a933b9e6241ce7f2cb98ff640"
+                      "Sha256":  "6ae079e592efa4477ac4f23e4b724a6f328e051031680d28fc9f3a4ccb5e8ace"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",

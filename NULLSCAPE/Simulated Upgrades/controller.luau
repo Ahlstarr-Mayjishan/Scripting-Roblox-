@@ -34,8 +34,6 @@ local Controller = {
 	GiftMagnetBlocked = false,
 	AutoCollectRange = 20,
 	AutoCollectGiftRange = 20,
-	AutoCollectInstrumentRange = 0,
-	AutoCollectTargets = { "Gift/GoldenGift", "Instrument (Cadence)" },
 	AutoCollectMode = "Legit",
 	CollectMedalKeybind = "V",
 	MedalESPEnabled = false,
@@ -565,14 +563,6 @@ function Controller:TriggerMedalAction()
 			Duration = ok and 2 or 3,
 		})
 	end
-end
-
-function Controller:SetAutoCollectInstrumentRange(value)
-	self.AutoCollectInstrumentRange = value
-end
-
-function Controller:SetAutoCollectTargets(value)
-	self.AutoCollectTargets = value or {}
 end
 
 function Controller:SetAutoCollectMode(value)

@@ -218,9 +218,7 @@ pcall(function()
 			HelmetToggle = false,
 			MiniatureHourglassToggle = false,
 			AutoCollectGiftsToggle = false,
-			AutoCollectTargetsDropdown = { "Gift/GoldenGift", "Instrument (Cadence)" },
 			AutoCollectRangeSlider = 20,
-			AutoCollectInstrumentRangeSlider = 0,
 			CollectMedalKeybind = "V",
 			MedalESPToggle = false,
 			TripmineBarrierModeDropdown = "Off",
@@ -375,6 +373,8 @@ pcall(function()
 		end
 		for _, legacyKey in ipairs({
 			"AltarFilterDropdown",
+			"AutoCollectInstrumentRangeSlider",
+			"AutoCollectTargetsDropdown",
 			"AutomationGiftFarmRestIntervalLevelsSlider",
 			"AutomationAutoChooseThingSelectionsDropdown",
 			"AutomationChoiceBlacklistDropdown",
