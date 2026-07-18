@@ -241,6 +241,8 @@ pcall(function()
 			ChargerAirPlatformAssistToggle = false,
 			ChargerLongJumpGuardToggle = false,
 			ChargerLongJumpGuardDistanceSlider = 18,
+			ChargerAnchorCastAssistToggle = false,
+			ChargerAnchorCastDelaySlider = 0.04,
 			GraceWingsToggle = false,
 			GraceWingsAirControlSlider = 1,
 			AdvancedGravityCoilToggle = false,

@@ -65,6 +65,8 @@ local createControllerProxy = function(Client, Controller)
 		ChargerAirPlatformAssistEnabled = false,
 		ChargerLongJumpGuardEnabled = false,
 		ChargerLongJumpGuardDistance = 18,
+		ChargerAnchorCastAssistEnabled = false,
+		ChargerAnchorCastDelay = 0.04,
 	}
 
 	return setmetatable({ __ClassAdjustmentProxy = true }, {
@@ -401,6 +403,27 @@ return function(Client, Controller)
 		Flag = "ChargerLongJumpGuardDistanceSlider",
 		Callback = function(Value)
 			Controller:SetChargerLongJumpGuardDistance(Value)
+		end,
+	})
+	Tab:CreateToggle({
+		Name = "Anchor Cast Assist",
+		Info = "After a native JumpPad or GrapplePoint touch creates its valid state, pulses Charger charge once.",
+		CurrentValue = Controller.ChargerAnchorCastAssistEnabled or false,
+		Flag = "ChargerAnchorCastAssistToggle",
+		Callback = function(Value)
+			Controller:SetChargerAnchorCastAssist(Value)
+		end,
+	})
+	Tab:CreateSlider({
+		Name = "Anchor Cast Delay",
+		Info = "Delay after the native anchor state is detected before the charge pulse. Lower is earlier.",
+		Range = { 0, 0.2 },
+		Increment = 0.01,
+		Suffix = "s",
+		CurrentValue = Controller.ChargerAnchorCastDelay or 0.04,
+		Flag = "ChargerAnchorCastDelaySlider",
+		Callback = function(Value)
+			Controller:SetChargerAnchorCastDelay(Value)
 		end,
 	})
 

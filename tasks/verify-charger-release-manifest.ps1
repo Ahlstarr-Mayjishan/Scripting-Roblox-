@@ -12,7 +12,8 @@ $requiredPaths = @(
 	"NULLSCAPE/Class Adjustment/Charger/Charge Collision Guard.luau",
 	"NULLSCAPE/Class Adjustment/Charger/Charger Assist Context.luau",
 	"NULLSCAPE/Class Adjustment/Charger/Charger Assist Hooks.luau",
-	"NULLSCAPE/Class Adjustment/Charger/Charger Assist Suite.luau"
+	"NULLSCAPE/Class Adjustment/Charger/Charger Assist Suite.luau",
+	"NULLSCAPE/Class Adjustment/Charger/Anchor Cast Assist.luau"
 )
 
 function Get-NormalizedSha256([string]$Path) {

@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.18.97",
+    "Version":  "2026.07.18.98",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "a82652c1aa103a76f0d3994a9e00f281bcbd68d0b95a5e86bfebe318ff51bf00"
+                      "Sha256":  "a8401bd11409aea48d5731e3ae9ed918c79d6269e095fb227bf355c089f7fd8e"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -622,14 +622,14 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "5d91b566e82d1714f0725ef567e4d43deab329e48603c701c9e75a8b78e08077"
+                      "Sha256":  "0e9f765d6e4890f38ff534ed0920d138ddaca6ce8edad67ed81e92171a61b1f1"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Executor.luau",
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "f9bb44a61e223ed289d30bd99e5dfdad833840f8bc1179bea3be38343a10a4fb"
+                      "Sha256":  "890eec9c52604d63c5f1c5aa555b465308081c3453d5c21b420fe142ce204b4e"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/GC.luau",
@@ -643,7 +643,7 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "04e267f3377727d69c377823e4f316df48b42a52275c4f8fecd8338541de8441"
+                      "Sha256":  "f1d93a1a14df554c9bef79a51a00532e958624967ba2170f5813d34fd8a9fb89"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Charger/Tripmine Assist.luau",
@@ -686,6 +686,13 @@
                                    "Class Adjustment"
                                ],
                       "Sha256":  "c4c97c3cd0ec31e2541d40e21308e941522bbb060045b4a728df21b645589e0a"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Class Adjustment/Charger/Anchor Cast Assist.luau",
+                      "Menu":  [
+                                   "Class Adjustment"
+                               ],
+                      "Sha256":  "5cc6e3835878ccd4acac5f4da5ed33f97ae92e81b8c8c43e449ba1b9a35de469"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Air Control.luau",

@@ -37,6 +37,8 @@ local Control = {
 	ChargerAirPlatformAssistEnabled = false,
 	ChargerLongJumpGuardEnabled = false,
 	ChargerLongJumpGuardDistance = 18,
+	ChargerAnchorCastAssistEnabled = false,
+	ChargerAnchorCastDelay = 0.04,
 	GrappleInstantGroundCast = false,
 	GrappleWallGlide = false,
 	GrappleInstantMaxPull = false,
@@ -181,6 +183,14 @@ local function readSettings()
 			8,
 			40
 		)
+		if decoded.ChargerAnchorCastAssistToggle ~= nil then
+			Control.ChargerAnchorCastAssistEnabled = not not decoded.ChargerAnchorCastAssistToggle
+		end
+		Control.ChargerAnchorCastDelay = math.clamp(
+			tonumber(decoded.ChargerAnchorCastDelaySlider) or Control.ChargerAnchorCastDelay,
+			0,
+			0.2
+		)
 	end
 end
 
@@ -231,6 +241,8 @@ local function writeSettings()
 	data.ChargerAirPlatformAssistToggle = Control.ChargerAirPlatformAssistEnabled
 	data.ChargerLongJumpGuardToggle = Control.ChargerLongJumpGuardEnabled
 	data.ChargerLongJumpGuardDistanceSlider = Control.ChargerLongJumpGuardDistance
+	data.ChargerAnchorCastAssistToggle = Control.ChargerAnchorCastAssistEnabled
+	data.ChargerAnchorCastDelaySlider = Control.ChargerAnchorCastDelay
 
 	pcall(makefolder, SETTINGS_FOLDER)
 
@@ -300,6 +312,9 @@ function Control:initialize()
 	if Executor and typeof(Executor.updateChargerAssistSuite) == "function" then
 		Executor.updateChargerAssistSuite(self)
 	end
+	if Executor and typeof(Executor.updateChargerAnchorCastAssist) == "function" then
+		Executor.updateChargerAnchorCastAssist(self)
+	end
 	if ClassContext and typeof(ClassContext.subscribe) == "function" then
 		local connection = ClassContext.subscribe(function()
 			if not self.Destroyed and Executor and typeof(Executor.updateChargerTripmineAssist) == "function" then
@@ -316,6 +331,9 @@ function Control:initialize()
 			end
 			if not self.Destroyed and Executor and typeof(Executor.updateChargerAssistSuite) == "function" then
 				Executor.updateChargerAssistSuite(self)
+			end
+			if not self.Destroyed and Executor and typeof(Executor.updateChargerAnchorCastAssist) == "function" then
+				Executor.updateChargerAnchorCastAssist(self)
 			end
 		end)
 		if connection then
@@ -533,6 +551,19 @@ end
 
 function Control:SetChargerLongJumpGuardDistance(value)
 	self.ChargerLongJumpGuardDistance = math.clamp(tonumber(value) or 18, 8, 40)
+	saveSettings()
+end
+
+function Control:SetChargerAnchorCastAssist(value)
+	self.ChargerAnchorCastAssistEnabled = value == true
+	saveSettings()
+	if Executor and typeof(Executor.updateChargerAnchorCastAssist) == "function" then
+		Executor.updateChargerAnchorCastAssist(self)
+	end
+end
+
+function Control:SetChargerAnchorCastDelay(value)
+	self.ChargerAnchorCastDelay = math.clamp(tonumber(value) or 0.04, 0, 0.2)
 	saveSettings()
 end
 
