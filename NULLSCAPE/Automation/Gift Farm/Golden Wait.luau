@@ -89,6 +89,11 @@ function GoldenWait.getWaitTime()
 end
 
 function GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, setStatus, reason)
+	if scanInfo and scanInfo.GoldenTargetReached == true then
+		goldenMissingSince = nil
+		return false
+	end
+
 	local passageActive = GoldenWait.isPassageWindowActive()
 	local normalClearActive = GoldenWait.isNormalClearWindowActive()
 	local pylonActive = GoldenWait.isPylonWindowActive()

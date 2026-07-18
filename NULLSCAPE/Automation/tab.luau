@@ -265,7 +265,8 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateSlider({
-		Name = "Golden Gift Efficiency (0 = Off)",
+		Name = "Golden Gift Collection Target (0 = All)",
+		Info = "Stop prioritizing Golden Gifts after reaching this percentage. Zero disables the cap and collects all.",
 		Range = { 0, 100 },
 		CurrentValue = Controller and Controller.GiftFarmGoldenEfficiency or 100,
 		Increment = 1,

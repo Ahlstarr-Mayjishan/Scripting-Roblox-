@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 local Progress = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Progress.luau")
 local Collapse = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Collapse.luau")
+local GoldenEfficiency = getgenv().loadModule("NULLSCAPE/Automation/GoldenEfficiency.luau")
 
 local Scanner = {}
 local SPAWN_SETTLE = 0.22
@@ -117,7 +118,19 @@ function Scanner.reset()
 	end
 end
 
-function Scanner.getLiveGoldenKind(gch)
+function Scanner.isGoldenTargetReached(gch, controller)
+	local collected, maximum = Progress.getGoldenGiftProgress(gch)
+	return GoldenEfficiency.evaluate(
+		controller and controller.GiftFarmGoldenEfficiency,
+		collected,
+		maximum
+	).Reached
+end
+
+function Scanner.getLiveGoldenKind(gch, controller)
+	if Scanner.isGoldenTargetReached(gch, controller) then
+		return nil
+	end
 	local gifts = gch and gch.Gifts
 	local giftsByType = gch and gch.GiftsByType
 	if typeof(gifts) ~= "table" or typeof(giftsByType) ~= "table" then
@@ -145,6 +158,11 @@ function Scanner.scan(controller, gch)
 	local now = os.clock()
 	local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 	local goldenCollected, goldenMax, goldenRatio = Progress.getGoldenGiftProgress(gch)
+	local goldenEfficiency = GoldenEfficiency.evaluate(
+		controller and controller.GiftFarmGoldenEfficiency,
+		goldenCollected,
+		goldenMax
+	)
 	local rawGolden = 0
 	local rawPassage = 0
 	local rawNormal = 0
@@ -206,14 +224,18 @@ function Scanner.scan(controller, gch)
 
 	peakRawGolden = math.max(peakRawGolden, rawGolden)
 	peakRawNormal = math.max(peakRawNormal, rawNormal)
-	local gifts = if rawGolden > 0 then goldenGifts else normalGifts
+	local actionableRawGolden = if goldenEfficiency.Reached then 0 else rawGolden
+	local actionableRawPassage = if goldenEfficiency.Reached then 0 else rawPassage
+	local gifts = if actionableRawGolden > 0 then goldenGifts else normalGifts
 
 	return gifts, {
 		Golden = settledGolden,
 		Passage = settledPassage,
 		Normal = settledNormal,
-		RawGolden = rawGolden,
-		RawPassage = rawPassage,
+		RawGolden = actionableRawGolden,
+		RawPassage = actionableRawPassage,
+		TotalRawGolden = rawGolden,
+		TotalRawPassage = rawPassage,
 		RawNormal = rawNormal,
 		PeakRawGolden = peakRawGolden,
 		PeakRawNormal = peakRawNormal,
@@ -222,11 +244,13 @@ function Scanner.scan(controller, gch)
 		GoldenMax = goldenMax,
 		GoldenProgressRatio = goldenRatio,
 		GoldenProgressComplete = goldenMax > 0 and goldenCollected >= goldenMax,
+		GoldenTargetPercent = goldenEfficiency.TargetPercent,
+		GoldenTargetReached = goldenEfficiency.Reached,
 		NormalRemainingRatio = if peakRawNormal > 0 then rawNormal / peakRawNormal else 1,
 		CollapseTracked = true,
 		FannyPackTracked = hasFannyPack,
-		GoldenLocked = rawGolden > 0,
-		PassageLocked = rawPassage > 0,
+		GoldenLocked = actionableRawGolden > 0,
+		PassageLocked = actionableRawPassage > 0,
 	}
 end
 

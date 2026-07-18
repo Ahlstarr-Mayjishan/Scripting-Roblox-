@@ -371,18 +371,6 @@ local function stepCompletedRoundRest(controller, completion)
 		return nil
 	end
 
-	local threshold = math.clamp(tonumber(controller.GiftFarmGoldenEfficiency) or 100, 0, 100)
-	if threshold <= 0 then
-		return nil
-	end
-
-	local maximum = tonumber(completion.GoldenMax) or 0
-	local collected = tonumber(completion.GoldenCollected) or 0
-	local ratio = tonumber(completion.GoldenProgressRatio) or (maximum > 0 and collected / maximum or 0)
-	if maximum <= 0 or ratio + 1e-6 < threshold / 100 then
-		return nil
-	end
-
 	local everyRound = controller.GiftFarmRestMode == "Every Completed Round"
 		or controller.GiftFarmRestMode == "Every Completed Level"
 	if everyRound then

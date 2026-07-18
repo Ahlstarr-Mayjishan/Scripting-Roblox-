@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.18.99",
+    "Version":  "2026.07.18.100",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "fb37eb981a3dc693391d5b5ca340e5cfda1fafa783b079fc9656b457fe53759e"
+                      "Sha256":  "f36d3a05aa9d20b4f2f75bfa76a45c1aed764f72ca31f318473d64506015ffef"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Run Policy.luau",
@@ -58,7 +58,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "e5cb9fa34a0cf635f0b042af7cb8df4e326c13192f6d24f33076bebaf90b0dbb"
+                      "Sha256":  "6d7b48ac34c742fa8b87d52b389d104a88819ab321aaa32806d969bcf2f41532"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/RunLevelTracker.luau",
@@ -67,6 +67,14 @@
                                    "Gift Farm"
                                ],
                       "Sha256":  "a6d7552a4857bba7eee308d613271c55e4053d15f897147eb810450bd55b766b"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Automation/GoldenEfficiency.luau",
+                      "Menu":  [
+                                   "Automation",
+                                   "Gift Farm"
+                               ],
+                      "Sha256":  "357a58d4fd21c48cba03c120def97dca079236134925c176a517305c98e3f035"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/No Tracking.luau",
@@ -819,7 +827,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "636a2fa0d4b4a7e698f1ad426ce4a1c50d959467397f97c7ddc7f45dd475ddce"
+                      "Sha256":  "c44661f2cf4db11c9a2914281d4c7ba6d5c4e4f660018043e14b3e7bdbd5a00d"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Altar.luau",
@@ -854,7 +862,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "557f9ce5482edd0685b04738b403f6e82450e5c9311a93a3c7cf482c634c9e2d"
+                      "Sha256":  "2af1c38f1af2cae3b38df7d489a67f02da756ba5b03d8b9a6ba2642cfd6cf4fe"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Medal.luau",
@@ -882,7 +890,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "c4466bad9adb2bfa9f2583943fefa22452975b6a49ff0efd05635fd7906f4a7e"
+                      "Sha256":  "ad30b10f587c6496cf74b42e8226f0360f6cc2c8e269475205d1e3d11c2c8e7e"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/executor.luau",

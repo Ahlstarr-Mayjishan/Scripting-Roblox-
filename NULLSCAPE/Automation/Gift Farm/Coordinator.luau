@@ -204,7 +204,7 @@ local function tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActiv
 
 	local pendingDuration = os.clock() - pendingGoldenReturnSince
 	local rawGoldenExhausted = (tonumber(scanInfo.PeakRawGolden) or 0) > 0
-	local counterConfirmed = scanInfo.GoldenProgressComplete == true
+	local counterConfirmed = scanInfo.GoldenProgressComplete == true or scanInfo.GoldenTargetReached == true
 	local staleCounterConfirmed = rawGoldenExhausted and pendingDuration >= GOLDEN_COUNTER_STALE_TIMEOUT
 	if not counterConfirmed and not staleCounterConfirmed then
 		if controller then
@@ -724,6 +724,7 @@ local function runLoop(controller)
 			end
 
 			local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
+			local goldenTargetReached = scanInfo and scanInfo.GoldenTargetReached == true
 			if rawGolden > 0 then
 				controller.GiftFarmGoldenComplete = false
 				pendingGoldenReturnSince = nil
@@ -731,6 +732,9 @@ local function runLoop(controller)
 					Beacon.suppressUntilReturn()
 				end
 			else
+				if goldenTargetReached and controller.GiftFarmGoldenComplete ~= true and not pendingGoldenReturnSince then
+					pendingGoldenReturnSince = os.clock()
+				end
 				if Beacon and typeof(Beacon.restore) == "function" then
 					Beacon.restore(true)
 				end
@@ -748,6 +752,7 @@ local function runLoop(controller)
 				and rawGolden == 0
 				and scanInfo
 				and scanInfo.GoldenProgressComplete ~= true
+				and scanInfo.GoldenTargetReached ~= true
 			then
 				transitionTo(
 					controller,
@@ -929,8 +934,10 @@ local function runLoop(controller)
 				else Progress.getNormalPacingBatchSize(normalRatio, scanInfo and scanInfo.RawNormal or #candidates)
 			local shouldHoldForGoldenWait = GoldenWait.shouldHoldAfterRoute(scanInfo, totalPlanned)
 			local goldenPreempted = false
+			local goldenTargetMet = false
 			local lastGoldenPreemptCheckAt = -math.huge
 			local cachedLiveGoldenKind = nil
+			local cachedGoldenTargetReached = false
 			local function shouldAbortRoute()
 				if not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision then
 					return true
@@ -938,7 +945,14 @@ local function runLoop(controller)
 				local now = os.clock()
 				if now - lastGoldenPreemptCheckAt >= GOLDEN_PREEMPT_SCAN_INTERVAL then
 					lastGoldenPreemptCheckAt = now
-					cachedLiveGoldenKind = Scanner.getLiveGoldenKind(gch)
+					cachedGoldenTargetReached = Scanner.isGoldenTargetReached(gch, controller)
+					cachedLiveGoldenKind = if cachedGoldenTargetReached
+						then nil
+						else Scanner.getLiveGoldenKind(gch, controller)
+				end
+				if wasGoldenRoute and cachedGoldenTargetReached then
+					goldenTargetMet = true
+					return true
 				end
 				if (cachedLiveGoldenKind == "PassageGift" and not wasPassageRoute)
 					or (cachedLiveGoldenKind ~= nil and not wasGoldenRoute)
@@ -1035,6 +1049,10 @@ local function runLoop(controller)
 			if not isSessionActive() then continue end
 			if goldenPreempted then
 				transitionTo(controller, "Scanning", "Golden gifts detected; preempting normal route")
+				continue
+			end
+			if goldenTargetMet then
+				transitionTo(controller, "Scanning", "Golden Gift collection target reached")
 				continue
 			end
 
