@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.19.003",
+    "Version":  "2026.07.19.004",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,14 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "f002b76b776391cb64ab91712b6eadfbfdd0c54a140bbf1cc1a80fd3cb35922b"
+                      "Sha256":  "db61d1b844da44ed3f308b8b870503414cb75bf718cc35bc40fa371d079b41d2"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/loader.luau",
+                      "Menu":  [
+                                   "Settings"
+                               ],
+                      "Sha256":  "2132061b0b55f627a675cef5d445848a0f8b4f29f9e1f3989f899a816049f6b8"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",

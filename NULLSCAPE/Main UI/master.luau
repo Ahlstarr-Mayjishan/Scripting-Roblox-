@@ -844,14 +844,17 @@ task.spawn(function()
 	end
 end)
 
+-- Runtime results live for one boot only so stateful modules keep singleton identity.
 local moduleCache = {}
 local moduleLoading = {}
-local remoteSourceCache = {}
-local remoteSourceFetches = {}
 local NIL_MODULE = {}
 local GITHUB_RAW_ROOT = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
-local REMOTE_PREFETCH_CONCURRENCY = 4
-local REMOTE_FETCH_WAIT_TIMEOUT = 20
+local BOOT_FETCH_TOKEN = tostring(os.time()) .. "-" .. HttpService:GenerateGUID(false)
+
+local function getFreshRemoteUrl(path, token)
+	local url = (GITHUB_RAW_ROOT .. tostring(path or "")):gsub(" ", "%%20")
+	return url .. "?nullscape_boot=" .. HttpService:UrlEncode(token or BOOT_FETCH_TOKEN)
+end
 
 function Client:Destroy(reason)
 	if self.Destroying or self.Destroyed then
@@ -914,12 +917,6 @@ function Client:Destroy(reason)
 		if moduleLoading then
 			table.clear(moduleLoading)
 		end
-		if remoteSourceCache then
-			table.clear(remoteSourceCache)
-		end
-		if remoteSourceFetches then
-			table.clear(remoteSourceFetches)
-		end
 	end)
 
 	safeStep("release globals", function()
@@ -946,7 +943,6 @@ function Client:InvalidateModule(path)
 	end
 	moduleCache[path] = nil
 	moduleLoading[path] = nil
-	remoteSourceCache[path] = nil
 	return true
 end
 
@@ -964,11 +960,6 @@ function Client:InvalidateModulePrefix(prefix)
 			moduleLoading[path] = nil
 		end
 	end
-	for path in pairs(remoteSourceCache) do
-		if typeof(path) == "string" and string.sub(path, 1, #prefix) == prefix then
-			remoteSourceCache[path] = nil
-		end
-	end
 	return true
 end
 
@@ -978,18 +969,18 @@ function Client:HotRestart(reason)
 	end
 
 	local source = nil
-	if readfile and isfile and isfile("NULLSCAPE/Main UI/master.luau") then
-		local ok, result = pcall(readfile, "NULLSCAPE/Main UI/master.luau")
-		if ok and typeof(result) == "string" and #result > 0 then
-			source = result
-		end
+	local ok, result = pcall(function()
+		local restartToken = tostring(os.time()) .. "-" .. HttpService:GenerateGUID(false)
+		return Game:HttpGet(getFreshRemoteUrl("NULLSCAPE/Main UI/master.luau", restartToken))
+	end)
+	if ok and typeof(result) == "string" and #result > 0 then
+		source = result
 	end
-	if not source then
-		local ok, result = pcall(function()
-			return Game:HttpGet((GITHUB_RAW_ROOT .. "NULLSCAPE/Main UI/master.luau"):gsub(" ", "%%20"))
-		end)
+	if not source and readfile and isfile and isfile("NULLSCAPE/Main UI/master.luau") then
+		ok, result = pcall(readfile, "NULLSCAPE/Main UI/master.luau")
 		if ok and typeof(result) == "string" and #result > 0 then
 			source = result
+			warn("[NULLSCAPE] GitHub unavailable during hot restart; using the local fallback")
 		end
 	end
 	if not source then
@@ -1008,8 +999,8 @@ function Client:HotRestart(reason)
 			warn("[NULLSCAPE] Hot restart compile failed: " .. tostring(err))
 			return
 		end
-		local ok, runtimeErr = pcall(chunk)
-		if not ok then
+		local runtimeOk, runtimeErr = pcall(chunk)
+		if not runtimeOk then
 			warn("[NULLSCAPE] Hot restart failed: " .. tostring(runtimeErr))
 		end
 	end)
@@ -1019,97 +1010,16 @@ end
 -- TAB: SETTINGS
 -- ==========================================
 local function fetchRemoteSource(path)
-	local cached = remoteSourceCache[path]
-	if cached then
-		return cached
-	end
-
-	local fetch = remoteSourceFetches[path]
-	if fetch then
-		local deadline = time() + REMOTE_FETCH_WAIT_TIMEOUT
-		repeat
-			task.wait()
-		until fetch.Done or Client.Destroyed or time() >= deadline
-		if fetch.Source then
-			return fetch.Source
-		end
-		if not fetch.Done then
-			error(Client.Destroyed and "Client destroyed" or ("Timed out downloading " .. tostring(path)))
-		end
-		error(fetch.Error or ("Failed to download " .. tostring(path)))
-	end
-
-	fetch = { Done = false }
-	remoteSourceFetches[path] = fetch
 	local success, source = pcall(function()
-		return Game:HttpGet((GITHUB_RAW_ROOT .. path):gsub(" ", "%%20"))
+		return Game:HttpGet(getFreshRemoteUrl(path))
 	end)
-
 	if Client.Destroyed then
-		fetch.Error = "Client destroyed"
-	elseif success and typeof(source) == "string" and #source > 0 then
-		fetch.Source = source
-		remoteSourceCache[path] = source
-	else
-		fetch.Error = tostring(source)
+		error("Client destroyed")
 	end
-	fetch.Done = true
-	remoteSourceFetches[path] = nil
-
-	if fetch.Source then
-		return fetch.Source
+	if success and typeof(source) == "string" and #source > 0 then
+		return source
 	end
-	error(fetch.Error or ("Failed to download " .. tostring(path)))
-end
-
-local function prefetchRemoteSources()
-	task.spawn(function()
-		local manifestSuccess, manifestSource = pcall(function()
-			return Game:HttpGet((GITHUB_RAW_ROOT .. "NULLSCAPE/update_manifest.json"):gsub(" ", "%%20"))
-		end)
-		if not manifestSuccess or typeof(manifestSource) ~= "string" then
-			return
-		end
-
-		local decodedSuccess, manifest = pcall(function()
-			return HttpService:JSONDecode(manifestSource)
-		end)
-		local files = decodedSuccess and manifest and manifest.Files
-		if typeof(files) ~= "table" then
-			return
-		end
-
-		local queue = {}
-		for _, entry in ipairs(files) do
-			local path = entry and entry.Path
-			if typeof(path) == "string" and path ~= "NULLSCAPE/Main UI/master.luau" then
-				local isLocal = isfile and readfile and isfile(path)
-				if not isLocal then
-					table.insert(queue, path)
-				end
-			end
-		end
-
-		local nextIndex = 1
-		local function worker()
-			while true do
-				if Client.Destroyed then
-					return
-				end
-				local index = nextIndex
-				nextIndex = index + 1
-				local path = queue[index]
-				if not path then
-					return
-				end
-				pcall(fetchRemoteSource, path)
-			end
-		end
-
-		for _ = 1, math.min(REMOTE_PREFETCH_CONCURRENCY, #queue) do
-			task.spawn(worker)
-		end
-	end)
+	error("Failed to download " .. tostring(path) .. ": " .. tostring(source))
 end
 
 local function loadModule(path)
@@ -1142,25 +1052,34 @@ local function loadModule(path)
 		return nil
 	end
 
-	local isLocal = not not (isfile and readfile and isfile(path))
-	warn("[NULLSCAPE] Loading module: " .. tostring(path) .. " (local=" .. tostring(isLocal) .. ")")
 	moduleLoading[path] = true
 
-	local sourceSuccess, sourceResult = pcall(function()
-		if isLocal then
+	local sourceOrigin = "GitHub"
+	local sourceSuccess, sourceResult = pcall(fetchRemoteSource, path)
+	if not sourceSuccess and isfile and readfile and isfile(path) then
+		local remoteError = sourceResult
+		sourceSuccess, sourceResult = pcall(function()
 			local content = readfile(path)
-			if content and #content:gsub("%s+", "") > 0 then
-				return content
-			else
-				warn("[NULLSCAPE] Local file " .. tostring(path) .. " is empty or invalid, falling back to GitHub!")
+			if typeof(content) ~= "string" or #content:gsub("%s+", "") == 0 then
+				error("Local fallback is empty or invalid")
 			end
+			return content
+		end)
+		if sourceSuccess then
+			sourceOrigin = "local fallback"
+			warn(
+				"[NULLSCAPE] GitHub fetch failed for "
+					.. tostring(path)
+					.. "; using local fallback: "
+					.. tostring(remoteError)
+			)
 		end
-		return fetchRemoteSource(path)
-	end)
+	end
 	if not sourceSuccess then
 		moduleLoading[path] = nil
 		error("[NULLSCAPE] Failed to read module " .. tostring(path) .. ": " .. tostring(sourceResult), 2)
 	end
+	warn("[NULLSCAPE] Loading module: " .. tostring(path) .. " (source=" .. sourceOrigin .. ")")
 
 	local source = sourceResult
 	if typeof(source) == "string" and string.sub(source, 1, 3) == "\239\187\191" then
@@ -1195,8 +1114,6 @@ local function loadModule(path)
 	return result
 end
 getgenv().loadModule = loadModule
-
-prefetchRemoteSources()
 
 local classContextLoaded, classContextResult = pcall(function()
 	return loadModule("NULLSCAPE/Core/Class Context.luau")
