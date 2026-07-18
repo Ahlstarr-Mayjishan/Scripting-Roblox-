@@ -134,6 +134,8 @@ local Controller = {
 	GiftFarmMinLevel = 10,
 	GiftFarmMaxLevel = 50,
 	GiftFarmGoldenEfficiency = 100,
+	GiftFarmRestMode = "Interval",
+	GiftFarmRestIntervalLevels = 5,
 	GiftFarmWaitMinutes10To24 = 5,
 	GiftFarmWaitMinutes25To49 = 10,
 	GiftFarmWaitMinutes50Plus = 20,
@@ -423,6 +425,16 @@ end
 
 function Controller:SetGiftFarmGoldenEfficiency(value)
 	return setConfigNumber(self, "GiftFarmGoldenEfficiency", value, 0, 100, 100)
+end
+
+function Controller:SetGiftFarmRestMode(value)
+	self.GiftFarmRestMode = value == "Every Completed Level" and "Every Completed Level" or "Interval"
+	self.ConfigChanged:Fire()
+	return true
+end
+
+function Controller:SetGiftFarmRestIntervalLevels(value)
+	return setConfigNumber(self, "GiftFarmRestIntervalLevels", value, 1, 30, 5)
 end
 
 function Controller:SetGiftFarmWaitMinutes10To24(value)

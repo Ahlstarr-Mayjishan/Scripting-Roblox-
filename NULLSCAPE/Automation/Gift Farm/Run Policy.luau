@@ -25,8 +25,7 @@ local state = {
 	AwaitingDeath = false,
 	DeathConfirmed = false,
 	AwaitingRunReset = false,
-	RestedLevels = {},
-	LastObservedLevel = nil,
+	RestedMilestones = {},
 	WaitUntil = nil,
 	WaitRemaining = nil,
 	WaitLevel = nil,
@@ -105,8 +104,7 @@ local function resetRunState(controller, resetCompletedRuns)
 	state.WaitRemaining = nil
 	state.WaitLevel = nil
 	NoTracking.reset()
-	table.clear(state.RestedLevels)
-	state.LastObservedLevel = nil
+	table.clear(state.RestedMilestones)
 	if resetCompletedRuns then
 		state.CompletedRuns = 0
 	end
@@ -136,6 +134,22 @@ local function getWaitMinutes(controller, level)
 		return math.clamp(tonumber(controller.GiftFarmWaitMinutes10To24) or 5, 0, 30)
 	end
 	return 0
+end
+
+local function getRestMilestone(controller, level)
+	if level < 10 then
+		return nil
+	end
+	if controller.GiftFarmRestMode == "Every Completed Level" then
+		return level
+	end
+
+	local interval = math.clamp(math.floor(tonumber(controller.GiftFarmRestIntervalLevels) or 5), 1, 30)
+	local bandStart = level >= 50 and 50 or (level >= 25 and 25 or 10)
+	if level < bandStart + interval then
+		return nil
+	end
+	return bandStart + math.floor((level - bandStart) / interval) * interval
 end
 
 local function hold(controller, status, detail, overlayText)
@@ -201,7 +215,7 @@ local function stepTargetLifecycle(controller)
 		if level < (state.CompletedTarget or math.huge) then
 			state.CompletedTarget = nil
 			state.AwaitingRunReset = false
-			table.clear(state.RestedLevels)
+			table.clear(state.RestedMilestones)
 			chooseTarget(controller)
 			return release(controller)
 		end
@@ -339,17 +353,14 @@ local function stepEfficiency(controller, scanInfo)
 	end
 
 	local level = getLevel()
-	if state.LastObservedLevel ~= level then
-		table.clear(state.RestedLevels)
-		state.LastObservedLevel = level
-	end
-	if state.RestedLevels[level] then
+	local milestone = getRestMilestone(controller, level)
+	if not milestone or state.RestedMilestones[milestone] then
 		return nil
 	end
 
 	local threshold = math.clamp(tonumber(controller.GiftFarmGoldenEfficiency) or 100, 0, 100)
 	if threshold <= 0 then
-		state.RestedLevels[level] = true
+		state.RestedMilestones[milestone] = true
 		return nil
 	end
 
@@ -360,13 +371,13 @@ local function stepEfficiency(controller, scanInfo)
 		return nil
 	end
 
-	state.RestedLevels[level] = true
+	state.RestedMilestones[milestone] = true
 	local waitMinutes = getWaitMinutes(controller, level)
 	if waitMinutes <= 0 then
 		return nil
 	end
 
-	state.WaitLevel = level
+	state.WaitLevel = milestone
 	state.WaitRemaining = waitMinutes * 60
 	state.WaitUntil = nil
 	controller.GiftFarmRestPending = true
@@ -393,8 +404,7 @@ local function suspendRules(controller)
 		state.WaitLevel = nil
 		state.Leaving = false
 		NoTracking.reset()
-		table.clear(state.RestedLevels)
-		state.LastObservedLevel = nil
+		table.clear(state.RestedMilestones)
 		state.RulesSuspended = true
 	end
 	controller.GiftFarmCompletedRuns = 0
@@ -430,8 +440,7 @@ function RunPolicy.step(controller, scanInfo)
 	syncConfiguration(controller)
 	local noTracking = NoTracking.step(controller)
 	if noTracking and noTracking.ResetComplete then
-		table.clear(state.RestedLevels)
-		state.LastObservedLevel = nil
+		table.clear(state.RestedMilestones)
 		chooseTarget(controller)
 		return release(controller)
 	end
@@ -478,8 +487,7 @@ function RunPolicy.disable(controller)
 	state.Leaving = false
 	state.RulesSuspended = false
 	NoTracking.reset()
-	table.clear(state.RestedLevels)
-	state.LastObservedLevel = nil
+	table.clear(state.RestedMilestones)
 	if controller then
 		controller.GiftFarmCompletedRuns = 0
 		controller.GiftFarmActiveTargetLevel = nil

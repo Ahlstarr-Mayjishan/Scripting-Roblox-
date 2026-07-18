@@ -279,6 +279,35 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateDropdown({
+		Name = "Rest Mode",
+		Options = { "Every Completed Level", "Interval" },
+		CurrentOption = Controller and Controller.GiftFarmRestMode or "Interval",
+		MultipleOptions = false,
+		Flag = "AutomationGiftFarmRestModeDropdown",
+		Callback = function(Value)
+			local selected = typeof(Value) == "table" and Value[1] or Value
+			if Controller and typeof(Controller.SetGiftFarmRestMode) == "function" then
+				Controller:SetGiftFarmRestMode(selected)
+			end
+		end,
+	})
+
+	Tab:CreateSlider({
+		Name = "Rest Interval",
+		Info = "Rest after this many completed levels, only during intermission.",
+		Range = { 1, 30 },
+		CurrentValue = Controller and Controller.GiftFarmRestIntervalLevels or 5,
+		Increment = 1,
+		ValueName = "Levels",
+		Flag = "AutomationGiftFarmRestIntervalLevelsSlider",
+		Callback = function(Value)
+			if Controller and typeof(Controller.SetGiftFarmRestIntervalLevels) == "function" then
+				Controller:SetGiftFarmRestIntervalLevels(Value)
+			end
+		end,
+	})
+
+	Tab:CreateDropdown({
 		Name = "Goal Mode",
 		Options = { "Reach to Levels", "Min-Max" },
 		CurrentOption = Controller and Controller.GiftFarmGoalMode or "Reach to Levels",

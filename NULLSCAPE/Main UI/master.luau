@@ -266,6 +266,8 @@ pcall(function()
 			AutomationGiftFarmMinLevelInput = "10",
 			AutomationGiftFarmMaxLevelInput = "50",
 			AutomationGiftFarmGoldenEfficiencySlider = 100,
+			AutomationGiftFarmRestModeDropdown = "Interval",
+			AutomationGiftFarmRestIntervalLevelsSlider = 5,
 			AutomationGiftFarmWait10To24Slider = 5,
 			AutomationGiftFarmWait25To49Slider = 10,
 			AutomationGiftFarmWait50PlusSlider = 20,
