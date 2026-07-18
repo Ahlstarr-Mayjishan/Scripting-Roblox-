@@ -125,8 +125,6 @@ local Controller = {
 	AltarSelections = {},
 	GiftFarmRulesEnabled = false,
 	GiftFarmNoTrackingEnabled = false,
-	EnemyChoiceWhitelist = {},
-	EnemyChoiceBlacklist = {},
 	CurseChoiceWhitelist = {},
 	CurseChoiceBlacklist = {},
 	GreaterCurseChoiceWhitelist = {},
@@ -211,6 +209,33 @@ local function normalizeSelections(value)
 		end
 	end
 	return selections
+end
+
+local function selectionKey(value)
+	return string.lower(tostring(value or "")):gsub("[%s%p_]+", "")
+end
+
+local function removeOverlappingSelections(selections, excluded)
+	local excludedKeys = {}
+	for _, selection in ipairs(excluded) do
+		excludedKeys[selectionKey(selection)] = true
+	end
+
+	local filtered = {}
+	for _, selection in ipairs(selections) do
+		if not excludedKeys[selectionKey(selection)] then
+			table.insert(filtered, selection)
+		end
+	end
+	return filtered
+end
+
+local function setChoicePolicySelections(controller, selectedField, oppositeField, value)
+	local selected = normalizeSelections(value)
+	controller[selectedField] = selected
+	controller[oppositeField] = removeOverlappingSelections(normalizeSelections(controller[oppositeField]), selected)
+	controller.ConfigChanged:Fire()
+	return true
 end
 
 local function setConfigNumber(controller, key, value, minimum, maximum, fallback)
@@ -349,38 +374,31 @@ function Controller:SetGiftFarmNoTrackingEnabled(value)
 	return true
 end
 
-function Controller:SetEnemyChoiceWhitelist(value)
-	self.EnemyChoiceWhitelist = normalizeSelections(value)
-	self.ConfigChanged:Fire()
-	return true
-end
-
-function Controller:SetEnemyChoiceBlacklist(value)
-	self.EnemyChoiceBlacklist = normalizeSelections(value)
-	self.ConfigChanged:Fire()
-	return true
-end
-
 function Controller:SetCurseChoiceWhitelist(value)
-	self.CurseChoiceWhitelist = normalizeSelections(value)
-	self.ConfigChanged:Fire()
-	return true
+	return setChoicePolicySelections(self, "CurseChoiceWhitelist", "CurseChoiceBlacklist", value)
 end
 
 function Controller:SetCurseChoiceBlacklist(value)
-	self.CurseChoiceBlacklist = normalizeSelections(value)
-	self.ConfigChanged:Fire()
-	return true
+	return setChoicePolicySelections(self, "CurseChoiceBlacklist", "CurseChoiceWhitelist", value)
 end
 
 function Controller:SetGreaterCurseChoiceWhitelist(value)
-	self.GreaterCurseChoiceWhitelist = normalizeSelections(value)
-	self.ConfigChanged:Fire()
-	return true
+	return setChoicePolicySelections(self, "GreaterCurseChoiceWhitelist", "GreaterCurseChoiceBlacklist", value)
 end
 
 function Controller:SetGreaterCurseChoiceBlacklist(value)
-	self.GreaterCurseChoiceBlacklist = normalizeSelections(value)
+	return setChoicePolicySelections(self, "GreaterCurseChoiceBlacklist", "GreaterCurseChoiceWhitelist", value)
+end
+
+function Controller:NormalizeChoicePolicies()
+	self.CurseChoiceBlacklist = removeOverlappingSelections(
+		normalizeSelections(self.CurseChoiceBlacklist),
+		normalizeSelections(self.CurseChoiceWhitelist)
+	)
+	self.GreaterCurseChoiceBlacklist = removeOverlappingSelections(
+		normalizeSelections(self.GreaterCurseChoiceBlacklist),
+		normalizeSelections(self.GreaterCurseChoiceWhitelist)
+	)
 	self.ConfigChanged:Fire()
 	return true
 end

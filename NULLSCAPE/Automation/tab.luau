@@ -133,6 +133,15 @@ return function(Client, Controller)
 		end,
 	})
 
+	local policyDropdowns = {}
+	local policySelections = {}
+	local oppositePolicyFields = {
+		CurseChoiceWhitelist = "CurseChoiceBlacklist",
+		CurseChoiceBlacklist = "CurseChoiceWhitelist",
+		GreaterCurseChoiceWhitelist = "GreaterCurseChoiceBlacklist",
+		GreaterCurseChoiceBlacklist = "GreaterCurseChoiceWhitelist",
+	}
+
 	local function createChoicePolicyDropdown(name, info, indexName, field, flag, setter)
 		local dropdown
 		local correctingSelection = false
@@ -160,35 +169,36 @@ return function(Client, Controller)
 				if Controller and typeof(Controller[setter]) == "function" then
 					Controller[setter](Controller, normalized)
 				end
-				if not correctingSelection and not selectionsMatch(Options, normalized) then
+				local selected = Controller and ChoicePolicy.normalizeSelections(indexName, Controller[field]) or normalized
+				policySelections[field] = selected
+				if not correctingSelection and not selectionsMatch(Options, selected) then
 					correctingSelection = true
 					task.defer(function()
 						if dropdown and typeof(dropdown.Set) == "function" then
-							dropdown:Set(normalized)
+							dropdown:Set(selected)
 						end
 						correctingSelection = false
 					end)
 				end
+				local oppositeField = oppositePolicyFields[field]
+				local oppositeDropdown = oppositeField and policyDropdowns[oppositeField]
+				if oppositeDropdown and Controller then
+					local opposite = ChoicePolicy.normalizeSelections(indexName, Controller[oppositeField])
+					if not selectionsMatch(policySelections[oppositeField] or {}, opposite) then
+						policySelections[oppositeField] = opposite
+						task.defer(function()
+							if typeof(oppositeDropdown.Set) == "function" then
+								oppositeDropdown:Set(opposite)
+							end
+						end)
+					end
+				end
 			end,
 		})
+		policyDropdowns[field] = dropdown
+		policySelections[field] = ChoicePolicy.normalizeSelections(indexName, Controller and Controller[field] or {})
 	end
 
-	createChoicePolicyDropdown(
-		"Enemy Whitelist",
-		"Preferred enemies. The first matching available enemy is selected.",
-		"EnemyIndex",
-		"EnemyChoiceWhitelist",
-		"AutomationEnemyChoiceWhitelistDropdown",
-		"SetEnemyChoiceWhitelist"
-	)
-	createChoicePolicyDropdown(
-		"Enemy Blacklist",
-		"Always overrides the whitelist. If every enemy choice is blacklisted, native rerolls are used; without rerolls, automation waits.",
-		"EnemyIndex",
-		"EnemyChoiceBlacklist",
-		"AutomationEnemyChoiceBlacklistDropdown",
-		"SetEnemyChoiceBlacklist"
-	)
 	createChoicePolicyDropdown(
 		"Curse Whitelist",
 		"Preferred normal curses. The first matching available curse is selected.",
@@ -221,6 +231,10 @@ return function(Client, Controller)
 		"AutomationGreaterCurseChoiceBlacklistDropdown",
 		"SetGreaterCurseChoiceBlacklist"
 	)
+
+	if Controller and typeof(Controller.NormalizeChoicePolicies) == "function" then
+		Controller:NormalizeChoicePolicies()
+	end
 
 	Tab:CreateSlider({
 		Name = "Gift Farm Range",
