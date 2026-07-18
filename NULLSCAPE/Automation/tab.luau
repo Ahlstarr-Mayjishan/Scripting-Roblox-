@@ -183,7 +183,7 @@ return function(Client, Controller)
 	)
 	createChoicePolicyDropdown(
 		"Enemy Blacklist",
-		"Avoided. If every enemy choice is blacklisted, native rerolls are used until an allowed choice appears or rerolls run out.",
+		"Always overrides the whitelist. If every enemy choice is blacklisted, native rerolls are used; without rerolls, automation waits.",
 		"EnemyIndex",
 		"EnemyChoiceBlacklist",
 		"AutomationEnemyChoiceBlacklistDropdown",
@@ -199,7 +199,7 @@ return function(Client, Controller)
 	)
 	createChoicePolicyDropdown(
 		"Curse Blacklist",
-		"Avoided. If every normal curse is blacklisted, native rerolls are used until an allowed choice appears or rerolls run out.",
+		"Always overrides the whitelist. If every normal curse is blacklisted, native rerolls are used; without rerolls, automation waits.",
 		"CurseIndex",
 		"CurseChoiceBlacklist",
 		"AutomationCurseChoiceBlacklistDropdown",
@@ -215,7 +215,7 @@ return function(Client, Controller)
 	)
 	createChoicePolicyDropdown(
 		"Greater Curse Blacklist",
-		"Avoided. If every greater curse is blacklisted, native rerolls are used until an allowed choice appears or rerolls run out.",
+		"Always overrides the whitelist. If every greater curse is blacklisted, native rerolls are used; without rerolls, automation waits.",
 		"GreaterCurseIndex",
 		"GreaterCurseChoiceBlacklist",
 		"AutomationGreaterCurseChoiceBlacklistDropdown",

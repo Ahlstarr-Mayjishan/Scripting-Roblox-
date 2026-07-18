@@ -124,11 +124,12 @@ function ChoicePolicy.applyWithDecision(controller, candidates)
 				decision.Category = false
 			end
 			local key = normalizeName(candidate.ChoiceName)
-			if whitelist[key] then
+			local blacklisted = blacklist[key] == true
+			if whitelist[key] and not blacklisted then
 				candidate.PolicyPriority = whitelistPriority[key] or 999
 				table.insert(preferred, candidate)
 			end
-			if not blacklist[key] then
+			if not blacklisted then
 				allPolicyCandidatesBlacklisted = false
 				table.insert(allowed, candidate)
 			end

@@ -461,6 +461,7 @@ local function collectTarget(controller, hrp)
 			reroll.RerollCategory = decision.Category
 			return reroll
 		end
+		return nil, "AllBlacklistedNoRerolls"
 	end
 
 	table.sort(candidates, function(a, b)
