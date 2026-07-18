@@ -260,6 +260,8 @@ pcall(function()
 			AutomationGiftFarmReturnBeaconToggle = true,
 			AutomationGiftFarmRulesToggle = false,
 			AutomationGiftFarmNoTrackingToggle = false,
+			AutomationEnemyChoiceWhitelistDropdown = {},
+			AutomationEnemyChoiceBlacklistDropdown = {},
 			AutomationCurseChoiceWhitelistDropdown = {},
 			AutomationCurseChoiceBlacklistDropdown = {},
 			AutomationGreaterCurseChoiceWhitelistDropdown = {},
@@ -374,8 +376,6 @@ pcall(function()
 		for _, legacyKey in ipairs({
 			"AltarFilterDropdown",
 			"AutomationGiftFarmRestIntervalLevelsSlider",
-			"AutomationEnemyChoiceWhitelistDropdown",
-			"AutomationEnemyChoiceBlacklistDropdown",
 			"AutomationAutoChooseThingSelectionsDropdown",
 			"AutomationChoiceBlacklistDropdown",
 			"AutomationChoiceWhitelistDropdown",

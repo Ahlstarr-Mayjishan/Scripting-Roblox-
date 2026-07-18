@@ -10,6 +10,11 @@ local ChoiceCatalog = getgenv().loadModule("NULLSCAPE/Automation/Choice Catalog.
 local ChoicePolicy = {}
 
 local CATEGORY_FIELDS = {
+	Enemies = {
+		Index = "EnemyIndex",
+		Whitelist = "EnemyChoiceWhitelist",
+		Blacklist = "EnemyChoiceBlacklist",
+	},
 	Curses = {
 		Index = "CurseIndex",
 		Whitelist = "CurseChoiceWhitelist",

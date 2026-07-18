@@ -127,6 +127,8 @@ local Controller = {
 	AltarSelections = {},
 	GiftFarmRulesEnabled = false,
 	GiftFarmNoTrackingEnabled = false,
+	EnemyChoiceWhitelist = {},
+	EnemyChoiceBlacklist = {},
 	CurseChoiceWhitelist = {},
 	CurseChoiceBlacklist = {},
 	GreaterCurseChoiceWhitelist = {},
@@ -379,6 +381,14 @@ function Controller:SetGiftFarmNoTrackingEnabled(value)
 	return true
 end
 
+function Controller:SetEnemyChoiceWhitelist(value)
+	return setChoicePolicySelections(self, "EnemyChoiceWhitelist", "EnemyChoiceBlacklist", value)
+end
+
+function Controller:SetEnemyChoiceBlacklist(value)
+	return setChoicePolicySelections(self, "EnemyChoiceBlacklist", "EnemyChoiceWhitelist", value)
+end
+
 function Controller:SetCurseChoiceWhitelist(value)
 	return setChoicePolicySelections(self, "CurseChoiceWhitelist", "CurseChoiceBlacklist", value)
 end
@@ -396,6 +406,10 @@ function Controller:SetGreaterCurseChoiceBlacklist(value)
 end
 
 function Controller:NormalizeChoicePolicies()
+	self.EnemyChoiceBlacklist = removeOverlappingSelections(
+		normalizeSelections(self.EnemyChoiceBlacklist),
+		normalizeSelections(self.EnemyChoiceWhitelist)
+	)
 	self.CurseChoiceBlacklist = removeOverlappingSelections(
 		normalizeSelections(self.CurseChoiceBlacklist),
 		normalizeSelections(self.CurseChoiceWhitelist)

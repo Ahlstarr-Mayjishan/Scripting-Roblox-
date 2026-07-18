@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.18.122",
+    "Version":  "2026.07.19.001",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "2defc86ebdf30b4e6dcca7e8c4a5dab5b90fc0d5e67d4167e56d6bf9f5c6676e"
+                      "Sha256":  "1e01843eb3e4727e3e9d5c8c71c73da88465ece3190c1af414f70ae170634422"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -163,7 +163,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "2b76ec7d5924a05afb3587b1113549002a8da6c617fb9a7351b25e69deeb39fe"
+                      "Sha256":  "76c265c08482505584b14e8aaaa973b5cc675d8216c20d056c96dadac3fccbce"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Kolona Auto QTE.luau",
@@ -785,7 +785,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "ba27f2e930c49f5c6a83d4ee28b752acb66eff6c5cfc09941e982b28f46393f0"
+                      "Sha256":  "7a509b5859bdb92d6fdd7253f9a20f931ed8eafc94075d5c025a33f13f094a31"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Choice Reroll.luau",
@@ -827,7 +827,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "27311121572f6f218ac114dfc6b6cfa3e2e2fd676f2481aee2249610299efb73"
+                      "Sha256":  "5f88d19e593af9a21849a2e087269f5cc944d1f17befdf9671caf0c5f926a563"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Altar.luau",

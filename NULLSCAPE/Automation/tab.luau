@@ -138,6 +138,8 @@ return function(Client, Controller)
 	local policyBaseOptions = {}
 	local syncingPolicyDropdowns = false
 	local oppositePolicyFields = {
+		EnemyChoiceWhitelist = "EnemyChoiceBlacklist",
+		EnemyChoiceBlacklist = "EnemyChoiceWhitelist",
 		CurseChoiceWhitelist = "CurseChoiceBlacklist",
 		CurseChoiceBlacklist = "CurseChoiceWhitelist",
 		GreaterCurseChoiceWhitelist = "GreaterCurseChoiceBlacklist",
@@ -220,6 +222,22 @@ return function(Client, Controller)
 	end
 
 	createChoicePolicyDropdown(
+		"Enemy Whitelist",
+		"Preferred enemies. The first matching available enemy is selected.",
+		"EnemyIndex",
+		"EnemyChoiceWhitelist",
+		"AutomationEnemyChoiceWhitelistDropdown",
+		"SetEnemyChoiceWhitelist"
+	)
+	createChoicePolicyDropdown(
+		"Enemy Blacklist",
+		"Avoided whenever possible. If every enemy is blacklisted, native rerolls are used before choosing a fallback.",
+		"EnemyIndex",
+		"EnemyChoiceBlacklist",
+		"AutomationEnemyChoiceBlacklistDropdown",
+		"SetEnemyChoiceBlacklist"
+	)
+	createChoicePolicyDropdown(
 		"Curse Whitelist",
 		"Preferred normal curses. The first matching available curse is selected.",
 		"CurseIndex",
@@ -255,6 +273,7 @@ return function(Client, Controller)
 	if Controller and typeof(Controller.NormalizeChoicePolicies) == "function" then
 		Controller:NormalizeChoicePolicies()
 	end
+	refreshPolicyPair("EnemyChoiceWhitelist")
 	refreshPolicyPair("CurseChoiceWhitelist")
 	refreshPolicyPair("GreaterCurseChoiceWhitelist")
 
