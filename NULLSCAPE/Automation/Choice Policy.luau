@@ -86,6 +86,7 @@ end
 function ChoicePolicy.applyWithDecision(controller, candidates)
 	local decision = {
 		AllBlacklisted = false,
+		Fallback = false,
 		Category = nil,
 		CandidateCount = 0,
 	}
@@ -145,6 +146,7 @@ function ChoicePolicy.applyWithDecision(controller, candidates)
 		if decision.Category == false then
 			decision.Category = nil
 		end
+		decision.Fallback = decision.AllBlacklisted
 		return candidates, decision
 	end
 	return allowed, decision

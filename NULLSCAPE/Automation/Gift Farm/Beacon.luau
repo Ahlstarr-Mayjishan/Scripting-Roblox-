@@ -114,6 +114,20 @@ local function getReturnCFrames(beacon, hrp)
 	return CFrame.new(approach), CFrame.new(target)
 end
 
+function Beacon.stageForWait(hrp, lease)
+	local beacon = Context.getBeaconPart()
+	if not (beacon and hrp and hrp.Parent) then
+		return false
+	end
+
+	local approach = getReturnCFrames(beacon, hrp)
+	Context.waitForStreamedGround(approach.Position, 0.25)
+	if lease then
+		return lease:moveTo(approach)
+	end
+	return Context.moveCharacterTo(approach)
+end
+
 local function pulseBeaconTouch(beacon, hrp)
 	if not (beacon and beacon.Parent and hrp and hrp.Parent) then
 		return false

@@ -1044,6 +1044,10 @@ local function runLoop(controller)
 			if routeStats and (tonumber(routeStats.Accepted) or 0) > 0 then
 				markProgress()
 			end
+			if routeCompleted and shouldHoldForGoldenWait and typeof(Beacon.stageForWait) == "function" then
+				transitionTo(controller, "Collecting", "Moving to a safe Golden Gift wait position")
+				Beacon.stageForWait(hrp, lease)
+			end
 			lease:release({ KeepFootholdDuration = 2.5, OnlyKeepFootholdIfAirborne = true })
 
 			if not isSessionActive() then continue end

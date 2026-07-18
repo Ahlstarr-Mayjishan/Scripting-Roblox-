@@ -1,5 +1,5 @@
 {
-    "Version":  "2026.07.18.101",
+    "Version":  "2026.07.18.102",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "f36d3a05aa9d20b4f2f75bfa76a45c1aed764f72ca31f318473d64506015ffef"
+                      "Sha256":  "cdeff9eb813f6fd4834fdc1674e49d0ed565900724b123d2b0cda2c99376ecf7"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Run Policy.luau",
@@ -138,7 +138,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "d53100e32fa6ba4ae8a33efb6bbceee39a20ab8e62db6b9ff1f6969f983d0ca3"
+                      "Sha256":  "a397493e4ca3776ec952858922743c75a7914d43f5d20ea93180ec3092b5303c"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Pipelined Collector/PipelinedCollector.luau",
@@ -771,7 +771,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "1383c630e5aa0b8889098c252aee5650c94639971ac73f6c65e3e823678b9df4"
+                      "Sha256":  "fba2cc57b9ca628071214684d0979501efcf13b8eadf4ba44cfdf75520f1e374"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Choice Catalog.luau",
@@ -785,14 +785,14 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "d11480d421a3c0945c529c356bd1fc86e8a29f2455b31fa5348fa2ec806f9e6e"
+                      "Sha256":  "be1f5f5eb4aab97065dd547bbe4f4916a4d9a8ba6668c09d4be7e4626b347ddb"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Choice Reroll.luau",
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "7d09c919d6e8dca99ea539c0c79becd5f0238b0c09dc3b5e9c65e3e88ce03058"
+                      "Sha256":  "10dfa292bfa9ff7a568d8f0dcfa7100239803c9b3019007f85a12eb0f66bbf63"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/executor.luau",

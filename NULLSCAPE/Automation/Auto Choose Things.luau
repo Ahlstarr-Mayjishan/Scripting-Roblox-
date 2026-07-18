@@ -199,6 +199,38 @@ local function activateButton(button)
 end
 
 local function classifyMedalChoice(root, prompt, itemIndex)
+	local identityValues = {
+		tostring(root and root.Name or ""),
+		tostring(prompt and prompt.ActionText or ""),
+		tostring(prompt and prompt.ObjectText or ""),
+		tostring(itemIndex or ""),
+	}
+	for _, identity in ipairs(identityValues) do
+		local normalizedIdentity = normalizeUpgradeName(identity)
+		if string.find(normalizedIdentity, "cursemedal", 1, true) then
+			return MEDAL_MODE_REROLLS
+		end
+		if normalizedIdentity == "medal" then
+			return MEDAL_MODE_REWARD
+		end
+	end
+	if root then
+		local hasMedalLabel = false
+		for _, descendant in ipairs(root:GetDescendants()) do
+			if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
+				local normalizedText = normalizeUpgradeName(descendant.Text)
+				if normalizedText == "cursemedal" then
+					return MEDAL_MODE_REROLLS
+				elseif normalizedText == "medal" then
+					hasMedalLabel = true
+				end
+			end
+		end
+		if hasMedalLabel then
+			return MEDAL_MODE_REWARD
+		end
+	end
+
 	for _, instance in ipairs({ root, prompt }) do
 		if instance then
 			for name, value in pairs(instance:GetAttributes()) do
@@ -221,7 +253,7 @@ local function classifyMedalChoice(root, prompt, itemIndex)
 	if textContains(visibleText, "no reroll") or textContains(visibleText, "without reroll") then
 		return MEDAL_MODE_REWARD
 	end
-	if textContains(visibleText, "reroll") or textContains(visibleText, "curse") then
+	if textContains(visibleText, "reroll") then
 		return MEDAL_MODE_REROLLS
 	end
 	if
@@ -455,13 +487,13 @@ local function collectTarget(controller, hrp)
 	local decision
 	candidates, decision = ChoicePolicy.applyWithDecision(controller, candidates)
 	if decision.AllBlacklisted == true then
-		local reroll = ChoiceReroll.find(selectFolder, hrp)
+		local reroll = ChoiceReroll.find(selectFolder, hrp, signature)
 		if reroll then
 			reroll.BatchSignature = signature
 			reroll.RerollCategory = decision.Category
 			return reroll
 		end
-		return nil, "AllBlacklistedNoRerolls"
+		decision.Fallback = true
 	end
 
 	table.sort(candidates, function(a, b)
@@ -480,7 +512,11 @@ local function collectTarget(controller, hrp)
 		end
 		return a.Priority == b.Priority and a.Distance < b.Distance or a.Priority < b.Priority
 	end)
-	return candidates[1], #candidates == 0 and "NoReadyChoice" or nil
+	local target = candidates[1]
+	if target and decision.Fallback == true then
+		target.PolicyFallback = true
+	end
+	return target, #candidates == 0 and "NoReadyChoice" or nil
 end
 
 local function moveInsidePromptRange(target)
@@ -568,7 +604,7 @@ local function run(controller)
 				attemptedAt[target.Key] = os.clock()
 				local fired = firePrompt(target.Prompt)
 				if fired and target.Category == "Reroll" then
-					ChoiceReroll.markFired(target.BatchSignature)
+					ChoiceReroll.markFired(target.BatchSignature, target.Remaining)
 				elseif fired and target.Category ~= "Continue" then
 					lastPrimaryChoiceAt = os.clock()
 				end
@@ -580,7 +616,11 @@ local function run(controller)
 						ChoiceReroll.getDetail(target.RerollCategory, target.Remaining)
 					)
 				else
-					setStatus(controller, fired and "Chosen" or "PromptFailed", target.Category .. " | " .. name)
+					local detail = target.Category .. " | " .. name
+					if target.PolicyFallback == true then
+						detail ..= " | blacklist fallback after rerolls"
+					end
+					setStatus(controller, fired and "Chosen" or "PromptFailed", detail)
 				end
 			end
 			task.wait(LOOP_INTERVAL)
