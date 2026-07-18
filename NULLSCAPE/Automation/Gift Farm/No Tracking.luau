@@ -1,7 +1,7 @@
 --!nocheck
 -- [[
 --  NULLSCAPE - Gift Farm No-Tracking Rule
---  Forces a void reset before farming can continue at level 9 or above.
+--  Allows Casual to run freely; other difficulties reset at level 9 or above.
 -- ]]
 
 local Players = game:GetService("Players")
@@ -26,6 +26,11 @@ local state = {
 local function getLevel()
 	local levelValue = ReplicatedStorage:FindFirstChild("Level")
 	return math.max(0, math.floor(tonumber(levelValue and levelValue.Value) or 0))
+end
+
+local function getDifficulty()
+	local difficultyValue = ReplicatedStorage:FindFirstChild("Difficulty")
+	return math.max(0, math.floor(tonumber(difficultyValue and difficultyValue.Value) or 0))
 end
 
 local function getCharacterParts()
@@ -98,6 +103,10 @@ end
 
 function NoTracking.step(controller)
 	if not controller or controller.GiftFarmNoTrackingEnabled ~= true then
+		NoTracking.reset()
+		return nil
+	end
+	if getDifficulty() == 1 then
 		NoTracking.reset()
 		return nil
 	end

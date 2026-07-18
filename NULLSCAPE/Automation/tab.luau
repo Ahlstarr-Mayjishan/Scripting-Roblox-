@@ -123,7 +123,7 @@ return function(Client, Controller)
 
 	Tab:CreateToggle({
 		Name = "No-Tracking me",
-		Info = "Hard rule: at level 9 or above, reset through the void and resume below level 9.",
+		Info = "Casual runs without a level limit. Other difficulties reset through the void at level 9 or above.",
 		CurrentValue = Controller and Controller.GiftFarmNoTrackingEnabled or false,
 		Flag = "AutomationGiftFarmNoTrackingToggle",
 		Callback = function(Value)
