@@ -1,0 +1,21 @@
+NULLSCAPE/Entities/VerifiedImmunityStatus.luau
+.Game logic ref
+.codegraph/
+.Game logic ref/decompiled_Null(Extreme Gamemode).lua
+.Game logic ref/decompiled_Null(Standar).lua
+.Game logic ref/Celestial.luau
+.Game logic ref/RealityBreak.lua
+place 100588763114828 Null/src/
+rbxlx-to-rojo.log
+default.project.json
+aftman.toml
+README.md
+.vscode
+NULLSCAPE/update_manifest.json
+rojo-serve.out.log
+rojo-serve.err.log
+.studio-import/
+tasks/
+.luaurc
+.selene.toml
+.sourcemap.json
