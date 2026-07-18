@@ -211,6 +211,7 @@ pcall(function()
 			GrappleMomentumTransferSlider = 0,
 			GrappleSharkTailWindowSlider = 0.25,
 			MatrixTetrahedronToggle = false,
+			TheOrbToggle = false,
 			MomentumReductionSlider = 100,
 			SpeedBuffSelectionsDropdown = {},
 			AirJumpSelectionsDropdown = {},

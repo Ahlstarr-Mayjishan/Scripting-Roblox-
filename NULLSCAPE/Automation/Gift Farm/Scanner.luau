@@ -208,6 +208,8 @@ end
 
 local function getConfigSignature(controller)
 	return tostring(controller and controller.GiftFarmGoldenEfficiency or 100)
+		.. ":"
+		.. tostring(controller and controller.GiftFarmXpTripcoinMode == true)
 end
 
 function Scanner.reset()
@@ -295,6 +297,7 @@ function Scanner.scan(controller, gch)
 	local goldenCollected, goldenMax, goldenRatio = Progress.getGoldenGiftProgress(gch)
 	local goldenEfficiency =
 		GoldenEfficiency.evaluate(controller and controller.GiftFarmGoldenEfficiency, goldenCollected, goldenMax)
+	local normalOnly = controller and controller.GiftFarmXpTripcoinMode == true
 	local rawGolden, rawPassage, rawNormal = 0, 0, 0
 	local settledGolden, settledPassage, settledNormal = 0, 0, 0
 	local hasFannyPack, fannyPackTiles = getFannyPackState(now)
@@ -357,8 +360,8 @@ function Scanner.scan(controller, gch)
 
 	peakRawGolden = math.max(peakRawGolden, rawGolden)
 	peakRawNormal = math.max(peakRawNormal, rawNormal)
-	local actionableRawGolden = goldenEfficiency.Reached and 0 or rawGolden
-	local actionableRawPassage = goldenEfficiency.Reached and 0 or rawPassage
+	local actionableRawGolden = (normalOnly or goldenEfficiency.Reached) and 0 or rawGolden
+	local actionableRawPassage = (normalOnly or goldenEfficiency.Reached) and 0 or rawPassage
 	local candidates = actionableRawGolden > 0 and goldenGifts or normalGifts
 	local info = {
 		Golden = settledGolden,

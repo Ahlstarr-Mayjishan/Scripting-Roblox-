@@ -1,5 +1,5 @@
-{
-    "Version":  "2026.07.18.111",
+﻿{
+    "Version":  "2026.07.18.115",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "6ed972d4c6e399873a01b647664f7cf938620e497dc23fa18310ada619e4d386"
+                      "Sha256":  "eca047710f6f3c408eb28397f40b83a5e34ec03cd4e8cb4b319ff2df15a7aac2"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -50,7 +50,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "6bc691409df4f30c8145d4f15794ff93b5259d2e774846196560921df2d1ca3a"
+                      "Sha256":  "b700861bf926d4110307b18fae4bc553b4c15a93bc61b21fe1918923d2076a1c"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Run Policy.luau",
@@ -138,7 +138,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "a397493e4ca3776ec952858922743c75a7914d43f5d20ea93180ec3092b5303c"
+                      "Sha256":  "c51ef2b1d554453eee2e5ec1c070cf51b9ac6b54a738859df82f24e892f233d3"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Pipelined Collector/PipelinedCollector.luau",
@@ -163,7 +163,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "9be83cb42bf72ad73f2424c6b23053eedfdd467b48edb90f8d2fefb89a84ef54"
+                      "Sha256":  "2b76ec7d5924a05afb3587b1113549002a8da6c617fb9a7351b25e69deeb39fe"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Kolona Auto QTE.luau",
@@ -232,14 +232,14 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "17a9e9847f1d1961f60058b98ca9aabc651dbef2c97ed8f4a63e64edeaae1bc3"
+                      "Sha256":  "147ebf463af388daa6fbb3ac3151c48a3f3b67791bdb636a2a03667f026d7056"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/executor.luau",
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "459cb01da00b09cd67a0f386496095ef28be213e8f2766508a075ede79ddae01"
+                      "Sha256":  "bf45e49cbbc8d223ed68be9fcf77469c40e2386893c9101f0f795a1ac1be5f4c"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau",
@@ -820,7 +820,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "1f2b1ca22e0d4ebbcf6c7fecaa060389d26fd0c29ba06d6ad14370c58c206352"
+                      "Sha256":  "5cd17597f3ccc0a1639813dce753871e6fe48c8cde8cf9c84bcf072363ae420c"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/tab.luau",
@@ -890,7 +890,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "abf7146cc17745be26c8c3442bf45dd5c8cb08c4e0e7168c600639020871ced1"
+                      "Sha256":  "e747fc190979dac28669b416925441fb42f802d1665b4f336ba5d424ced2457e"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/executor.luau",
@@ -988,7 +988,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "d8eff842a3b584b5a2deaa541c94204db690c60c6606b4adc5d6ed6028100fe8"
+                      "Sha256":  "820b3dcd14e48faf5e1a3066fa845b4f8a5b0c0a933b9e6241ce7f2cb98ff640"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",
@@ -1130,6 +1130,22 @@
                                    "Simulated Upgrades"
                                ],
                       "Sha256":  "8ae432efa204ac7ae8044ae9b12bfa6a444f5867723b93854659edbfac65d6c9"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Automation/Gift Farm/Upgrade Completion.luau",
+                      "Menu":  [
+                                   "Automation",
+                                   "Gift Farm"
+                               ],
+                      "Sha256":  "a0ccdef0f8d9bb3aed64acaf3d002f5dd57558d8b03ff59699480b0b1daa8cfb"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Automation/Gift Farm/XP Tripcoin Mode.luau",
+                      "Menu":  [
+                                   "Automation",
+                                   "Gift Farm"
+                               ],
+                      "Sha256":  "f01596924d6f0f0dbc0903e966131ee51a5658643a46a429d08dfad298e52231"
                   }
               ]
 }

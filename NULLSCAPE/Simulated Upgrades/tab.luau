@@ -168,6 +168,18 @@ return function(Client, Controller)
 		end,
 	})
 
+	Tab:CreateSection("Orb")
+
+	Tab:CreateToggle({
+		Name = "Simulate Orb",
+		Info = "Spoofs the native TheOrb upgrade for client-side ability checks.",
+		CurrentValue = Controller.TheOrbEnabled == true,
+		Flag = "TheOrbToggle",
+		Callback = function(Value)
+			Controller:SetTheOrb(Value)
+		end,
+	})
+
 	Tab:CreateSection("Matrix Tetrahedron")
 
 	Tab:CreateToggle({

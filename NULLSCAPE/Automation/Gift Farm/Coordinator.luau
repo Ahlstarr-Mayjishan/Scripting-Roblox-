@@ -19,6 +19,7 @@ local GoldenWait = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Golden W
 local MovementLease = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/MovementLease.luau")
 local RunPolicy = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Run Policy.luau")
 local NativeGiftRegistry = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Native Gift Registry.luau")
+local XpTripcoinMode = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/XP Tripcoin Mode.luau")
 
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
@@ -86,6 +87,18 @@ local function markProgress()
 	lastProgressAt = os.clock()
 end
 
+local function syncXpTripcoinMode(controller)
+	local complete, changed = XpTripcoinMode.sync(controller)
+	if changed and complete then
+		pendingGoldenReturnSince = nil
+		controller.GiftFarmGoldenComplete = false
+		if GoldenWait and typeof(GoldenWait.reset) == "function" then
+			GoldenWait.reset()
+		end
+	end
+	return complete
+end
+
 local function transitionTo(controller, status, detail, force)
 	local nextStatus = status or "Idle"
 	local now = os.clock()
@@ -123,6 +136,7 @@ local function recoverAfterStop(controller, detail)
 	markProgress()
 	if controller then
 		controller.GiftFarmGoldenComplete = false
+		controller.GiftFarmXpTripcoinMode = false
 	end
 
 	transitionTo(controller, "Idle", detail or "Gift Farm stopped", true)
@@ -506,6 +520,14 @@ local function observeInRound(controller, gc)
 		if controller then
 			controller.GiftFarmGoldenComplete = false
 		end
+		if value then
+			syncXpTripcoinMode(controller)
+		else
+			controller.GiftFarmXpTripcoinMode = false
+		end
+		if XpTripcoinMode and typeof(XpTripcoinMode.reset) == "function" then
+			XpTripcoinMode.reset()
+		end
 
 		if GoldenWait and typeof(GoldenWait.reset) == "function" then
 			GoldenWait.reset()
@@ -654,6 +676,11 @@ local function runLoop(controller)
 					continue
 				end
 
+				local xpTripcoinMode = syncXpTripcoinMode(controller)
+				if xpTripcoinMode and controller.PylonActivatorHolding == true then
+					controller.PylonActivatorHolding = false
+				end
+
 				-- 3. Wait for normal gifts to spawn and stabilize
 				if not giftsStabilized then
 					if not startWaitAt then
@@ -727,6 +754,13 @@ local function runLoop(controller)
 					continue
 				end
 
+				if
+					xpTripcoinMode
+					and XpTripcoinMode.handleScan(controller, hrp, candidates, scanInfo, transitionTo, mySessionToken)
+				then
+					continue
+				end
+
 				local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
 				local goldenTargetReached = scanInfo and scanInfo.GoldenTargetReached == true
 				if rawGolden > 0 then
@@ -748,16 +782,17 @@ local function runLoop(controller)
 					end
 				end
 
-				if GoldenWait and typeof(GoldenWait.noteScan) == "function" then
+				if not xpTripcoinMode and GoldenWait and typeof(GoldenWait.noteScan) == "function" then
 					GoldenWait.noteScan(scanInfo)
 				end
 
 				-- Try Golden Return
-				if tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActive) then
+				if not xpTripcoinMode and tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActive) then
 					continue
 				end
 				if
-					pendingGoldenReturnSince
+					not xpTripcoinMode
+					and pendingGoldenReturnSince
 					and rawGolden == 0
 					and scanInfo
 					and scanInfo.GoldenProgressComplete ~= true
@@ -779,7 +814,13 @@ local function runLoop(controller)
 				-- Golden always wins. Altar is the next producer action before normal gifts.
 				local producerWindowActive = (GoldenWait.isPassageWindowActive and GoldenWait.isPassageWindowActive())
 					or (GoldenWait.isPylonWindowActive and GoldenWait.isPylonWindowActive())
-				if rawGolden == 0 and not producerWindowActive and Altar and typeof(Altar.tryStep) == "function" then
+				if
+					not xpTripcoinMode
+					and rawGolden == 0
+					and not producerWindowActive
+					and Altar
+					and typeof(Altar.tryStep) == "function"
+				then
 					local lease = MovementLease.acquire("AltarStep")
 					transitionTo(controller, "Collecting", "Attempting Altar activation")
 					local _, _, normalGiftRatio = Progress.getNormalGiftProgress(gch)
@@ -814,7 +855,8 @@ local function runLoop(controller)
 				-- Check Golden Wait
 				local goldenWaitReason = GoldenWait.hasSeenGolden() and "Golden respawn check" or "Post-clear check"
 				if
-					GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, function(c, _, d)
+					not xpTripcoinMode
+					and GoldenWait.shouldWait(controller, scanInfo, lastGiftSeenAt, function(c, _, d)
 						transitionTo(c, "Paused", d)
 					end, goldenWaitReason)
 				then
@@ -823,7 +865,8 @@ local function runLoop(controller)
 				end
 
 				if
-					GoldenWait
+					not xpTripcoinMode
+					and GoldenWait
 					and typeof(GoldenWait.canReleasePylonWithoutGolden) == "function"
 					and GoldenWait.canReleasePylonWithoutGolden()
 				then
@@ -932,7 +975,8 @@ local function runLoop(controller)
 						normalRatio,
 						scanInfo and scanInfo.RawNormal or #candidates
 					)
-				local shouldHoldForGoldenWait = GoldenWait.shouldHoldAfterRoute(scanInfo, totalPlanned)
+				local shouldHoldForGoldenWait = not xpTripcoinMode
+					and GoldenWait.shouldHoldAfterRoute(scanInfo, totalPlanned)
 				local goldenPreempted = false
 				local goldenTargetMet = false
 				local lastGoldenPreemptCheckAt = -math.huge
@@ -947,6 +991,9 @@ local function runLoop(controller)
 						or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision
 					then
 						return true
+					end
+					if xpTripcoinMode then
+						return false
 					end
 					local now = os.clock()
 					if now - lastGoldenPreemptCheckAt >= GOLDEN_PREEMPT_SCAN_INTERVAL then
@@ -1280,6 +1327,9 @@ function Coordinator.enable(controller, gc)
 	enabled = true
 	configDirty = true
 	NativeGiftRegistry.start()
+	if XpTripcoinMode and typeof(XpTripcoinMode.start) == "function" then
+		XpTripcoinMode.start(gc)
+	end
 	if RunPolicy and typeof(RunPolicy.enable) == "function" then
 		RunPolicy.enable(controller)
 	end
@@ -1342,6 +1392,9 @@ function Coordinator.disable(controller)
 		Scanner.stop()
 	end
 	NativeGiftRegistry.stop()
+	if XpTripcoinMode and typeof(XpTripcoinMode.stop) == "function" then
+		XpTripcoinMode.stop(controller)
+	end
 
 	if wasEnabled then
 		local recovered, recoveryError = pcall(recoverAfterStop, controller, "Gift Farm disabled")
@@ -1374,6 +1427,10 @@ function Coordinator.getStatus(controller)
 		Status = controller and controller.GiftFarmStatus or "Idle",
 		Detail = controller and controller.GiftFarmDetail or "",
 		Mode = controller and controller.GiftFarmMode or NORMAL_MODE,
+		XpTripcoin = {
+			Enabled = controller and controller.GiftFarmXpTripcoinMode == true,
+			UpgradeCompletion = controller and controller.GiftFarmUpgradeCompletion or "Not synchronized",
+		},
 		Pipeline = {
 			Window = controller and controller.GiftFarmPipelineWindow or 0,
 			InFlight = controller and controller.GiftFarmPipelineInFlight or 0,

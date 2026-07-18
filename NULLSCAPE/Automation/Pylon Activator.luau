@@ -388,6 +388,14 @@ local function run(controller)
 	running = true
 	task.spawn(function()
 		while enabled and controller and not controller.Destroyed do
+			if controller.GiftFarmXpTripcoinMode == true then
+				controller.PylonActivatorHolding = false
+				controller.PylonActivatorComplete = false
+				setStatus(controller, "DisabledForXpTripcoin", "All upgrades owned; normal Gift farming only")
+				task.wait(0.5)
+				continue
+			end
+
 			if not isInRound() then
 				controller.PylonActivatorHolding = false
 				controller.PylonActivatorComplete = false
@@ -487,6 +495,7 @@ local function run(controller)
 				and not controller.Destroyed
 				and isInRound()
 				and getLevel() >= TARGET_LEVEL
+				and controller.GiftFarmXpTripcoinMode ~= true
 				and controller.GiftFarmGoldenComplete == true
 				and controller.GiftFarmPolicyHolding ~= true
 				and controller.GiftFarmRestPending ~= true

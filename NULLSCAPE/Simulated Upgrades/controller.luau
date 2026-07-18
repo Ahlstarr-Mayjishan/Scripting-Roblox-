@@ -41,6 +41,7 @@ local Controller = {
 	MedalESPEnabled = false,
 
 	MatrixTetrahedronEnabled = false,
+	TheOrbEnabled = false,
 	MomentumReduction = 1.0,
 
 	GraceWingsEnabled = false,
@@ -309,6 +310,12 @@ function Controller:SetMatrixTetrahedron(value)
 			MatrixTetrahedron.stop()
 		end
 	end
+end
+
+function Controller:SetTheOrb(value)
+	self.TheOrbEnabled = value == true
+	syncVirtualGrapplerVisuals()
+	refreshUpgradeServerState()
 end
 
 function Controller:SetMomentumReduction(value)
@@ -818,6 +825,7 @@ function Controller:CleanUp()
 			Logic.disableRadarSimulation()
 		end
 		self.GraceWingsEnabled = false
+		self.TheOrbEnabled = false
 		self.AdvancedGravityCoilEnabled = false
 		self.BetterJumpPadEnabled = false
 		self.SpeedBuffsEnabled = false
@@ -913,6 +921,7 @@ getgenv()._NULLSCAPE_Globals.UpgradeSimulationCallbackOwner = Controller
 getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	local args = { ... }
 	local isTetrahedron = false
+	local isTheOrb = false
 	local isGraceWings = false
 	local isAdvancedGravityCoil = false
 	local isBetterJumpPad = false
@@ -923,6 +932,8 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	for _, v in ipairs(args) do
 		if v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
 			isTetrahedron = true
+		elseif v == "TheOrb" or v == "Orb" then
+			isTheOrb = true
 		elseif v == "GraceWings" or v == "Grace Wings" then
 			isGraceWings = true
 		elseif v == "AdvancedGravityCoil" or v == "Advanced Gravity Coil" then
@@ -955,6 +966,9 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 	if isTetrahedron and Controller.MatrixTetrahedronEnabled then
 		return true, true
 	end
+	if isTheOrb and Controller.TheOrbEnabled then
+		return true, true
+	end
 	if isGraceWings and Controller.GraceWingsEnabled then
 		return true, true
 	end
@@ -982,6 +996,7 @@ end
 getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	local args = { ... }
 	local isTetrahedron = false
+	local isTheOrb = false
 	local isGraceWings = false
 	local isAdvancedGravityCoil = false
 	local isBetterJumpPad = false
@@ -992,6 +1007,8 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 	for _, v in ipairs(args) do
 		if v == "MatrixTetrahedron" or v == "Matrix Tetrahedron" then
 			isTetrahedron = true
+		elseif v == "TheOrb" or v == "Orb" then
+			isTheOrb = true
 		elseif v == "GraceWings" or v == "Grace Wings" then
 			isGraceWings = true
 		elseif v == "AdvancedGravityCoil" or v == "Advanced Gravity Coil" then
@@ -1022,6 +1039,9 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 		end
 	end
 	if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+		return true, 1
+	end
+	if isTheOrb and Controller.TheOrbEnabled then
 		return true, 1
 	end
 	if isGraceWings and Controller.GraceWingsEnabled then

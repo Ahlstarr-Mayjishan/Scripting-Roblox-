@@ -49,9 +49,7 @@ function Beacon.suppressUntilReturn()
 	end
 
 	lastSuppressAt = now
-	suppressed = Context.suppressBeaconInteraction() == true
-		or suppressed
-		or contextSuppressed
+	suppressed = Context.suppressBeaconInteraction() == true or suppressed or contextSuppressed
 	return suppressed
 end
 
@@ -152,8 +150,8 @@ local function pulseBeaconTouch(beacon, hrp)
 	return true
 end
 
-function Beacon.returnToBeacon(controller, hrp, setStatus, reason, lease, _currentSessionToken)
-	if controller.GiftFarmReturnToBeaconAfterGolden == false then
+function Beacon.returnToBeacon(controller, hrp, setStatus, reason, lease, _currentSessionToken, forceReturn)
+	if controller.GiftFarmReturnToBeaconAfterGolden == false and forceReturn ~= true then
 		return false
 	end
 
@@ -194,12 +192,12 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason, lease, _curre
 		else
 			Context.moveCharacterTo(approach)
 		end
-		
+
 		if lease and not lease:isValid() then
 			return false
 		end
 		waitFrames(1)
-		
+
 		if lease and not lease:isValid() then
 			return false
 		end
@@ -211,7 +209,7 @@ function Beacon.returnToBeacon(controller, hrp, setStatus, reason, lease, _curre
 			Context.moveCharacterTo(target)
 		end
 		pulseBeaconTouch(beacon, hrp)
-		
+
 		if lease and not lease:isValid() then
 			if not (hrp and hrp.Parent) or Context.getRootPart() ~= hrp then
 				return true

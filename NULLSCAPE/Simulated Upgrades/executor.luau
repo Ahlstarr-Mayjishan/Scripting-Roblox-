@@ -18,6 +18,7 @@ local VIRTUAL_GRAPPLER_UPGRADES = {
 	NinjaBelt = true,
 	PocketBell = true,
 	SharkTail = true,
+	TheOrb = true,
 }
 
 local function hasSelectedOption(options, option)
@@ -60,6 +61,9 @@ function Executor.syncVirtualGrapplerUpgradeVisuals(controller)
 			PocketBell = controller and hasSelectedOption(controller.AirJumpSelections, "PocketBell"),
 			SharkTail = isGrappler and controller and controller.GrappleVirtualSharkTail == true,
 		})
+		if controller and controller.TheOrbEnabled == true then
+			ClientUpgradeInjector.set("TheOrb", true, 1)
+		end
 	end
 	return true
 end
