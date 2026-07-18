@@ -11,10 +11,16 @@ local View = {
 	Rows = {},
 }
 
-local PANEL_WIDTH = 600
-local HEADER_HEIGHT = 38
-local ROW_HEIGHT = 30
-local PANEL_PADDING = 8
+local PANEL_WIDTH = 440
+local HEADER_HEIGHT = 34
+local ROW_HEIGHT = 28
+local PANEL_PADDING = 6
+
+local function getPanelWidth()
+	local camera = workspace.CurrentCamera
+	local viewportWidth = camera and camera.ViewportSize.X or PANEL_WIDTH + 32
+	return math.min(PANEL_WIDTH, math.max(240, viewportWidth - 32))
+end
 
 local function ensureGui()
 	if View.Gui and View.Gui.Parent then
@@ -28,7 +34,7 @@ local function ensureGui()
 
 	local frame = Instance.new("Frame")
 	frame.Name = "MainFrame"
-	frame.Size = UDim2.fromOffset(PANEL_WIDTH, HEADER_HEIGHT + PANEL_PADDING)
+	frame.Size = UDim2.fromOffset(getPanelWidth(), HEADER_HEIGHT + PANEL_PADDING)
 	frame.Position = UDim2.fromOffset(16, 115)
 	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 22)
 	frame.BackgroundTransparency = 0.12
@@ -48,8 +54,8 @@ local function ensureGui()
 
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
-	title.Size = UDim2.new(1, -20, 0, 25)
-	title.Position = UDim2.fromOffset(10, 7)
+	title.Size = UDim2.new(1, -20, 0, 24)
+	title.Position = UDim2.fromOffset(10, 5)
 	title.BackgroundTransparency = 1
 	title.Font = Enum.Font.GothamBold
 	title.TextColor3 = Color3.fromRGB(240, 240, 245)
@@ -78,7 +84,7 @@ local function ensureRow(index)
 
 	row = Instance.new("TextLabel")
 	row.Name = "CadenceRow" .. tostring(index)
-	row.Size = UDim2.new(1, -16, 0, ROW_HEIGHT - 4)
+	row.Size = UDim2.new(1, -12, 0, ROW_HEIGHT - 3)
 	row.BackgroundColor3 = Color3.fromRGB(30, 30, 34)
 	row.BackgroundTransparency = index % 2 == 0 and 0.2 or 0.35
 	row.BorderSizePixel = 0
@@ -101,7 +107,7 @@ local function ensureRow(index)
 	return row
 end
 
-function View.render(rows, instrumentCount, threshold)
+function View.render(rows, instrumentCount)
 	if #rows == 0 then
 		if View.Gui then
 			View.Gui.Enabled = false
@@ -111,18 +117,13 @@ function View.render(rows, instrumentCount, threshold)
 
 	ensureGui()
 	View.Gui.Enabled = true
-	View.Frame.Size = UDim2.fromOffset(PANEL_WIDTH, HEADER_HEIGHT + #rows * ROW_HEIGHT + PANEL_PADDING)
-	View.Title.Text = string.format(
-		"CADENCE STATUS (%d)   |   Instruments: %d / %d",
-		#rows,
-		instrumentCount,
-		threshold
-	)
+	View.Frame.Size = UDim2.fromOffset(getPanelWidth(), HEADER_HEIGHT + #rows * ROW_HEIGHT + PANEL_PADDING)
+	View.Title.Text = string.format("CADENCE %d   |   INSTRUMENTS %d", #rows, instrumentCount)
 
 	for index, data in ipairs(rows) do
 		local row = ensureRow(index)
 		row.Visible = true
-		row.Position = UDim2.fromOffset(8, HEADER_HEIGHT + (index - 1) * ROW_HEIGHT)
+		row.Position = UDim2.fromOffset(6, HEADER_HEIGHT + (index - 1) * ROW_HEIGHT)
 		row.Text = data.Text
 		row.TextColor3 = data.Color
 	end

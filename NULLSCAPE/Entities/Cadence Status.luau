@@ -13,6 +13,7 @@ local Status = {
 	Enabled = false,
 	Entries = {},
 	Connections = {},
+	InstrumentConnections = {},
 	InstrumentCount = 0,
 	NextOrdinal = 0,
 	UpdateToken = nil,
@@ -32,6 +33,13 @@ local function disconnectList(connections)
 		end)
 	end
 	table.clear(connections)
+end
+
+local function clearInstrumentTracking()
+	for _, connections in pairs(Status.InstrumentConnections) do
+		disconnectList(connections)
+	end
+	table.clear(Status.InstrumentConnections)
 end
 
 local function getTimerProfile()
@@ -150,16 +158,16 @@ end
 local function getRowText(entry)
 	local estimated = not entry.RemainingIsServer
 	if entry.Chasing then
-		return string.format("Cadence #%d   |   CHASE ACTIVE", entry.Ordinal)
+		return string.format("#%d   |   CHASE ACTIVE", entry.Ordinal)
 	elseif entry.Stopped then
 		return string.format(
-			"Cadence #%d   |   Chase stopped   |   Timer: %s",
+			"#%d   |   Chase stopped   |   Timer %s",
 			entry.Ordinal,
 			formatSeconds(entry.Remaining, estimated)
 		)
 	elseif Status.InstrumentCount < getInstrumentThreshold() then
 		return string.format(
-			"Cadence #%d   |   Phase %d   |   Timer recovering: %s",
+			"#%d   |   Phase %d   |   Recovery %s",
 			entry.Ordinal,
 			entry.Stage,
 			formatSeconds(entry.Remaining, estimated)
@@ -168,7 +176,7 @@ local function getRowText(entry)
 
 	local profile = getTimerProfile()
 	return string.format(
-		"Cadence #%d   |   P%d   |   Timer %s   |   P2 %s   |   P3 %s   |   Chase %s",
+		"#%d   |   P%d   |   Now %s   |   P2 %s   |   P3 %s   |   Chase %s",
 		entry.Ordinal,
 		entry.Stage,
 		formatSeconds(entry.Remaining, estimated),
@@ -187,7 +195,7 @@ local function render()
 			Color = getPhaseColor(entry),
 		}
 	end
-	View.render(rows, Status.InstrumentCount, getInstrumentThreshold())
+	View.render(rows, Status.InstrumentCount)
 end
 
 local function resetEstimate(entry, stage)
@@ -261,18 +269,52 @@ local function ensureRuntimeConnections()
 	end
 
 	local function updateInstrumentCount()
-		Status.InstrumentCount = #CollectionService:GetTagged("CadenceOrb")
+		local count = 0
+		for _, orb in ipairs(CollectionService:GetTagged("CadenceOrb")) do
+			if orb:IsA("BasePart") and orb:IsDescendantOf(workspace) and orb.CanTouch then
+				count += 1
+			end
+		end
+		Status.InstrumentCount = count
 		render()
 	end
+
+	local function trackInstrument(orb)
+		if Status.InstrumentConnections[orb] then
+			return
+		end
+		local connections = {}
+		Status.InstrumentConnections[orb] = connections
+		if orb:IsA("BasePart") then
+			table.insert(connections, orb:GetPropertyChangedSignal("CanTouch"):Connect(updateInstrumentCount))
+		end
+		table.insert(connections, orb.AncestryChanged:Connect(updateInstrumentCount))
+	end
+
+	local function untrackInstrument(orb)
+		local connections = Status.InstrumentConnections[orb]
+		if connections then
+			disconnectList(connections)
+			Status.InstrumentConnections[orb] = nil
+		end
+		updateInstrumentCount()
+	end
+
+	for _, orb in ipairs(CollectionService:GetTagged("CadenceOrb")) do
+		trackInstrument(orb)
+	end
+	table.insert(
+		Status.Connections,
+		CollectionService:GetInstanceAddedSignal("CadenceOrb"):Connect(function(orb)
+			trackInstrument(orb)
+			updateInstrumentCount()
+		end)
+	)
+	table.insert(
+		Status.Connections,
+		CollectionService:GetInstanceRemovedSignal("CadenceOrb"):Connect(untrackInstrument)
+	)
 	updateInstrumentCount()
-	table.insert(
-		Status.Connections,
-		CollectionService:GetInstanceAddedSignal("CadenceOrb"):Connect(updateInstrumentCount)
-	)
-	table.insert(
-		Status.Connections,
-		CollectionService:GetInstanceRemovedSignal("CadenceOrb"):Connect(updateInstrumentCount)
-	)
 end
 
 local function startUpdateLoop()
@@ -320,6 +362,7 @@ end
 function Status.clearRuntime()
 	Status.UpdateToken = nil
 	disconnectList(Status.Connections)
+	clearInstrumentTracking()
 	for _, entry in pairs(Status.Entries) do
 		disconnectList(entry.Connections)
 	end
@@ -392,6 +435,7 @@ function Status.detach(enemy)
 	if next(Status.Entries) == nil then
 		Status.UpdateToken = nil
 		disconnectList(Status.Connections)
+		clearInstrumentTracking()
 		Status.InstrumentCount = 0
 	end
 	render()

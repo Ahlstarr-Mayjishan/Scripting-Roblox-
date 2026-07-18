@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.18.116",
+    "Version":  "2026.07.18.119",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "eca047710f6f3c408eb28397f40b83a5e34ec03cd4e8cb4b319ff2df15a7aac2"
+                      "Sha256":  "2defc86ebdf30b4e6dcca7e8c4a5dab5b90fc0d5e67d4167e56d6bf9f5c6676e"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -1078,14 +1078,14 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "1fa7ef0a63bd0d373d71d3243bfb65b53afc89088e2db25cf55b38cdd79336ba"
+                      "Sha256":  "9ad5f43582b60aba64f258183232ea1a74d59a607be97a53d17dcfed6905b57f"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Cadence Status View.luau",
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "7f849d4d05fb6d156c20c0b0f0c7ba53594e20de01d5fddf73d3ca56557b3e99"
+                      "Sha256":  "3cbdb736a00295b7e3cb5315f24b72528d8ea37349323f5c2e0278bd18479d44"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Operator Auto Disable.luau",

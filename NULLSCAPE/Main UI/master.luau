@@ -778,7 +778,7 @@ end)
 local Window = Rayfield:CreateWindow({
 	Name = "NULLSCAPE Client",
 	LoadingTitle = "NULLSCAPE Loader",
-	LoadingSubtitle = "by Antigravity AI",
+	LoadingSubtitle = "by Ahlstarr Mayijshan",
 	ConfigurationSaving = {
 		Enabled = true,
 		FolderName = "NULLSCAPE",
