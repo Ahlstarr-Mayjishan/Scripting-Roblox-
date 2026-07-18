@@ -10,6 +10,8 @@ local Workspace = game:GetService("Workspace")
 
 local MovementLease = {}
 local activeLeaseToken = 0
+local activeClaimToken = nil
+local activeOwnerName = nil
 local activeFootholdToken = 0
 local activeFootholdPart = nil
 
@@ -17,6 +19,45 @@ local FOOTHOLD_SIZE = Vector3.new(18, 1, 18)
 local FOOTHOLD_OFFSET = Vector3.new(0, -3.6, 0)
 local SAFETY_FOOTHOLD_DURATION = 2.5
 local FLOOR_RAY_DISTANCE = 20
+
+local function getOwnerPriority(ownerName)
+	local name = tostring(ownerName or "")
+	if string.sub(name, 1, 5) == "Pylon" then
+		return 30
+	elseif name == "AutoChoose" then
+		return 20
+	end
+	return 10
+end
+
+local function createDeniedLease(ownerName, blockedBy)
+	local lease = {
+		Owner = ownerName,
+		BlockedBy = blockedBy,
+	}
+
+	function lease:isValid()
+		return false
+	end
+
+	function lease:moveTo()
+		return false
+	end
+
+	function lease:moveCollectTo()
+		return false
+	end
+
+	function lease:reportCollectResult() end
+
+	function lease:placeFoothold()
+		return nil
+	end
+
+	function lease:release() end
+
+	return lease
+end
 
 local function setActiveLeaseState(leaseToken, ownerName)
 	local globals = getgenv()._NULLSCAPE_Globals
@@ -101,9 +142,20 @@ local function hasGroundBelow(hrp)
 	return result ~= nil
 end
 
-function MovementLease.acquire(ownerName)
+local function createLease(ownerName, allowPreempt)
+	if activeClaimToken == activeLeaseToken then
+		if not allowPreempt then
+			return nil
+		end
+		if getOwnerPriority(ownerName) < getOwnerPriority(activeOwnerName) then
+			return createDeniedLease(ownerName, activeOwnerName)
+		end
+	end
+
 	activeLeaseToken += 1
 	local leaseToken = activeLeaseToken
+	activeClaimToken = leaseToken
+	activeOwnerName = ownerName
 	setActiveLeaseState(leaseToken, ownerName)
 
 	-- Create lease object
@@ -197,6 +249,8 @@ function MovementLease.acquire(ownerName)
 		end
 
 		if activeLeaseToken == leaseToken then
+			activeClaimToken = nil
+			activeOwnerName = nil
 			activeLeaseToken += 1
 		end
 	end
@@ -204,10 +258,34 @@ function MovementLease.acquire(ownerName)
 	return lease
 end
 
-function MovementLease.invalidateActive()
+function MovementLease.acquire(ownerName)
+	return createLease(ownerName, true)
+end
+
+function MovementLease.tryAcquire(ownerName)
+	return createLease(ownerName, false)
+end
+
+function MovementLease.getActiveOwner()
+	if activeClaimToken == activeLeaseToken then
+		return activeOwnerName
+	end
+	return nil
+end
+
+function MovementLease.invalidateActive(maxOwnerPriority)
+	if activeClaimToken == activeLeaseToken
+		and maxOwnerPriority ~= nil
+		and getOwnerPriority(activeOwnerName) > maxOwnerPriority
+	then
+		return false
+	end
 	activeLeaseToken += 1
+	activeClaimToken = nil
+	activeOwnerName = nil
 	clearActiveLeaseState()
 	cleanUpFootholdPart()
+	return true
 end
 
 function MovementLease.resetTransport()

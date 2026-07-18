@@ -9,6 +9,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
+local MovementLease = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/MovementLease.luau")
 
 local PylonActivator = {}
 
@@ -82,6 +83,19 @@ end
 local function areAllPylonsComplete()
 	local completed, maximum = getPylonProgress()
 	return maximum > 0 and completed >= maximum
+end
+
+local function hasPendingPylons()
+	local completed, maximum = getPylonProgress()
+	if maximum > completed then
+		return true
+	end
+	for _, record in ipairs(knownPylons) do
+		if not record.Completed then
+			return true
+		end
+	end
+	return false
 end
 
 local function getPylonProgressDetail(prefix)
@@ -304,26 +318,38 @@ local function confirmTargetCompletion(candidate, completedBefore)
 	until false
 end
 
-local function holdAtRoot(hrp, root)
-	if not (hrp and hrp.Parent and root and root.Parent) then
-		return
+local function holdAtRoot(hrp, root, lease)
+	if not (hrp and hrp.Parent and root and root.Parent and lease and lease:isValid()) then
+		return false
 	end
 
-	Context.moveCharacterTo(root.CFrame + ROOT_OFFSET)
+	if not lease:moveTo(root.CFrame + ROOT_OFFSET) then
+		return false
+	end
 	pcall(function()
 		hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 		hrp.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
 	end)
+	return true
 end
 
 local function restorePosition(controller)
-	if controller and controller.PylonActivatorReturnAfter ~= false and savedCFrame then
-		local hrp = getRootPart()
-		if hrp and hrp.Parent then
-			Context.moveCharacterTo(savedCFrame)
-		end
-	end
+	local returnCFrame = savedCFrame
 	savedCFrame = nil
+	if not (controller and not controller.Destroyed and controller.PylonActivatorReturnAfter ~= false and returnCFrame) then
+		return false
+	end
+	if not isInRound() or controller.GiftFarmPolicyHolding == true then
+		return false
+	end
+
+	local lease = MovementLease.tryAcquire("PylonReturn")
+	if not lease then
+		return false
+	end
+	local restored = lease:moveTo(returnCFrame)
+	lease:release()
+	return restored
 end
 
 local function run(controller)
@@ -338,9 +364,16 @@ local function run(controller)
 				controller.PylonActivatorHolding = false
 				controller.PylonActivatorComplete = false
 				resetKnownPylons()
-				restorePosition(controller)
+				savedCFrame = nil
 				setStatus(controller, "WaitingForRound")
 				task.wait(0.5)
+				continue
+			end
+
+			if controller.GiftFarmPolicyHolding == true or controller.GiftFarmRestPending == true then
+				controller.PylonActivatorHolding = false
+				setStatus(controller, "WaitingForGiftFarmPolicy", controller.GiftFarmDetail)
+				task.wait(0.25)
 				continue
 			end
 
@@ -366,18 +399,24 @@ local function run(controller)
 			end
 
 			if areAllPylonsComplete() then
-				controller.PylonActivatorHolding = false
 				controller.PylonActivatorComplete = true
 				restorePosition(controller)
+				controller.PylonActivatorHolding = false
 				setStatus(controller, "Completed", getPylonProgressDetail("All pylons activated"))
 				task.wait(0.5)
 				continue
 			end
+			if not hasPendingPylons() then
+				controller.PylonActivatorHolding = false
+				setStatus(controller, "WaitingForPylons", "Waiting for native pylon progress")
+				task.wait(0.25)
+				continue
+			end
 
 			controller.PylonActivatorComplete = false
+			controller.PylonActivatorHolding = true
 			local hrp = getRootPart()
 			if not hrp then
-				controller.PylonActivatorHolding = false
 				setStatus(controller, "WaitingForCharacter")
 				task.wait(0.5)
 				continue
@@ -385,10 +424,10 @@ local function run(controller)
 
 			local candidates = getCandidates(hrp)
 			if #candidates == 0 then
-				controller.PylonActivatorHolding = false
 				controller.PylonActivatorComplete = areAllPylonsComplete()
 				if controller.PylonActivatorComplete then
 					restorePosition(controller)
+					controller.PylonActivatorHolding = false
 					setStatus(controller, "Completed", getPylonProgressDetail("All pylons activated"))
 				else
 					setStatus(controller, "WaitingForPylons", getPylonProgressDetail("Waiting for remaining pylons"))
@@ -400,14 +439,18 @@ local function run(controller)
 			local target = candidates[1]
 			local targetModel, targetRoot = resolveCandidate(controller, target)
 			if not (targetModel and targetRoot) then
-				controller.PylonActivatorHolding = false
 				task.wait(0.2)
+				continue
+			end
+			local lease = MovementLease.tryAcquire("PylonActivator")
+			if not lease then
+				setStatus(controller, "WaitingForMovement", MovementLease.getActiveOwner() or "Movement busy")
+				task.wait(0.12)
 				continue
 			end
 			target.Model = targetModel
 			target.Root = targetRoot
 			savedCFrame = savedCFrame or hrp.CFrame
-			controller.PylonActivatorHolding = true
 			local completedBefore = getPylonProgress()
 
 			while
@@ -417,6 +460,9 @@ local function run(controller)
 				and isInRound()
 				and getLevel() >= TARGET_LEVEL
 				and controller.GiftFarmGoldenComplete == true
+				and controller.GiftFarmPolicyHolding ~= true
+				and controller.GiftFarmRestPending ~= true
+				and lease:isValid()
 			do
 				if isCompleted(target.Model) then
 					break
@@ -432,14 +478,20 @@ local function run(controller)
 					break
 				end
 
-				holdAtRoot(hrp, root)
+				if not holdAtRoot(hrp, root, lease) then
+					break
+				end
 				setStatus(controller, "Activating", getProgressDetail(target.Model))
 				task.wait(HOLD_INTERVAL)
 			end
 
-			controller.PylonActivatorHolding = false
+			lease:release()
 			if confirmTargetCompletion(target, completedBefore) then
 				controller.PylonActivatorComplete = areAllPylonsComplete()
+				if controller.PylonActivatorComplete then
+					restorePosition(controller)
+					controller.PylonActivatorHolding = false
+				end
 				setStatus(controller, "Completed", getPylonProgressDetail("Pylon activated"))
 			else
 				setStatus(controller, "WaitingForPylons", getPylonProgressDetail("Pylon not confirmed; retrying"))

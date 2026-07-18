@@ -8,7 +8,7 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
+local MovementLease = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/MovementLease.luau")
 local ChoicePolicy = getgenv().loadModule("NULLSCAPE/Automation/Choice Policy.luau")
 local ChoiceReroll = getgenv().loadModule("NULLSCAPE/Automation/Choice Reroll.luau")
 
@@ -519,9 +519,9 @@ local function collectTarget(controller, hrp)
 	return target, #candidates == 0 and "NoReadyChoice" or nil
 end
 
-local function moveInsidePromptRange(target)
+local function moveInsidePromptRange(target, lease)
 	local hrp = getRootPart()
-	if not (hrp and target and target.Part) then
+	if not (hrp and target and target.Part and lease and lease:isValid()) then
 		return false
 	end
 
@@ -532,7 +532,7 @@ local function moveInsidePromptRange(target)
 	end
 
 	local offset = Vector3.new(0, math.clamp(target.Part.Size.Y * 0.25 + 1.5, 2, 5), 0)
-	return Context.moveCharacterTo(CFrame.new(target.Part.Position + offset))
+	return lease:moveTo(CFrame.new(target.Part.Position + offset))
 end
 
 local function firePrompt(prompt)
@@ -570,16 +570,15 @@ local function run(controller)
 				task.wait(0.25)
 				continue
 			end
-			if tryContinue(controller) then
-				task.wait(LOOP_INTERVAL)
-				continue
-			end
-
 			if isInRound() then
 				attemptedAt, lastSelectFolder = {}, nil
 				ChoiceReroll.reset()
 				setStatus(controller, "WaitingForIntermission")
 				task.wait(0.4)
+				continue
+			end
+			if tryContinue(controller) then
+				task.wait(LOOP_INTERVAL)
 				continue
 			end
 
@@ -597,8 +596,28 @@ local function run(controller)
 				continue
 			end
 
-			moveInsidePromptRange(target)
+			local lease = MovementLease.tryAcquire("AutoChoose")
+			if not lease then
+				setStatus(controller, "WaitingForMovement", MovementLease.getActiveOwner() or "Movement busy")
+				task.wait(LOOP_INTERVAL)
+				continue
+			end
+
+			local moved = moveInsidePromptRange(target, lease)
 			task.wait(MOVE_SETTLE)
+			if not moved
+				or not lease:isValid()
+				or not enabled
+				or controller.Destroyed
+				or isInRound()
+				or controller.GiftFarmPolicyHolding == true
+				or controller.GiftFarmRestPending == true
+			then
+				lease:release()
+				task.wait(LOOP_INTERVAL)
+				continue
+			end
+
 			if os.clock() - lastActionAt >= ACTION_COOLDOWN then
 				lastActionAt = os.clock()
 				attemptedAt[target.Key] = os.clock()
@@ -623,6 +642,7 @@ local function run(controller)
 					setStatus(controller, fired and "Chosen" or "PromptFailed", detail)
 				end
 			end
+			lease:release()
 			task.wait(LOOP_INTERVAL)
 		end
 		setStatus(controller, "Idle")

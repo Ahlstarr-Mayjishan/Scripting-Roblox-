@@ -101,12 +101,13 @@ end
 
 local function recoverAfterStop(controller, detail)
 	sessionToken += 1
-	MovementLease.invalidateActive()
-	Context.releaseCharacterControl({
-		SkipVelocityClear = true,
-		SkipStateChange = true,
-		ForceAbilityClear = true,
-	})
+	if MovementLease.invalidateActive(10) then
+		Context.releaseCharacterControl({
+			SkipVelocityClear = true,
+			SkipStateChange = true,
+			ForceAbilityClear = true,
+		})
+	end
 
 	if Beacon and typeof(Beacon.restore) == "function" then
 		Beacon.restore(true)
@@ -238,12 +239,7 @@ local function tryGoldenCompleteReturn(controller, hrp, scanInfo, isSessionActiv
 
 	if not Context.isInRound() then
 		transitionTo(controller, "Recovering", "Waiting for round")
-		MovementLease.invalidateActive()
-		Context.releaseCharacterControl({
-			SkipVelocityClear = true,
-			ForceAbilityClear = true,
-			SkipStateChange = true,
-		})
+		MovementLease.invalidateActive(10)
 		return true
 	end
 
@@ -379,7 +375,7 @@ local function observePylons(controller, gc)
 		pendingGoldenReturnSince = nil
 		lastGiftSeenAt = os.clock()
 		sessionToken += 1
-		MovementLease.invalidateActive()
+		MovementLease.invalidateActive(10)
 		transitionTo(controller, "Scanning", "Pylon detected; waiting for golden gifts", true)
 	end
 
@@ -586,7 +582,7 @@ local function runLoop(controller)
 				configDirty = false
 				transitionTo(controller, "HydratingConfig", "Updating configuration options")
 				sessionToken += 1
-				MovementLease.invalidateActive()
+				MovementLease.invalidateActive(10)
 				if PipelinedCollector and typeof(PipelinedCollector.cancelPending) == "function" then
 					PipelinedCollector.cancelPending(controller)
 				end
@@ -641,12 +637,6 @@ local function runLoop(controller)
 
 			if not inRound then
 				transitionTo(controller, "Recovering", "Waiting for round to start")
-				MovementLease.invalidateActive()
-				Context.releaseCharacterControl({
-					SkipVelocityClear = true,
-					ForceAbilityClear = true,
-					SkipStateChange = true,
-				})
 				task.wait(0.4)
 				continue
 			end
@@ -939,7 +929,12 @@ local function runLoop(controller)
 			local cachedLiveGoldenKind = nil
 			local cachedGoldenTargetReached = false
 			local function shouldAbortRoute()
-				if not isSessionActive() or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision then
+				if not isSessionActive()
+					or not Context.isInRound()
+					or controller.PylonActivatorHolding == true
+					or controller.GiftFarmPolicyHolding == true
+					or (tonumber(controller.GiftFarmRangeRevision) or 0) ~= rangeRevision
+				then
 					return true
 				end
 				local now = os.clock()
@@ -966,6 +961,15 @@ local function runLoop(controller)
 
 			-- Acquire Collecting Lease
 			local lease = MovementLease.acquire("Collecting")
+			if not lease:isValid() then
+				transitionTo(
+					controller,
+					"Paused",
+					"Waiting for " .. tostring(lease.BlockedBy or "movement owner")
+				)
+				task.wait(0.1)
+				continue
+			end
 			transitionTo(controller, "Collecting", string.format("Collecting %d clusters (%d %s)", #route, totalPlanned, focus))
 
 			local routeCompleted = false
@@ -1097,12 +1101,13 @@ local function runLoop(controller)
 		then
 			warn("[NULLSCAPE] Gift Farm coordinator recovered: " .. tostring(err))
 			sessionToken += 1
-			MovementLease.invalidateActive()
-			Context.releaseCharacterControl({
-				SkipVelocityClear = true,
-				SkipStateChange = true,
-				ForceAbilityClear = true,
-			})
+			if MovementLease.invalidateActive(10) then
+				Context.releaseCharacterControl({
+					SkipVelocityClear = true,
+					SkipStateChange = true,
+					ForceAbilityClear = true,
+				})
+			end
 			transitionTo(controller, "Recovering", "Coordinator restarted after runtime error", true)
 			task.delay(0.25, function()
 				if enabled and not controller.Destroyed and controller.GiftFarmEnabled then
@@ -1138,7 +1143,7 @@ local function restartStalledWorker(controller, detail)
 	workerGeneration += 1
 	loopActive = false
 	sessionToken += 1
-	MovementLease.invalidateActive()
+	local releasedGiftMovement = MovementLease.invalidateActive(10)
 	MovementLease.resetTransport()
 	lastWatchGiftCount = nil
 	markWorkerPulse()
@@ -1155,11 +1160,13 @@ local function restartStalledWorker(controller, detail)
 	if PipelinedCollector and typeof(PipelinedCollector.resetAdaptive) == "function" then
 		PipelinedCollector.resetAdaptive(controller)
 	end
-	Context.releaseCharacterControl({
-		SkipVelocityClear = true,
-		SkipStateChange = true,
-		ForceAbilityClear = true,
-	})
+	if releasedGiftMovement then
+		Context.releaseCharacterControl({
+			SkipVelocityClear = true,
+			SkipStateChange = true,
+			ForceAbilityClear = true,
+		})
+	end
 	transitionTo(controller, "Recovering", detail, true)
 	runLoop(controller)
 end
@@ -1248,7 +1255,7 @@ function Coordinator.enable(controller, gc)
 		configChangedConn = controller.ConfigChanged.Event:Connect(function()
 			configDirty = true
 			sessionToken += 1
-			MovementLease.invalidateActive()
+			MovementLease.invalidateActive(10)
 			if enabled then
 				runLoop(controller)
 			end
@@ -1274,7 +1281,7 @@ function Coordinator.disable(controller)
 	workerGeneration += 1
 	loopActive = false
 	sessionToken += 1
-	MovementLease.invalidateActive()
+	MovementLease.invalidateActive(10)
 	if PipelinedCollector and typeof(PipelinedCollector.cancelPending) == "function" then
 		PipelinedCollector.cancelPending(controller)
 	end
