@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.18.115",
+    "Version":  "2026.07.18.116",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -778,14 +778,14 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "d74f01d8df3640d06a1d3d917b76a04b968d04d1f3a32a1f06bb6af4f2f38a0c"
+                      "Sha256":  "99b5d9ec815f11c69bc45e28069ac60730135d87cef7aca09b0864f4d190d3e4"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Choice Policy.luau",
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "00078c0f3447858044206d70a0e0c3f57ee1ded1c2fda07a9931faac593c0289"
+                      "Sha256":  "ba27f2e930c49f5c6a83d4ee28b752acb66eff6c5cfc09941e982b28f46393f0"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Choice Reroll.luau",

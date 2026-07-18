@@ -126,6 +126,26 @@ function ChoiceCatalog.resolveKey(indexName, value)
 	return loadCatalog(indexName).KeyByAlias[normalized] or normalized
 end
 
+function ChoiceCatalog.contains(indexName, value)
+	local normalized = normalize(value)
+	return loadCatalog(indexName).KeyByAlias[normalized] ~= nil
+end
+
+function ChoiceCatalog.resolveChaosCategory(value)
+	-- Native GameShopHandler merges Enemy, Curse, then Greater Curse. Check in
+	-- reverse order so a later native assignment owns any duplicate key.
+	for _, entry in ipairs({
+		{ Index = "GreaterCurseIndex", Category = "Greater Curses" },
+		{ Index = "CurseIndex", Category = "Curses" },
+		{ Index = "EnemyIndex", Category = "Enemies" },
+	}) do
+		if ChoiceCatalog.contains(entry.Index, value) then
+			return entry.Category
+		end
+	end
+	return nil
+end
+
 function ChoiceCatalog.toDisplaySelections(indexName, values)
 	local catalog = loadCatalog(indexName)
 	local selections = {}

@@ -109,13 +109,17 @@ function ChoicePolicy.applyWithDecision(controller, candidates)
 	local allCandidatesUsePolicy = #candidates > 0
 	local allPolicyCandidatesBlacklisted = true
 	for _, candidate in ipairs(candidates) do
-		local whitelist, whitelistPriority, blacklist, indexName = getCategoryPolicy(controller, candidate.Category)
+		local policyCategory = candidate.Category
+		if policyCategory == "Chaos" then
+			policyCategory = ChoiceCatalog.resolveChaosCategory(candidate.ChoiceName) or policyCategory
+		end
+		local whitelist, whitelistPriority, blacklist, indexName = getCategoryPolicy(controller, policyCategory)
 		if whitelist then
 			hasPolicyCandidate = true
 			decision.CandidateCount += 1
 			if decision.Category == nil then
-				decision.Category = candidate.Category
-			elseif decision.Category ~= candidate.Category then
+				decision.Category = policyCategory
+			elseif decision.Category ~= policyCategory then
 				decision.Category = false
 			end
 			local key = ChoiceCatalog.resolveKey(indexName, candidate.ChoiceName)
