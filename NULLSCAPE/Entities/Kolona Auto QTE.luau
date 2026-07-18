@@ -15,11 +15,17 @@ local ACTIVE_INTERVAL = 0.025
 local IDLE_INTERVAL = 0.15
 local ABILITY_HOLD = 0.06
 local JUMP_STATE_TIMEOUT = 0.08
-local MOVEMENT_RETRY_INTERVAL = 0.5
+local MOVEMENT_RETRY_INTERVAL = 2
 local TICK_SOUND_REFRESH_INTERVAL = 1
 local INVERTED_MAX = 0.08
 local GRAPPLE_RANGE = 90
 local FATAL_TICK_FALLBACK_DELAY = 0.3
+local MOVEMENT_GLOBAL_KEYS = {
+	"NullscapeLocalMovement",
+	"NullscapePhysicalInteractionMovement",
+	"NullscapeStaminaMovement",
+	"NullscapeRailLocalMovement",
+}
 
 local enabled = false
 local running = false
@@ -30,6 +36,8 @@ local cycleComplete = false
 local castInProgress = false
 local cachedMovement = nil
 local lastMovementSearchAt = -1000
+local movementResolverRunning = false
+local movementResolverGeneration = 0
 local ownedMovement = nil
 local ownedSpecial = nil
 local wasKolonaActive = false
@@ -239,7 +247,7 @@ local function isLocalMovement(candidate, character, humanoid)
 		and typeof(specialAction) == "function"
 end
 
-local function findMovement(character, humanoid)
+local function findMovement(character, humanoid, allowGCSearch)
 	if isLocalMovement(cachedMovement, character, humanoid) then
 		return cachedMovement
 	end
@@ -247,20 +255,21 @@ local function findMovement(character, humanoid)
 
 	local globals = getgenv()._NULLSCAPE_Globals
 	if globals then
-		local staminaMovement = globals.NullscapeStaminaMovement
-		if isLocalMovement(staminaMovement, character, humanoid) then
-			cachedMovement = staminaMovement
-			return staminaMovement
-		end
-
-		local railMovement = globals.NullscapeRailLocalMovement
-		if isLocalMovement(railMovement, character, humanoid) then
-			cachedMovement = railMovement
-			return railMovement
+		for _, key in ipairs(MOVEMENT_GLOBAL_KEYS) do
+			local movement = globals[key]
+			if isLocalMovement(movement, character, humanoid) then
+				cachedMovement = movement
+				globals.NullscapeLocalMovement = movement
+				return movement
+			end
 		end
 	end
 
-	if time() - lastMovementSearchAt < MOVEMENT_RETRY_INTERVAL or typeof(getgc) ~= "function" then
+	if
+		allowGCSearch ~= true
+		or time() - lastMovementSearchAt < MOVEMENT_RETRY_INTERVAL
+		or typeof(getgc) ~= "function"
+	then
 		return nil
 	end
 	lastMovementSearchAt = time()
@@ -273,11 +282,43 @@ local function findMovement(character, humanoid)
 	for _, candidate in next, objects do
 		if isLocalMovement(candidate, character, humanoid) then
 			cachedMovement = candidate
+			if globals then
+				globals.NullscapeLocalMovement = candidate
+			end
 			return candidate
 		end
 	end
 
 	return nil
+end
+
+local function prewarmMovement(character, humanoid)
+	if
+		isLocalMovement(cachedMovement, character, humanoid)
+		or movementResolverRunning
+		or time() - lastMovementSearchAt < MOVEMENT_RETRY_INTERVAL
+	then
+		return
+	end
+
+	movementResolverRunning = true
+	local generation = movementResolverGeneration
+	task.defer(function()
+		if
+			enabled
+			and generation == movementResolverGeneration
+			and character
+			and character.Parent
+			and humanoid
+			and humanoid.Parent == character
+			and not isKolonaActive(getMain())
+		then
+			findMovement(character, humanoid, true)
+		end
+		if generation == movementResolverGeneration then
+			movementResolverRunning = false
+		end
+	end)
 end
 
 local function getClassId(movement)
@@ -441,7 +482,7 @@ local function castNativeAbility(character, humanoid)
 		return "success"
 	end
 
-	local movement = findMovement(character, humanoid)
+	local movement = findMovement(character, humanoid, false)
 	local special = movement and movement.ActiveSpecial
 	if not (movement and special) then
 		return "retry"
@@ -499,12 +540,17 @@ local function run(controller)
 
 			if active and not wasKolonaActive then
 				resetCycle()
-				refreshTickSounds(main, true)
 			end
 			wasKolonaActive = active
 
 			if character and humanoid and not isLocalMovement(cachedMovement, character, humanoid) then
-				findMovement(character, humanoid)
+				findMovement(character, humanoid, false)
+				if not active then
+					prewarmMovement(character, humanoid)
+				end
+			end
+			if main and not active then
+				refreshTickSounds(main, false)
 			end
 
 			if not (active and character and main and humanoid) then
@@ -541,6 +587,8 @@ end
 
 function AutoQTE.disable()
 	enabled = false
+	movementResolverGeneration += 1
+	movementResolverRunning = false
 	castGeneration += 1
 	castInProgress = false
 	releaseOwnedCast()

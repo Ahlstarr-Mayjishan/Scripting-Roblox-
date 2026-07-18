@@ -230,6 +230,24 @@ local function localPlayerHasStatus(statusName)
 	return okStatusOnly and hasStatusOnly == true
 end
 
+local function isStatusSuppressed(statusName)
+	local globals = getgenv()._NULLSCAPE_Globals
+	local statusImmunity = globals and globals.NullscapeStatusImmunity
+	if not (statusImmunity and typeof(statusImmunity.isImmune) == "function") then
+		return false
+	end
+
+	local success, immune = pcall(statusImmunity.isImmune, statusName)
+	return success and immune == true
+end
+
+local function isBellDebuffReport(remote, args)
+	return remote:IsA("RemoteEvent")
+		and remote.Name == "ClientEvent"
+		and string.lower(tostring(args and args[1] or "")) == "debuff"
+		and hasAncestorName(remote, "Bell")
+end
+
 local SHIELD_NAME_KEYWORDS = {
 	"shield",
 	"barrier",
@@ -607,23 +625,15 @@ function Logic.shouldBlockRemoteCall(remote, args, controller)
 		end
 	end
 
-	if remote.ClassName == "RemoteEvent" and remote.Name == "ClientEvent" and args[1] == "Debuff" then
-		local parent = remote.Parent
-		if parent and string.find(parent.Name, "Bell", 1, true) then
-			if controller.BellCurseImmune == true then
-				return Logic.shouldBlockWithShieldPolicy(controller, false)
-			end
+	if isBellDebuffReport(remote, args) then
+		if controller.BellCurseImmune == true then
+			return Logic.shouldBlockWithShieldPolicy(controller, false)
 		end
-	end
 
-	if
-		controller.BellOvertunedKillImmune == true
-		and remote.ClassName == "RemoteEvent"
-		and remote.Name == "ClientEvent"
-		and args[1] == "Debuff"
-	then
-		local parent = remote.Parent
-		if parent and string.find(parent.Name, "Bell", 1, true) and localPlayerHasStatus("Overtuned") then
+		if
+			controller.BellOvertunedKillImmune == true
+			and (localPlayerHasStatus("Overtuned") or isStatusSuppressed("Overtuned"))
+		then
 			return Logic.shouldBlockWithShieldPolicy(controller, false)
 		end
 	end

@@ -19,6 +19,8 @@ local MIN_GONG_IMPULSE = (NATIVE_GONG_ORIGIN_SPEED - NATIVE_GONG_RANGE) * NATIVE
 local IMPULSE_MATCH_RATIO = 0.65
 local SCREEN_RECOVERY_DURATION = 4
 local SCREEN_TARGET_REFRESH_INTERVAL = 0.25
+local SCREEN_GUARD_BIND_NAME = "NULLSCAPE_BellScreenGuard"
+local SCREEN_GUARD_PRIORITY = Enum.RenderPriority.Last.Value + 10
 
 local BellImmunity = {
 	Controller = nil,
@@ -26,6 +28,7 @@ local BellImmunity = {
 	OriginalRingBell = nil,
 	HookWaitToken = 0,
 	ScreenRecoveryToken = 0,
+	ScreenGuardBound = false,
 	CharacterConnection = nil,
 	BellEventConnection = nil,
 	PreSimulationConnection = nil,
@@ -127,6 +130,70 @@ local function neutralizeScreenEffect()
 		flash.Contrast = 0
 		flash.Saturation = 0
 	end
+end
+
+local function hasActiveScreenEffect()
+	local targets = refreshScreenTargets(false)
+	local vignette = targets.Vignette
+	if
+		vignette
+		and (vignette:IsA("ImageLabel") or vignette:IsA("ImageButton"))
+		and vignette.ImageTransparency < 0.999
+	then
+		return true
+	end
+
+	local strength = targets.Strength
+	if strength and strength.Value > 0.01 then
+		return true
+	end
+
+	local colorCorrection = targets.ColorCorrection
+	local bloom = targets.Bloom
+	if
+		colorCorrection
+		and colorCorrection:IsA("ColorCorrectionEffect")
+		and (colorCorrection.Brightness > 0.01 or colorCorrection.Contrast > 0.01)
+		and bloom
+		and bloom:IsA("BloomEffect")
+		and (bloom.Threshold < 0.99 or bloom.Intensity > 0.51)
+	then
+		return true
+	end
+
+	local flash = targets.Flash
+	return flash
+		and flash:IsA("ColorCorrectionEffect")
+		and (flash.Brightness < -0.01 or flash.Contrast > 0.01 or flash.Saturation > 0.01)
+end
+
+local function stopScreenGuard()
+	if not BellImmunity.ScreenGuardBound then
+		return
+	end
+	pcall(function()
+		RunService:UnbindFromRenderStep(SCREEN_GUARD_BIND_NAME)
+	end)
+	BellImmunity.ScreenGuardBound = false
+end
+
+local function ensureScreenGuard()
+	if BellImmunity.ScreenGuardBound then
+		return
+	end
+	pcall(function()
+		RunService:UnbindFromRenderStep(SCREEN_GUARD_BIND_NAME)
+	end)
+	BellImmunity.ScreenGuardBound = pcall(function()
+		RunService:BindToRenderStep(SCREEN_GUARD_BIND_NAME, SCREEN_GUARD_PRIORITY, function()
+			if not isBlindnessImmune() then
+				return
+			end
+			if hasActiveScreenEffect() then
+				neutralizeScreenEffect()
+			end
+		end)
+	end)
 end
 
 local function getScreenRecoveryDuration(intensity)
@@ -329,12 +396,14 @@ end
 function BellImmunity.update(controller)
 	BellImmunity.Controller = controller
 	if controller.BellBlindnessImmune == true then
+		ensureScreenGuard()
 		if not installRingBellHook() then
 			scheduleRingBellHook(5)
 		end
 		recoverActiveScreenEffect()
 	else
 		BellImmunity.ScreenRecoveryToken += 1
+		stopScreenGuard()
 	end
 
 	if not isGongImmune() then
@@ -383,6 +452,7 @@ end
 
 function BellImmunity.disable()
 	BellImmunity.clearRuntime()
+	stopScreenGuard()
 	BellImmunity.HookWaitToken += 1
 	restoreRingBellHook()
 	disconnect(BellImmunity.CharacterConnection)

@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.18.119",
+    "Version":  "2026.07.18.122",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -172,7 +172,7 @@
                                    "Kolona",
                                    "Auto QTE"
                                ],
-                      "Sha256":  "27015790de86ea7e9fc8c2d45eb3f7f27a1c8a023d26dec8d33288921ad15106"
+                      "Sha256":  "0b135c0fb046e0770d6fc347a8c3edcbec77584baa91ce9f39a32c180d88269e"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Springer Auto Jump.luau",
@@ -211,14 +211,14 @@
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "ff0b34b488664eac1ffe384d17569b26767478f5328bec1354cbe664ef85dd1e"
+                      "Sha256":  "78ed6378ed4a7454d5c0ac1e55f54eea66455c7f74316470331343a2f9d87e35"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Bell Immunity.luau",
                       "Menu":  [
                                    "Entities"
                                ],
-                      "Sha256":  "a6bb980ad943ccbe22f7d9a795c9b85736a48c6d105c6d340fba7e64dc065059"
+                      "Sha256":  "343241b1ec69713eeed8a2c1e38b1d0c2c7784c363707edd21c033fcd8d32540"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/tab.luau",
