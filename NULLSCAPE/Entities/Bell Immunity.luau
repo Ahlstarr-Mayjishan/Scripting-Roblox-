@@ -18,6 +18,7 @@ local NATIVE_GONG_MULTIPLIER = 2.35
 local MIN_GONG_IMPULSE = (NATIVE_GONG_ORIGIN_SPEED - NATIVE_GONG_RANGE) * NATIVE_GONG_MULTIPLIER
 local IMPULSE_MATCH_RATIO = 0.65
 local SCREEN_RECOVERY_DURATION = 4
+local SCREEN_TARGET_REFRESH_INTERVAL = 0.25
 
 local BellImmunity = {
 	Controller = nil,
@@ -31,6 +32,8 @@ local BellImmunity = {
 	PostSimulationConnection = nil,
 	BaselineRoot = nil,
 	BaselineVelocity = nil,
+	ScreenTargets = {},
+	NextScreenTargetRefreshAt = 0,
 	ActiveGongs = setmetatable({}, { __mode = "k" }),
 	AttachedEnemies = setmetatable({}, { __mode = "k" }),
 }
@@ -70,54 +73,55 @@ local function getEnemyPosition(enemy)
 	return part and part.Position or nil
 end
 
-local function getBellStrength()
+local function refreshScreenTargets(force)
+	local now = time()
+	if not force and now < BellImmunity.NextScreenTargetRefreshAt then
+		return BellImmunity.ScreenTargets
+	end
+	BellImmunity.NextScreenTargetRefreshAt = now + SCREEN_TARGET_REFRESH_INTERVAL
+
 	local character = LocalPlayer.Character
-	if not character then
-		return nil
-	end
-
-	local boioing = character:FindFirstChild("Boioing")
+	local boioing = character and character:FindFirstChild("Boioing")
 	local strength = boioing and boioing:FindFirstChild("Strength")
-	if strength and strength:IsA("NumberValue") then
-		return strength
-	end
-
-	return nil
-end
-
-local function getBellVignette()
 	local playerGui = LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	local staticGui = playerGui and playerGui:FindFirstChild("StaticGUI")
 	local vignette = staticGui and staticGui:FindFirstChild("BellVignette")
-	return vignette
+	local targets = BellImmunity.ScreenTargets
+	targets.Strength = strength and strength:IsA("NumberValue") and strength or nil
+	targets.Vignette = vignette
+	targets.ColorCorrection = Lighting:FindFirstChild("ColorCorrection")
+	targets.Bloom = Lighting:FindFirstChild("Bloom")
+	targets.Flash = Lighting:FindFirstChild("Flash")
+	return targets
 end
 
 local function neutralizeScreenEffect()
-	local vignette = getBellVignette()
+	local targets = refreshScreenTargets(false)
+	local vignette = targets.Vignette
 	if vignette and (vignette:IsA("ImageLabel") or vignette:IsA("ImageButton")) then
 		vignette.ImageTransparency = 1
 		vignette.Size = UDim2.fromScale(2, 2)
 	end
 
-	local strength = getBellStrength()
+	local strength = targets.Strength
 	if strength then
 		strength.Value = 0
 	end
 
-	local colorCorrection = Lighting:FindFirstChild("ColorCorrection")
+	local colorCorrection = targets.ColorCorrection
 	if colorCorrection and colorCorrection:IsA("ColorCorrectionEffect") then
 		colorCorrection.Brightness = 0
 		colorCorrection.Contrast = 0
 		colorCorrection.Saturation = 0
 	end
 
-	local bloom = Lighting:FindFirstChild("Bloom")
+	local bloom = targets.Bloom
 	if bloom and bloom:IsA("BloomEffect") then
 		bloom.Threshold = 1
 		bloom.Intensity = 0.5
 	end
 
-	local flash = Lighting:FindFirstChild("Flash")
+	local flash = targets.Flash
 	if flash and flash:IsA("ColorCorrectionEffect") then
 		flash.Brightness = 0
 		flash.Contrast = 0
@@ -256,10 +260,9 @@ local function ensurePhysicsGuard()
 			return
 		end
 
-		local character = LocalPlayer.Character
-		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local root = BellImmunity.BaselineRoot
 		local baseline = BellImmunity.BaselineVelocity
-		if not (root and root:IsA("BasePart") and BellImmunity.BaselineRoot == root and baseline) then
+		if not (root and root.Parent and root:IsA("BasePart") and baseline) then
 			return
 		end
 
@@ -305,6 +308,7 @@ function BellImmunity.initialize(controller)
 		BellImmunity.CharacterConnection = LocalPlayer.CharacterAdded:Connect(function()
 			BellImmunity.BaselineRoot = nil
 			BellImmunity.BaselineVelocity = nil
+			BellImmunity.NextScreenTargetRefreshAt = 0
 			scheduleRingBellHook(5, BellImmunity.HookTarget)
 		end)
 	end
@@ -373,6 +377,8 @@ function BellImmunity.clearRuntime()
 	table.clear(BellImmunity.AttachedEnemies)
 	stopPhysicsGuard()
 	BellImmunity.ScreenRecoveryToken += 1
+	table.clear(BellImmunity.ScreenTargets)
+	BellImmunity.NextScreenTargetRefreshAt = 0
 end
 
 function BellImmunity.disable()

@@ -8,6 +8,7 @@
 local Magnet = {}
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 
 local COLLECT_DELAY = 0.35
 
@@ -15,6 +16,9 @@ local lastCollectTime = 0
 local comboCount = 0
 local lastCollectTick = 0
 local cachedGCH = nil
+local cachedCollectedGiftEvent = nil
+local scanGeneration = 0
+local scannedGifts = setmetatable({}, { __mode = "k" })
 
 -- Non-blocking spawn time tracker for Gift replication settle check
 local seenGifts = setmetatable({}, { __mode = "k" })
@@ -24,8 +28,7 @@ local function getGiftClientHandler()
 		return cachedGCH
 	end
 
-	local replicatedFirst = game:GetService("ReplicatedFirst")
-	local clientModules = replicatedFirst:FindFirstChild("ClientModules")
+	local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
 		or ReplicatedStorage:FindFirstChild("ClientModules")
 	local giftClient = clientModules and clientModules:FindFirstChild("GiftClient")
 	local handlerModule = giftClient and giftClient:FindFirstChild("GiftClientHandler")
@@ -45,9 +48,13 @@ local function getGiftClientHandler()
 end
 
 local function getCollectedGiftEvent()
+	if cachedCollectedGiftEvent and cachedCollectedGiftEvent.Parent then
+		return cachedCollectedGiftEvent
+	end
 	local movement = ReplicatedStorage:FindFirstChild("Movement")
 	local events = movement and movement:FindFirstChild("Events")
-	return events and events:FindFirstChild("CollectedGift")
+	cachedCollectedGiftEvent = events and events:FindFirstChild("CollectedGift")
+	return cachedCollectedGiftEvent
 end
 
 local function getGiftPosition(gift)
@@ -90,37 +97,34 @@ local function collectGift(rawObj, collectedEvent)
 	end
 end
 
-local function addCandidate(validGifts, seenRawObjects, rawObj, hrpPos, range)
-	if not rawObj or seenRawObjects[rawObj] then
-		return
+local function getCandidateDistance(rawObj, hrpPos, range, generation, now)
+	if not rawObj or scannedGifts[rawObj] == generation then
+		return nil
 	end
+	scannedGifts[rawObj] = generation
 	if rawObj.Collected or rawObj.Destroyed or rawObj.Tripmine then
-		return
+		return nil
 	end
 
 	local pos = getGiftPosition(rawObj)
 	if not pos then
-		return
+		return nil
 	end
 
 	-- Settle check: Track first seen timestamp
 	if not seenGifts[rawObj] then
-		seenGifts[rawObj] = os.clock()
+		seenGifts[rawObj] = now
 	end
-	if os.clock() - seenGifts[rawObj] < 0.5 then
-		return -- Wait 0.5s for settle
+	if now - seenGifts[rawObj] < 0.5 then
+		return nil
 	end
 
 	local distance = (hrpPos - pos).Magnitude
 	if distance > range then
-		return
+		return nil
 	end
 
-	seenRawObjects[rawObj] = true
-	table.insert(validGifts, {
-		rawObj = rawObj,
-		dist = distance,
-	})
+	return distance
 end
 
 function Magnet.update(controller, hrp)
@@ -153,33 +157,43 @@ function Magnet.update(controller, hrp)
 		end
 
 		if canCollectGift then
-			local validGifts = {}
-			local seenRawObjects = {}
+			scanGeneration += 1
+			local generation = scanGeneration
+			local now = os.clock()
+			local collectedEvent = getCollectedGiftEvent()
+			local nearestGift = nil
+			local nearestDistance = math.huge
+
+			local function consider(rawObj)
+				local distance = getCandidateDistance(rawObj, hrpPos, giftRange, generation, now)
+				if not distance then
+					return
+				end
+
+				if mode == "Legit" then
+					if distance < nearestDistance then
+						nearestGift = rawObj
+						nearestDistance = distance
+					end
+				else
+					collectGift(rawObj, collectedEvent)
+				end
+			end
 
 			for _, giftInfo in ipairs(controller.ActiveGifts or {}) do
-				addCandidate(validGifts, seenRawObjects, giftInfo.rawObj, hrpPos, giftRange)
+				consider(giftInfo.rawObj)
 			end
 
 			local GCH = getGiftClientHandler()
 			if GCH and GCH.Gifts then
 				for _, rawObj in pairs(GCH.Gifts) do
-					addCandidate(validGifts, seenRawObjects, rawObj, hrpPos, giftRange)
+					consider(rawObj)
 				end
 			end
 
-			if #validGifts > 0 then
-				local collectedEvent = getCollectedGiftEvent()
-				if mode == "Legit" then
-					table.sort(validGifts, function(a, b)
-						return a.dist < b.dist
-					end)
-					collectGift(validGifts[1].rawObj, collectedEvent)
-					lastCollectTime = os.clock()
-				else
-					for _, item in ipairs(validGifts) do
-						collectGift(item.rawObj, collectedEvent)
-					end
-				end
+			if nearestGift then
+				collectGift(nearestGift, collectedEvent)
+				lastCollectTime = now
 			end
 		end
 	end

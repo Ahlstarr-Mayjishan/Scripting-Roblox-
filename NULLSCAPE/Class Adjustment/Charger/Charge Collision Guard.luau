@@ -17,6 +17,7 @@ local SCAN_FORWARD_OFFSET = 5
 local MAX_SMALL_PART_DIMENSION = 8
 local CHARGE_END_GRACE = 0.15
 local MIN_ABILITY_CHARGE_SPEED = 20
+local SCAN_INTERVAL = 1 / 30
 
 type CollisionState = {
 	CanCollide: boolean,
@@ -31,7 +32,13 @@ type Controller = {
 local activeController: Controller? = nil
 local heartbeatConnection: RBXScriptConnection? = nil
 local lastChargingAt = 0
+local lastScanAt = 0
 local originalStates: { [BasePart]: CollisionState } = {}
+local overlapParams = OverlapParams.new()
+local overlapCharacter: Model? = nil
+
+overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+overlapParams.MaxParts = 100
 
 local function isCharging(character: Model, humanoid: Humanoid, root: BasePart): boolean
 	if character:GetAttribute("ChargingCheck") == true then
@@ -95,10 +102,10 @@ local function restoreParts()
 end
 
 local function scanChargeCorridor(character: Model, root: BasePart)
-	local overlapParams = OverlapParams.new()
-	overlapParams.FilterType = Enum.RaycastFilterType.Exclude
-	overlapParams.FilterDescendantsInstances = { character }
-	overlapParams.MaxParts = 100
+	if overlapCharacter ~= character then
+		overlapCharacter = character
+		overlapParams.FilterDescendantsInstances = { character }
+	end
 
 	local scanCFrame = root.CFrame + root.CFrame.LookVector * SCAN_FORWARD_OFFSET
 	for _, part in ipairs(workspace:GetPartBoundsInBox(scanCFrame, SCAN_SIZE, overlapParams)) do
@@ -109,6 +116,12 @@ local function scanChargeCorridor(character: Model, root: BasePart)
 end
 
 local function updateGuard()
+	local now = os.clock()
+	if now - lastScanAt < SCAN_INTERVAL then
+		return
+	end
+	lastScanAt = now
+
 	local controller = activeController
 	if not (controller and controller.ChargerCollisionGuardEnabled and ClassContext.is("Charger")) then
 		restoreParts()
@@ -119,12 +132,12 @@ local function updateGuard()
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if character and humanoid and root and root:IsA("BasePart") and isCharging(character, humanoid, root) then
-		lastChargingAt = os.clock()
+		lastChargingAt = now
 		scanChargeCorridor(character, root)
 		return
 	end
 
-	if os.clock() - lastChargingAt >= CHARGE_END_GRACE then
+	if now - lastChargingAt >= CHARGE_END_GRACE then
 		restoreParts()
 	end
 end
@@ -135,6 +148,9 @@ local function disconnect()
 		heartbeatConnection = nil
 	end
 	restoreParts()
+	lastScanAt = 0
+	overlapCharacter = nil
+	overlapParams.FilterDescendantsInstances = {}
 end
 
 function ChargeCollisionGuard.update(controller: Controller?): boolean

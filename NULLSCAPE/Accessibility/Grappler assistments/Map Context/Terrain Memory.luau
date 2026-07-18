@@ -5,15 +5,15 @@
 -- ]]
 
 local Workspace = game:GetService("Workspace")
-local SpatialIndex = getgenv().loadModule(
-	"NULLSCAPE/Accessibility/Grappler assistments/Map Context/Spatial Index.luau"
-)
+local SpatialIndex = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Spatial Index.luau")
 
 local BUCKET_SIZE = 128
 local DEFAULT_QUERY_RADIUS = 96
 local partIds = setmetatable({}, { __mode = "k" })
 local nextPartId = 0
 local OBSERVER_PRUNE_INTERVAL = 2
+local ROOT_CACHE_INTERVAL = 0.5
+local VOID_CACHE_INTERVAL = 0.5
 
 local TerrainMemory = {
 	Index = SpatialIndex.new(BUCKET_SIZE),
@@ -21,6 +21,10 @@ local TerrainMemory = {
 	ObservedRoots = {},
 	LastPruneAt = -1000,
 	SurfaceCount = 0,
+	CachedRoots = {},
+	LastRootCheckAt = -1000,
+	VoidInfo = {},
+	LastVoidCheckAt = -1000,
 }
 
 local function isAlive(instance)
@@ -53,7 +57,25 @@ local function addRoot(roots, instance)
 	end
 end
 
-local function getMapRoots()
+local function cachedRootsAlive()
+	if #TerrainMemory.CachedRoots == 0 then
+		return false
+	end
+	for _, root in ipairs(TerrainMemory.CachedRoots) do
+		if not (root and root.Parent) then
+			return false
+		end
+	end
+	return true
+end
+
+local function getMapRoots(force)
+	local now = time()
+	if not force and now - TerrainMemory.LastRootCheckAt < ROOT_CACHE_INTERVAL and cachedRootsAlive() then
+		return TerrainMemory.CachedRoots
+	end
+	TerrainMemory.LastRootCheckAt = now
+
 	local roots = {}
 	addRoot(roots, Workspace:FindFirstChild("CurrentRooms"))
 	addRoot(roots, Workspace:FindFirstChild("Spawn"))
@@ -62,7 +84,8 @@ local function getMapRoots()
 		addRoot(roots, Workspace)
 	end
 
-	return roots
+	TerrainMemory.CachedRoots = roots
+	return TerrainMemory.CachedRoots
 end
 
 local function getPartId(part)
@@ -200,17 +223,24 @@ function TerrainMemory.getMapRoots()
 end
 
 function TerrainMemory.getVoidInfo()
+	local now = time()
+	if now - TerrainMemory.LastVoidCheckAt < VOID_CACHE_INTERVAL and TerrainMemory.VoidInfo.Part then
+		return TerrainMemory.VoidInfo
+	end
+	TerrainMemory.LastVoidCheckAt = now
+
 	local killVoid = Workspace:FindFirstChild("KillVoid")
 	if not (killVoid and killVoid:IsA("BasePart")) then
+		table.clear(TerrainMemory.VoidInfo)
 		return nil
 	end
 
-	return {
-		Part = killVoid,
-		Position = killVoid.Position,
-		Y = killVoid.Position.Y,
-		Size = killVoid.Size,
-	}
+	local info = TerrainMemory.VoidInfo
+	info.Part = killVoid
+	info.Position = killVoid.Position
+	info.Y = killVoid.Position.Y
+	info.Size = killVoid.Size
+	return info
 end
 
 function TerrainMemory.ensureScanned(force)
@@ -227,13 +257,13 @@ function TerrainMemory.ensureScanned(force)
 	return true
 end
 
-function TerrainMemory.getNearbySurfaces(position, radius)
+function TerrainMemory.getNearbySurfaces(position, radius, limit)
 	TerrainMemory.ensureScanned(false)
-	return SpatialIndex.query(TerrainMemory.Index, position, tonumber(radius) or DEFAULT_QUERY_RADIUS)
+	return SpatialIndex.query(TerrainMemory.Index, position, tonumber(radius) or DEFAULT_QUERY_RADIUS, limit)
 end
 
 function TerrainMemory.getClosestSurface(position, radius)
-	local surfaces = TerrainMemory.getNearbySurfaces(position, radius or DEFAULT_QUERY_RADIUS)
+	local surfaces = TerrainMemory.getNearbySurfaces(position, radius or DEFAULT_QUERY_RADIUS, 1)
 	return surfaces[1]
 end
 
@@ -241,6 +271,10 @@ function TerrainMemory.clear()
 	resetObservedRoots()
 	TerrainMemory.Scanned = false
 	TerrainMemory.LastPruneAt = -1000
+	TerrainMemory.LastRootCheckAt = -1000
+	TerrainMemory.LastVoidCheckAt = -1000
+	table.clear(TerrainMemory.CachedRoots)
+	table.clear(TerrainMemory.VoidInfo)
 end
 
 return TerrainMemory

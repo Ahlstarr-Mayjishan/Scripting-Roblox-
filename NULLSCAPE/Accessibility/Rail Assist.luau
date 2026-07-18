@@ -6,25 +6,17 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
-local RunService = game:GetService("RunService")
 
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 local RailMemory =
 	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Rail Memory Proxy.luau")
 
 local Logic = {
-	Connections = {},
 	Telefraggers = {},
 	LastAutoRailAt = 0,
 	LastScanAt = 0,
 	LastTelefraggerScanAt = 0,
 }
-
-local function packValues(...)
-	local values = { ... }
-	values.n = select("#", ...)
-	return values
-end
 
 local RAIL_SCAN_INTERVAL = 0.08
 local RAIL_NEAR_CAPTURE_DISTANCE = 2.75
@@ -85,18 +77,6 @@ local function getMovementCore()
 	end
 
 	return movementCore
-end
-
-local function clearConnections()
-	for _, connection in ipairs(Logic.Connections) do
-		if connection then
-			pcall(function()
-				connection:Disconnect()
-			end)
-		end
-	end
-
-	table.clear(Logic.Connections)
 end
 
 local function getLocalMovement()
@@ -375,8 +355,8 @@ local function canAutoRail(movement)
 	return true
 end
 
-local function autoRailStep()
-	local movement = getLocalMovement()
+local function autoRailStep(movement)
+	movement = movement or getLocalMovement()
 	if not canAutoRail(movement) or time() - Logic.LastScanAt < RAIL_SCAN_INTERVAL then
 		return
 	end
@@ -469,18 +449,17 @@ function Logic.enable()
 				globals.NullscapeRailLocalMovement = self
 				local wasRail = self.rail == true
 				local railPart = globals.NullscapeRailCurrentPart
-				local results = packValues(originalStep(self, dt, ...))
+				local result = originalStep(self, dt, ...)
 				if wasRail and self.rail ~= true then
 					rememberRailExit(self, railPart)
 					globals.NullscapeRailCurrentPart = nil
 				end
-				return table.unpack(results, 1, results.n)
+				autoRailStep(self)
+				return result
 			end
 			return originalStep(self, dt, ...)
 		end
 	end
-
-	table.insert(Logic.Connections, RunService.Heartbeat:Connect(autoRailStep))
 
 	globals.RailAssistHooked = true
 	return true
@@ -508,7 +487,6 @@ function Logic.disable()
 	Logic.LastAutoRailAt = 0
 	Logic.LastScanAt = 0
 	Logic.LastTelefraggerScanAt = 0
-	clearConnections()
 	table.clear(Logic.Telefraggers)
 end
 

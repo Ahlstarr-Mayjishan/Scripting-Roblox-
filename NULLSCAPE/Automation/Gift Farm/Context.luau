@@ -8,6 +8,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
+local NativeGiftRegistry = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Native Gift Registry.luau")
+
 local function getGlobals()
 	local env = getgenv()
 	env._NULLSCAPE_Globals = env._NULLSCAPE_Globals or {}
@@ -48,6 +50,11 @@ local function collectBeaconParts()
 end
 
 function Context.getGiftClientHandler()
+	if NativeGiftRegistry and typeof(NativeGiftRegistry.getHandler) == "function" then
+		NativeGiftRegistry.start()
+		return NativeGiftRegistry.getHandler()
+	end
+
 	local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
 		or ReplicatedStorage:FindFirstChild("ClientModules")
 	local giftClient = clientModules and clientModules:FindFirstChild("GiftClient")
@@ -92,7 +99,7 @@ local function raycastCurrentRoomsFloor(position)
 		Vector3.new(4.5, 0, 0),
 		Vector3.new(-4.5, 0, 0),
 		Vector3.new(0, 0, 4.5),
-		Vector3.new(0, 0, -4.5)
+		Vector3.new(0, 0, -4.5),
 	}
 
 	for _, offset in ipairs(offsets) do
@@ -398,11 +405,18 @@ function Context.suppressMovementInteractions()
 		end)
 	end
 
+	interactionConnection = Workspace.DescendantAdded:Connect(process)
+
+	local scanStartedAt = os.clock()
+	local scanned = 0
 	for _, descendant in ipairs(Workspace:GetDescendants()) do
 		process(descendant)
+		scanned += 1
+		if scanned % 200 == 0 and os.clock() - scanStartedAt >= 0.003 then
+			task.wait()
+			scanStartedAt = os.clock()
+		end
 	end
-
-	interactionConnection = Workspace.DescendantAdded:Connect(process)
 
 	local globals = getGlobals()
 	globals.GiftFarmMovementInteractionOwner = Context

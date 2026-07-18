@@ -73,14 +73,14 @@ local function installCurseHandlerHook()
 		end
 
 		Logic.CallingOriginal = true
-		local results = table.pack(pcall(original, curseName, ...))
+		local success, result = pcall(original, curseName, ...)
 		Logic.CallingOriginal = false
 
-		if not results[1] then
+		if not success then
 			return false
 		end
 
-		return table.unpack(results, 2, results.n)
+		return result
 	end
 
 	local success = pcall(function()
@@ -292,6 +292,18 @@ local function findMirageRoot(instance)
 	return instance
 end
 
+local function mayAffectBeaconMirage(instance)
+	if not instance then
+		return false
+	end
+	local lowerName = string.lower(instance.Name)
+	return instance.Name == "BeaconModel"
+		or instance.Name == "ClientEvent"
+		or instance.Name == "Sound"
+		or string.find(lowerName, "beaconmirage", 1, true) ~= nil
+		or string.find(lowerName, "beaconfeint", 1, true) ~= nil
+end
+
 local function startBeaconMirageIdentifier()
 	if Logic.Connections[1] then
 		return
@@ -301,6 +313,9 @@ local function startBeaconMirageIdentifier()
 	table.insert(
 		Logic.Connections,
 		Workspace.DescendantAdded:Connect(function(instance)
+			if not mayAffectBeaconMirage(instance) then
+				return
+			end
 			task.defer(function()
 				if Logic.BeaconMirageIdentifier and instance and instance.Parent then
 					local root = findMirageRoot(instance)

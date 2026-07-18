@@ -10,6 +10,10 @@ local AirControl = {}
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 
 local CachedControl = nil
+local ProfileCache = setmetatable({}, { __mode = "k" })
+local LastImpulseNoteAt = setmetatable({}, { __mode = "k" })
+local PROFILE_TTL = 0.5
+local IMPULSE_NOTE_INTERVAL = 0.1
 
 local function getControl()
 	if CachedControl then
@@ -44,6 +48,12 @@ local function characterHas(grapple, name)
 end
 
 local function getPhysicsProfile(grapple)
+	local now = time()
+	local cached = ProfileCache[grapple]
+	if cached and now - cached.At < PROFILE_TTL then
+		return cached.AirControlScale, cached.LowGravity, cached.GraceWings
+	end
+
 	local movement = grapple and grapple.Movement
 	local graceWings = hasUpgrade(movement, "GraceWings")
 	local lowGravity = hasUpgrade(movement, "AdvancedGravityCoil")
@@ -59,10 +69,14 @@ local function getPhysicsProfile(grapple)
 		airControlScale += 0.2
 	end
 
-	return {
+	local profile = {
+		At = now,
 		AirControlScale = airControlScale,
 		LowGravity = lowGravity,
+		GraceWings = graceWings,
 	}
+	ProfileCache[grapple] = profile
+	return profile.AirControlScale, profile.LowGravity, profile.GraceWings
 end
 
 local function applyVelocityDelta(rootPart, delta, maxDelta)
@@ -78,18 +92,22 @@ local function applyVelocityDelta(rootPart, delta, maxDelta)
 
 	local beforeVelocity = rootPart.Velocity
 	rootPart.Velocity += delta
-	if MomentumMemory and typeof(MomentumMemory.noteImpulse) == "function" then
-		pcall(function()
-			MomentumMemory.noteImpulse(rootPart, "GrappleAirControl", beforeVelocity, rootPart.Velocity, delta, {
-				MaxDelta = maxDelta,
-			})
-		end)
+	local now = time()
+	if
+		MomentumMemory
+		and typeof(MomentumMemory.noteImpulse) == "function"
+		and now - (LastImpulseNoteAt[rootPart] or 0) >= IMPULSE_NOTE_INTERVAL
+	then
+		LastImpulseNoteAt[rootPart] = now
+		pcall(MomentumMemory.noteImpulse, rootPart, "GrappleAirControl", beforeVelocity, rootPart.Velocity, delta, {
+			MaxDelta = maxDelta,
+		})
 	end
 	return true
 end
 
-function AirControl.apply(grapple, dt)
-	local Control = getControl()
+function AirControl.apply(grapple, dt, Control)
+	Control = Control or getControl()
 	local controlLevel = Control and Control.GrappleAirControlMultiplier or 0
 	if controlLevel <= 0 then
 		return
@@ -114,9 +132,8 @@ function AirControl.apply(grapple, dt)
 	local levelAlpha = math.clamp(controlLevel / 10, 0, 1)
 	local velocity = rootPart.Velocity
 	local horizontalVelocity = Vector3.new(velocity.X, 0, velocity.Z)
-	local profile = getPhysicsProfile(grapple)
-	local graceWingsMultiplier = hasUpgrade(movement, "GraceWings") and 1.5 or 1
-	local profileAirScale = tonumber(profile and profile.AirControlScale) or 1
+	local profileAirScale, lowGravity, graceWings = getPhysicsProfile(grapple)
+	local graceWingsMultiplier = graceWings and 1.5 or 1
 	local movementSpeedMultiplier = tonumber(movement.movementSpeedMulti) or 1
 
 	local inputUnit = playerMoveDirection.Unit
@@ -148,7 +165,7 @@ function AirControl.apply(grapple, dt)
 	end
 
 	local gravityCancel = (math.clamp((controlLevel - 3) / 7, 0, 1) ^ 1.35) * 0.82
-	if profile and profile.LowGravity then
+	if lowGravity then
 		gravityCancel *= 0.65
 	end
 	local nextY = velocity.Y

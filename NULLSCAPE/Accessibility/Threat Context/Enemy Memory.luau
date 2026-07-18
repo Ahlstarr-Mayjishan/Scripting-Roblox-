@@ -9,9 +9,13 @@ local Workspace = game:GetService("Workspace")
 local EnemyMemory = {
 	Entries = {},
 	LastRefreshAt = 0,
+	LastPruneAt = 0,
+	Folder = nil,
+	Connections = {},
 }
 
 local REFRESH_INTERVAL = 0.08
+local PRUNE_INTERVAL = 1
 local DEFAULT_RADIUS = 48
 local enemyIds = setmetatable({}, { __mode = "k" })
 local nextEnemyId = 0
@@ -85,29 +89,39 @@ local function getEnemyId(enemy)
 end
 
 local function rememberEnemy(enemy, now)
-	local part = getEnemyPart(enemy)
+	local id = getEnemyId(enemy)
+	local previous = EnemyMemory.Entries[id]
+	local part = previous and isAlive(previous.Part) and previous.Part or getEnemyPart(enemy)
 	if not part then
 		return nil
 	end
 
-	local id = getEnemyId(enemy)
-	local previous = EnemyMemory.Entries[id]
-	local entry = {
-		Id = id,
-		Enemy = enemy,
-		Part = part,
-		Name = enemy.Name,
-		Position = part.Position,
-		Velocity = getPartVelocity(part, previous, now),
-		Size = part.Size,
-		SeenAt = now,
-	}
+	local entry = previous
+	if not entry then
+		entry = {
+			Id = id,
+			Enemy = enemy,
+		}
+		EnemyMemory.Entries[id] = entry
+	end
 
-	EnemyMemory.Entries[id] = entry
+	local velocity = getPartVelocity(part, previous, now)
+	entry.Part = part
+	entry.Name = enemy.Name
+	entry.Position = part.Position
+	entry.Velocity = velocity
+	entry.Size = part.Size
+	entry.SeenAt = now
+
 	return entry
 end
 
 local function pruneDead()
+	local now = time()
+	if now - EnemyMemory.LastPruneAt < PRUNE_INTERVAL then
+		return
+	end
+	EnemyMemory.LastPruneAt = now
 	for id, entry in pairs(EnemyMemory.Entries) do
 		if not (isAlive(entry.Enemy) and isAlive(entry.Part)) then
 			EnemyMemory.Entries[id] = nil
@@ -115,10 +129,51 @@ local function pruneDead()
 	end
 end
 
+local function disconnectFolder()
+	for _, connection in ipairs(EnemyMemory.Connections) do
+		connection:Disconnect()
+	end
+	table.clear(EnemyMemory.Connections)
+	EnemyMemory.Folder = nil
+end
+
+local function removeEnemy(enemy)
+	local id = enemyIds[enemy]
+	if id then
+		EnemyMemory.Entries[id] = nil
+	end
+end
+
+local function bindFolder(enemies, now)
+	if EnemyMemory.Folder == enemies then
+		return
+	end
+	disconnectFolder()
+	EnemyMemory.Folder = enemies
+
+	for _, enemy in ipairs(enemies:GetChildren()) do
+		rememberEnemy(enemy, now)
+	end
+	table.insert(
+		EnemyMemory.Connections,
+		enemies.ChildAdded:Connect(function(enemy)
+			rememberEnemy(enemy, time())
+		end)
+	)
+	table.insert(EnemyMemory.Connections, enemies.ChildRemoved:Connect(removeEnemy))
+	table.insert(
+		EnemyMemory.Connections,
+		enemies.AncestryChanged:Connect(function(_, parent)
+			if not parent then
+				disconnectFolder()
+			end
+		end)
+	)
+end
+
 function EnemyMemory.refresh(force)
 	local now = time()
 	if not force and now - EnemyMemory.LastRefreshAt < REFRESH_INTERVAL then
-		pruneDead()
 		return true
 	end
 
@@ -127,11 +182,13 @@ function EnemyMemory.refresh(force)
 
 	local enemies = Workspace:FindFirstChild("Enemies")
 	if not enemies then
+		disconnectFolder()
 		return false
 	end
 
-	for _, enemy in ipairs(enemies:GetChildren()) do
-		rememberEnemy(enemy, now)
+	bindFolder(enemies, now)
+	for _, entry in pairs(EnemyMemory.Entries) do
+		rememberEnemy(entry.Enemy, now)
 	end
 
 	return true
@@ -162,8 +219,10 @@ function EnemyMemory.getNearbyThreats(position, radius)
 end
 
 function EnemyMemory.clear()
+	disconnectFolder()
 	table.clear(EnemyMemory.Entries)
 	EnemyMemory.LastRefreshAt = 0
+	EnemyMemory.LastPruneAt = 0
 end
 
 return EnemyMemory

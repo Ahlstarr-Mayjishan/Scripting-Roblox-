@@ -4,13 +4,13 @@
 	Chooses workspace.Select orbs by ChoiceType/ChoiceName while InRound is false.
 ]]
 
-local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MovementLease = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/MovementLease.luau")
 local ChoicePolicy = getgenv().loadModule("NULLSCAPE/Automation/Choice Policy.luau")
 local ChoiceReroll = getgenv().loadModule("NULLSCAPE/Automation/Choice Reroll.luau")
+local ChoiceRegistry = getgenv().loadModule("NULLSCAPE/Automation/Choice Registry.luau")
 
 local AutoChooseThings = {}
 
@@ -27,6 +27,7 @@ local CATEGORY_ORDER = {
 
 local CHOOSE_DISTANCE = 6
 local LOOP_INTERVAL = 0.12
+local IDLE_LOOP_INTERVAL = 0.35
 local ACTION_COOLDOWN = 0.65
 local RETRY_COOLDOWN = 1.2
 local MOVE_SETTLE = 0.08
@@ -378,8 +379,7 @@ local function addCandidate(candidates, seen, root, selected, priority, hrp)
 		Category = category,
 		ChoiceName = choiceName,
 		ItemIndex = itemIndex,
-		MedalChoiceMode = category == "Selection - Medal Curses"
-			and classifyMedalChoice(root, prompt, itemIndex)
+		MedalChoiceMode = category == "Selection - Medal Curses" and classifyMedalChoice(root, prompt, itemIndex)
 			or nil,
 		Cost = tonumber(prompt:GetAttribute("Cost")) or 0,
 		UpgradeBuyPriority = category == "Upgrades" and getUpgradeBuyPriority(choiceName) or 999,
@@ -435,7 +435,7 @@ local function collectTarget(controller, hrp)
 			addCandidate(candidates, seen, descendant.Parent or descendant, selected, priority, hrp)
 		end
 	end
-	for _, tagged in ipairs(CollectionService:GetTagged("ChoiceOrb")) do
+	for _, tagged in ipairs(ChoiceRegistry.getOrbs()) do
 		addCandidate(candidates, seen, tagged, selected, priority, hrp)
 	end
 
@@ -446,7 +446,8 @@ local function collectTarget(controller, hrp)
 			break
 		end
 	end
-	local waitingForChoiceRefresh = not hasPrimaryChoice and os.clock() - lastPrimaryChoiceAt < CONTINUE_AFTER_PRIMARY_GRACE
+	local waitingForChoiceRefresh = not hasPrimaryChoice
+		and os.clock() - lastPrimaryChoiceAt < CONTINUE_AFTER_PRIMARY_GRACE
 	if waitingForChoiceRefresh then
 		for _, child in ipairs(selectFolder:GetChildren()) do
 			if hasReadyPrimaryChoice(child, selected) then
@@ -455,7 +456,7 @@ local function collectTarget(controller, hrp)
 			end
 		end
 		if not hasPrimaryChoice then
-			for _, tagged in ipairs(CollectionService:GetTagged("ChoiceOrb")) do
+			for _, tagged in ipairs(ChoiceRegistry.getOrbs()) do
 				if hasReadyPrimaryChoice(tagged, selected) then
 					hasPrimaryChoice = true
 					break
@@ -564,6 +565,7 @@ local function run(controller)
 	end
 	running = true
 	task.spawn(function()
+		local observedChoiceRevision = -1
 		while enabled and controller and not controller.Destroyed do
 			if controller.GiftFarmPolicyHolding == true or controller.GiftFarmRestPending == true then
 				setStatus(controller, "WaitingForGiftFarmPolicy", controller.GiftFarmDetail)
@@ -592,7 +594,10 @@ local function run(controller)
 			local target, reason = collectTarget(controller, hrp)
 			if not target then
 				setStatus(controller, reason or "Waiting")
-				task.wait(LOOP_INTERVAL)
+				local choiceRevision = ChoiceRegistry.getRevision()
+				local interval = choiceRevision == observedChoiceRevision and IDLE_LOOP_INTERVAL or LOOP_INTERVAL
+				observedChoiceRevision = choiceRevision
+				task.wait(interval)
 				continue
 			end
 
@@ -605,7 +610,8 @@ local function run(controller)
 
 			local moved = moveInsidePromptRange(target, lease)
 			task.wait(MOVE_SETTLE)
-			if not moved
+			if
+				not moved
 				or not lease:isValid()
 				or not enabled
 				or controller.Destroyed
@@ -629,11 +635,7 @@ local function run(controller)
 				end
 				local name = tostring(target.MedalChoiceMode or target.ChoiceName or target.Root.Name)
 				if fired and target.Category == "Reroll" then
-					setStatus(
-						controller,
-						"Rerolled",
-						ChoiceReroll.getDetail(target.RerollCategory, target.Remaining)
-					)
+					setStatus(controller, "Rerolled", ChoiceReroll.getDetail(target.RerollCategory, target.Remaining))
 				else
 					local detail = target.Category .. " | " .. name
 					if target.PolicyFallback == true then
@@ -653,6 +655,7 @@ end
 function AutoChooseThings.update(controller)
 	enabled = controller and controller.AutoChooseThingsEnabled == true
 	if enabled then
+		ChoiceRegistry.start()
 		run(controller)
 	else
 		setStatus(controller, "Idle")
@@ -662,6 +665,7 @@ end
 
 function AutoChooseThings.disable(controller)
 	enabled = false
+	ChoiceRegistry.stop()
 	attemptedAt, lastSelectFolder = {}, nil
 	ChoiceReroll.reset()
 	setStatus(controller, "Idle")

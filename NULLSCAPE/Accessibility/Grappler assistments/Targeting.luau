@@ -450,7 +450,7 @@ local function refreshCandidateCache(origin, maxRange, budget)
 	end
 
 	if TerrainMemory and typeof(TerrainMemory.getNearbySurfaces) == "function" then
-		for _, entry in ipairs(TerrainMemory.getNearbySurfaces(origin, maxRange)) do
+		for _, entry in ipairs(TerrainMemory.getNearbySurfaces(origin, maxRange, terrainLimit)) do
 			if #candidates >= terrainLimit then
 				break
 			end

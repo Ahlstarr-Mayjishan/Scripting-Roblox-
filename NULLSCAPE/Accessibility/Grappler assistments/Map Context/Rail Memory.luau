@@ -5,9 +5,7 @@
 -- ]]
 
 local Workspace = game:GetService("Workspace")
-local SpatialIndex = getgenv().loadModule(
-	"NULLSCAPE/Accessibility/Grappler assistments/Map Context/Spatial Index.luau"
-)
+local SpatialIndex = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Map Context/Spatial Index.luau")
 
 local BUCKET_SIZE = 128
 local DEFAULT_QUERY_RADIUS = 110

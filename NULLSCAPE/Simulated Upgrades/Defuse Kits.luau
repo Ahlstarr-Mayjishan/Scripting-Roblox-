@@ -10,6 +10,7 @@ local getgenv = getgenv
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
+local TripmineIframeRegistry = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Tripmine Iframe Registry.luau")
 
 local LocalPlayer = Players.LocalPlayer
 local ChargerEvent = ReplicatedStorage:WaitForChild("Movement"):WaitForChild("Events"):WaitForChild("ChargerEvent")
@@ -18,7 +19,6 @@ local OFF_MODE = "Off"
 local IFRAMES_MODE = "I-Frames"
 local IMMUNITY_MODE = "Immunity"
 local ACTIVE_WATCH_INTERVAL = 0.05
-local IDLE_WATCH_INTERVAL = 0.35
 local IMMUNITY_SERVER_PULSE_INTERVAL = 0.8
 local IMMUNITY_REARM_DELAY = 0.6
 local IMMUNITY_ARM_DISTANCE = 7.5
@@ -31,8 +31,8 @@ local IMMUNITY_PRECOLLECT_DELAY = 0.08
 
 local activeController = nil
 local watcherRunning = false
-local watcherToken = {}
-local iframeObject = nil
+local watcherToken = nil
+local watcherGeneration = 0
 local cachedGCH = nil
 local lastChargerState = nil
 local lastRefreshAt = 0
@@ -54,70 +54,16 @@ local bypassNextSendCollectDelay = false
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
-globals.TripmineBarrierWatcherToken = watcherToken
-globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
+globals.TripmineBarrierWatcherToken = nil
 
 local IFRAME_OWNER = "DefuseKits"
 
-local function getIframeOwners()
-	globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
-	return globals.TripmineIframeOwners
-end
-
-local function hasIframeOwner()
-	for _, owns in pairs(getIframeOwners()) do
-		if owns then
-			return true
-		end
-	end
-
-	return false
-end
-
-local function hasIframes()
-	return iframeObject ~= nil and iframeObject.Parent ~= nil
-end
-
 local function addIframes()
-	getIframeOwners()[IFRAME_OWNER] = true
-
-	if hasIframes() then
-		return
-	end
-
-	local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
-	if existing then
-		iframeObject = existing
-		return
-	end
-
-	local obj = Instance.new("BoolValue")
-	obj.Name = "TRIP_IFRAMES"
-	obj.Parent = LocalPlayer
-	iframeObject = obj
+	TripmineIframeRegistry.acquire(IFRAME_OWNER)
 end
 
-local function removeIframes(force)
-	getIframeOwners()[IFRAME_OWNER] = nil
-	if hasIframeOwner() and not force then
-		return
-	end
-
-	if iframeObject then
-		pcall(function()
-			iframeObject:Destroy()
-		end)
-		iframeObject = nil
-	end
-
-	if force then
-		local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
-		if existing then
-			pcall(function()
-				existing:Destroy()
-			end)
-		end
-	end
+local function removeIframes(_force)
+	TripmineIframeRegistry.release(IFRAME_OWNER)
 end
 
 local function getGiftClientHandler()
@@ -192,12 +138,7 @@ local function getSegmentInfo(fromPos, toPos, point)
 	local alpha = math.clamp((point - fromPos):Dot(segment) / (length * length), 0, 1)
 	local closest = fromPos + segment * alpha
 	local distance = (point - closest).Magnitude
-	return {
-		alpha = alpha,
-		distance = distance,
-		closest = closest,
-		length = length,
-	}
+	return alpha, distance
 end
 
 local function getTripmineThreatInfo(hrp)
@@ -221,11 +162,11 @@ local function getTripmineThreatInfo(hrp)
 				local distance = (hrpPos - giftPos).Magnitude
 				nearest = math.min(nearest, distance)
 
-				local segmentInfo = previousHrpPos and getSegmentInfo(previousHrpPos, hrpPos, giftPos)
-				local wasPassed = segmentInfo
-					and segmentInfo.alpha > 0
-					and segmentInfo.alpha < 1
-					and segmentInfo.distance <= IMMUNITY_PASS_CORRIDOR
+				local alpha, corridorDistance
+				if previousHrpPos then
+					alpha, corridorDistance = getSegmentInfo(previousHrpPos, hrpPos, giftPos)
+				end
+				local wasPassed = alpha and alpha > 0 and alpha < 1 and corridorDistance <= IMMUNITY_PASS_CORRIDOR
 				local isOverlapping = distance <= IMMUNITY_PASS_NEAR_DISTANCE
 				if wasPassed or isOverlapping then
 					passThreat = true
@@ -314,10 +255,11 @@ pulseChargerImmunity = function(force)
 	pcall(function()
 		ChargerEvent:FireServer(true)
 	end)
+	globals.TripmineImmunityOwner = watcherToken or Barrier
 end
 
 local function resetChargerImmunity(force)
-	if not force and not immunityArmed then
+	if not immunityArmed and (not force or globals.TripmineImmunityOwner == nil) then
 		return
 	end
 
@@ -328,6 +270,7 @@ local function resetChargerImmunity(force)
 	pcall(function()
 		ChargerEvent:FireServer(false)
 	end)
+	globals.TripmineImmunityOwner = nil
 end
 
 local function armChargerImmunityWindow()
@@ -383,10 +326,10 @@ hookTripmineCollect = function(gift)
 		return
 	end
 
-	hookedTripmineCollects[gift] = true
 	local originalCollect = gift.Collect
 	originalTripmineCollects[gift] = originalCollect
-	gift.Collect = function(self, ...)
+	local wrappedCollect
+	wrappedCollect = function(self, ...)
 		if isTripmineGift(self) and isImmunityModeActive() then
 			armChargerImmunityWindow()
 
@@ -406,19 +349,25 @@ hookTripmineCollect = function(gift)
 
 		return originalCollect(self, ...)
 	end
+	hookedTripmineCollects[gift] = wrappedCollect
+	gift.Collect = wrappedCollect
 end
 
 local function hookTripmineSendCollect()
 	local GCH = getGiftClientHandler()
 	local replicationClient = GCH and GCH.ReplicationClient
-	if not replicationClient or hookedReplicationClients[replicationClient] or type(replicationClient.SendCollect) ~= "function" then
+	if
+		not replicationClient
+		or hookedReplicationClients[replicationClient]
+		or type(replicationClient.SendCollect) ~= "function"
+	then
 		return
 	end
 
-	hookedReplicationClients[replicationClient] = true
 	local originalSendCollect = replicationClient.SendCollect
 	originalReplicationSendCollects[replicationClient] = originalSendCollect
-	replicationClient.SendCollect = function(first, ...)
+	local wrappedSendCollect
+	wrappedSendCollect = function(first, ...)
 		local giftId = first
 		local args = table.pack(...)
 		local colonCall = first == replicationClient
@@ -456,6 +405,8 @@ local function hookTripmineSendCollect()
 
 		return originalSendCollect(first, ...)
 	end
+	hookedReplicationClients[replicationClient] = wrappedSendCollect
+	replicationClient.SendCollect = wrappedSendCollect
 end
 
 local function updateImmunityTripmineWindow()
@@ -506,7 +457,7 @@ local function scheduleImmunityRearm(delaySeconds)
 end
 
 local function bindImmunityRearmWatcher()
-	if playerChildConnection then
+	if playerChildConnection or not isImmunityModeActive() then
 		return
 	end
 
@@ -518,110 +469,96 @@ local function bindImmunityRearmWatcher()
 end
 
 local function startWatcher()
-	if watcherRunning then
+	if watcherRunning or not isImmunityModeActive() then
 		return
 	end
 	watcherRunning = true
-	local token = watcherToken
+	watcherGeneration += 1
+	local generation = watcherGeneration
+	local token = {}
+	watcherToken = token
+	globals.TripmineBarrierWatcherToken = token
+	bindImmunityRearmWatcher()
 
 	task.spawn(function()
-		local cleanedIdle = false
-		while watcherToken == token and globals.TripmineBarrierWatcherToken == token do
-			task.wait(
-				activeController and activeController.TripmineBarrierEnabled and ACTIVE_WATCH_INTERVAL
-					or IDLE_WATCH_INTERVAL
-			)
-
-			local mode = getBarrierMode()
-			if mode ~= lastMode then
-				rearmToken += 1
-				lastMode = mode
-				if mode == OFF_MODE or mode == IMMUNITY_MODE then
-					resetChargerImmunity(true)
-					removeIframes(true)
-				end
+		while
+			watcherGeneration == generation
+			and globals.TripmineBarrierWatcherToken == token
+			and isImmunityModeActive()
+		do
+			task.wait(ACTIVE_WATCH_INTERVAL)
+			if
+				watcherGeneration ~= generation
+				or globals.TripmineBarrierWatcherToken ~= token
+				or not isImmunityModeActive()
+			then
+				break
 			end
-
-			if mode == OFF_MODE then
-				if not cleanedIdle then
-					removeIframes(true)
-					cleanedIdle = true
-				end
-				continue
-			end
-			cleanedIdle = false
-
-			if mode == IFRAMES_MODE then
-				addIframes()
-			elseif mode == IMMUNITY_MODE then
-				updateImmunityTripmineWindow()
-
-				watchNativeChargerState()
-			end
+			updateImmunityTripmineWindow()
+			watchNativeChargerState()
 		end
-		removeIframes(true)
-		if watcherToken == token then
+		if watcherGeneration == generation then
 			watcherRunning = false
+			watcherToken = nil
 		end
 	end)
 end
 
-function Barrier.update(controller)
-	if not watcherRunning then
-		bindImmunityRearmWatcher()
-		startWatcher()
+local function stopWatcher()
+	watcherGeneration += 1
+	if watcherToken and globals.TripmineBarrierWatcherToken == watcherToken then
+		globals.TripmineBarrierWatcherToken = nil
 	end
+	watcherToken = nil
+	watcherRunning = false
+	if playerChildConnection then
+		playerChildConnection:Disconnect()
+		playerChildConnection = nil
+	end
+	resetChargerImmunity(true)
+	previousHrpPos = nil
+	lastChargerState = nil
+end
+
+function Barrier.update(controller)
 	activeController = controller
 	local mode = getBarrierMode()
 	local previousMode = lastMode
 	lastMode = mode
 	if previousMode ~= mode then
 		rearmToken += 1
+		stopWatcher()
 	end
 
 	if mode == OFF_MODE then
-		resetChargerImmunity(true)
-		removeIframes(true)
+		stopWatcher()
+		removeIframes(false)
+	elseif mode == IFRAMES_MODE then
+		stopWatcher()
+		addIframes()
 	elseif mode == IMMUNITY_MODE then
-		if previousMode ~= IMMUNITY_MODE then
-			resetChargerImmunity(true)
-			removeIframes(true)
-		end
+		removeIframes(false)
+		startWatcher()
 		updateImmunityTripmineWindow()
 	end
 end
 
 function Barrier.Init()
-	bindImmunityRearmWatcher()
-	startWatcher()
-	local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
-	if existing then
-		pcall(function()
-			existing:Destroy()
-		end)
-	end
 	print("[NULLSCAPE Defuse] Module ready. Modes: I-Frames | Immunity")
 end
 
 function Barrier.stop()
 	rearmToken += 1
-	resetChargerImmunity(true)
-	removeIframes(true)
-
-	if playerChildConnection then
-		pcall(function()
-			playerChildConnection:Disconnect()
-		end)
-		playerChildConnection = nil
-	end
+	stopWatcher()
+	removeIframes(false)
 
 	for gift, originalCollect in pairs(originalTripmineCollects) do
-		if gift and gift.Collect and gift.Collect ~= originalCollect then
+		if gift and gift.Collect == hookedTripmineCollects[gift] then
 			gift.Collect = originalCollect
 		end
 	end
 	for replicationClient, originalSendCollect in pairs(originalReplicationSendCollects) do
-		if replicationClient and replicationClient.SendCollect and replicationClient.SendCollect ~= originalSendCollect then
+		if replicationClient and replicationClient.SendCollect == hookedReplicationClients[replicationClient] then
 			replicationClient.SendCollect = originalSendCollect
 		end
 	end
@@ -633,9 +570,6 @@ function Barrier.stop()
 	cachedGCH = nil
 	activeController = nil
 	lastMode = OFF_MODE
-	watcherToken = {}
-	globals.TripmineBarrierWatcherToken = watcherToken
-	watcherRunning = false
 end
 
 Barrier.Init()

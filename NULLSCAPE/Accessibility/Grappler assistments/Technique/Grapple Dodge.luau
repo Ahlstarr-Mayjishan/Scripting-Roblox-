@@ -429,7 +429,7 @@ local function collectCandidates(origin, controller, sharkEscape)
 	local terrainLimit =
 		math.min(MAX_TERRAIN_CANDIDATES, tonumber(budget and budget.CandidateLimit) or MAX_TERRAIN_CANDIDATES)
 	local terrainCount = 0
-	for _, entry in ipairs(TerrainMemory.getNearbySurfaces(origin, range)) do
+	for _, entry in ipairs(TerrainMemory.getNearbySurfaces(origin, range, terrainLimit)) do
 		if terrainCount >= terrainLimit then
 			break
 		end

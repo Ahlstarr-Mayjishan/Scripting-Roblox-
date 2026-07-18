@@ -10,9 +10,11 @@ local ChargerAssist = {}
 
 local getgenv = getgenv
 local Players = game:GetService("Players")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local ClassContext = getgenv().loadModule("NULLSCAPE/Core/Class Context.luau")
+local TripmineIframeRegistry = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Tripmine Iframe Registry.luau")
 
 local PREDETONATE_MODE = "PreDetonate"
 local AUTO_MODE = "Auto"
@@ -29,10 +31,11 @@ local PASS_BATCH_MIN_SPEED = 22
 
 local activeController = nil
 local watcherRunning = false
-local watcherToken = {}
+local watcherToken = nil
+local watcherGeneration = 0
 local cachedGCH = nil
-local iframeObject = nil
 local processedMines = {}
+local targetDistances = {}
 local logs = {}
 local lastCollectAt = {}
 local passBatchLocked = false
@@ -41,25 +44,9 @@ local characterConnection = nil
 
 local globals = getgenv()._NULLSCAPE_Globals or {}
 getgenv()._NULLSCAPE_Globals = globals
-globals.ChargerTripmineWatcherToken = watcherToken
-globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
+globals.ChargerTripmineWatcherToken = nil
 
 local IFRAME_OWNER = "ChargerAssist"
-
-local function getIframeOwners()
-	globals.TripmineIframeOwners = globals.TripmineIframeOwners or {}
-	return globals.TripmineIframeOwners
-end
-
-local function hasIframeOwner()
-	for _, owns in pairs(getIframeOwners()) do
-		if owns then
-			return true
-		end
-	end
-
-	return false
-end
 
 local function isChargerAssistMode(mode)
 	return mode == AUTO_MODE or mode == PREDETONATE_MODE or mode == PASS_BATCH_MODE
@@ -73,50 +60,12 @@ local function isActiveForNativeClass(controller)
 		and isChargerAssistMode(controller.ChargerTripmineMode)
 end
 
-local function hasIframes()
-	return iframeObject ~= nil and iframeObject.Parent ~= nil
-end
-
 local function addIframes()
-	getIframeOwners()[IFRAME_OWNER] = true
-
-	if hasIframes() then
-		return
-	end
-
-	local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
-	if existing then
-		iframeObject = existing
-		return
-	end
-
-	local obj = Instance.new("BoolValue")
-	obj.Name = "TRIP_IFRAMES"
-	obj.Parent = LocalPlayer
-	iframeObject = obj
+	TripmineIframeRegistry.acquire(IFRAME_OWNER)
 end
 
-local function removeIframes(force)
-	getIframeOwners()[IFRAME_OWNER] = nil
-	if hasIframeOwner() and not force then
-		return
-	end
-
-	if iframeObject then
-		pcall(function()
-			iframeObject:Destroy()
-		end)
-		iframeObject = nil
-	end
-
-	if force then
-		local existing = LocalPlayer:FindFirstChild("TRIP_IFRAMES")
-		if existing then
-			pcall(function()
-				existing:Destroy()
-			end)
-		end
-	end
+local function removeIframes(_force)
+	TripmineIframeRegistry.release(IFRAME_OWNER)
 end
 
 local function getGiftClientHandler()
@@ -124,8 +73,7 @@ local function getGiftClientHandler()
 		return cachedGCH
 	end
 
-	local replicatedFirst = game:GetService("ReplicatedFirst")
-	local clientModules = replicatedFirst:FindFirstChild("ClientModules")
+	local clientModules = ReplicatedFirst:FindFirstChild("ClientModules")
 		or ReplicatedStorage:FindFirstChild("ClientModules")
 	local giftClient = clientModules and clientModules:FindFirstChild("GiftClient")
 	local handlerModule = giftClient and giftClient:FindFirstChild("GiftClientHandler")
@@ -146,12 +94,14 @@ end
 
 local function clearMineState(giftId)
 	processedMines[giftId] = nil
-	processedMines["__dist_" .. giftId] = nil
+	targetDistances[giftId] = nil
 	lastCollectAt[giftId] = nil
+	logs[giftId] = nil
 end
 
 local function clearState()
 	table.clear(processedMines)
+	table.clear(targetDistances)
 	table.clear(logs)
 	table.clear(lastCollectAt)
 	passBatchLocked = false
@@ -159,12 +109,16 @@ local function clearState()
 end
 
 local function logOnce(giftId, reason, dist)
-	local key = reason .. ":" .. tostring(giftId)
-	if logs[key] then
+	local giftLogs = logs[giftId]
+	if not giftLogs then
+		giftLogs = {}
+		logs[giftId] = giftLogs
+	end
+	if giftLogs[reason] then
 		return
 	end
 
-	logs[key] = true
+	giftLogs[reason] = true
 	print("[NULLSCAPE Charger Assist] " .. reason, giftId, "at", math.round(dist), "studs")
 end
 
@@ -255,12 +209,7 @@ local function getSegmentInfo(fromPos, toPos, point)
 	local alpha = math.clamp((point - fromPos):Dot(segment) / (length * length), 0, 1)
 	local closest = fromPos + segment * alpha
 	local distance = (point - closest).Magnitude
-	return {
-		alpha = alpha,
-		distance = distance,
-		closest = closest,
-		length = length,
-	}
+	return alpha, distance
 end
 
 local function updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
@@ -268,7 +217,7 @@ local function updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
 	if not charging then
 		passBatchLocked = false
 		previousHrpPos = nil
-		removeIframes(true)
+		removeIframes(false)
 		return
 	end
 
@@ -284,41 +233,40 @@ local function updatePassBatch(char, hrp, hrpPos, GCH, batchDistance)
 		return
 	end
 
-	local candidates = {}
+	local bestId = nil
+	local bestGift = nil
+	local bestPosition = nil
+	local bestAlpha = math.huge
 	for giftId, gift in pairs(GCH.Gifts) do
 		if gift.Tripmine and not gift.Collected and not processedMines[giftId] then
 			local giftPos = getGiftPosition(gift)
 			local dist = giftPos and (hrpPos - giftPos).Magnitude or math.huge
-			local segmentInfo = giftPos and getSegmentInfo(previousHrpPos, hrpPos, giftPos)
-			local wasPassed = segmentInfo
-				and segmentInfo.alpha > 0
-				and segmentInfo.alpha < 1
-				and segmentInfo.distance <= PASS_BATCH_CORRIDOR
+			local segmentAlpha, segmentDistance = getSegmentInfo(previousHrpPos, hrpPos, giftPos)
+			local wasPassed = segmentAlpha
+				and segmentAlpha > 0
+				and segmentAlpha < 1
+				and segmentDistance <= PASS_BATCH_CORRIDOR
 			local isOverlapping = dist <= NEAR_PASS_DISTANCE
 
 			if (wasPassed or isOverlapping) and dist <= batchDistance then
-				table.insert(candidates, {
-					id = giftId,
-					gift = gift,
-					pos = giftPos,
-					alpha = segmentInfo and segmentInfo.alpha or 1,
-				})
+				local alpha = segmentAlpha or 1
+				if alpha < bestAlpha then
+					bestId = giftId
+					bestGift = gift
+					bestPosition = giftPos
+					bestAlpha = alpha
+				end
 			end
 		end
 	end
 
-	table.sort(candidates, function(a, b)
-		return a.alpha < b.alpha
-	end)
-
-	local candidate = candidates[1]
-	if candidate then
-		local dist = (hrpPos - candidate.pos).Magnitude
-		local ok = tryCollectTripmine(candidate.id, candidate.gift, "PassBatchSingle", dist)
+	if bestId then
+		local dist = (hrpPos - bestPosition).Magnitude
+		local ok = tryCollectTripmine(bestId, bestGift, "PassBatchSingle", dist)
 		if ok then
-			processedMines[candidate.id] = true
+			processedMines[bestId] = true
 			passBatchLocked = true
-			logOnce(candidate.id, "PassBatchSingle", dist)
+			logOnce(bestId, "PassBatchSingle", dist)
 		end
 	end
 
@@ -343,6 +291,11 @@ local function startWatcher()
 		return
 	end
 	watcherRunning = true
+	watcherGeneration += 1
+	local generation = watcherGeneration
+	local token = {}
+	watcherToken = token
+	globals.ChargerTripmineWatcherToken = token
 
 	if not characterConnection and LocalPlayer then
 		characterConnection = LocalPlayer.CharacterAdded:Connect(function()
@@ -356,10 +309,13 @@ local function startWatcher()
 
 	task.spawn(function()
 		local cleanedIdle = false
-		while not globals or globals.ChargerTripmineWatcherToken == watcherToken do
+		while watcherGeneration == generation and globals.ChargerTripmineWatcherToken == token do
 			local mode = activeController and activeController.ChargerTripmineMode
 			local active = isActiveForNativeClass(activeController)
 			task.wait(active and ACTIVE_WATCH_INTERVAL or IDLE_WATCH_INTERVAL)
+			if watcherGeneration ~= generation or globals.ChargerTripmineWatcherToken ~= token then
+				break
+			end
 
 			mode = activeController and activeController.ChargerTripmineMode
 			active = isActiveForNativeClass(activeController)
@@ -377,7 +333,7 @@ local function startWatcher()
 			local hrp = char and char:FindFirstChild("HumanoidRootPart")
 			if not hrp then
 				if mode == PASS_BATCH_MODE then
-					removeIframes(true)
+					removeIframes(false)
 					clearState()
 				end
 				continue
@@ -399,19 +355,17 @@ local function startWatcher()
 				PASS_BATCH_DISTANCE
 			)
 
-			local staleMineIds = {}
 			for id in pairs(processedMines) do
-				local idText = tostring(id)
-				if idText:sub(1, 7) ~= "__dist_" then
-					local giftId = tonumber(id)
-					if not GCH.Gifts[id] and (not giftId or not GCH.Gifts[giftId]) then
-						table.insert(staleMineIds, id)
-					end
+				local giftId = tonumber(id)
+				if not GCH.Gifts[id] and (not giftId or not GCH.Gifts[giftId]) then
+					clearMineState(id)
 				end
 			end
-
-			for _, id in ipairs(staleMineIds) do
-				clearMineState(id)
+			for id in pairs(targetDistances) do
+				local giftId = tonumber(id)
+				if not GCH.Gifts[id] and (not giftId or not GCH.Gifts[giftId]) then
+					clearMineState(id)
+				end
 			end
 
 			if mode == PASS_BATCH_MODE then
@@ -440,12 +394,12 @@ local function startWatcher()
 						continue
 					end
 
-					if not processedMines["__dist_" .. giftId] then
+					if not targetDistances[giftId] then
 						local targetDist = baseDist + (jitter > 0 and math.random(-jitter, jitter) or 0)
-						processedMines["__dist_" .. giftId] = math.max(targetDist, 5)
+						targetDistances[giftId] = math.max(targetDist, 5)
 					end
 
-					local targetDist = processedMines["__dist_" .. giftId]
+					local targetDist = targetDistances[giftId]
 					local shouldCollect = dist <= targetDist
 					if mode == AUTO_MODE then
 						shouldCollect = shouldAutoPredetonate(hrp, giftPos, dist, targetDist)
@@ -465,10 +419,28 @@ local function startWatcher()
 				end
 			end
 		end
-		removeIframes(true)
-		clearState()
-		watcherRunning = false
+		if watcherGeneration == generation then
+			removeIframes(true)
+			clearState()
+			watcherRunning = false
+			watcherToken = nil
+		end
 	end)
+end
+
+local function stopWatcher()
+	watcherGeneration += 1
+	if watcherToken and globals.ChargerTripmineWatcherToken == watcherToken then
+		globals.ChargerTripmineWatcherToken = nil
+	end
+	watcherToken = nil
+	watcherRunning = false
+	if characterConnection then
+		characterConnection:Disconnect()
+		characterConnection = nil
+	end
+	removeIframes(true)
+	clearState()
 end
 
 function ChargerAssist.update(controller)
@@ -477,14 +449,19 @@ function ChargerAssist.update(controller)
 		controller.ChargerTripmineMode = PASS_BATCH_MODE
 	end
 
-	if not isActiveForNativeClass(controller) then
-		removeIframes(true)
-		clearState()
+	if isActiveForNativeClass(controller) then
+		startWatcher()
+	else
+		stopWatcher()
 	end
 end
 
+function ChargerAssist.stop()
+	activeController = nil
+	stopWatcher()
+end
+
 function ChargerAssist.Init()
-	startWatcher()
 	print("[NULLSCAPE Charger Assist] Module ready. Modes: Auto | PassBatch | PreDetonate")
 end
 

@@ -26,6 +26,10 @@ local running = false
 local savedCFrame = nil
 local knownPylons = {}
 local pylonAddedConnection = nil
+local pylonRemovedConnection = nil
+local pylonRegistryDirty = true
+local lastPylonRefreshAt = -math.huge
+local PYLON_SAFETY_REFRESH_INTERVAL = 1
 
 local function setStatus(controller, status, detail)
 	if controller then
@@ -169,10 +173,15 @@ local function rememberPylon(model)
 		record.Position = position
 	end
 	record.Completed = record.Completed or isCompleted(model)
+	pylonRegistryDirty = true
 	return record
 end
 
-local function refreshKnownPylons()
+local function refreshKnownPylons(force)
+	local now = os.clock()
+	if not force and not pylonRegistryDirty and now - lastPylonRefreshAt < PYLON_SAFETY_REFRESH_INTERVAL then
+		return
+	end
 	for _, model in ipairs(CollectionService:GetTagged("Pylon")) do
 		rememberPylon(model)
 	end
@@ -187,10 +196,14 @@ local function refreshKnownPylons()
 			record.Model = nil
 		end
 	end
+	pylonRegistryDirty = false
+	lastPylonRefreshAt = now
 end
 
 local function resetKnownPylons()
 	table.clear(knownPylons)
+	pylonRegistryDirty = true
+	lastPylonRefreshAt = -math.huge
 end
 
 local function startPylonObserver()
@@ -199,6 +212,7 @@ local function startPylonObserver()
 	end
 
 	pylonAddedConnection = CollectionService:GetInstanceAddedSignal("Pylon"):Connect(function(model)
+		pylonRegistryDirty = true
 		task.spawn(function()
 			for _ = 1, 20 do
 				if not enabled then
@@ -211,12 +225,24 @@ local function startPylonObserver()
 			end
 		end)
 	end)
+	pylonRemovedConnection = CollectionService:GetInstanceRemovedSignal("Pylon"):Connect(function(model)
+		local record = findKnownPylon(model)
+		if record then
+			record.Completed = record.Completed or isCompleted(model)
+			record.Model = nil
+		end
+		pylonRegistryDirty = true
+	end)
 end
 
 local function stopPylonObserver()
 	if pylonAddedConnection then
 		pylonAddedConnection:Disconnect()
 		pylonAddedConnection = nil
+	end
+	if pylonRemovedConnection then
+		pylonRemovedConnection:Disconnect()
+		pylonRemovedConnection = nil
 	end
 end
 
@@ -284,7 +310,7 @@ local function resolveCandidate(controller, candidate)
 	if Context and typeof(Context.requestStreamAround) == "function" then
 		Context.requestStreamAround(record.Position, STREAM_REQUEST_TIMEOUT)
 	end
-	refreshKnownPylons()
+	refreshKnownPylons(true)
 
 	model = record.Model
 	root = model and model:IsDescendantOf(workspace) and getPylonRoot(model) or nil
@@ -336,7 +362,9 @@ end
 local function restorePosition(controller)
 	local returnCFrame = savedCFrame
 	savedCFrame = nil
-	if not (controller and not controller.Destroyed and controller.PylonActivatorReturnAfter ~= false and returnCFrame) then
+	if
+		not (controller and not controller.Destroyed and controller.PylonActivatorReturnAfter ~= false and returnCFrame)
+	then
 		return false
 	end
 	if not isInRound() or controller.GiftFarmPolicyHolding == true then

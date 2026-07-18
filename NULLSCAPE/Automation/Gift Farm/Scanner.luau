@@ -8,11 +8,19 @@ local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.lua
 local Progress = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Progress.luau")
 local Collapse = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Collapse.luau")
 local GoldenEfficiency = getgenv().loadModule("NULLSCAPE/Automation/GoldenEfficiency.luau")
+local NativeGiftRegistry = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Native Gift Registry.luau")
 
 local Scanner = {}
 local SPAWN_SETTLE = 0.22
 local GOLDEN_SPAWN_SETTLE = 0.05
 local FANNY_PACK_TILE_PRIORITY = 4
+local FANNY_PACK_CACHE_INTERVAL = 0.4
+local SCAN_SAFETY_INTERVAL = 0.65
+local SCAN_FRAME_BUDGET = 0.003
+local SCAN_CHECK_INTERVAL = 48
+local TRACKED_GIFT_TYPES = { "PassageGift", "GoldenGift", "Gift" }
+local GOLDEN_GIFT_TYPES = { "PassageGift", "GoldenGift" }
+
 local seenGifts = setmetatable({}, { __mode = "k" })
 local peakRawGolden = 0
 local peakRawNormal = 0
@@ -20,8 +28,55 @@ local cachedUpgradeHandler = nil
 local lastFannyPackCheckAt = -math.huge
 local cachedHasFannyPack = false
 local cachedFannyPackTiles = nil
-local FANNY_PACK_CACHE_INTERVAL = 0.4
-local GOLDEN_GIFT_TYPES = { "PassageGift", "GoldenGift" }
+local fannyPackTileSet = {}
+local fannyPackConnections = {}
+local fannyPackTrackingStarted = false
+local fannyPackTilesDirty = true
+local lastScanRevision = -1
+local lastScanAt = -math.huge
+local lastConfigSignature = nil
+local nextSettleAt = nil
+local cachedCandidates = nil
+local cachedInfo = nil
+local stats = {
+	Scans = 0,
+	CacheHits = 0,
+	LastDuration = 0,
+	LastGiftCount = 0,
+}
+
+local function startFannyPackTracking()
+	if fannyPackTrackingStarted then
+		return
+	end
+	fannyPackTrackingStarted = true
+	for _, tile in ipairs(CollectionService:GetTagged("FannyPackTile")) do
+		fannyPackTileSet[tile] = true
+	end
+	fannyPackConnections[#fannyPackConnections + 1] = CollectionService:GetInstanceAddedSignal("FannyPackTile")
+		:Connect(function(tile)
+			fannyPackTileSet[tile] = true
+			fannyPackTilesDirty = true
+		end)
+	fannyPackConnections[#fannyPackConnections + 1] = CollectionService:GetInstanceRemovedSignal("FannyPackTile")
+		:Connect(function(tile)
+			fannyPackTileSet[tile] = nil
+			fannyPackTilesDirty = true
+		end)
+end
+
+local function rebuildFannyPackTiles()
+	local tiles = {}
+	for tile in pairs(fannyPackTileSet) do
+		if tile and tile:IsA("BasePart") and tile:IsDescendantOf(workspace) then
+			tiles[#tiles + 1] = tile
+		else
+			fannyPackTileSet[tile] = nil
+		end
+	end
+	cachedFannyPackTiles = tiles
+	fannyPackTilesDirty = false
+end
 
 local function getUpgradeHandler()
 	if cachedUpgradeHandler ~= nil then
@@ -92,18 +147,67 @@ local function getFannyPackTilePriority(position, fannyPackTiles)
 			return FANNY_PACK_TILE_PRIORITY
 		end
 	end
-
 	return 0
 end
 
 local function getFannyPackState(now)
+	startFannyPackTracking()
 	if now - lastFannyPackCheckAt >= FANNY_PACK_CACHE_INTERVAL then
 		cachedHasFannyPack = getActiveUpgradeStack("FannyPack") > 0
-		cachedFannyPackTiles = if cachedHasFannyPack then CollectionService:GetTagged("FannyPackTile") else nil
 		lastFannyPackCheckAt = now
 	end
+	if cachedHasFannyPack and (fannyPackTilesDirty or cachedFannyPackTiles == nil) then
+		rebuildFannyPackTiles()
+	end
+	return cachedHasFannyPack, cachedHasFannyPack and cachedFannyPackTiles or nil
+end
 
-	return cachedHasFannyPack, cachedFannyPackTiles
+local function visitLiveGifts(gch, callback)
+	local gifts = gch and gch.Gifts
+	if typeof(gifts) ~= "table" then
+		return 0
+	end
+	local giftsByType = gch.GiftsByType
+	local visitedIds = {}
+	local count = 0
+	local sliceStartedAt = os.clock()
+	local function visit(giftId, gift)
+		if visitedIds[giftId] then
+			return
+		end
+		visitedIds[giftId] = true
+		count += 1
+		callback(gift)
+		if count % SCAN_CHECK_INTERVAL == 0 and os.clock() - sliceStartedAt >= SCAN_FRAME_BUDGET then
+			task.wait()
+			sliceStartedAt = os.clock()
+		end
+	end
+
+	if typeof(giftsByType) == "table" then
+		for _, giftType in ipairs(TRACKED_GIFT_TYPES) do
+			local giftIds = giftsByType[giftType]
+			if typeof(giftIds) == "table" then
+				for giftId in pairs(giftIds) do
+					visit(giftId, gifts[giftId])
+				end
+			end
+		end
+		if count == 0 and next(gifts) ~= nil then
+			for giftId, gift in pairs(gifts) do
+				visit(giftId, gift)
+			end
+		end
+	else
+		for giftId, gift in pairs(gifts) do
+			visit(giftId, gift)
+		end
+	end
+	return count
+end
+
+local function getConfigSignature(controller)
+	return tostring(controller and controller.GiftFarmGoldenEfficiency or 100)
 end
 
 function Scanner.reset()
@@ -112,19 +216,35 @@ function Scanner.reset()
 	peakRawNormal = 0
 	lastFannyPackCheckAt = -math.huge
 	cachedHasFannyPack = false
-	cachedFannyPackTiles = nil
+	lastScanRevision = -1
+	lastScanAt = -math.huge
+	lastConfigSignature = nil
+	nextSettleAt = nil
+	cachedCandidates = nil
+	cachedInfo = nil
 	if Collapse and typeof(Collapse.reset) == "function" then
 		Collapse.reset()
 	end
 end
 
+function Scanner.stop()
+	for _, connection in ipairs(fannyPackConnections) do
+		connection:Disconnect()
+	end
+	table.clear(fannyPackConnections)
+	table.clear(fannyPackTileSet)
+	fannyPackTrackingStarted = false
+	fannyPackTilesDirty = true
+	cachedFannyPackTiles = nil
+	if Collapse and typeof(Collapse.stop) == "function" then
+		Collapse.stop()
+	end
+	Scanner.reset()
+end
+
 function Scanner.isGoldenTargetReached(gch, controller)
 	local collected, maximum = Progress.getGoldenGiftProgress(gch)
-	return GoldenEfficiency.evaluate(
-		controller and controller.GiftFarmGoldenEfficiency,
-		collected,
-		maximum
-	).Reached
+	return GoldenEfficiency.evaluate(controller and controller.GiftFarmGoldenEfficiency, collected, maximum).Reached
 end
 
 function Scanner.getLiveGoldenKind(gch, controller)
@@ -148,87 +268,99 @@ function Scanner.getLiveGoldenKind(gch, controller)
 			end
 		end
 	end
-
 	return nil
 end
 
 function Scanner.scan(controller, gch)
+	NativeGiftRegistry.start()
+	local now = os.clock()
+	local revision = NativeGiftRegistry.getRevision()
+	local configSignature = getConfigSignature(controller)
+	local settleDue = nextSettleAt ~= nil and now >= nextSettleAt
+	if
+		cachedCandidates
+		and revision == lastScanRevision
+		and configSignature == lastConfigSignature
+		and not settleDue
+		and now - lastScanAt < SCAN_SAFETY_INTERVAL
+	then
+		stats.CacheHits += 1
+		return cachedCandidates, cachedInfo
+	end
+
+	local scanStartedAt = os.clock()
 	local goldenGifts = {}
 	local normalGifts = {}
-	local now = os.clock()
 	local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 	local goldenCollected, goldenMax, goldenRatio = Progress.getGoldenGiftProgress(gch)
-	local goldenEfficiency = GoldenEfficiency.evaluate(
-		controller and controller.GiftFarmGoldenEfficiency,
-		goldenCollected,
-		goldenMax
-	)
-	local rawGolden = 0
-	local rawPassage = 0
-	local rawNormal = 0
-	local settledGolden = 0
-	local settledPassage = 0
-	local settledNormal = 0
+	local goldenEfficiency =
+		GoldenEfficiency.evaluate(controller and controller.GiftFarmGoldenEfficiency, goldenCollected, goldenMax)
+	local rawGolden, rawPassage, rawNormal = 0, 0, 0
+	local settledGolden, settledPassage, settledNormal = 0, 0, 0
 	local hasFannyPack, fannyPackTiles = getFannyPackState(now)
-	local collapseTiles = if Collapse and typeof(Collapse.prepareScan) == "function"
-		then Collapse.prepareScan()
-		else nil
-	for _, gift in pairs(gch.Gifts or {}) do
-		if gift and not gift.Destroyed and not gift.Collected and not gift.Tripmine then
-			local pos = Context.getGiftPosition(gift)
-			local priority = Progress.getGiftPriority(gift, normalRatio, controller)
-			if pos and priority ~= nil then
-				local isGolden = gift.Golden == true
-				local isPassage = gift.Type == "PassageGift"
-				if isGolden then
-					rawGolden += 1
-					if isPassage then
-						rawPassage += 1
-					end
-				else
-					rawNormal += 1
-				end
-				if not seenGifts[gift] then
-					seenGifts[gift] = now
-				end
-				local settleTime = isGolden and GOLDEN_SPAWN_SETTLE or SPAWN_SETTLE
-				if now - seenGifts[gift] >= settleTime then
-					if isGolden then
-						settledGolden += 1
-						if isPassage then
-							settledPassage += 1
-						end
-					else
-						settledNormal += 1
-					end
-
-					local collapsePriority = 0
-					if Collapse and typeof(Collapse.getGiftUrgency) == "function" then
-						collapsePriority = Collapse.getGiftUrgency(pos, collapseTiles)
-					end
-					local candidates = if isGolden then goldenGifts else normalGifts
-					candidates[#candidates + 1] = {
-						rawObj = gift,
-						pos = pos,
-						priority = priority,
-						collapsePriority = collapsePriority,
-						bonusTilePriority = getFannyPackTilePriority(pos, fannyPackTiles),
-						id = gift.Id or 0,
-						golden = isGolden,
-						passage = isPassage,
-					}
-				end
-			end
+	local collapseTiles = Collapse and typeof(Collapse.prepareScan) == "function" and Collapse.prepareScan() or nil
+	local earliestSettleAt = nil
+	local visitedCount = visitLiveGifts(gch, function(gift)
+		if not (gift and not gift.Destroyed and not gift.Collected and not gift.Tripmine) then
+			return
 		end
-	end
+		local pos = Context.getGiftPosition(gift)
+		local priority = Progress.getGiftPriority(gift, normalRatio, controller)
+		if not pos or priority == nil then
+			return
+		end
+
+		local isGolden = gift.Golden == true
+		local isPassage = gift.Type == "PassageGift"
+		if isGolden then
+			rawGolden += 1
+			if isPassage then
+				rawPassage += 1
+			end
+		else
+			rawNormal += 1
+		end
+		if not seenGifts[gift] then
+			seenGifts[gift] = now
+		end
+		local settleTime = isGolden and GOLDEN_SPAWN_SETTLE or SPAWN_SETTLE
+		local settleAt = seenGifts[gift] + settleTime
+		if now < settleAt then
+			earliestSettleAt = math.min(earliestSettleAt or settleAt, settleAt)
+			return
+		end
+
+		if isGolden then
+			settledGolden += 1
+			if isPassage then
+				settledPassage += 1
+			end
+		else
+			settledNormal += 1
+		end
+		local collapsePriority = Collapse
+				and typeof(Collapse.getGiftUrgency) == "function"
+				and Collapse.getGiftUrgency(pos, collapseTiles)
+			or 0
+		local candidates = isGolden and goldenGifts or normalGifts
+		candidates[#candidates + 1] = {
+			rawObj = gift,
+			pos = pos,
+			priority = priority,
+			collapsePriority = collapsePriority,
+			bonusTilePriority = getFannyPackTilePriority(pos, fannyPackTiles),
+			id = gift.Id or 0,
+			golden = isGolden,
+			passage = isPassage,
+		}
+	end)
 
 	peakRawGolden = math.max(peakRawGolden, rawGolden)
 	peakRawNormal = math.max(peakRawNormal, rawNormal)
-	local actionableRawGolden = if goldenEfficiency.Reached then 0 else rawGolden
-	local actionableRawPassage = if goldenEfficiency.Reached then 0 else rawPassage
-	local gifts = if actionableRawGolden > 0 then goldenGifts else normalGifts
-
-	return gifts, {
+	local actionableRawGolden = goldenEfficiency.Reached and 0 or rawGolden
+	local actionableRawPassage = goldenEfficiency.Reached and 0 or rawPassage
+	local candidates = actionableRawGolden > 0 and goldenGifts or normalGifts
+	local info = {
 		Golden = settledGolden,
 		Passage = settledPassage,
 		Normal = settledNormal,
@@ -239,19 +371,34 @@ function Scanner.scan(controller, gch)
 		RawNormal = rawNormal,
 		PeakRawGolden = peakRawGolden,
 		PeakRawNormal = peakRawNormal,
-		GoldenRemainingRatio = if peakRawGolden > 0 then rawGolden / peakRawGolden else 1,
+		GoldenRemainingRatio = peakRawGolden > 0 and rawGolden / peakRawGolden or 1,
 		GoldenCollected = goldenCollected,
 		GoldenMax = goldenMax,
 		GoldenProgressRatio = goldenRatio,
 		GoldenProgressComplete = goldenMax > 0 and goldenCollected >= goldenMax,
 		GoldenTargetPercent = goldenEfficiency.TargetPercent,
 		GoldenTargetReached = goldenEfficiency.Reached,
-		NormalRemainingRatio = if peakRawNormal > 0 then rawNormal / peakRawNormal else 1,
+		NormalRemainingRatio = peakRawNormal > 0 and rawNormal / peakRawNormal or 1,
 		CollapseTracked = true,
 		FannyPackTracked = hasFannyPack,
 		GoldenLocked = actionableRawGolden > 0,
 		PassageLocked = actionableRawPassage > 0,
 	}
+
+	lastScanRevision = revision
+	lastConfigSignature = configSignature
+	lastScanAt = now
+	nextSettleAt = earliestSettleAt
+	cachedCandidates = candidates
+	cachedInfo = info
+	stats.Scans += 1
+	stats.LastDuration = os.clock() - scanStartedAt
+	stats.LastGiftCount = visitedCount
+	return candidates, info
+end
+
+function Scanner.getStats()
+	return table.clone(stats)
 end
 
 return Scanner

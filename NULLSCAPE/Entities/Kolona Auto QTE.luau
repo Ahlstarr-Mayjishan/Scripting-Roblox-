@@ -15,7 +15,8 @@ local ACTIVE_INTERVAL = 0.025
 local IDLE_INTERVAL = 0.15
 local ABILITY_HOLD = 0.06
 local JUMP_STATE_TIMEOUT = 0.08
-local MOVEMENT_RETRY_INTERVAL = 0.05
+local MOVEMENT_RETRY_INTERVAL = 0.5
+local TICK_SOUND_REFRESH_INTERVAL = 1
 local INVERTED_MAX = 0.08
 local GRAPPLE_RANGE = 90
 local FATAL_TICK_FALLBACK_DELAY = 0.3
@@ -34,6 +35,27 @@ local ownedSpecial = nil
 local wasKolonaActive = false
 local castGeneration = 0
 local tickStates = setmetatable({}, { __mode = "k" })
+local guiCache = {
+	Main = nil,
+	Background = nil,
+	Number = nil,
+	Eyes = nil,
+	DeathSpin = nil,
+	TickFolder = nil,
+	TickSounds = {},
+	NextTickSoundRefreshAt = 0,
+}
+
+local function clearGuiCache()
+	guiCache.Main = nil
+	guiCache.Background = nil
+	guiCache.Number = nil
+	guiCache.Eyes = nil
+	guiCache.DeathSpin = nil
+	guiCache.TickFolder = nil
+	table.clear(guiCache.TickSounds)
+	guiCache.NextTickSoundRefreshAt = 0
+end
 
 local function getCharacter()
 	if GameState and typeof(GameState.getCharacter) == "function" then
@@ -50,9 +72,28 @@ local function getHumanoid(character)
 end
 
 local function getMain()
+	if guiCache.Main and guiCache.Main.Parent then
+		return guiCache.Main
+	end
+	clearGuiCache()
 	local playerGui = LocalPlayer and LocalPlayer:FindFirstChildOfClass("PlayerGui")
 	local kolonaGui = playerGui and playerGui:FindFirstChild("Kolona")
-	return kolonaGui and kolonaGui:FindFirstChild("Main")
+	guiCache.Main = kolonaGui and kolonaGui:FindFirstChild("Main")
+	return guiCache.Main
+end
+
+local function getCachedChild(main, key, name, className)
+	local child = guiCache[key]
+	if child and child.Parent then
+		return child
+	end
+	child = main and main:FindFirstChild(name)
+	if child and (not className or child:IsA(className)) then
+		guiCache[key] = child
+		return child
+	end
+	guiCache[key] = nil
+	return nil
 end
 
 local function isKolonaActive(main)
@@ -68,12 +109,12 @@ local function isKolonaActive(main)
 		return false
 	end
 
-	local background = main:FindFirstChild("Background")
+	local background = getCachedChild(main, "Background", "Background", "ImageLabel")
 	return background and background:IsA("ImageLabel") and background.ImageTransparency < 0.99
 end
 
 local function isInverted(main)
-	local background = main and main:FindFirstChild("Background")
+	local background = getCachedChild(main, "Background", "Background", "GuiObject")
 	if not (background and background:IsA("GuiObject")) then
 		return false
 	end
@@ -83,12 +124,17 @@ local function isInverted(main)
 end
 
 local function getNumberLabel(main)
-	local number = main and main:FindFirstChild("Number")
+	local number = guiCache.Number
+	if number and number.Parent then
+		return number
+	end
+	number = main and main:FindFirstChild("Number")
 	if not number and main and main.Parent then
 		local centered = main.Parent:FindFirstChild("CenteredMain")
 		number = centered and centered:FindFirstChild("Number")
 	end
-	return number and number:IsA("TextLabel") and number or nil
+	guiCache.Number = number and number:IsA("TextLabel") and number or nil
+	return guiCache.Number
 end
 
 local function resetCycle()
@@ -111,15 +157,35 @@ local function captureTarget(main)
 	end
 end
 
-local function updateTick(main)
-	local folder = main and main:FindFirstChild("tick")
+local function refreshTickSounds(main, force)
+	local folder = guiCache.TickFolder
+	if not (folder and folder.Parent) then
+		folder = main and main:FindFirstChild("tick")
+		guiCache.TickFolder = folder
+		force = true
+	end
 	if not folder then
-		return
+		return guiCache.TickSounds
 	end
 
+	local now = time()
+	if not force and now < guiCache.NextTickSoundRefreshAt then
+		return guiCache.TickSounds
+	end
+	guiCache.NextTickSoundRefreshAt = now + TICK_SOUND_REFRESH_INTERVAL
+	table.clear(guiCache.TickSounds)
 	for _, sound in ipairs(folder:GetChildren()) do
 		if sound:IsA("Sound") then
-			local nowPlaying = sound.IsPlaying == true
+			table.insert(guiCache.TickSounds, sound)
+		end
+	end
+	return guiCache.TickSounds
+end
+
+local function updateTick(main)
+	for _, sound in ipairs(refreshTickSounds(main, false)) do
+		if sound.Parent then
+			local nowPlaying = sound.IsPlaying
 			if nowPlaying and tickStates[sound] ~= true then
 				currentTick = tonumber(sound.Name) or currentTick
 				if targetNumber and currentTick == targetNumber then
@@ -142,12 +208,12 @@ local function isFatalWindow(main)
 		end
 	end
 
-	local eyes = main and main:FindFirstChild("Eyes")
+	local eyes = getCachedChild(main, "Eyes", "Eyes", "ImageLabel")
 	if eyes and eyes:IsA("ImageLabel") and eyes.ImageTransparency < 0.5 then
 		return true
 	end
 
-	local deathSpin = main and main:FindFirstChild("deathSpin")
+	local deathSpin = getCachedChild(main, "DeathSpin", "deathSpin", "Sound")
 	return deathSpin and deathSpin:IsA("Sound") and deathSpin.IsPlaying == true
 end
 
@@ -181,13 +247,16 @@ local function findMovement(character, humanoid)
 
 	local globals = getgenv()._NULLSCAPE_Globals
 	if globals then
-		local candidates = table.pack(globals.NullscapeStaminaMovement, globals.NullscapeRailLocalMovement)
-		for index = 1, candidates.n do
-			local candidate = candidates[index]
-			if isLocalMovement(candidate, character, humanoid) then
-				cachedMovement = candidate
-				return candidate
-			end
+		local staminaMovement = globals.NullscapeStaminaMovement
+		if isLocalMovement(staminaMovement, character, humanoid) then
+			cachedMovement = staminaMovement
+			return staminaMovement
+		end
+
+		local railMovement = globals.NullscapeRailLocalMovement
+		if isLocalMovement(railMovement, character, humanoid) then
+			cachedMovement = railMovement
+			return railMovement
 		end
 	end
 
@@ -430,12 +499,19 @@ local function run(controller)
 
 			if active and not wasKolonaActive then
 				resetCycle()
+				refreshTickSounds(main, true)
 			end
 			wasKolonaActive = active
 
+			if character and humanoid and not isLocalMovement(cachedMovement, character, humanoid) then
+				findMovement(character, humanoid)
+			end
+
 			if not (active and character and main and humanoid) then
 				releaseOwnedCast()
-				resetCycle()
+				if targetNumber or currentTick or fatalTickStartedAt or cycleComplete or next(tickStates) ~= nil then
+					resetCycle()
+				end
 				task.wait(IDLE_INTERVAL)
 				continue
 			end
@@ -470,6 +546,8 @@ function AutoQTE.disable()
 	releaseOwnedCast()
 	resetCycle()
 	cachedMovement = nil
+	lastMovementSearchAt = -1000
+	clearGuiCache()
 	wasKolonaActive = false
 	return true
 end

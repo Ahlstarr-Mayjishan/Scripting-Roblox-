@@ -10,6 +10,20 @@ local MAX_REFINED_CENTERS = 6
 local EDGE_PENALTY_RATIO = 0.92
 local Y_SCALE = 0.8
 local ROOT_OFFSET = Vector3.new(0, 3, 0)
+local FRAME_BUDGET = 0.003
+local BUDGET_CHECK_INTERVAL = 64
+
+local function makeBudgetCheckpoint()
+	local startedAt = os.clock()
+	local operations = 0
+	return function()
+		operations += 1
+		if operations % BUDGET_CHECK_INTERVAL == 0 and os.clock() - startedAt >= FRAME_BUDGET then
+			task.wait()
+			startedAt = os.clock()
+		end
+	end
+end
 
 local function nativeDistanceSq(a, b)
 	return Distance.nativeDistanceSq(a, b)
@@ -130,14 +144,18 @@ end
 local function getBucket(grid, x, y, z, create)
 	local xGrid = grid[x]
 	if not xGrid then
-		if not create then return nil end
+		if not create then
+			return nil
+		end
 		xGrid = {}
 		grid[x] = xGrid
 	end
 
 	local yGrid = xGrid[y]
 	if not yGrid then
-		if not create then return nil end
+		if not create then
+			return nil
+		end
 		yGrid = {}
 		xGrid[y] = yGrid
 	end
@@ -159,6 +177,7 @@ local function buildIndex(candidates, cellSize)
 		Count = 0,
 	}
 
+	local checkpoint = makeBudgetCheckpoint()
 	for _, item in ipairs(index.Candidates) do
 		if typeof(item.pos) == "Vector3" then
 			local x, y, z = getCellCoordinates(item.pos, cellSize)
@@ -167,6 +186,7 @@ local function buildIndex(candidates, cellSize)
 			index.Active[item] = true
 			index.Count += 1
 		end
+		checkpoint()
 	end
 
 	return index
@@ -182,6 +202,7 @@ local function queryIndex(index, targetPosition, range)
 	local x, y, z = getCellCoordinates(rootPosition, index.CellSize)
 	local cellSpan = math.max(1, math.ceil(range / index.CellSize))
 	local rangeSq = range * range
+	local checkpoint = makeBudgetCheckpoint()
 
 	for offsetX = -cellSpan, cellSpan do
 		for offsetY = -cellSpan, cellSpan do
@@ -194,6 +215,7 @@ local function queryIndex(index, targetPosition, range)
 						end
 					end
 				end
+				checkpoint()
 			end
 		end
 	end
@@ -304,12 +326,13 @@ local function buildIndexedCluster(index, seed, safeRange, origin)
 	sortCluster(bestCluster, bestPosition)
 	bestCluster.TargetPosition = bestPosition
 	bestCluster.SafeRange = safeRange
-	return bestCluster, {
-		Seed = seed,
-		TargetPosition = bestPosition,
-		SafeRange = safeRange,
-		Score = bestScore,
-	}
+	return bestCluster,
+		{
+			Seed = seed,
+			TargetPosition = bestPosition,
+			SafeRange = safeRange,
+			Score = bestScore,
+		}
 end
 
 local function deactivateCluster(index, cluster)

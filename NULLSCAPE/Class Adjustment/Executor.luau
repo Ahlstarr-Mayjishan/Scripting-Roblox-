@@ -38,6 +38,7 @@ local ChargePlatformDurationState = {
 }
 local SharkTailWindowState = setmetatable({}, { __mode = "k" })
 local SharkTailEndTokens = setmetatable({}, { __mode = "k" })
+local SharkTailCooldownWasEnabled = false
 
 local MODULE_PATHS = {
 	AirControl = "NULLSCAPE/Class Adjustment/Grappler/Grapple Air Control.luau",
@@ -57,8 +58,7 @@ local MODULE_PATHS = {
 }
 
 local ClassContext = getgenv().loadModule("NULLSCAPE/Core/Class Context.luau")
-local AnchorAvailability =
-	getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Anchor Availability.luau")
+local AnchorAvailability = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Anchor Availability.luau")
 
 local function isGrapplerActive()
 	return HooksActive and ClassContext and ClassContext.is("Grappler")
@@ -68,6 +68,12 @@ local function getGlobals()
 	local env = getgenv()
 	env._NULLSCAPE_Globals = env._NULLSCAPE_Globals or {}
 	return env._NULLSCAPE_Globals
+end
+
+local function getControl()
+	local globals = getgenv()._NULLSCAPE_Globals
+	local controller = globals and globals.activeClassAdjustmentController
+	return typeof(controller) == "table" and controller or nil
 end
 
 local function getGrappleModule()
@@ -102,11 +108,7 @@ local function getMovementModule()
 	end
 
 	local success, movementModule = pcall(require, movementCore)
-	if
-		not success
-		or typeof(movementModule) ~= "table"
-		or typeof(movementModule.HasUpgrade) ~= "function"
-	then
+	if not success or typeof(movementModule) ~= "table" or typeof(movementModule.HasUpgrade) ~= "function" then
 		return nil
 	end
 
@@ -387,19 +389,35 @@ local function clearStaleHooks(grappleModule, globals)
 	end
 end
 
-local function applyStepAdjustments(self, dt)
+local function applyStepAdjustments(self, dt, Control)
 	if not isGrapplerActive() then
 		return
 	end
-	if AirControl and typeof(AirControl.apply) == "function" then
-		pcall(AirControl.apply, self, dt)
+	if
+		Control
+		and (tonumber(Control.GrappleAirControlMultiplier) or 0) > 0
+		and AirControl
+		and typeof(AirControl.apply) == "function"
+	then
+		pcall(AirControl.apply, self, dt, Control)
 	end
-	if ReelPull and typeof(ReelPull.apply) == "function" then
-		pcall(ReelPull.apply, self)
+	if
+		Control
+		and self
+		and self.jumpPadReel
+		and (tonumber(Control.GrappleReelPullMultiplier) or 1.1) > 1
+		and ReelPull
+		and typeof(ReelPull.apply) == "function"
+	then
+		pcall(ReelPull.apply, self, Control)
 	end
-	if SharkTailCooldown and typeof(SharkTailCooldown.apply) == "function" then
-		pcall(SharkTailCooldown.apply, self)
+	local sharkTailCooldownEnabled = Control and Control.GrappleSharkTailNoCooldown == true
+	if sharkTailCooldownEnabled and SharkTailCooldown and typeof(SharkTailCooldown.apply) == "function" then
+		pcall(SharkTailCooldown.apply, self, Control)
+	elseif SharkTailCooldownWasEnabled and SharkTailCooldown and typeof(SharkTailCooldown.reset) == "function" then
+		pcall(SharkTailCooldown.reset)
 	end
+	SharkTailCooldownWasEnabled = sharkTailCooldownEnabled == true
 end
 
 local function applySharkTailAdjustment(self, previousVelocity)
@@ -582,8 +600,13 @@ function Executor.enable()
 	if typeof(hookfunction) == "function" and not globals.ClassAdjustmentOriginalShapecast then
 		local originalShapecast
 		originalShapecast = hookfunction(workspace.Shapecast, function(self, ...)
-			local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
-			if isGrapplerActive() and getgenv()._NULLSCAPE_InGrappleStep == true and Control and Control.GrappleWallGlide == true then
+			local Control = getControl()
+			if
+				isGrapplerActive()
+				and getgenv()._NULLSCAPE_InGrappleStep == true
+				and Control
+				and Control.GrappleWallGlide == true
+			then
 				return nil
 			end
 			return originalShapecast(self, ...)
@@ -607,7 +630,7 @@ function Executor.enable()
 				return originalStep(self, dt, ...)
 			end
 
-			local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+			local Control = getControl()
 			local originalFilter
 			local altered = false
 
@@ -626,12 +649,7 @@ function Executor.enable()
 
 			local beforeTime = self and self.Time
 			local originalReelStart = nil
-			if
-				Control
-				and Control.GrappleInstantMaxPull
-				and self
-				and self.jumpPadReel
-			then
+			if Control and Control.GrappleInstantMaxPull and self and self.jumpPadReel then
 				originalReelStart = self.reelStart
 				self.reelStart = time() - 2.0
 			end
@@ -661,7 +679,7 @@ function Executor.enable()
 				error(stepResults[2], 0)
 			end
 
-			applyStepAdjustments(self, dt)
+			applyStepAdjustments(self, dt, Control)
 
 			if GrappleRecovery and typeof(GrappleRecovery.apply) == "function" then
 				pcall(GrappleRecovery.apply, self, dt, beforeTime)
@@ -775,7 +793,7 @@ function Executor.enable()
 				end
 			end
 
-			local Control = getgenv().loadModule("NULLSCAPE/Class Adjustment/Control.luau")
+			local Control = getControl()
 
 			-- Capture JumpPad state before original Start runs
 			local jumpPad = p2 and p2.Instance
@@ -854,7 +872,13 @@ end
 function Executor.disable()
 	HooksActive = false
 	SharkTailWindowState = setmetatable({}, { __mode = "k" })
-	if ChargerTripmineAssist and typeof(ChargerTripmineAssist.update) == "function" then
+	SharkTailCooldownWasEnabled = false
+	if SharkTailCooldown and typeof(SharkTailCooldown.reset) == "function" then
+		pcall(SharkTailCooldown.reset)
+	end
+	if ChargerTripmineAssist and typeof(ChargerTripmineAssist.stop) == "function" then
+		pcall(ChargerTripmineAssist.stop)
+	elseif ChargerTripmineAssist and typeof(ChargerTripmineAssist.update) == "function" then
 		pcall(ChargerTripmineAssist.update, {
 			ChargerTripmineAssistEnabled = false,
 			ChargerTripmineMode = "Auto",

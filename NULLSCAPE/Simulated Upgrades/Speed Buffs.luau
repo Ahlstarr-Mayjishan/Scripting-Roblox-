@@ -60,10 +60,7 @@ local function syncNativeStacks(controller)
 	end
 
 	local stacks = getNativeStacks(controller)
-	for upgradeName, stack in pairs(stacks) do
-		Injector.set(upgradeName, stack > 0, stack)
-	end
-	return true
+	return Injector.syncStacks(stacks)
 end
 
 local function getActiveController()

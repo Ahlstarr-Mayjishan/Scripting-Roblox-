@@ -209,13 +209,13 @@ local function installMovementHook()
 			refillMovement(self)
 		end
 
-		local results = table.pack(originalStep(self, dt, ...))
+		local result = originalStep(self, dt, ...)
 
 		if self and self.IsLocalPlayer then
 			refillMovement(self)
 		end
 
-		return table.unpack(results, 1, results.n)
+		return result
 	end
 
 	movementCore.Step = wrappedStep

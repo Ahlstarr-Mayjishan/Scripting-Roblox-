@@ -368,7 +368,7 @@ local function installStepHook(grappleModule, globals)
 			end)
 		end
 
-		local results = packValues(originalStep(self, dt, ...))
+		local result = originalStep(self, dt, ...)
 		local controller = getController()
 		if
 			isEnabled()
@@ -539,7 +539,7 @@ local function installStepHook(grappleModule, globals)
 			end)
 		end
 
-		return table.unpack(results, 1, results.n)
+		return result
 	end
 
 	Logic.OriginalStep = originalStep

@@ -4,7 +4,6 @@
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Logic = {}
 
@@ -131,21 +130,17 @@ local function startWatchdog()
 		return
 	end
 
-	local lastCheck = 0
-	globals.AntiBonkWatchdog = RunService.Heartbeat:Connect(function()
-		if not shouldSuppress() then
-			return
-		end
-
-		local now = os.clock()
-		if now - lastCheck < 0.5 then
-			return
-		end
-		lastCheck = now
-
-		local movementCore = getMovementCore()
-		if movementCore and movementCore.DiveBonk ~= globals.AntiBonkWrappedDiveBonk then
-			installHook()
+	local token = { Running = true }
+	globals.AntiBonkWatchdog = token
+	task.spawn(function()
+		while token.Running and globals.AntiBonkWatchdog == token do
+			task.wait(0.5)
+			if shouldSuppress() then
+				local movementCore = getMovementCore()
+				if movementCore and movementCore.DiveBonk ~= globals.AntiBonkWrappedDiveBonk then
+					installHook()
+				end
+			end
 		end
 	end)
 end
@@ -162,11 +157,28 @@ end
 function Logic.disable()
 	local globals = getGlobals()
 	if globals.AntiBonkWatchdog then
-		pcall(function()
-			globals.AntiBonkWatchdog:Disconnect()
-		end)
+		if type(globals.AntiBonkWatchdog) == "table" then
+			globals.AntiBonkWatchdog.Running = false
+		else
+			pcall(function()
+				globals.AntiBonkWatchdog:Disconnect()
+			end)
+		end
 		globals.AntiBonkWatchdog = nil
 	end
+
+	local movementCore = getMovementCore()
+	if
+		movementCore
+		and globals.AntiBonkWrappedDiveBonk
+		and movementCore.DiveBonk == globals.AntiBonkWrappedDiveBonk
+		and globals.AntiBonkPreviousDiveBonk
+	then
+		movementCore.DiveBonk = globals.AntiBonkPreviousDiveBonk
+	end
+	globals.AntiBonkPreviousDiveBonk = nil
+	globals.AntiBonkWrappedDiveBonk = nil
+	globals.AntiBonkHooked = false
 end
 
 return Logic

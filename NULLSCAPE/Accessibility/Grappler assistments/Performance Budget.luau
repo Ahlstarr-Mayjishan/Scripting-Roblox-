@@ -11,6 +11,44 @@ local Budget = {
 	LastRun = setmetatable({}, { __mode = "k" }),
 }
 
+local PROFILES = {
+	Emergency = {
+		CandidateLimit = 42,
+		TerrainCacheLimit = 180,
+		CandidateCacheTTL = 3,
+		AnchorScanBudget = 150,
+		TrajectorySamples = 3,
+	},
+	EmergencyConstrained = {
+		CandidateLimit = 30,
+		TerrainCacheLimit = 120,
+		CandidateCacheTTL = 5,
+		AnchorScanBudget = 90,
+		TrajectorySamples = 2,
+	},
+	Stressed = {
+		CandidateLimit = 14,
+		TerrainCacheLimit = 90,
+		CandidateCacheTTL = 7,
+		AnchorScanBudget = 60,
+		TrajectorySamples = 1,
+	},
+	Constrained = {
+		CandidateLimit = 22,
+		TerrainCacheLimit = 140,
+		CandidateCacheTTL = 5,
+		AnchorScanBudget = 100,
+		TrajectorySamples = 2,
+	},
+	Normal = {
+		CandidateLimit = 40,
+		TerrainCacheLimit = 220,
+		CandidateCacheTTL = 3,
+		AnchorScanBudget = 180,
+		TrajectorySamples = 3,
+	},
+}
+
 local function isMobile()
 	return UserInputService.TouchEnabled
 end
@@ -29,42 +67,18 @@ function Budget.get(urgency)
 	local stressed = frameAverage > 1 / 28
 
 	if urgency == "Emergency" then
-		return {
-			CandidateLimit = constrained and 30 or 42,
-			TerrainCacheLimit = constrained and 120 or 180,
-			CandidateCacheTTL = constrained and 5 or 3,
-			AnchorScanBudget = constrained and 90 or 150,
-			TrajectorySamples = constrained and 2 or 3,
-		}
+		return constrained and PROFILES.EmergencyConstrained or PROFILES.Emergency
 	end
 
 	if stressed then
-		return {
-			CandidateLimit = 14,
-			TerrainCacheLimit = 90,
-			CandidateCacheTTL = 7,
-			AnchorScanBudget = 60,
-			TrajectorySamples = 1,
-		}
+		return PROFILES.Stressed
 	end
 
 	if constrained then
-		return {
-			CandidateLimit = 22,
-			TerrainCacheLimit = 140,
-			CandidateCacheTTL = 5,
-			AnchorScanBudget = 100,
-			TrajectorySamples = 2,
-		}
+		return PROFILES.Constrained
 	end
 
-	return {
-		CandidateLimit = 40,
-		TerrainCacheLimit = 220,
-		CandidateCacheTTL = 3,
-		AnchorScanBudget = 180,
-		TrajectorySamples = 3,
-	}
+	return PROFILES.Normal
 end
 
 function Budget.shouldRun(grapple, name, interval)

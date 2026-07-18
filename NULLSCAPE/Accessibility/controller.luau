@@ -861,7 +861,6 @@ if typeof(Executor.resume) == "function" then
 end
 callExecutor("initializeMirageSafety")
 
-
 local characterRefreshConnection = Players.LocalPlayer.CharacterAdded:Connect(function()
 	scheduleRespawnFeatureRefresh()
 end)

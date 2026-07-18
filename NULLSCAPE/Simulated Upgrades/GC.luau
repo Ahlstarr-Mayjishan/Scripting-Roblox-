@@ -64,9 +64,12 @@ function GC.registerEntityConnection(instance, connection)
 	if not connections then
 		connections = {}
 		GC.EntityConnections[instance] = connections
-		table.insert(connections, instance.Destroying:Connect(function()
-			GC.cleanupEntity(instance)
-		end))
+		table.insert(
+			connections,
+			instance.Destroying:Connect(function()
+				GC.cleanupEntity(instance)
+			end)
+		)
 	end
 	table.insert(connections, connection)
 end
@@ -77,11 +80,11 @@ function GC.cleanAll()
 	end
 	table.clear(GC.ActiveConnections)
 
-	local instances = {}
-	for instance in pairs(GC.EntityConnections) do
-		table.insert(instances, instance)
-	end
-	for _, instance in ipairs(instances) do
+	while true do
+		local instance = next(GC.EntityConnections)
+		if not instance then
+			break
+		end
 		GC.cleanupEntity(instance)
 	end
 end

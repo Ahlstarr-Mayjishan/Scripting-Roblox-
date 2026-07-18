@@ -8,6 +8,7 @@ local Logic = {}
 local upgradeWatcherConnection = nil
 local upgradeWatcherController = nil
 local simulatedUpgradeStates = {}
+local desiredCache = setmetatable({}, { __mode = "k" })
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
@@ -36,6 +37,16 @@ Logic.FEATURES = {
 	Altar = { upgrade = "RadarAltars" },
 	Player = { upgrade = "RadarPlayer" },
 	Enemy = { upgrade = "EnemyOnTop" },
+}
+
+local FEATURE_TO_UPGRADE = {
+	Gift = "HighlightGifts",
+	Tripmine = "HighlightTripmines",
+	Cadance = "RadarInstruments",
+	Cadence = "RadarInstruments",
+	Altar = "RadarAltars",
+	Player = "RadarPlayer",
+	Enemy = "EnemyOnTop",
 }
 
 local DIRECT_FOLDER_UPGRADES = {
@@ -96,30 +107,44 @@ end
 Logic.isNativelyOwned = isNativelyOwned
 
 local function collectDesiredSimulatedUpgrades(controller)
+	local cached = controller and desiredCache[controller]
+	if cached and cached.Enabled == controller.RadarEnabled and cached.Features == controller.RadarFeatures then
+		return cached.Desired
+	end
+
 	local desired = {}
 	if not controller or controller.RadarEnabled ~= true then
+		if controller then
+			desiredCache[controller] = {
+				Enabled = controller.RadarEnabled,
+				Features = controller.RadarFeatures,
+				Desired = desired,
+			}
+		end
 		return desired
 	end
 
 	local features = controller.RadarFeatures or { "Gift", "Tripmine", "Cadance", "Altar", "Player", "Enemy" }
-	local featureMap = {
-		Gift = "HighlightGifts",
-		Tripmine = "HighlightTripmines",
-		Cadance = "RadarInstruments",
-		Cadence = "RadarInstruments",
-		Altar = "RadarAltars",
-		Player = "RadarPlayer",
-		Enemy = "EnemyOnTop",
-	}
 
 	for _, featureName in ipairs(features) do
-		local upgradeName = featureMap[featureName]
+		local upgradeName = FEATURE_TO_UPGRADE[featureName]
 		if upgradeName then
 			desired[upgradeName] = true
 		end
 	end
+	desiredCache[controller] = {
+		Enabled = controller.RadarEnabled,
+		Features = controller.RadarFeatures,
+		Desired = desired,
+	}
 
 	return desired
+end
+
+function Logic.invalidateDesired(controller)
+	if controller then
+		desiredCache[controller] = nil
+	end
 end
 
 local function ensureSimulatedUpgradeInt(upgrades, upgradeName)
@@ -224,11 +249,9 @@ function Logic.syncSimulatedUpgradeHud(controller)
 	local enemyRadarNative = isNativelyOwned("EnemyOnTop")
 	local enemyRadarWasSimulated = simulatedUpgradeStates.EnemyOnTop == true
 
-	if enemyRadarDesired and not enemyRadarNative and not enemyRadarWasSimulated then
+	if not enemyRadarNative and (not enemyRadarDesired or not enemyRadarWasSimulated) then
 		-- Remove markers produced by older NULLSCAPE builds. New markers are owned by
 		-- the native spriteManager ChildAdded listener after EnemyOnTop is installed.
-		clearSimulatedEnemyRadarMarkers()
-	elseif not enemyRadarDesired and not enemyRadarNative then
 		clearSimulatedEnemyRadarMarkers()
 	end
 

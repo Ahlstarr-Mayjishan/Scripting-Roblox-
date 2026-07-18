@@ -11,11 +11,13 @@ local Logic = {
 	ResetUnlocked = false,
 	ResetEvent = nil,
 	ResetConnection = nil,
+	CharacterAddedConnection = nil,
 	ApplyToken = 0,
 }
 
 local RESET_APPLY_ATTEMPTS = 20
 local RESET_APPLY_INTERVAL = 0.1
+local RESET_GUARD_INTERVAL = 0.75
 local VOID_OFFSET = 64
 
 local function destroyResetBinding()
@@ -26,6 +28,10 @@ local function destroyResetBinding()
 	if Logic.ResetEvent then
 		Logic.ResetEvent:Destroy()
 		Logic.ResetEvent = nil
+	end
+	if Logic.CharacterAddedConnection then
+		Logic.CharacterAddedConnection:Disconnect()
+		Logic.CharacterAddedConnection = nil
 	end
 end
 
@@ -40,6 +46,29 @@ local function applyResetCallback(callback, token)
 		task.wait(RESET_APPLY_INTERVAL)
 	end
 	return false
+end
+
+local function startResetGuard(resetEvent, token)
+	if token ~= Logic.ApplyToken or not Logic.ResetUnlocked or Logic.ResetEvent ~= resetEvent then
+		return
+	end
+	local player = Players.LocalPlayer
+	if player then
+		Logic.CharacterAddedConnection = player.CharacterAdded:Connect(function()
+			task.defer(function()
+				if token == Logic.ApplyToken and Logic.ResetUnlocked and Logic.ResetEvent == resetEvent then
+					applyResetCallback(resetEvent, token)
+				end
+			end)
+		end)
+	end
+
+	task.spawn(function()
+		while token == Logic.ApplyToken and Logic.ResetUnlocked and Logic.ResetEvent == resetEvent do
+			applyResetCallback(resetEvent, token)
+			task.wait(RESET_GUARD_INTERVAL)
+		end
+	end)
 end
 
 function Logic.respawn()
@@ -88,7 +117,9 @@ function Logic.setResetUnlocked(enabled)
 		if not applyResetCallback(resetEvent, token) and token == Logic.ApplyToken then
 			Logic.ResetUnlocked = false
 			destroyResetBinding()
+			return
 		end
+		startResetGuard(resetEvent, token)
 	end)
 	return true
 end

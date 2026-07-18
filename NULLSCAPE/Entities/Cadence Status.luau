@@ -7,7 +7,6 @@
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 local View = getgenv().loadModule("NULLSCAPE/Entities/Cadence Status View.luau")
 
 local Status = {
@@ -16,11 +15,15 @@ local Status = {
 	Connections = {},
 	InstrumentCount = 0,
 	NextOrdinal = 0,
+	UpdateToken = nil,
 }
 
 local UPDATE_INTERVAL = 0.25
 local RECOVERY_RATE = 2
 local TIMER_KEYS = { "Remaining", "TimeLeft", "Timer", "Countdown", "StageTime", "Time" }
+local SOLO_TIMER_PROFILE = { 90, 60, 30, 15, 0 }
+local MULTIPLAYER_TIMER_PROFILE = { 50, 30, 20, 10, 0 }
+local cachedDifficulty = nil
 
 local function disconnectList(connections)
 	for _, connection in ipairs(connections) do
@@ -33,13 +36,16 @@ end
 
 local function getTimerProfile()
 	if #Players:GetPlayers() <= 1 then
-		return { 90, 60, 30, 15, 0 }
+		return SOLO_TIMER_PROFILE
 	end
-	return { 50, 30, 20, 10, 0 }
+	return MULTIPLAYER_TIMER_PROFILE
 end
 
 local function getInstrumentThreshold()
-	local difficulty = ReplicatedStorage:FindFirstChild("Difficulty")
+	if not (cachedDifficulty and cachedDifficulty.Parent) then
+		cachedDifficulty = ReplicatedStorage:FindFirstChild("Difficulty")
+	end
+	local difficulty = cachedDifficulty
 	return if difficulty and tonumber(difficulty.Value) and tonumber(difficulty.Value) >= 3 then 1 else 2
 end
 
@@ -146,7 +152,11 @@ local function getRowText(entry)
 	if entry.Chasing then
 		return string.format("Cadence #%d   |   CHASE ACTIVE", entry.Ordinal)
 	elseif entry.Stopped then
-		return string.format("Cadence #%d   |   Chase stopped   |   Timer: %s", entry.Ordinal, formatSeconds(entry.Remaining, estimated))
+		return string.format(
+			"Cadence #%d   |   Chase stopped   |   Timer: %s",
+			entry.Ordinal,
+			formatSeconds(entry.Remaining, estimated)
+		)
 	elseif Status.InstrumentCount < getInstrumentThreshold() then
 		return string.format(
 			"Cadence #%d   |   Phase %d   |   Timer recovering: %s",
@@ -255,23 +265,42 @@ local function ensureRuntimeConnections()
 		render()
 	end
 	updateInstrumentCount()
-	table.insert(Status.Connections, CollectionService:GetInstanceAddedSignal("CadenceOrb"):Connect(updateInstrumentCount))
-	table.insert(Status.Connections, CollectionService:GetInstanceRemovedSignal("CadenceOrb"):Connect(updateInstrumentCount))
-	table.insert(Status.Connections, RunService.Heartbeat:Connect(function(deltaTime)
-		local changed = false
-		for _, entry in pairs(Status.Entries) do
-			entry.LastUpdateAt += deltaTime
-			if entry.LastUpdateAt >= UPDATE_INTERVAL then
-				local elapsed = entry.LastUpdateAt
-				entry.LastUpdateAt = 0
-				updateEntry(entry, elapsed)
-				changed = true
+	table.insert(
+		Status.Connections,
+		CollectionService:GetInstanceAddedSignal("CadenceOrb"):Connect(updateInstrumentCount)
+	)
+	table.insert(
+		Status.Connections,
+		CollectionService:GetInstanceRemovedSignal("CadenceOrb"):Connect(updateInstrumentCount)
+	)
+end
+
+local function startUpdateLoop()
+	if Status.UpdateToken then
+		return
+	end
+
+	local token = {}
+	Status.UpdateToken = token
+	task.spawn(function()
+		local lastUpdateAt = time()
+		while Status.Enabled and Status.UpdateToken == token and next(Status.Entries) ~= nil do
+			task.wait(UPDATE_INTERVAL)
+			if not Status.Enabled or Status.UpdateToken ~= token or next(Status.Entries) == nil then
+				break
 			end
-		end
-		if changed then
+			local now = time()
+			local elapsed = now - lastUpdateAt
+			lastUpdateAt = now
+			for _, entry in pairs(Status.Entries) do
+				updateEntry(entry, elapsed)
+			end
 			render()
 		end
-	end))
+		if Status.UpdateToken == token then
+			Status.UpdateToken = nil
+		end
+	end)
 end
 
 local function findCadences()
@@ -289,6 +318,7 @@ local function findCadences()
 end
 
 function Status.clearRuntime()
+	Status.UpdateToken = nil
 	disconnectList(Status.Connections)
 	for _, entry in pairs(Status.Entries) do
 		disconnectList(entry.Connections)
@@ -319,28 +349,34 @@ function Status.attach(enemy)
 		Stopped = false,
 		Remaining = nil,
 		RemainingIsServer = false,
-		LastUpdateAt = 0,
 	}
 	resetEstimate(entry, stage)
 	if chasing then
 		entry.Remaining = 0
 	end
 	Status.Entries[enemy] = entry
+	startUpdateLoop()
 
 	local clientEvent = enemy:FindFirstChild("ClientEvent") or enemy:WaitForChild("ClientEvent", 5)
 	if clientEvent and clientEvent:IsA("RemoteEvent") then
-		table.insert(entry.Connections, clientEvent.OnClientEvent:Connect(function(action, payload)
-			onClientEvent(entry, action, payload)
-		end))
+		table.insert(
+			entry.Connections,
+			clientEvent.OnClientEvent:Connect(function(action, payload)
+				onClientEvent(entry, action, payload)
+			end)
+		)
 	end
-	table.insert(entry.Connections, enemy.AttributeChanged:Connect(function()
-		local serverRemaining = readReplicatedTimer(enemy)
-		if serverRemaining then
-			entry.Remaining = serverRemaining
-			entry.RemainingIsServer = true
-			render()
-		end
-	end))
+	table.insert(
+		entry.Connections,
+		enemy.AttributeChanged:Connect(function()
+			local serverRemaining = readReplicatedTimer(enemy)
+			if serverRemaining then
+				entry.Remaining = serverRemaining
+				entry.RemainingIsServer = true
+				render()
+			end
+		end)
+	)
 
 	render()
 	return true
@@ -354,6 +390,7 @@ function Status.detach(enemy)
 	disconnectList(entry.Connections)
 	Status.Entries[enemy] = nil
 	if next(Status.Entries) == nil then
+		Status.UpdateToken = nil
 		disconnectList(Status.Connections)
 		Status.InstrumentCount = 0
 	end

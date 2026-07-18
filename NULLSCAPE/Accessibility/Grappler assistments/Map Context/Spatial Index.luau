@@ -54,12 +54,16 @@ function SpatialIndex.insert(index, id, entry, position)
 		return nil
 	end
 
+	local bucketKey = getBucketKey(index, position)
 	local previous = index.Entries[id]
+	if previous == entry and previous.BucketKey == bucketKey then
+		entry.Position = position
+		return entry
+	end
 	if previous and previous.BucketKey then
 		removeFromBucket(index, previous.BucketKey, id)
 	end
 
-	local bucketKey = getBucketKey(index, position)
 	entry.Id = id
 	entry.Position = position
 	entry.BucketKey = bucketKey
@@ -80,11 +84,51 @@ function SpatialIndex.remove(index, id)
 	index.Entries[id] = nil
 end
 
-function SpatialIndex.query(index, origin, radius)
+local function insertBounded(results, entry, limit)
+	local count = #results
+	if count < limit then
+		local index = count + 1
+		results[index] = entry
+		while index > 1 do
+			local parent = math.floor(index / 2)
+			if (results[parent].Distance or -math.huge) >= (entry.Distance or -math.huge) then
+				break
+			end
+			results[index] = results[parent]
+			index = parent
+			results[index] = entry
+		end
+		return
+	end
+
+	if (entry.Distance or math.huge) < (results[1].Distance or -math.huge) then
+		results[1] = entry
+		local index = 1
+		while true do
+			local left = index * 2
+			if left > count then
+				break
+			end
+			local right = left + 1
+			local child = left
+			if right <= count and (results[right].Distance or -math.huge) > (results[left].Distance or -math.huge) then
+				child = right
+			end
+			if (results[index].Distance or -math.huge) >= (results[child].Distance or -math.huge) then
+				break
+			end
+			results[index], results[child] = results[child], results[index]
+			index = child
+		end
+	end
+end
+
+function SpatialIndex.query(index, origin, radius, limit)
 	local results = {}
 	if not (index and origin and radius) then
 		return results
 	end
+	local resultLimit = math.max(0, math.floor(tonumber(limit) or 0))
 
 	local bucketSize = index.BucketSize or DEFAULT_BUCKET_SIZE
 	local centerX, centerY, centerZ = getBucketCoords(index, origin)
@@ -100,7 +144,11 @@ function SpatialIndex.query(index, origin, radius)
 						local distance = offset.Magnitude
 						if distance <= radius then
 							entry.Distance = distance
-							table.insert(results, entry)
+							if resultLimit > 0 then
+								insertBounded(results, entry, resultLimit)
+							else
+								results[#results + 1] = entry
+							end
 						end
 					end
 				end

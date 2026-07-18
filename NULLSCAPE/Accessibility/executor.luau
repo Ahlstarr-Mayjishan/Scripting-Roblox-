@@ -127,10 +127,9 @@ function callModule(name, methodName, ...)
 		return false
 	end
 
-	local args = table.pack(...)
 	local module, state = loadAccessibilityModule(name)
 	if state == "loading" then
-		schedulePendingCall(name, methodName, args)
+		schedulePendingCall(name, methodName, table.pack(...))
 		return true
 	end
 	if not module or typeof(module[methodName]) ~= "function" then

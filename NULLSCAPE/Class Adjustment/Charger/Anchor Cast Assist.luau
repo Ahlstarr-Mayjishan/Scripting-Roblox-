@@ -3,7 +3,6 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local ClassContext = getgenv().loadModule("NULLSCAPE/Core/Class Context.luau")
 
@@ -14,7 +13,8 @@ local AnchorCastAssist = {
 	OriginalOnHitboxTouch = nil,
 	WrappedOnHitboxTouch = nil,
 	Pending = {},
-	Connection = nil,
+	LoopRunning = false,
+	LoopToken = 0,
 }
 
 local MAX_WAIT = 0.22
@@ -86,14 +86,34 @@ local function processPending()
 		return
 	end
 	local now = time()
+	local delay = getDelay()
 	for movement, pending in pairs(AnchorCastAssist.Pending) do
 		if now - pending.TouchedAt > MAX_WAIT then
 			AnchorCastAssist.Pending[movement] = nil
-		elseif now - pending.TouchedAt >= getDelay() and isReadyForAnchorCast(pending) then
+		elseif now - pending.TouchedAt >= delay and isReadyForAnchorCast(pending) then
 			AnchorCastAssist.Pending[movement] = nil
 			pulseNativeCast(movement)
 		end
 	end
+end
+
+local function ensureLoop()
+	if AnchorCastAssist.LoopRunning then
+		return
+	end
+
+	AnchorCastAssist.LoopRunning = true
+	AnchorCastAssist.LoopToken += 1
+	local token = AnchorCastAssist.LoopToken
+	task.spawn(function()
+		while token == AnchorCastAssist.LoopToken and isEnabled() and next(AnchorCastAssist.Pending) ~= nil do
+			processPending()
+			task.wait()
+		end
+		if token == AnchorCastAssist.LoopToken then
+			AnchorCastAssist.LoopRunning = false
+		end
+	end)
 end
 
 local function queueAnchorCast(movement, anchorName)
@@ -103,6 +123,7 @@ local function queueAnchorCast(movement, anchorName)
 			AnchorName = anchorName,
 			TouchedAt = time(),
 		}
+		ensureLoop()
 	end
 end
 
@@ -151,27 +172,18 @@ local function installHook()
 	return true
 end
 
-local function ensureLoop()
-	if not AnchorCastAssist.Connection then
-		AnchorCastAssist.Connection = RunService.Heartbeat:Connect(processPending)
-	end
-end
-
 function AnchorCastAssist.update(controller)
 	AnchorCastAssist.Controller = controller
 	if not isEnabled() then
 		AnchorCastAssist.stop()
 		return false
 	end
-	ensureLoop()
 	return installHook()
 end
 
 function AnchorCastAssist.stop()
-	if AnchorCastAssist.Connection then
-		AnchorCastAssist.Connection:Disconnect()
-		AnchorCastAssist.Connection = nil
-	end
+	AnchorCastAssist.LoopToken += 1
+	AnchorCastAssist.LoopRunning = false
 	restoreHook()
 	table.clear(AnchorCastAssist.Pending)
 	AnchorCastAssist.Controller = nil

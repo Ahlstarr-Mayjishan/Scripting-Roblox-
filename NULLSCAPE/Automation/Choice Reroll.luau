@@ -26,6 +26,13 @@ local exhaustedSignature = nil
 local exhaustedRemaining = nil
 local observedUses = 0
 local requestedUses = 0
+local cachedSelectFolder = nil
+local cachedSelectDescendants = nil
+local cachedSelectAt = -math.huge
+local cachedBroadFolder = nil
+local cachedBroadRemaining = nil
+local cachedBroadAt = -math.huge
+local BROAD_SCAN_CACHE_INTERVAL = 0.35
 
 local function containsReroll(value)
 	return string.find(string.lower(tostring(value or "")), "reroll", 1, true) ~= nil
@@ -109,15 +116,25 @@ local function readRemaining(root, prompt, selectFolder)
 		end
 		current = current.Parent
 	end
-	for _, source in ipairs({
-		{ Instance = selectFolder, Descendants = true },
-		{ Instance = Players.LocalPlayer, Descendants = true },
-		{ Instance = ReplicatedStorage, Descendants = false },
-	}) do
-		local amount = readRemainingFromInstance(source.Instance, source.Descendants)
-		if amount ~= nil then
-			return amount
+	local now = os.clock()
+	if selectFolder ~= cachedBroadFolder or now - cachedBroadAt >= BROAD_SCAN_CACHE_INTERVAL then
+		cachedBroadFolder = selectFolder
+		cachedBroadAt = now
+		cachedBroadRemaining = nil
+		for _, source in ipairs({
+			{ Instance = selectFolder, Descendants = true },
+			{ Instance = Players.LocalPlayer, Descendants = true },
+			{ Instance = ReplicatedStorage, Descendants = false },
+		}) do
+			local amount = readRemainingFromInstance(source.Instance, source.Descendants)
+			if amount ~= nil then
+				cachedBroadRemaining = amount
+				break
+			end
 		end
+	end
+	if cachedBroadRemaining ~= nil then
+		return cachedBroadRemaining
 	end
 
 	local text = table.concat({
@@ -144,7 +161,13 @@ function ChoiceReroll.find(selectFolder, hrp, signature)
 		return nil
 	end
 
-	for _, descendant in ipairs(selectFolder:GetDescendants()) do
+	local now = os.clock()
+	if selectFolder ~= cachedSelectFolder or now - cachedSelectAt >= BROAD_SCAN_CACHE_INTERVAL then
+		cachedSelectFolder = selectFolder
+		cachedSelectDescendants = selectFolder:GetDescendants()
+		cachedSelectAt = now
+	end
+	for _, descendant in ipairs(cachedSelectDescendants or {}) do
 		if descendant:IsA("ProximityPrompt") and belongsToReroll(descendant.Parent, descendant) then
 			local prompt = descendant
 			local root = prompt.Parent
@@ -241,6 +264,12 @@ function ChoiceReroll.reset()
 	exhaustedRemaining = nil
 	observedUses = 0
 	requestedUses = 0
+	cachedSelectFolder = nil
+	cachedSelectDescendants = nil
+	cachedSelectAt = -math.huge
+	cachedBroadFolder = nil
+	cachedBroadRemaining = nil
+	cachedBroadAt = -math.huge
 end
 
 return ChoiceReroll

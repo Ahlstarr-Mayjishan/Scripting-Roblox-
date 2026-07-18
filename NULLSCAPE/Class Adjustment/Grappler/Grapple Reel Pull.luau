@@ -8,6 +8,10 @@ local ReelPull = {}
 local MomentumMemory = getgenv().loadModule("NULLSCAPE/Accessibility/Movement Context/Momentum Memory.luau")
 
 local CachedControl = nil
+local PullScaleCache = setmetatable({}, { __mode = "k" })
+local LastImpulseNoteAt = setmetatable({}, { __mode = "k" })
+local PROFILE_TTL = 0.5
+local IMPULSE_NOTE_INTERVAL = 0.1
 
 local function getControl()
 	if CachedControl then
@@ -43,13 +47,21 @@ local function characterHas(grapple, name)
 end
 
 local function getPullScale(grapple)
+	local now = time()
+	local cached = PullScaleCache[grapple]
+	if cached and now - cached.At < PROFILE_TTL then
+		return cached.Scale
+	end
+
 	local movement = grapple and grapple.Movement
 	local lowGravity = hasUpgrade(movement, "AdvancedGravityCoil")
 		or characterHas(grapple, "HighriseLowGravity")
 		or characterHas(grapple, "Highrise")
 		or hasMovementFlag(movement, "HighriseLowGravity")
 
-	return lowGravity and 0.78 or 1
+	local scale = lowGravity and 0.78 or 1
+	PullScaleCache[grapple] = { At = now, Scale = scale }
+	return scale
 end
 
 local function applyVelocityDelta(rootPart, delta, maxDelta)
@@ -65,23 +77,27 @@ local function applyVelocityDelta(rootPart, delta, maxDelta)
 
 	local beforeVelocity = rootPart.Velocity
 	rootPart.Velocity += delta
-	if MomentumMemory and typeof(MomentumMemory.noteImpulse) == "function" then
-		pcall(function()
-			MomentumMemory.noteImpulse(rootPart, "GrappleReelPull", beforeVelocity, rootPart.Velocity, delta, {
-				MaxDelta = maxDelta,
-			})
-		end)
+	local now = time()
+	if
+		MomentumMemory
+		and typeof(MomentumMemory.noteImpulse) == "function"
+		and now - (LastImpulseNoteAt[rootPart] or 0) >= IMPULSE_NOTE_INTERVAL
+	then
+		LastImpulseNoteAt[rootPart] = now
+		pcall(MomentumMemory.noteImpulse, rootPart, "GrappleReelPull", beforeVelocity, rootPart.Velocity, delta, {
+			MaxDelta = maxDelta,
+		})
 	end
 	return true
 end
 
-function ReelPull.apply(grapple)
+function ReelPull.apply(grapple, Control)
 	local rootPart = grapple and grapple.RootPart
 	if not (grapple and rootPart and grapple.jumpPadReel) then
 		return
 	end
 
-	local Control = getControl()
+	Control = Control or getControl()
 	local multiplier = Control and Control.GrappleReelPullMultiplier or 1.1
 	if multiplier <= 1 then
 		return

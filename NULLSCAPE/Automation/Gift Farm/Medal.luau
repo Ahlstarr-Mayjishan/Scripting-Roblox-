@@ -2,6 +2,7 @@
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 local Beacon = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Beacon.luau")
+local MedalRegistry = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Medal Registry.luau")
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -82,19 +83,10 @@ local function getMedalPart()
 		return part
 	end
 
-	for _, tagged in ipairs(CollectionService:GetTagged("Medal")) do
-		part = getPartFromMedal(tagged)
-		if part and not medalHeldByLocalPlayer(tagged) then
+	for _, medalInstance in ipairs(MedalRegistry.getInstances()) do
+		part = getPartFromMedal(medalInstance)
+		if part and not medalHeldByLocalPlayer(medalInstance) then
 			return part
-		end
-	end
-
-	for _, descendant in ipairs(workspace:GetDescendants()) do
-		if descendant.Name == "Medal" then
-			part = getPartFromMedal(descendant)
-			if part and not medalHeldByLocalPlayer(descendant) then
-				return part
-			end
 		end
 	end
 
@@ -133,8 +125,8 @@ local function carriesMedal()
 	if medalHeldByLocalPlayer(medal) then
 		return true
 	end
-	for _, tagged in ipairs(CollectionService:GetTagged("Medal")) do
-		if medalHeldByLocalPlayer(tagged) then
+	for _, medalInstance in ipairs(MedalRegistry.getInstances()) do
+		if medalHeldByLocalPlayer(medalInstance) then
 			return true
 		end
 	end
@@ -191,23 +183,8 @@ local function clearESP()
 end
 
 local function scanMedalsForESP()
-	local seen = {}
-	local direct = workspace:FindFirstChild("Medal")
-	if direct then
-		seen[direct] = true
-		applyESP(direct)
-	end
-	for _, tagged in ipairs(CollectionService:GetTagged("Medal")) do
-		if not seen[tagged] then
-			seen[tagged] = true
-			applyESP(tagged)
-		end
-	end
-	for _, descendant in ipairs(workspace:GetDescendants()) do
-		if descendant.Name == "Medal" and not seen[descendant] then
-			seen[descendant] = true
-			applyESP(descendant)
-		end
+	for _, medalInstance in ipairs(MedalRegistry.getInstances()) do
+		applyESP(medalInstance)
 	end
 end
 
@@ -288,16 +265,22 @@ function Medal.setESPEnabled(enabled)
 	end
 
 	scanMedalsForESP()
-	table.insert(espConnections, workspace.DescendantAdded:Connect(function(instance)
-		if instance.Name == "Medal" then
-			applyESP(instance)
-		end
-	end))
-	table.insert(espConnections, workspace.DescendantRemoving:Connect(function(instance)
-		if instance.Name == "Medal" or CollectionService:HasTag(instance, "Medal") then
-			removeESP(instance)
-		end
-	end))
+	table.insert(
+		espConnections,
+		workspace.DescendantAdded:Connect(function(instance)
+			if instance.Name == "Medal" then
+				applyESP(instance)
+			end
+		end)
+	)
+	table.insert(
+		espConnections,
+		workspace.DescendantRemoving:Connect(function(instance)
+			if instance.Name == "Medal" or CollectionService:HasTag(instance, "Medal") then
+				removeESP(instance)
+			end
+		end)
+	)
 	table.insert(espConnections, CollectionService:GetInstanceAddedSignal("Medal"):Connect(applyESP))
 	table.insert(espConnections, CollectionService:GetInstanceRemovedSignal("Medal"):Connect(removeESP))
 end
@@ -378,6 +361,7 @@ end
 function Medal.cleanup()
 	espEnabled = false
 	clearESP()
+	MedalRegistry.stop()
 	Medal.reset()
 end
 

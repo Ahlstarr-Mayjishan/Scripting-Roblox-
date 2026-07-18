@@ -136,22 +136,16 @@ local function claimActiveController(controller)
 end
 
 local function hasUtilityWork()
-	local virtualGrapplerUpgradesEnabled = ClassContext
-		and ClassContext.is("Grappler")
-		and (Controller.GrappleVirtualNinjaBelt or Controller.GrappleVirtualSharkTail)
+	local hasPendingSetup = (Controller.MatrixTetrahedronEnabled and MatrixTetrahedron and not MatrixTetrahedron.Hooked)
+		or (Controller.GraceWingsEnabled and GraceWings and not GraceWings.Hooked)
+		or (Controller.AdvancedGravityCoilEnabled and AdvancedGravityCoil and not AdvancedGravityCoil.Hooked)
+		or (Controller.BetterJumpPadEnabled and BetterJumpPad and not BetterJumpPad.Hooked)
+		or (Controller.SpeedBuffsEnabled and SpeedBuffs and not SpeedBuffs.Hooked)
+		or (Controller.AirJumpSimulationEnabled and AirJumps and not AirJumps.Hooked)
+		or (Controller.HelmetEnabled and Helmet and not Helmet.Hooked)
+		or (Controller.MiniatureHourglassEnabled and MiniatureHourglass and not MiniatureHourglass.Hooked)
 
-	return (Controller.AutoCollectEnabled and Controller.GiftMagnetBlocked ~= true)
-		or Controller.TripmineBarrierEnabled
-		or Controller.MatrixTetrahedronEnabled
-		or Controller.GraceWingsEnabled
-		or Controller.AdvancedGravityCoilEnabled
-		or Controller.BetterJumpPadEnabled
-		or Controller.SpeedBuffsEnabled
-		or Controller.AirJumpSimulationEnabled
-		or Controller.InfiniteJumpEnabled
-		or Controller.HelmetEnabled
-		or Controller.MiniatureHourglassEnabled
-		or virtualGrapplerUpgradesEnabled
+	return (Controller.AutoCollectEnabled and Controller.GiftMagnetBlocked ~= true) or hasPendingSetup
 end
 
 local function syncVirtualGrapplerVisuals()
@@ -180,7 +174,7 @@ local function startUtilityLoop()
 				break
 			end
 			claimActiveController(Controller)
-			if not hasUtilityWork() then
+			if Controller.inLobby or not hasUtilityWork() then
 				break
 			end
 			local char = LocalPlayer.Character
@@ -191,12 +185,6 @@ local function startUtilityLoop()
 						Executor.updateMagnet(Controller, hrp)
 					end)
 				end
-				if Controller.TripmineBarrierEnabled then
-					pcall(function()
-						Executor.updateBarriers(Controller, GC)
-					end)
-				end
-
 				if Controller.MatrixTetrahedronEnabled and MatrixTetrahedron and not MatrixTetrahedron.Hooked then
 					pcall(function()
 						local reduction = Controller.MomentumReduction or 1.0
@@ -244,7 +232,10 @@ local function startUtilityLoop()
 					end)
 				end
 			end
-			task.wait(hasUtilityWork() and 0.12 or 0.6)
+			if not hasUtilityWork() then
+				break
+			end
+			task.wait(0.12)
 		end
 		utilityLoopActive = false
 	end)
@@ -264,6 +255,7 @@ end
 
 function Controller:SetRadarEnabled(value)
 	self.RadarEnabled = value
+	Logic.invalidateDesired(self)
 	Logic.syncSimulatedUpgradeHud(self)
 end
 
@@ -273,6 +265,7 @@ function Controller:SetRadarFeatures(value)
 	else
 		self.RadarFeatures = {}
 	end
+	Logic.invalidateDesired(self)
 	Logic.syncSimulatedUpgradeHud(self)
 end
 
@@ -597,7 +590,6 @@ function Controller:SetTripmineBarrier(value)
 	pcall(function()
 		Executor.updateBarriers(self, GC)
 	end)
-	startUtilityLoop()
 end
 
 function Controller:SetTripmineBarrierCollectDelay(value)
@@ -614,7 +606,6 @@ function Controller:SetTripmineBarrierMode(value)
 	pcall(function()
 		Executor.updateBarriers(self, GC)
 	end)
-	startUtilityLoop()
 end
 
 function Controller:SetTripmineDetonationDistance(value)
@@ -816,6 +807,9 @@ function Controller:CleanUp()
 		or (globals.activeUpgradeController ~= nil and globals.activeUpgradeController ~= self)
 	if Logic and typeof(Logic.unbindUpgradeWatcher) == "function" then
 		Logic.unbindUpgradeWatcher(self)
+	end
+	if Logic and typeof(Logic.invalidateDesired) == "function" then
+		Logic.invalidateDesired(self)
 	end
 
 	if finalCleanup then
@@ -1317,7 +1311,7 @@ local function hookUpgradeHandler()
 									customEvent = Instance.new("BindableEvent")
 									customUpgradeEvents[upgradeName] = customEvent
 									if originalEvent then
-											getgenv()._NULLSCAPE_Globals.customUpgradeEventConnections[upgradeName] = originalEvent:Connect(function(...)
+										getgenv()._NULLSCAPE_Globals.customUpgradeEventConnections[upgradeName] = originalEvent:Connect(function(...)
 											customEvent:Fire(...)
 										end)
 									end

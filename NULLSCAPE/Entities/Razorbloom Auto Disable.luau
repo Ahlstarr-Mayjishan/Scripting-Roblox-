@@ -247,17 +247,6 @@ local function watchRazorbloom(razorbloom)
 	end)
 end
 
-local function findRazorbloomAncestor(instance, character)
-	local current = instance
-	while current and current ~= character do
-		if current.Name == "Razorbloom" then
-			return current
-		end
-		current = current.Parent
-	end
-	return nil
-end
-
 local function scanCharacter(character)
 	if not character then
 		return
@@ -278,10 +267,8 @@ local function watchCharacter(character)
 	end
 
 	Logic.Connections.CharacterDescendantAdded = character.DescendantAdded:Connect(function(descendant)
-		local razorbloom = descendant.Name == "Razorbloom" and descendant
-			or findRazorbloomAncestor(descendant, character)
-		if razorbloom then
-			task.defer(watchRazorbloom, razorbloom)
+		if descendant.Name == "Razorbloom" then
+			task.defer(watchRazorbloom, descendant)
 		end
 	end)
 	task.defer(scanCharacter, character)
