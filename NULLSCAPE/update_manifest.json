@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.19.002",
+    "Version":  "2026.07.19.003",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -645,7 +645,7 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "7f81d0e7a80d2e69276101bee2ea8a86085e6113ceef2078365aceeca98e8e49"
+                      "Sha256":  "9452cb5d6b25262e45e16098de96ad3d93f927276bc89dcaf3b968df79c347cf"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/GC.luau",

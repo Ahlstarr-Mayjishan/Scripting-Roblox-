@@ -28,13 +28,9 @@ local ChargerAssistSuite = nil
 local ChargerAnchorCastAssist = nil
 local CatapultBoost = nil
 local MomentumTransfer = nil
-local MAIN_THREAD_KEY = {}
 local ChargePlatformDurationState = {
 	ChargeModule = nil,
-	OriginalDelay = nil,
-	ActiveThreads = setmetatable({}, { __mode = "k" }),
-	HookedMethods = {},
-	ConstantPatches = {},
+	StepHook = nil,
 }
 local SharkTailWindowState = setmetatable({}, { __mode = "k" })
 local SharkTailEndTokens = setmetatable({}, { __mode = "k" })
@@ -131,118 +127,30 @@ local function getAirPlatformDuration(controller)
 	return math.clamp(tonumber(controller and controller.ChargerAirPlatformDuration) or 1, 1, 10)
 end
 
-local function isNativeAirPlatformDelay(value)
-	local duration = tonumber(value)
-	return duration ~= nil and (math.abs(duration - 1) <= 0.01 or math.abs(duration - 1.4) <= 0.01)
-end
-
-local function getCurrentThreadKey()
-	return coroutine.running() or MAIN_THREAD_KEY
-end
-
-local function getExecutorDebugFunction(name)
-	local environment = getgenv()
-	local direct = environment[name]
-	if typeof(direct) == "function" then
-		return direct
-	end
-
-	local debugLibrary = environment.debug or debug
-	local debugFunction = debugLibrary and debugLibrary[name]
-	return typeof(debugFunction) == "function" and debugFunction or nil
-end
-
-local function patchFrameTimerConstants(chargeModule, configuredDuration)
-	local getConstants = getExecutorDebugFunction("getconstants")
-	local setConstant = getExecutorDebugFunction("setconstant")
-	if not (getConstants and setConstant) then
-		return false
-	end
-
-	local patched = false
-	for _, methodName in ipairs({ "Step", "AltSpecialAction", "SpecialAction", "Start" }) do
-		local method = chargeModule[methodName]
-		local success, constants = pcall(getConstants, method)
-		if success and typeof(method) == "function" and typeof(constants) == "table" then
-			local hasHourglassCheck = false
-			local baseIndexes = {}
-			local bonusIndexes = {}
-			for index, value in pairs(constants) do
-				hasHourglassCheck = hasHourglassCheck or value == "MiniatureHourglass"
-				if typeof(value) == "number" then
-					if math.abs(value - 1) <= 0.01 then
-						table.insert(baseIndexes, index)
-					elseif math.abs(value - 0.4) <= 0.01 or math.abs(value - 1.4) <= 0.01 then
-						table.insert(bonusIndexes, index)
-					end
-				end
-			end
-
-			local baseIndex = nil
-			local bonusIndex = nil
-			local closestDistance = math.huge
-			if hasHourglassCheck then
-				for _, possibleBase in ipairs(baseIndexes) do
-					for _, possibleBonus in ipairs(bonusIndexes) do
-						local distance = math.abs(possibleBase - possibleBonus)
-						if distance <= 3 and distance < closestDistance then
-							baseIndex = possibleBase
-							bonusIndex = possibleBonus
-							closestDistance = distance
-						end
-					end
-				end
-			end
-
-			if baseIndex and bonusIndex then
-				local targets = {
-					{ Index = baseIndex, Original = constants[baseIndex], Replacement = configuredDuration },
-					{
-						Index = bonusIndex,
-						Original = constants[bonusIndex],
-						Replacement = math.abs(constants[bonusIndex] - 0.4) <= 0.01 and 0 or configuredDuration,
-					},
-				}
-				for _, target in ipairs(targets) do
-					if pcall(setConstant, method, target.Index, target.Replacement) then
-						table.insert(ChargePlatformDurationState.ConstantPatches, {
-							Function = method,
-							Index = target.Index,
-							Original = target.Original,
-						})
-						patched = true
-					end
-				end
-			end
+local function getNativeAirPlatformDuration(charge)
+	local movement = charge and charge.Movement
+	if movement and typeof(movement.HasUpgrade) == "function" then
+		local success, hasHourglass = pcall(movement.HasUpgrade, movement, "MiniatureHourglass")
+		if success and hasHourglass == true then
+			return 1.4
 		end
 	end
-	return patched
+	return 1
+end
+
+local function getScaledPlatformStartTime(now, startTime, nativeDuration, configuredDuration)
+	local elapsed = math.max(0, now - startTime)
+	return now - elapsed / configuredDuration * nativeDuration
 end
 
 local function restoreChargerAirPlatformDuration()
 	local state = ChargePlatformDurationState
-	local setConstant = getExecutorDebugFunction("setconstant")
-	if setConstant then
-		for index = #state.ConstantPatches, 1, -1 do
-			local patch = state.ConstantPatches[index]
-			pcall(setConstant, patch.Function, patch.Index, patch.Original)
-		end
+	local hook = state.StepHook
+	if state.ChargeModule and hook and state.ChargeModule.Step == hook.Wrapper then
+		state.ChargeModule.Step = hook.Original
 	end
-	state.ConstantPatches = {}
-
-	for methodName, hook in pairs(state.HookedMethods) do
-		if state.ChargeModule and state.ChargeModule[methodName] == hook.Wrapper then
-			state.ChargeModule[methodName] = hook.Original
-		end
-	end
-	state.HookedMethods = {}
+	state.StepHook = nil
 	state.ChargeModule = nil
-	state.ActiveThreads = setmetatable({}, { __mode = "k" })
-
-	if state.OriginalDelay and typeof(hookfunction) == "function" then
-		pcall(hookfunction, task.delay, state.OriginalDelay)
-	end
-	state.OriginalDelay = nil
 end
 
 local function updateChargerAirPlatformDuration(controller)
@@ -258,61 +166,47 @@ local function updateChargerAirPlatformDuration(controller)
 	end
 
 	local state = ChargePlatformDurationState
+	local original = chargeModule.Step
+	if typeof(original) ~= "function" then
+		return false
+	end
+
 	state.ChargeModule = chargeModule
-	local constantsPatched = patchFrameTimerConstants(chargeModule, configuredDuration)
-	if typeof(hookfunction) ~= "function" then
-		return constantsPatched
-	end
-
-	local methodsToWrap = {}
-	for _, methodName in ipairs({ "AltSpecialAction", "SpecialAction", "Start" }) do
-		if typeof(chargeModule[methodName]) == "function" then
-			table.insert(methodsToWrap, methodName)
-		end
-	end
-	if #methodsToWrap == 0 then
-		return constantsPatched
-	end
-
-	local delayHooked, originalDelay = pcall(function()
-		return hookfunction(task.delay, function(delayTime, callback, ...)
-			local activeThread = getCurrentThreadKey()
-			if (state.ActiveThreads[activeThread] or 0) > 0 and isNativeAirPlatformDelay(delayTime) then
-				delayTime = configuredDuration
-			end
-			return state.OriginalDelay(delayTime, callback, ...)
-		end)
-	end)
-	if not delayHooked or typeof(originalDelay) ~= "function" then
-		return constantsPatched
-	end
-
-	state.OriginalDelay = originalDelay
-	for _, methodName in ipairs(methodsToWrap) do
-		local original = chargeModule[methodName]
-		if typeof(original) == "function" then
-			local wrapper = function(...)
-				local activeThread = getCurrentThreadKey()
-				state.ActiveThreads[activeThread] = (state.ActiveThreads[activeThread] or 0) + 1
-				local results = table.pack(pcall(original, ...))
-				local remainingDepth = (state.ActiveThreads[activeThread] or 1) - 1
-				state.ActiveThreads[activeThread] = remainingDepth > 0 and remainingDepth or nil
-				if not results[1] then
-					error(results[2], 0)
+	local wrapper = function(charge, ...)
+		local originalStartTime = nil
+		local scaledStartTime = nil
+		if typeof(charge) == "table" and charge.usingAntiFallingMethod == true then
+			local startTime = tonumber(charge.lastFallTime)
+			if startTime and startTime >= 0 then
+				local now = time()
+				local elapsed = math.max(0, now - startTime)
+				if elapsed < configuredDuration then
+					originalStartTime = startTime
+					local nativeDuration = getNativeAirPlatformDuration(charge)
+					-- Native Step owns fading and collision. Give it a temporary clock scaled to the custom lifetime.
+					scaledStartTime = getScaledPlatformStartTime(now, startTime, nativeDuration, configuredDuration)
+					charge.lastFallTime = scaledStartTime
 				end
-				return table.unpack(results, 2, results.n)
 			end
-			state.HookedMethods[methodName] = { Original = original, Wrapper = wrapper }
-			chargeModule[methodName] = wrapper
 		end
+
+		if not originalStartTime then
+			return original(charge, ...)
+		end
+
+		local results = table.pack(pcall(original, charge, ...))
+		if charge.lastFallTime == scaledStartTime then
+			charge.lastFallTime = originalStartTime
+		end
+		if not results[1] then
+			error(results[2], 0)
+		end
+		return table.unpack(results, 2, results.n)
 	end
 
-	if next(state.HookedMethods) == nil then
-		pcall(hookfunction, task.delay, state.OriginalDelay)
-		state.OriginalDelay = nil
-		return constantsPatched
-	end
-	return true
+	state.StepHook = { Original = original, Wrapper = wrapper }
+	chargeModule.Step = wrapper
+	return chargeModule.Step == wrapper
 end
 
 local function packValues(...)
