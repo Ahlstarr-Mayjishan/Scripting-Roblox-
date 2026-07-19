@@ -43,6 +43,8 @@ local stats = {
 	Scans = 0,
 	CacheHits = 0,
 	LastDuration = 0,
+	TotalDuration = 0,
+	MaxDuration = 0,
 	LastGiftCount = 0,
 }
 
@@ -169,14 +171,9 @@ local function visitLiveGifts(gch, callback)
 		return 0
 	end
 	local giftsByType = gch.GiftsByType
-	local visitedIds = {}
 	local count = 0
 	local sliceStartedAt = os.clock()
-	local function visit(giftId, gift)
-		if visitedIds[giftId] then
-			return
-		end
-		visitedIds[giftId] = true
+	local function visit(gift)
 		count += 1
 		callback(gift)
 		if count % SCAN_CHECK_INTERVAL == 0 and os.clock() - sliceStartedAt >= SCAN_FRAME_BUDGET then
@@ -190,18 +187,18 @@ local function visitLiveGifts(gch, callback)
 			local giftIds = giftsByType[giftType]
 			if typeof(giftIds) == "table" then
 				for giftId in pairs(giftIds) do
-					visit(giftId, gifts[giftId])
+					visit(gifts[giftId])
 				end
 			end
 		end
 		if count == 0 and next(gifts) ~= nil then
-			for giftId, gift in pairs(gifts) do
-				visit(giftId, gift)
+			for _, gift in pairs(gifts) do
+				visit(gift)
 			end
 		end
 	else
-		for giftId, gift in pairs(gifts) do
-			visit(giftId, gift)
+		for _, gift in pairs(gifts) do
+			visit(gift)
 		end
 	end
 	return count
@@ -238,6 +235,15 @@ function Scanner.reset()
 	if Collapse and typeof(Collapse.reset) == "function" then
 		Collapse.reset()
 	end
+end
+
+function Scanner.resetStats()
+	stats.Scans = 0
+	stats.CacheHits = 0
+	stats.LastDuration = 0
+	stats.TotalDuration = 0
+	stats.MaxDuration = 0
+	stats.LastGiftCount = 0
 end
 
 function Scanner.stop()
@@ -406,8 +412,11 @@ function Scanner.scan(controller, gch)
 	nextSettleAt = earliestSettleAt
 	cachedCandidates = candidates
 	cachedInfo = info
+	local scanDuration = os.clock() - scanStartedAt
 	stats.Scans += 1
-	stats.LastDuration = os.clock() - scanStartedAt
+	stats.LastDuration = scanDuration
+	stats.TotalDuration += scanDuration
+	stats.MaxDuration = math.max(stats.MaxDuration, scanDuration)
 	stats.LastGiftCount = visitedCount
 	return candidates, info
 end

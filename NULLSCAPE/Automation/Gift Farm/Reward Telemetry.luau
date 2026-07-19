@@ -154,7 +154,7 @@ local function ensureRuntime(controller)
 	end
 	runtimeName = createRuntimeName()
 	document = {
-		Schema = 1,
+		Schema = 2,
 		RuntimeName = runtimeName,
 		StartedAt = utcTimestamp(),
 		Records = {},
@@ -203,6 +203,14 @@ function Telemetry.observeRound(giftClientHandler)
 	peak.NormalMax = math.max(peak.NormalMax, gifts.NormalMax)
 	peak.Golden = math.max(peak.Golden, gifts.Golden)
 	peak.GoldenMax = math.max(peak.GoldenMax, gifts.GoldenMax)
+	return true
+end
+
+function Telemetry.observePerformance(metrics)
+	if not activeRound or typeof(metrics) ~= "table" then
+		return false
+	end
+	activeRound.Performance = metrics
 	return true
 end
 

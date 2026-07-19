@@ -23,6 +23,8 @@ local XpTripcoinMode = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/XP T
 local Lap2Policy = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Lap2 Policy.luau")
 local RewardTelemetry = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Reward Telemetry.luau")
 local RuntimeBudget = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Runtime Budget.luau")
+local PerformanceMetrics = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Performance Metrics.luau")
+local PylonState = getgenv().loadModule("NULLSCAPE/Automation/Pylon State.luau")
 
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
@@ -36,7 +38,6 @@ local PIPELINE_MODE = "Pipelining (Network)"
 local DEFAULT_RANGE = 60
 local STATUS_UPDATE_INTERVAL = RuntimeBudget.Coordinator.StatusUpdateInterval
 local EMPTY_COMPLETE_DELAY = 2.5
-local PYLON_LEVEL = 35
 local GOLDEN_RETURN_VERIFY_ATTEMPTS = 6
 local GOLDEN_RETURN_VERIFY_INTERVAL = 0.12
 local GOLDEN_RETURN_CONFIRM_DELAY = 0.25
@@ -140,6 +141,7 @@ local function recoverAfterStop(controller, detail)
 	markProgress()
 	if controller then
 		controller.GiftFarmGoldenComplete = false
+		controller.GiftFarmNormalComplete = false
 		controller.GiftFarmXpTripcoinMode = false
 	end
 	if Lap2Policy and typeof(Lap2Policy.reset) == "function" then
@@ -159,43 +161,12 @@ local function getGiftFarmRange(controller)
 	return r
 end
 
-local function getLevel()
-	local lvl = ReplicatedStorage:FindFirstChild("Level")
-	if lvl and (lvl:IsA("IntValue") or lvl:IsA("NumberValue")) then
-		return tonumber(lvl.Value) or 0
-	end
-	return 0
-end
-
-local function hasActivePylon()
-	for _, model in ipairs(CollectionService:GetTagged("Pylon")) do
-		if model and model:IsDescendantOf(workspace) and model:GetAttribute("Completed") ~= true then
-			return true
-		end
-	end
-	return false
-end
-
 local function getPylonProgress()
-	local completed = tonumber(ReplicatedStorage:GetAttribute("PylonsDone")) or 0
-	local maximum = tonumber(ReplicatedStorage:GetAttribute("MaxPylons")) or 0
-	return completed, maximum
+	return PylonState.getProgress()
 end
 
 local function shouldWaitForPylons(controller)
-	if not (controller and controller.PylonActivatorEnabled) then
-		return false
-	end
-
-	local completed, maximum = getPylonProgress()
-	if maximum > 0 then
-		return completed < maximum
-	end
-	if controller.PylonActivatorComplete then
-		return false
-	end
-
-	return getLevel() >= PYLON_LEVEL and hasActivePylon()
+	return PylonState.shouldWait(controller)
 end
 
 local function tryMedalStep(controller, hrp, lease, currentSessionToken)
@@ -431,6 +402,7 @@ local function observeCharacter(controller, gc)
 		markProgress()
 		if controller then
 			controller.GiftFarmGoldenComplete = false
+			controller.GiftFarmNormalComplete = false
 		end
 
 		if GoldenWait and typeof(GoldenWait.reset) == "function" then
@@ -514,6 +486,9 @@ local function observeInRound(controller, gc)
 	local function resetRoundState(value)
 		local giftClientHandler = Context.getGiftClientHandler()
 		if not value and RewardTelemetry and typeof(RewardTelemetry.endRound) == "function" then
+			if PerformanceMetrics and typeof(PerformanceMetrics.snapshot) == "function" then
+				RewardTelemetry.observePerformance(PerformanceMetrics.snapshot(Scanner.getStats()))
+			end
 			RewardTelemetry.endRound(controller, giftClientHandler)
 		end
 		sessionToken += 1
@@ -530,6 +505,7 @@ local function observeInRound(controller, gc)
 		markProgress()
 		if controller then
 			controller.GiftFarmGoldenComplete = false
+			controller.GiftFarmNormalComplete = false
 		end
 		if value then
 			syncXpTripcoinMode(controller)
@@ -561,6 +537,12 @@ local function observeInRound(controller, gc)
 		end
 		if Scanner and typeof(Scanner.reset) == "function" then
 			Scanner.reset()
+		end
+		if Scanner and typeof(Scanner.resetStats) == "function" then
+			Scanner.resetStats()
+		end
+		if PerformanceMetrics and typeof(PerformanceMetrics.reset) == "function" then
+			PerformanceMetrics.reset()
 		end
 		if Collector and typeof(Collector.resetAdaptive) == "function" then
 			Collector.resetAdaptive(controller)
@@ -697,10 +679,6 @@ local function runLoop(controller)
 				local lap2Active = Lap2Policy
 					and typeof(Lap2Policy.sync) == "function"
 					and Lap2Policy.sync(controller) == true
-				if xpTripcoinMode and controller.PylonActivatorHolding == true then
-					controller.PylonActivatorHolding = false
-				end
-
 				-- 3. Wait for normal gifts to spawn and stabilize
 				if not giftsStabilized then
 					if not startWaitAt then
@@ -763,6 +741,7 @@ local function runLoop(controller)
 				end
 
 				local candidates, scanInfo = Scanner.scan(controller, gch)
+				controller.GiftFarmNormalComplete = (tonumber(scanInfo and scanInfo.RawNormal) or 0) <= 0
 				if RewardTelemetry and typeof(RewardTelemetry.observeRound) == "function" then
 					RewardTelemetry.observeRound(gch)
 				end
@@ -880,6 +859,7 @@ local function runLoop(controller)
 						local isPassage = altarName == "Passage"
 						if isPassage then
 							controller.GiftFarmGoldenComplete = false
+							controller.GiftFarmNormalComplete = false
 							pendingGoldenReturnSince = nil
 						end
 						if
@@ -998,6 +978,7 @@ local function runLoop(controller)
 				lastGiftSeenAt = os.clock()
 
 				local rangeRevision = tonumber(controller.GiftFarmRangeRevision) or 0
+				local planStartedAt = os.clock()
 				local route, remaining = ClusterPlanner.planRoute(candidates, range, hrp.Position)
 				if
 					remaining
@@ -1020,6 +1001,12 @@ local function runLoop(controller)
 				for _, step in ipairs(route) do
 					totalPlanned += #(step.Cluster or {})
 				end
+				PerformanceMetrics.recordPlan(
+					os.clock() - planStartedAt,
+					#candidates,
+					#route,
+					totalPlanned
+				)
 
 				local focus = scanInfo and scanInfo.GoldenLocked and "golden" or "gifts"
 				local wasGoldenRoute = scanInfo and scanInfo.GoldenLocked == true
@@ -1089,6 +1076,7 @@ local function runLoop(controller)
 
 				local routeCompleted = false
 				local routeStats = nil
+				local collectionStartedAt = os.clock()
 
 				if mode == PIPELINE_MODE then
 					routeCompleted, routeStats = PipelinedCollector.collectRoute(controller, hrp, route, range, {
@@ -1168,6 +1156,7 @@ local function runLoop(controller)
 						routeCompleted = false
 					end
 				end
+				PerformanceMetrics.recordCollection(os.clock() - collectionStartedAt, routeStats)
 
 				-- Release lease
 				if routeStats and (tonumber(routeStats.Accepted) or 0) > 0 then

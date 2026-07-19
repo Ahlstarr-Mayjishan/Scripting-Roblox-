@@ -849,6 +849,18 @@ Client.Tabs["Home"] = HomeTab
 HomeTab:CreateSection("Player Info")
 HomeTab:CreateLabel("Account Name: " .. LocalPlayer.Name)
 HomeTab:CreateLabel("Account Age: " .. LocalPlayer.AccountAge .. " days")
+local classLabel = HomeTab:CreateLabel("Current Class: Detecting...")
+
+local function updateClassLabel(classId)
+	local displayName = "Unknown"
+	if typeof(classId) == "string" and classId ~= "" then
+		local normalized = string.gsub(classId, "^class/", "")
+		displayName = string.upper(string.sub(normalized, 1, 1)) .. string.sub(normalized, 2)
+	end
+	pcall(function()
+		classLabel:Set("Current Class: " .. displayName)
+	end)
+end
 
 HomeTab:CreateSection("Server Info")
 local statsLabel = HomeTab:CreateLabel("FPS: Calculating... | Ping: Calculating... | Players: 0/0")
@@ -1142,8 +1154,14 @@ local classContextLoaded, classContextResult = pcall(function()
 end)
 if classContextLoaded and typeof(classContextResult) == "table" then
 	Client.Modules.ClassContext = classContextResult
-	pcall(classContextResult.initialize)
+	local initialized, currentClass = pcall(classContextResult.initialize)
+	updateClassLabel(initialized and currentClass or nil)
+	local subscribed, classSubscription = pcall(classContextResult.subscribe, updateClassLabel)
+	if subscribed and classSubscription then
+		trackConnection(classSubscription)
+	end
 else
+	updateClassLabel(nil)
 	warn("[NULLSCAPE] Class context unavailable: " .. tostring(classContextResult))
 end
 

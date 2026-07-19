@@ -3,6 +3,7 @@
 local UpgradeCompletion = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Upgrade Completion.luau")
 local Beacon = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Beacon.luau")
 local MovementLease = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/MovementLease.luau")
+local PylonState = getgenv().loadModule("NULLSCAPE/Automation/Pylon State.luau")
 
 local XpTripcoinMode = {}
 local returnedThisRound = false
@@ -75,6 +76,21 @@ function XpTripcoinMode.handleScan(controller, hrp, candidates, scanInfo, setSta
 			return true
 		end
 		return false
+	end
+
+	local pylonsPending, pylonSnapshot = PylonState.shouldWait(controller)
+	if pylonsPending then
+		Beacon.suppressUntilReturn()
+		local detail = if pylonSnapshot.Maximum > 0
+			then string.format(
+				"XP + Tripcoin | waiting for pylons %d/%d",
+				pylonSnapshot.Completed,
+				pylonSnapshot.Maximum
+			)
+			else "XP + Tripcoin | waiting for active pylons"
+		setStatus(controller, "Paused", detail, true)
+		task.wait(0.08)
+		return true
 	end
 
 	Beacon.restore(true)

@@ -28,6 +28,15 @@ local STREAM_REQUEST_TIMEOUT = 2.5
 local GROUND_WAIT_TIMEOUT = 1.25
 local GROUND_RAY_HEIGHT = 14
 local GROUND_RAY_DISTANCE = 96
+local GROUND_OFFSETS = {
+	Vector3.new(0, 0, 0),
+	Vector3.new(4.5, 0, 0),
+	Vector3.new(-4.5, 0, 0),
+	Vector3.new(0, 0, 4.5),
+	Vector3.new(0, 0, -4.5),
+}
+local cachedGroundRoom = nil
+local cachedGroundParams = nil
 
 local function collectBeaconParts()
 	local beacon = workspace:FindFirstChild("Beacon")
@@ -88,25 +97,19 @@ local function raycastCurrentRoomsFloor(position)
 		return nil
 	end
 
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Include
-	params.FilterDescendantsInstances = { currentRooms }
-	params.RespectCanCollide = true
+	if cachedGroundRoom ~= currentRooms or not cachedGroundParams then
+		cachedGroundRoom = currentRooms
+		cachedGroundParams = RaycastParams.new()
+		cachedGroundParams.FilterType = Enum.RaycastFilterType.Include
+		cachedGroundParams.FilterDescendantsInstances = { currentRooms }
+		cachedGroundParams.RespectCanCollide = true
+	end
 
-	-- Check center and 4 horizontal offsets (cross pattern) to handle edges/gaps robustly
-	local offsets = {
-		Vector3.new(0, 0, 0),
-		Vector3.new(4.5, 0, 0),
-		Vector3.new(-4.5, 0, 0),
-		Vector3.new(0, 0, 4.5),
-		Vector3.new(0, 0, -4.5),
-	}
-
-	for _, offset in ipairs(offsets) do
+	for _, offset in ipairs(GROUND_OFFSETS) do
 		local result = Workspace:Raycast(
 			position + offset + Vector3.new(0, GROUND_RAY_HEIGHT, 0),
 			Vector3.new(0, -GROUND_RAY_DISTANCE, 0),
-			params
+			cachedGroundParams
 		)
 		if result and result.Instance then
 			return result
@@ -133,6 +136,13 @@ function Context.waitForStreamedGround(position, timeout)
 	end
 
 	local waitTimeout = math.max(0, tonumber(timeout) or GROUND_WAIT_TIMEOUT)
+	local existingGround = raycastCurrentRoomsFloor(position)
+	if existingGround and existingGround.Instance then
+		return true
+	end
+	if waitTimeout <= 0 then
+		return false
+	end
 	Context.requestStreamAround(position, waitTimeout)
 
 	local deadline = os.clock() + waitTimeout

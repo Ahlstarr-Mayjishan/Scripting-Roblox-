@@ -10,10 +10,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 local MovementLease = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/MovementLease.luau")
+local PylonState = getgenv().loadModule("NULLSCAPE/Automation/Pylon State.luau")
 
 local PylonActivator = {}
 
-local TARGET_LEVEL = 35
+local TARGET_LEVEL = PylonState.TargetLevel
 local HOLD_INTERVAL = 0.12
 local ROOT_OFFSET = Vector3.new(0, 2, 0)
 local STREAM_REQUEST_TIMEOUT = 1.25
@@ -49,11 +50,7 @@ local function isInRound()
 end
 
 local function getLevel()
-	local level = ReplicatedStorage:FindFirstChild("Level")
-	if level and (level:IsA("IntValue") or level:IsA("NumberValue")) then
-		return tonumber(level.Value) or 0
-	end
-	return 0
+	return PylonState.getLevel()
 end
 
 local function getPylonRoot(model)
@@ -79,9 +76,7 @@ local function isCompleted(model)
 end
 
 local function getPylonProgress()
-	local completed = tonumber(ReplicatedStorage:GetAttribute("PylonsDone")) or 0
-	local maximum = tonumber(ReplicatedStorage:GetAttribute("MaxPylons")) or 0
-	return completed, maximum
+	return PylonState.getProgress()
 end
 
 local function areAllPylonsComplete()
@@ -100,6 +95,28 @@ local function hasPendingPylons()
 		end
 	end
 	return false
+end
+
+local function areGiftTargetsComplete(controller)
+	if controller.GiftFarmXpTripcoinMode == true then
+		return controller.GiftFarmNormalComplete == true
+	end
+	return controller.GiftFarmGoldenComplete == true
+end
+
+local function getGiftWaitStatus(controller)
+	if controller.GiftFarmXpTripcoinMode == true then
+		return "WaitingForNormal", "Gift Farm must clear normal gifts first"
+	end
+	return "WaitingForGolden", "Gift Farm must clear golden gifts first"
+end
+
+local function updatePendingState(controller)
+	local pending = hasPendingPylons()
+	if controller then
+		controller.PylonActivatorPending = pending
+	end
+	return pending
 end
 
 local function getPylonProgressDetail(prefix)
@@ -388,17 +405,10 @@ local function run(controller)
 	running = true
 	task.spawn(function()
 		while enabled and controller and not controller.Destroyed do
-			if controller.GiftFarmXpTripcoinMode == true then
-				controller.PylonActivatorHolding = false
-				controller.PylonActivatorComplete = false
-				setStatus(controller, "DisabledForXpTripcoin", "All upgrades owned; normal Gift farming only")
-				task.wait(0.5)
-				continue
-			end
-
 			if not isInRound() then
 				controller.PylonActivatorHolding = false
 				controller.PylonActivatorComplete = false
+				controller.PylonActivatorPending = false
 				resetKnownPylons()
 				savedCFrame = nil
 				setStatus(controller, "WaitingForRound")
@@ -416,6 +426,7 @@ local function run(controller)
 			if getLevel() < TARGET_LEVEL then
 				controller.PylonActivatorHolding = false
 				controller.PylonActivatorComplete = false
+				controller.PylonActivatorPending = false
 				setStatus(
 					controller,
 					"WaitingForLevel",
@@ -426,23 +437,26 @@ local function run(controller)
 			end
 
 			refreshKnownPylons()
+			updatePendingState(controller)
 
-			if controller.GiftFarmGoldenComplete ~= true then
+			if not areGiftTargetsComplete(controller) then
 				controller.PylonActivatorHolding = false
-				setStatus(controller, "WaitingForGolden", "Gift Farm must clear golden gifts first")
+				local waitStatus, waitDetail = getGiftWaitStatus(controller)
+				setStatus(controller, waitStatus, waitDetail)
 				task.wait(0.5)
 				continue
 			end
 
 			if areAllPylonsComplete() then
 				controller.PylonActivatorComplete = true
+				controller.PylonActivatorPending = false
 				restorePosition(controller)
 				controller.PylonActivatorHolding = false
 				setStatus(controller, "Completed", getPylonProgressDetail("All pylons activated"))
 				task.wait(0.5)
 				continue
 			end
-			if not hasPendingPylons() then
+			if not updatePendingState(controller) then
 				controller.PylonActivatorHolding = false
 				setStatus(controller, "WaitingForPylons", "Waiting for native pylon progress")
 				task.wait(0.25)
@@ -495,8 +509,7 @@ local function run(controller)
 				and not controller.Destroyed
 				and isInRound()
 				and getLevel() >= TARGET_LEVEL
-				and controller.GiftFarmXpTripcoinMode ~= true
-				and controller.GiftFarmGoldenComplete == true
+				and areGiftTargetsComplete(controller)
 				and controller.GiftFarmPolicyHolding ~= true
 				and controller.GiftFarmRestPending ~= true
 				and lease:isValid()
@@ -525,6 +538,7 @@ local function run(controller)
 			lease:release()
 			if confirmTargetCompletion(target, completedBefore) then
 				controller.PylonActivatorComplete = areAllPylonsComplete()
+				controller.PylonActivatorPending = not controller.PylonActivatorComplete and hasPendingPylons()
 				if controller.PylonActivatorComplete then
 					restorePosition(controller)
 					controller.PylonActivatorHolding = false
@@ -538,6 +552,7 @@ local function run(controller)
 
 		if controller then
 			controller.PylonActivatorHolding = false
+			controller.PylonActivatorPending = false
 		end
 		restorePosition(controller)
 		running = false
@@ -550,11 +565,13 @@ function PylonActivator.update(controller)
 		controller.PylonActivatorComplete = false
 		startPylonObserver()
 		refreshKnownPylons()
+		updatePendingState(controller)
 		run(controller)
 	else
 		if controller then
 			controller.PylonActivatorHolding = false
 			controller.PylonActivatorComplete = false
+			controller.PylonActivatorPending = false
 		end
 		restorePosition(controller)
 		setStatus(controller, "Idle")
@@ -569,6 +586,7 @@ function PylonActivator.disable(controller)
 	if controller then
 		controller.PylonActivatorHolding = false
 		controller.PylonActivatorComplete = false
+		controller.PylonActivatorPending = false
 	end
 	restorePosition(controller)
 	setStatus(controller, "Idle")

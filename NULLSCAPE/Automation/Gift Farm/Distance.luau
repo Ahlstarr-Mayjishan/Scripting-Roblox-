@@ -4,6 +4,7 @@ local Distance = {}
 
 local Y_SCALE = 0.8
 local ROOT_OFFSET = Vector3.new(0, 3, 0)
+local MIN_BEACON_DISTANCE = 15
 
 local function scaleOffset(offset)
 	return Vector3.new(offset.X, offset.Y * Y_SCALE, offset.Z)
@@ -39,12 +40,11 @@ function Distance.getRootPosition(targetPosition)
 		local offset = rootPos - beaconPos
 		local flatOffset = Vector3.new(offset.X, 0, offset.Z)
 		local dist = flatOffset.Magnitude
-		local minSafeDistance = 15
-		if dist < minSafeDistance then
+		if dist < MIN_BEACON_DISTANCE then
 			if dist > 0.1 then
-				rootPos = beaconPos + flatOffset.Unit * minSafeDistance + Vector3.new(0, offset.Y, 0)
+				rootPos = beaconPos + flatOffset.Unit * MIN_BEACON_DISTANCE + Vector3.new(0, offset.Y, 0)
 			else
-				rootPos = beaconPos + Vector3.new(minSafeDistance, offset.Y, 0)
+				rootPos = beaconPos + Vector3.new(MIN_BEACON_DISTANCE, offset.Y, 0)
 			end
 		end
 	end

@@ -5,6 +5,7 @@
 -- ]]
 
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Logic = {
 	Connections = {},
@@ -15,6 +16,8 @@ local Logic = {
 }
 
 local RETRY_DELAYS = { 0, 0.1, 0.5 }
+local DIED_REASON = "celestial"
+local DIED_GUARD_STATE_KEY = "_NULLSCAPE_CelestialDiedGuardState"
 local SOURCE_EVENTS = {
 	Celestial = {
 		ControllerFlag = "CelestialImmune",
@@ -50,6 +53,73 @@ end
 local function isSourceEnabled(config)
 	local controller = getController()
 	return controller and not controller.Destroyed and controller.inLobby ~= true and controller[config.ControllerFlag] == true
+end
+
+local function wrapHook(callback)
+	if typeof(newcclosure) == "function" then
+		return newcclosure(callback)
+	end
+	return callback
+end
+
+local function installDiedGuard()
+	if typeof(hookfunction) ~= "function" then
+		return false
+	end
+
+	local events = ReplicatedStorage:FindFirstChild("Events")
+	local diedRemote = events and events:FindFirstChild("Died")
+	if not (diedRemote and diedRemote:IsA("RemoteEvent")) then
+		return false
+	end
+
+	local environment = getgenv()
+	local state = environment[DIED_GUARD_STATE_KEY]
+	if typeof(state) ~= "table" then
+		state = {}
+		environment[DIED_GUARD_STATE_KEY] = state
+	end
+
+	state.DiedRemote = diedRemote
+	state.ShouldBlock = function(remote, firstArg)
+		local controller = getController()
+		return Logic.Enabled
+			and remote == state.DiedRemote
+			and controller ~= nil
+			and not controller.Destroyed
+			and controller.CelestialImmune == true
+			and controller.ShieldBaitEnabled ~= true
+			and string.lower(tostring(firstArg or "")) == DIED_REASON
+	end
+
+	if state.Installed == true then
+		return true
+	end
+
+	local success, originalFireServer = pcall(function()
+		local original
+		original = hookfunction(diedRemote.FireServer, wrapHook(function(remote, ...)
+			local shouldBlock = state.ShouldBlock
+			if typeof(shouldBlock) == "function" and shouldBlock(remote, ...) then
+				local globals = getgenv()._NULLSCAPE_Globals
+				if typeof(globals) == "table" then
+					globals.LastCelestialDeathReportBlockedAt = os.clock()
+					globals.LastCelestialDeathReportBlockedReason = DIED_REASON
+				end
+				return
+			end
+			return original(remote, ...)
+		end))
+		return original
+	end)
+
+	if success and typeof(originalFireServer) == "function" then
+		state.OriginalFireServer = originalFireServer
+		state.Installed = true
+		return true
+	end
+
+	return false
 end
 
 local function disableSignal(signal)
@@ -163,10 +233,12 @@ end
 
 function Logic.enable()
 	if Logic.Enabled then
+		installDiedGuard()
 		return true
 	end
 
 	Logic.Enabled = true
+	installDiedGuard()
 	local enemies = Workspace:FindFirstChild("Enemies")
 	if enemies and enemies:IsA("Folder") then
 		observeEnemiesFolder(enemies)
