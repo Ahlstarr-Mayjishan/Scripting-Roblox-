@@ -72,9 +72,16 @@ function Helper.step(grapple)
 	end
 
 	Helper.Pending[grapple] = nil
+	local metadata = pending.Metadata or {}
+	local function notifyFailure(reason)
+		if typeof(metadata.OnReleaseFailed) == "function" then
+			pcall(metadata.OnReleaseFailed, grapple, pending.Reason, reason)
+		end
+	end
 
 	local movement = grapple and grapple.Movement
 	if not (movement and movement.grappling == true and grapple.grappleReel == true) then
+		notifyFailure("state-invalid")
 		return false
 	end
 
@@ -90,11 +97,15 @@ function Helper.step(grapple)
 	end
 
 	if not (ReleasePolicy and typeof(ReleasePolicy.release) == "function") then
+		notifyFailure("policy-unavailable")
 		return false
 	end
 
-	local metadata = pending.Metadata or {}
-	return ReleasePolicy.release(grapple, pending.Reason, metadata)
+	local released = ReleasePolicy.release(grapple, pending.Reason, metadata)
+	if not released then
+		notifyFailure("native-rejected")
+	end
+	return released
 end
 
 function Helper.reset()

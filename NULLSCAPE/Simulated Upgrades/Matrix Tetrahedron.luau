@@ -110,6 +110,47 @@ local function getNativeFrictionTarget(humanoidMovement)
 	return target
 end
 
+local function getCurrentInputDirection(movement)
+	local input = movement and movement.PlayerMoveDirection
+	if typeof(input) ~= "Vector3" or input.Magnitude <= 1e-6 then
+		return Vector3.zero
+	end
+
+	local modifier = 1
+	local character = movement.Character
+	if character then
+		modifier = tonumber(character:GetAttribute("EmoteMoveModifier")) or 1
+	end
+	return input.Unit * modifier
+end
+
+local function getQuickTurnReduction(reduction)
+	local normalized = math.clamp(reduction / NATIVE_MODE_THRESHOLD, 0, 1)
+	return normalized * normalized * NATIVE_MODE_THRESHOLD
+end
+
+local function reduceQuickTurn(humanoidMovement, reduction)
+	local movement = humanoidMovement and humanoidMovement.Movement
+	if not (movement and movement.doingQuickTurn == true) then
+		return false
+	end
+
+	-- Native Quick Turn applies a 0.5 brake (0.75 while charge-slowing) and
+	-- locks WantDirection to its captured direction. Matrix skips both.
+	local strength = getQuickTurnReduction(reduction)
+	local penalty = movement.chargeSlowing == true and 0.75 or 0.5
+	if typeof(movement.friction) == "number" then
+		local unbrakedFriction = movement.friction / penalty
+		movement.friction += (unbrakedFriction - movement.friction) * strength
+	end
+
+	local inputDirection = getCurrentInputDirection(movement)
+	if typeof(movement.WantDirection) == "Vector3" and inputDirection.Magnitude > 0 then
+		movement.WantDirection = movement.WantDirection:Lerp(inputDirection, strength)
+	end
+	return true
+end
+
 local function applySimulation(humanoidMovement)
 	local controller = getActiveController()
 	local movement = humanoidMovement and humanoidMovement.Movement
@@ -125,6 +166,9 @@ local function applySimulation(humanoidMovement)
 	local reduction = getReduction(controller)
 	if reduction >= NATIVE_MODE_THRESHOLD then
 		stopQuickTurn(movement)
+		return
+	end
+	if reduceQuickTurn(humanoidMovement, reduction) then
 		return
 	end
 

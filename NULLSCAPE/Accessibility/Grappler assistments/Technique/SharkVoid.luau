@@ -9,7 +9,6 @@ local UpgradeGate = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assis
 local GrappleRange = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Range.luau")
 local VoidCastAssist = getgenv().loadModule("NULLSCAPE/Class Adjustment/Grappler/Grapple Void Cast Assist.luau")
 local CastTransaction = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Cast Transaction.luau")
-local ReleasePolicy = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/Release Policy.luau")
 local SharkTailWindow = getgenv().loadModule("NULLSCAPE/Accessibility/Grappler assistments/SharkTail Window.luau")
 
 local DEFAULT_HEIGHT = 45
@@ -19,11 +18,18 @@ local VOID_ANCHOR_TOLERANCE = 10
 local VOID_REEL_LATERAL_OFFSET = 64
 
 local Logic = {
-	PendingEndAt = nil,
 	LastAutoCastAt = 0,
+	LastAutoCastAttemptAt = 0,
 	LastAutoReelAt = 0,
 	LastSharkTailAt = 0,
+	LastSharkTailAttemptAt = 0,
 	LastVoidAnchorAt = 0,
+	LastTransactionAt = 0,
+	RetryAfter = 0,
+	ConsecutiveCastFailures = 0,
+	ReelOwned = false,
+	ActiveGrapple = nil,
+	MaxRescueHorizontalSpeed = 0,
 }
 
 local function getNumber(value, fallback, minimum, maximum)
@@ -35,6 +41,49 @@ local function recordMomentum(grapple, source)
 	if MomentumMemory and typeof(MomentumMemory.record) == "function" then
 		pcall(MomentumMemory.record, grapple and grapple.RootPart, source)
 	end
+end
+
+local function getVelocity(rootPart)
+	return rootPart and (rootPart.AssemblyLinearVelocity or rootPart.Velocity) or Vector3.zero
+end
+
+local function trackRescueMomentum(grapple)
+	local rootPart = grapple and grapple.RootPart
+	if not (rootPart and rootPart.Parent) then
+		return 0
+	end
+
+	local velocity = getVelocity(rootPart)
+	local horizontalSpeed = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
+	Logic.MaxRescueHorizontalSpeed = math.max(Logic.MaxRescueHorizontalSpeed or 0, horizontalSpeed)
+	return Logic.MaxRescueHorizontalSpeed
+end
+
+local function applyMaximumVerticalMomentum(grapple, controller)
+	local rootPart = grapple and grapple.RootPart
+	if not (rootPart and rootPart.Parent) then
+		return false
+	end
+
+	local beforeVelocity = getVelocity(rootPart)
+	local maximumHorizontalSpeed = math.max(trackRescueMomentum(grapple), 0)
+	local nativeVerticalVelocity = maximumHorizontalSpeed ^ 0.95 * 1.3
+	local verticalLimit = math.clamp(tonumber(controller and controller.MomentumMaxVerticalSpeed) or 500, 100, 500)
+	local targetVerticalVelocity = math.min(nativeVerticalVelocity, verticalLimit)
+	if targetVerticalVelocity <= beforeVelocity.Y then
+		return false
+	end
+
+	local afterVelocity = Vector3.new(beforeVelocity.X, targetVerticalVelocity, beforeVelocity.Z)
+	rootPart.AssemblyLinearVelocity = afterVelocity
+	rootPart.Velocity = afterVelocity
+	if MomentumMemory and typeof(MomentumMemory.noteImpulse) == "function" then
+		pcall(MomentumMemory.noteImpulse, rootPart, "SharkVoidVerticalConversion", beforeVelocity, afterVelocity, afterVelocity - beforeVelocity, {
+			CapturedHorizontalSpeed = maximumHorizontalSpeed,
+			NativeFormula = true,
+		})
+	end
+	return true
 end
 
 local function getKillVoidY()
@@ -85,6 +134,9 @@ local function isDangerousFall(grapple, controller)
 	end
 
 	if not isAirborne(grapple) then
+		return false
+	end
+	if rootPart.AssemblyLinearVelocity.Y >= 0 then
 		return false
 	end
 
@@ -154,7 +206,7 @@ local function playReelSound(grapple)
 end
 
 local function canAutoCast(grapple, now)
-	if now - (Logic.LastAutoCastAt or 0) < 0.35 then
+	if now < (Logic.RetryAfter or 0) or now - (Logic.LastAutoCastAttemptAt or 0) < 0.35 then
 		return false
 	end
 
@@ -175,6 +227,52 @@ local function canAutoCast(grapple, now)
 	return typeof(grapple.Start) == "function"
 end
 
+local function clearOwnedReel(grapple)
+	if Logic.ReelOwned and grapple then
+		grapple.grappleReel = false
+		grapple.jumpPadReel = false
+	end
+	Logic.ReelOwned = false
+end
+
+local function noteCastFailure(grapple, now)
+	Logic.ConsecutiveCastFailures = (Logic.ConsecutiveCastFailures or 0) + 1
+	Logic.RetryAfter = now + math.min(1.5, 0.35 + Logic.ConsecutiveCastFailures * 0.25)
+	Logic.LastVoidAnchorAt = 0
+	Logic.MaxRescueHorizontalSpeed = 0
+	clearOwnedReel(grapple)
+	if ReleaseTiming and typeof(ReleaseTiming.cancelReason) == "function" then
+		ReleaseTiming.cancelReason(grapple, "SharkVoid")
+	end
+end
+
+local function syncCastTransaction(grapple, now)
+	if not (CastTransaction and typeof(CastTransaction.getLast) == "function") then
+		return false
+	end
+
+	local transaction = CastTransaction.getLast(grapple)
+	if
+		typeof(transaction) ~= "table"
+		or transaction.Source ~= "SharkVoid"
+		or (tonumber(transaction.At) or 0) <= (Logic.LastTransactionAt or 0)
+	then
+		return false
+	end
+
+	Logic.LastTransactionAt = tonumber(transaction.At) or now
+	if transaction.State == "confirmed" then
+		Logic.ConsecutiveCastFailures = 0
+		Logic.RetryAfter = 0
+		Logic.LastVoidAnchorAt = now
+		return true
+	end
+	if transaction.State ~= "pending" then
+		noteCastFailure(grapple, now)
+	end
+	return false
+end
+
 local function hasRequiredUpgrades(grapple)
 	local movement = grapple and grapple.Movement
 	return UpgradeGate and UpgradeGate.hasAll(movement, { "NinjaBelt", "SharkBelt" })
@@ -190,6 +288,9 @@ local function autoCast(grapple, targeting, now)
 	if not canAutoCast(grapple, now) then
 		return false
 	end
+	Logic.LastAutoCastAttemptAt = now
+	Logic.MaxRescueHorizontalSpeed = 0
+	trackRescueMomentum(grapple)
 
 	local controller = Logic.Controller
 	local hitResult, usedEasierVoidCast = findEmergencyVoidHit(grapple, controller)
@@ -217,6 +318,7 @@ local function autoCast(grapple, targeting, now)
 	end
 
 	if not isVoidHit(hitResult) then
+		noteCastFailure(grapple, now)
 		return false
 	end
 
@@ -231,7 +333,8 @@ local function autoCast(grapple, targeting, now)
 	if success then
 		recordMomentum(grapple, "SharkVoidAutoCast")
 		Logic.LastAutoCastAt = now
-		Logic.LastVoidAnchorAt = now
+	else
+		noteCastFailure(grapple, now)
 	end
 
 	return success
@@ -249,6 +352,9 @@ end
 
 local function canAutoReel(grapple, controller, now)
 	if controller.GrappleVoidRescueAutoReel == false then
+		return false
+	end
+	if now < (Logic.RetryAfter or 0) then
 		return false
 	end
 
@@ -286,53 +392,34 @@ local function autoReel(grapple, controller, now)
 	grapple.grappleReel = true
 	recordMomentum(grapple, "SharkVoidAutoReel")
 	Logic.LastAutoReelAt = now
+	Logic.ReelOwned = true
 	local holdTime = getNumber(controller.GrappleVoidRescueReelHoldTime, DEFAULT_REEL_HOLD, 0.05, 0.25)
-	Logic.PendingEndAt = now + holdTime
+	local scheduled = false
 	if ReleaseTiming and typeof(ReleaseTiming.schedule) == "function" then
-		pcall(function()
-			ReleaseTiming.schedule(grapple, "SharkVoid", holdTime, {
+		local scheduleSuccess, scheduleResult = pcall(function()
+			return ReleaseTiming.schedule(grapple, "SharkVoid", holdTime, {
 				Intent = "VoidRescue",
 				EndWasCancelled = false,
 				OnReleased = function(releasedGrapple)
+					Logic.ReelOwned = false
+					recordMomentum(releasedGrapple, "SharkVoidAutoEnd")
 					armSharkTailWindow(releasedGrapple)
+				end,
+				OnReleaseFailed = function(failedGrapple)
+					clearOwnedReel(failedGrapple)
+					noteCastFailure(failedGrapple, time())
 				end,
 			})
 		end)
+		scheduled = scheduleSuccess and scheduleResult ~= false
+	end
+	if not scheduled then
+		clearOwnedReel(grapple)
+		noteCastFailure(grapple, now)
+		return false
 	end
 	playReelSound(grapple)
 	return true
-end
-
-local function autoEnd(grapple, now)
-	if not Logic.PendingEndAt or now < Logic.PendingEndAt then
-		return false
-	end
-
-	Logic.PendingEndAt = nil
-	local movement = grapple and grapple.Movement
-	if not (movement and movement.grappling == true and grapple.grappleReel == true) then
-		return false
-	end
-
-	if not (ReleasePolicy and typeof(ReleasePolicy.release) == "function") then
-		return false
-	end
-
-	local success = ReleasePolicy.release(grapple, "SharkVoid", {
-		EndWasCancelled = false,
-		OnReleased = function(releasedGrapple)
-			armSharkTailWindow(releasedGrapple)
-		end,
-	})
-
-	if success then
-		if ReleaseTiming and typeof(ReleaseTiming.cancel) == "function" then
-			ReleaseTiming.cancel(grapple)
-		end
-		recordMomentum(grapple, "SharkVoidAutoEnd")
-	end
-
-	return success
 end
 
 local function autoSharkTail(grapple, controller, now)
@@ -350,7 +437,10 @@ local function autoSharkTail(grapple, controller, now)
 		return false
 	end
 
-	if now - (Logic.LastSharkTailAt or 0) < RESCUE_COOLDOWN then
+	if
+		now - (Logic.LastSharkTailAt or 0) < RESCUE_COOLDOWN
+		or now - (Logic.LastSharkTailAttemptAt or 0) < 0.08
+	then
 		return false
 	end
 
@@ -362,11 +452,14 @@ local function autoSharkTail(grapple, controller, now)
 		return false
 	end
 
+	Logic.LastSharkTailAttemptAt = now
 	local success = SharkTailWindow.trigger(grapple, "SharkVoid", now)
 
 	if success then
+		applyMaximumVerticalMomentum(grapple, controller)
 		recordMomentum(grapple, "SharkVoidAutoSharkTail")
 		Logic.LastSharkTailAt = now
+		Logic.MaxRescueHorizontalSpeed = 0
 	end
 
 	return success
@@ -374,10 +467,17 @@ end
 
 function Logic.step(grapple, _dt, controller, targeting)
 	Logic.Controller = controller
+	if Logic.ActiveGrapple and Logic.ActiveGrapple ~= grapple then
+		clearOwnedReel(Logic.ActiveGrapple)
+		if ReleaseTiming and typeof(ReleaseTiming.cancelReason) == "function" then
+			ReleaseTiming.cancelReason(Logic.ActiveGrapple, "SharkVoid")
+		end
+	end
+	Logic.ActiveGrapple = grapple
 
 	if not (controller and controller.GrappleVoidRescueEnabled == true) then
-		Logic.PendingEndAt = nil
 		Logic.LastVoidAnchorAt = 0
+		clearOwnedReel(grapple)
 		if SharkTailWindow and typeof(SharkTailWindow.cancel) == "function" then
 			SharkTailWindow.cancel(grapple, "SharkVoid")
 		end
@@ -388,31 +488,45 @@ function Logic.step(grapple, _dt, controller, targeting)
 	end
 
 	local now = time()
+	syncCastTransaction(grapple, now)
+	local pendingRelease = ReleaseTiming and typeof(ReleaseTiming.get) == "function" and ReleaseTiming.get(grapple)
+	local ownsPendingRelease = pendingRelease and pendingRelease.Reason == "SharkVoid"
+	if Logic.ReelOwned or ownsPendingRelease then
+		trackRescueMomentum(grapple)
+	end
 	local sharkTailTriggered = autoSharkTail(grapple, controller, now)
 
 	if not isDangerousFall(grapple, controller) then
-		Logic.PendingEndAt = nil
-		return sharkTailTriggered
+		return sharkTailTriggered or ownsPendingRelease == true
 	end
 
 	if not hasRequiredUpgrades(grapple) then
-		Logic.PendingEndAt = nil
 		return false
 	end
 
-	autoCast(grapple, targeting, now)
-	autoEnd(grapple, now)
-	autoSharkTail(grapple, controller, now)
-	autoReel(grapple, controller, now)
-	return true
+	local castStarted = autoCast(grapple, targeting, now)
+	local reelStarted = autoReel(grapple, controller, now)
+	local movement = grapple and grapple.Movement
+	local rescueAttached = movement and movement.grappling == true and hasVoidAnchor(grapple, now)
+	if rescueAttached then
+		trackRescueMomentum(grapple)
+	end
+	return castStarted or reelStarted or sharkTailTriggered or rescueAttached == true or ownsPendingRelease == true
 end
 
 function Logic.reset()
-	Logic.PendingEndAt = nil
+	clearOwnedReel(Logic.ActiveGrapple)
 	Logic.LastAutoCastAt = 0
+	Logic.LastAutoCastAttemptAt = 0
 	Logic.LastAutoReelAt = 0
 	Logic.LastSharkTailAt = 0
+	Logic.LastSharkTailAttemptAt = 0
 	Logic.LastVoidAnchorAt = 0
+	Logic.LastTransactionAt = 0
+	Logic.RetryAfter = 0
+	Logic.ConsecutiveCastFailures = 0
+	Logic.ActiveGrapple = nil
+	Logic.MaxRescueHorizontalSpeed = 0
 	if SharkTailWindow and typeof(SharkTailWindow.reset) == "function" then
 		SharkTailWindow.reset("SharkVoid")
 	end

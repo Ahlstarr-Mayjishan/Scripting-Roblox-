@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.20.018",
+    "Version":  "2026.07.20.021",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -275,7 +275,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "79c17fe13806dde75095458695cb326680cd735b9817f90436221cd7a683ca84"
+                      "Sha256":  "619b96dcb3fbf4e98a5632d0fcb8b5e0a32832d669bddd94d57c444961a4af53"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Advanced Gravity Coil.luau",
@@ -373,7 +373,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "91253ef01d1eee136c5beb8a5b79106972ec400bac38bc43d431560aa8fa2ce3"
+                      "Sha256":  "72cce3f5e3180290a28c2fbf125ac9ec9d74d84d246ede72975d52e62c2ec700"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Adaptive Anchor Style.luau",
@@ -513,7 +513,70 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "9361e84bf620bd0f88b081644c3f0411f4afde0b84e330f1b80197a89eab2308"
+                      "Sha256":  "85e4ddc3ddc6cda758366690165649d1810d9de8820e8d24746cb9d66222ca27"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Accessibility/Grappler assistments/SharkTail Window.luau",
+                      "Menu":  [
+                                   "Accessibility"
+                               ],
+                      "Sha256":  "0a985a85616f5cdb531a309a5dd0aefbb9cd5778187a183fcf09229f4389290c"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Anchor Action Profiles.luau",
+                      "Menu":  [
+                                   "Accessibility"
+                               ],
+                      "Sha256":  "677f60c95171d25ed41b82224d4edb3828c255069a0f2a021eb965a88954617e"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Anchor Availability.luau",
+                      "Menu":  [
+                                   "Accessibility"
+                               ],
+                      "Sha256":  "6cfb4e06a7f3210dddaacc9aea499d03aaa4fd708f66a04723f6e982582d4e66"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Exit Corridor Guard.luau",
+                      "Menu":  [
+                                   "Accessibility"
+                               ],
+                      "Sha256":  "1c7e935c80861916d6640fe5a75d132eed909c2e2a01a49173197699a4de28c1"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Grapple Time Budget.luau",
+                      "Menu":  [
+                                   "Accessibility"
+                               ],
+                      "Sha256":  "f512251297c4e19670026ad2749f8f5bed858e22f6dc46db66d2e07c51a7e165"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Local Route Hint.luau",
+                      "Menu":  [
+                                   "Accessibility"
+                               ],
+                      "Sha256":  "257977b11200f3ef2091b8df5207fc8cbded80d1d57c8e6ef01568cba423c613"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Release Planner.luau",
+                      "Menu":  [
+                                   "Accessibility"
+                               ],
+                      "Sha256":  "54acf94bd8f057d5a9825c06c815d02873b252b3ee867356d0fcf96907c4d69c"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Special Anchor Capture.luau",
+                      "Menu":  [
+                                   "Accessibility"
+                               ],
+                      "Sha256":  "46d8419dbe84abd8a994fe39b891f63784d8ffe7fa642d155cf696da7484b924"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Threat Target Policy.luau",
+                      "Menu":  [
+                                   "Accessibility"
+                               ],
+                      "Sha256":  "89bec679c581515b381e8cdc626a9f35027aee24ee7f146c9b1e2bed36f73ece"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Secondary Cast.luau",
@@ -618,7 +681,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "55fa41fbafe1dbd7441b0d278421522f16a5fa98ab722a9cf1f9c139c433ebc5"
+                      "Sha256":  "a6d0d439fe842e79c229bdace36e7dcecc887a718870aee47a9413b3d8f9e02d"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Technique/Reel Saver/init.luau",

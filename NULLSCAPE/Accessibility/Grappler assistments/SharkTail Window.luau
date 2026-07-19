@@ -59,13 +59,14 @@ function Window.trigger(grapple, reason, now)
 		return false
 	end
 
-	local success = pcall(function()
-		grapple:SharkTail()
+	local success, result = pcall(function()
+		return grapple:SharkTail()
 	end)
-	if success then
+	local triggered = success and result ~= false
+	if triggered then
 		Window.cancel(grapple, reason)
 	end
-	return success
+	return triggered
 end
 
 function Window.reset(reason)

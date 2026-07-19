@@ -711,8 +711,8 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateSlider({
-		Name = "SharkVoid Cast Window",
-		Info = "How long the rescue reel holds before its voluntary release.",
+		Name = "SharkVoid Reel Hold",
+		Info = "How long SharkVoid accumulates reel momentum before its voluntary release. A longer hold can produce more vertical lift.",
 		Range = { 0.05, 0.25 },
 		Increment = 0.01,
 		Suffix = "s",
