@@ -527,6 +527,7 @@ do
 end
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
@@ -692,8 +693,8 @@ local function recoverCelestialVisualLocks(reason)
 end
 
 local function startCelestialVisualLockGuard()
-	local lockSince = nil
-	local STALE_VISUAL_LOCK_TIMEOUT = 1.5
+	local staleSince = nil
+	local POST_ROUND_STALE_TIMEOUT = 6
 
 	task.spawn(function()
 		while not Client.Destroyed do
@@ -713,14 +714,28 @@ local function startCelestialVisualLockGuard()
 				end
 			end
 
-			if hasMouseLock or hasCameraClone or (celestialActive and hasMothLock) then
-				lockSince = lockSince or os.clock()
-				if celestialActive or os.clock() - lockSince >= STALE_VISUAL_LOCK_TIMEOUT then
-					recoverCelestialVisualLocks(celestialActive and "CelestialImmune" or "StaleCutsceneLock")
-					lockSince = nil
+			local hasVisualLock = hasMouseLock or hasCameraClone or hasMothLock
+			local inRoundValue = ReplicatedStorage:FindFirstChild("InRound")
+			local roundEnded = inRoundValue and inRoundValue.Value == false
+			local enemies = workspace:FindFirstChild("Enemies")
+			local hasLiveCelestial = false
+			if enemies then
+				for _, enemy in ipairs(enemies:GetChildren()) do
+					if string.find(string.lower(enemy.Name), "celestial", 1, true) then
+						hasLiveCelestial = true
+						break
+					end
+				end
+			end
+
+			if celestialActive and hasVisualLock and roundEnded and not hasLiveCelestial then
+				staleSince = staleSince or os.clock()
+				if os.clock() - staleSince >= POST_ROUND_STALE_TIMEOUT then
+					recoverCelestialVisualLocks("CelestialPostRoundStaleLock")
+					staleSince = nil
 				end
 			else
-				lockSince = nil
+				staleSince = nil
 			end
 
 			task.wait(0.2)

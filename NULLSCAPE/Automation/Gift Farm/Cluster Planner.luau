@@ -2,16 +2,17 @@
 
 local Planner = {}
 local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.luau")
+local RuntimeBudget = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Runtime Budget.luau")
 
 local RANGE_BUFFER = 3.5
-local MAX_ROUTE_POINTS = 36
-local MAX_TAIL_ROUTE_POINTS = 32
-local MAX_REFINED_CENTERS = 6
+local MAX_ROUTE_POINTS = RuntimeBudget.Planner.MaxRoutePoints
+local MAX_TAIL_ROUTE_POINTS = RuntimeBudget.Planner.MaxTailRoutePoints
+local MAX_REFINED_CENTERS = RuntimeBudget.Planner.MaxRefinedCenters
 local EDGE_PENALTY_RATIO = 0.92
 local Y_SCALE = 0.8
 local ROOT_OFFSET = Vector3.new(0, 3, 0)
-local FRAME_BUDGET = 0.003
-local BUDGET_CHECK_INTERVAL = 64
+local FRAME_BUDGET = RuntimeBudget.Planner.FrameBudget
+local BUDGET_CHECK_INTERVAL = RuntimeBudget.Planner.CheckInterval
 
 local function makeBudgetCheckpoint()
 	local startedAt = os.clock()

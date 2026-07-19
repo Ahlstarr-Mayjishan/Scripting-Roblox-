@@ -26,8 +26,10 @@ local CATEGORY_ORDER = {
 }
 
 local CHOOSE_DISTANCE = 6
-local LOOP_INTERVAL = 0.12
-local IDLE_LOOP_INTERVAL = 0.35
+local RuntimeBudget = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Runtime Budget.luau")
+
+local LOOP_INTERVAL = RuntimeBudget.AutoChoice.LoopInterval
+local IDLE_LOOP_INTERVAL = RuntimeBudget.AutoChoice.IdleLoopInterval
 local ACTION_COOLDOWN = 0.65
 local RETRY_COOLDOWN = 1.2
 local MOVE_SETTLE = 0.08

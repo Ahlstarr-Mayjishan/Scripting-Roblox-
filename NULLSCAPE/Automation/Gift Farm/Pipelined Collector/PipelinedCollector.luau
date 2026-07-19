@@ -7,6 +7,7 @@
 local Collector = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Collector.luau")
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 local NetworkDispatch = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Pipelined Collector/NetworkDispatch.luau")
+local RuntimeBudget = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Runtime Budget.luau")
 
 local PipelinedCollector = {}
 
@@ -147,11 +148,29 @@ function PipelinedCollector.collectRoute(controller, hrp, route, range, options,
 		Barriers = 0,
 	}
 	local routeIndex = 0
+	local lastControllerUpdateAt = -math.huge
+	local lastProgressUpdateAt = -math.huge
+
+	local function publishController(force)
+		local now = os.clock()
+		local interval = RuntimeBudget.Pipeline.ControllerUpdateInterval
+		if not force and interval > 0 and now - lastControllerUpdateAt < interval then
+			return
+		end
+		lastControllerUpdateAt = now
+		updateController(controller, #inFlight, stats)
+	end
 
 	local function reportProgress(stage)
 		if typeof(options.ProgressCallback) ~= "function" then
 			return
 		end
+		local now = os.clock()
+		local interval = RuntimeBudget.Pipeline.ProgressUpdateInterval
+		if stage ~= "draining" and interval > 0 and now - lastProgressUpdateAt < interval then
+			return
+		end
+		lastProgressUpdateAt = now
 		pcall(options.ProgressCallback, {
 			Stage = stage,
 			Index = routeIndex,
@@ -191,7 +210,7 @@ function PipelinedCollector.collectRoute(controller, hrp, route, range, options,
 		if lease and typeof(lease.reportCollectResult) == "function" and result.Attempted > 0 then
 			lease:reportCollectResult(result.Attempted, result.Rejected)
 		end
-		updateController(controller, #inFlight, stats)
+		publishController(false)
 		reportProgress("settling")
 		return true
 	end
@@ -264,7 +283,7 @@ function PipelinedCollector.collectRoute(controller, hrp, route, range, options,
 					inFlight[#inFlight + 1] = ticket
 					stats.Dispatched += ticket.Attempted
 				end
-				updateController(controller, #inFlight, stats)
+				publishController(false)
 				reportProgress("streaming")
 			end
 		end

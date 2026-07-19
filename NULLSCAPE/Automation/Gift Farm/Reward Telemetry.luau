@@ -10,6 +10,7 @@ local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Progress = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Progress.luau")
+local RuntimeBudget = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Runtime Budget.luau")
 
 local Telemetry = {}
 local OUTPUT_FOLDER = "NULLSCAPE/telemetry"
@@ -19,12 +20,14 @@ local REPLICA_WAIT_TIMEOUT = 4
 local REPLICA_POLL_INTERVAL = 0.25
 local REPLICA_STABLE_TIME = 0.75
 local REPLICA_MIN_WAIT = 2
+local OBSERVE_INTERVAL = RuntimeBudget.Telemetry.ObserveInterval
 
 local runtimeName = nil
 local document = nil
 local activeRound = nil
 local pendingGeneration = 0
 local moduleCache = {}
+local lastObserveAt = -math.huge
 
 local function utcTimestamp()
 	local ok, value = pcall(os.date, "!%Y-%m-%dT%H:%M:%SZ")
@@ -171,6 +174,7 @@ end
 
 function Telemetry.beginRound(controller, giftClientHandler)
 	ensureRuntime(controller)
+	lastObserveAt = -math.huge
 	activeRound = {
 		RuntimeName = runtimeName,
 		Level = readNumberValue("Level"),
@@ -188,6 +192,11 @@ function Telemetry.observeRound(giftClientHandler)
 	if not activeRound then
 		return false
 	end
+	local now = os.clock()
+	if now - lastObserveAt < OBSERVE_INTERVAL then
+		return true
+	end
+	lastObserveAt = now
 	local gifts = captureGifts(giftClientHandler)
 	local peak = activeRound.GiftsPeak
 	peak.Normal = math.max(peak.Normal, gifts.Normal)
@@ -281,6 +290,7 @@ end
 function Telemetry.stop()
 	pendingGeneration += 1
 	activeRound = nil
+	lastObserveAt = -math.huge
 	writeDocument()
 	return true
 end

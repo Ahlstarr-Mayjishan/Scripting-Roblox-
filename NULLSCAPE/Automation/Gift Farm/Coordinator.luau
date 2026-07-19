@@ -22,6 +22,7 @@ local NativeGiftRegistry = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/
 local XpTripcoinMode = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/XP Tripcoin Mode.luau")
 local Lap2Policy = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Lap2 Policy.luau")
 local RewardTelemetry = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Reward Telemetry.luau")
+local RuntimeBudget = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Runtime Budget.luau")
 
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
@@ -33,7 +34,7 @@ local Coordinator = {}
 local NORMAL_MODE = "Normal (teleport)"
 local PIPELINE_MODE = "Pipelining (Network)"
 local DEFAULT_RANGE = 60
-local STATUS_UPDATE_INTERVAL = 0.15
+local STATUS_UPDATE_INTERVAL = RuntimeBudget.Coordinator.StatusUpdateInterval
 local EMPTY_COMPLETE_DELAY = 2.5
 local PYLON_LEVEL = 35
 local GOLDEN_RETURN_VERIFY_ATTEMPTS = 6
@@ -46,7 +47,8 @@ local WATCHDOG_INTERVAL = 1
 local WORKER_STALL_TIMEOUT = 6
 local LOGICAL_STALL_TIMEOUT = 8
 local WATCHDOG_MOVEMENT_EPSILON = 2
-local GOLDEN_PREEMPT_SCAN_INTERVAL = 0.03
+local GOLDEN_PREEMPT_SCAN_INTERVAL = RuntimeBudget.Coordinator.GoldenPreemptInterval
+local WORKER_LOOP_INTERVAL = RuntimeBudget.Coordinator.LoopInterval
 
 local enabled = false
 local configDirty = false
@@ -997,7 +999,12 @@ local function runLoop(controller)
 
 				local rangeRevision = tonumber(controller.GiftFarmRangeRevision) or 0
 				local route, remaining = ClusterPlanner.planRoute(candidates, range, hrp.Position)
-				if remaining and #remaining > 0 and typeof(ClusterPlanner.planTailRoute) == "function" then
+				if
+					remaining
+					and #remaining > 0
+					and RuntimeBudget.shouldAppendTailRoute(route)
+					and typeof(ClusterPlanner.planTailRoute) == "function"
+				then
 					local tailRoute = ClusterPlanner.planTailRoute(remaining, range, hrp.Position)
 					for _, step in ipairs(tailRoute) do
 						table.insert(route, step)
@@ -1201,7 +1208,7 @@ local function runLoop(controller)
 					transitionTo(controller, "Scanning", "Passage gifts cleared; resuming route")
 				end
 
-				task.wait(0.04)
+				task.wait(WORKER_LOOP_INTERVAL)
 			end
 		end, debug.traceback)
 		if workerGeneration == myWorkerGeneration then

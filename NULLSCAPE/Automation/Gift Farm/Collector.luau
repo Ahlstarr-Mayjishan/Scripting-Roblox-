@@ -2,6 +2,7 @@
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.luau")
+local RuntimeBudget = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Runtime Budget.luau")
 
 local RunService = game:GetService("RunService")
 local Stats = game:GetService("Stats")
@@ -20,9 +21,9 @@ local PRECISION_ARRIVAL_TIMEOUT = 0.28
 local TAIL_ARRIVAL_TIMEOUT = 0.38
 local PRECISION_CLEANUP_DURATION = 0.18
 local TAIL_CLEANUP_DURATION = 0.34
-local PRECISION_CLEANUP_MAX_PULSES = 6
-local TAIL_CLEANUP_MAX_PULSES = 10
-local CLEANUP_PULSE_INTERVAL = 0.015
+local PRECISION_CLEANUP_MAX_PULSES = RuntimeBudget.Collector.PrecisionCleanupMaxPulses
+local TAIL_CLEANUP_MAX_PULSES = RuntimeBudget.Collector.TailCleanupMaxPulses
+local CLEANUP_PULSE_INTERVAL = RuntimeBudget.Collector.CleanupPulseInterval
 local MAX_RETRY_PASSES = 2
 local MAX_PRECISION_RETRY_PASSES = 3
 local POSITION_SYNC_MIN = 0.065

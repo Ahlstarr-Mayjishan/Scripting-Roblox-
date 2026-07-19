@@ -14,6 +14,7 @@ local Workspace = game:GetService("Workspace")
 
 local Booster = {
 	Enabled = false,
+	LifecycleGeneration = 0,
 	ProjectileHandler = nil,
 	OriginalProjectileNew = nil,
 	WrappedProjectileNew = nil,
@@ -29,6 +30,7 @@ local Booster = {
 	PositionDrains = setmetatable({}, { __mode = "k" }),
 	CameraStates = setmetatable({}, { __mode = "k" }),
 	RendererSuppressed = false,
+	CelestialPresentationActive = false,
 	OriginalGlobalShadows = nil,
 	OriginalQualityLevel = nil,
 	BackgroundColor = Color3.fromRGB(24, 24, 24),
@@ -48,7 +50,9 @@ local HEADLESS_GRAPHICS = {
 
 local function destroyBackgroundOverlay()
 	if Booster.BackgroundGui then
-		Booster.BackgroundGui:Destroy()
+		pcall(function()
+			Booster.BackgroundGui:Destroy()
+		end)
 	end
 	Booster.BackgroundGui = nil
 	Booster.BackgroundFrame = nil
@@ -95,8 +99,26 @@ end
 local function disconnect(name)
 	local connection = Booster.Connections[name]
 	if connection then
-		connection:Disconnect()
+		pcall(function()
+			connection:Disconnect()
+		end)
 		Booster.Connections[name] = nil
+	end
+end
+
+local function disconnectAll()
+	for name, connection in pairs(Booster.Connections) do
+		pcall(function()
+			connection:Disconnect()
+		end)
+		Booster.Connections[name] = nil
+	end
+end
+
+local function runCleanupStep(name, callback)
+	local success, err = pcall(callback)
+	if not success then
+		warn("[NULLSCAPE] Ultimate FPS cleanup failed at " .. name .. ": " .. tostring(err))
 	end
 end
 
@@ -120,11 +142,9 @@ local function installHeadlessRenderer()
 end
 
 local function restoreHeadlessRenderer()
-	if Booster.RendererSuppressed then
-		pcall(function()
-			RunService:Set3dRenderingEnabled(true)
-		end)
-	end
+	pcall(function()
+		RunService:Set3dRenderingEnabled(true)
+	end)
 	Booster.RendererSuppressed = false
 
 	if Booster.OriginalGlobalShadows ~= nil then
@@ -156,16 +176,17 @@ local function parkCamera(camera)
 
 	disconnect("CameraCFrame")
 	Booster.Connections.CameraCFrame = camera:GetPropertyChangedSignal("CFrame"):Connect(function()
-		if Booster.Enabled and camera.CFrame ~= PARKED_CAMERA_CFRAME then
+		if Booster.Enabled and not Booster.CelestialPresentationActive and camera.CFrame ~= PARKED_CAMERA_CFRAME then
 			camera.CFrame = PARKED_CAMERA_CFRAME
 		end
 	end)
 end
 
 local function installCameraParking()
+	disconnect("CurrentCamera")
 	parkCamera(Workspace.CurrentCamera)
 	Booster.Connections.CurrentCamera = Workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-		if Booster.Enabled then
+		if Booster.Enabled and not Booster.CelestialPresentationActive then
 			parkCamera(Workspace.CurrentCamera)
 		end
 	end)
@@ -185,6 +206,72 @@ local function restoreCameras()
 		end
 		Booster.CameraStates[camera] = nil
 	end
+end
+
+local function isCelestialDescendant(instance, enemiesRoot)
+	local current = instance
+	while current and current ~= enemiesRoot do
+		if string.find(string.lower(current.Name), "celestial", 1, true) then
+			return true
+		end
+		current = current.Parent
+	end
+	return false
+end
+
+local function hasLiveCelestial()
+	local enemiesRoot = Booster.EnemiesRoot or Workspace:FindFirstChild("Enemies")
+	if not enemiesRoot or not enemiesRoot.Parent then
+		return false
+	end
+
+	for _, enemy in ipairs(enemiesRoot:GetChildren()) do
+		if string.find(string.lower(enemy.Name), "celestial", 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
+local function setCelestialPresentationActive(active, force)
+	active = Booster.Enabled and active == true
+	if Booster.CelestialPresentationActive == active and not force then
+		return
+	end
+
+	Booster.CelestialPresentationActive = active
+	if active then
+		if Booster.BackgroundGui then
+			Booster.BackgroundGui.Enabled = false
+		end
+		restoreCameras()
+		pcall(function()
+			RunService:Set3dRenderingEnabled(true)
+		end)
+		Booster.RendererSuppressed = false
+		return
+	end
+
+	if Booster.BackgroundGui then
+		Booster.BackgroundGui.Enabled = true
+	end
+	Booster.RendererSuppressed = pcall(function()
+		RunService:Set3dRenderingEnabled(false)
+	end)
+	installCameraParking()
+end
+
+local function refreshCelestialPresentation(force)
+	setCelestialPresentationActive(hasLiveCelestial(), force)
+end
+
+local function deferCelestialPresentationRefresh()
+	local generation = Booster.LifecycleGeneration
+	task.defer(function()
+		if Booster.Enabled and Booster.LifecycleGeneration == generation then
+			refreshCelestialPresentation()
+		end
+	end)
 end
 
 local function getProjectileHandler()
@@ -230,7 +317,7 @@ local function installProjectileSuppression()
 
 	local originalNew = handler.new
 	local wrappedNew = function(...)
-		if Booster.Enabled then
+		if Booster.Enabled and not Booster.CelestialPresentationActive then
 			return nil
 		end
 		return originalNew(...)
@@ -241,10 +328,12 @@ local function installProjectileSuppression()
 	Booster.WrappedProjectileNew = wrappedNew
 	handler.new = wrappedNew
 
-	local cleared, clearError = pcall(handler.ClearProjectiles)
-	if not cleared then
-		uninstallProjectileSuppression()
-		return false, "Active projectiles could not be cleared: " .. tostring(clearError)
+	if not Booster.CelestialPresentationActive then
+		local cleared, clearError = pcall(handler.ClearProjectiles)
+		if not cleared then
+			uninstallProjectileSuppression()
+			return false, "Active projectiles could not be cleared: " .. tostring(clearError)
+		end
 	end
 
 	return true
@@ -327,7 +416,12 @@ local function installGraphicsSuppression()
 
 	local originalGet = handler.Get
 	local wrappedGet = function(path, ...)
-		if Booster.Enabled and typeof(path) == "table" and path[1] == "Graphics" then
+		if
+			Booster.Enabled
+			and not Booster.CelestialPresentationActive
+			and typeof(path) == "table"
+			and path[1] == "Graphics"
+		then
 			local override = HEADLESS_GRAPHICS[path[2]]
 			if override ~= nil then
 				return override
@@ -345,6 +439,9 @@ end
 
 local function suspendIfVisualScript(instance, enemiesRoot)
 	if not Booster.Enabled or not instance:IsA("BaseScript") then
+		return
+	end
+	if isCelestialDescendant(instance, enemiesRoot) then
 		return
 	end
 
@@ -371,6 +468,7 @@ local function drainPositionRemote(instance, enemiesRoot)
 		or not instance:IsA("RemoteEvent")
 		or instance.Name ~= "UpdatePosition"
 		or not instance:IsDescendantOf(enemiesRoot)
+		or isCelestialDescendant(instance, enemiesRoot)
 		or Booster.PositionDrains[instance] ~= nil
 	then
 		return
@@ -408,16 +506,25 @@ local function attachEnemiesRoot(enemiesRoot)
 	end
 
 	disconnect("EnemyAdded")
+	disconnect("CelestialAdded")
+	disconnect("CelestialRemoved")
 	Booster.EnemiesRoot = enemiesRoot
 	Booster.Connections.EnemyAdded = enemiesRoot.DescendantAdded:Connect(function(instance)
 		suspendIfVisualScript(instance, enemiesRoot)
 		drainPositionRemote(instance, enemiesRoot)
+	end)
+	Booster.Connections.CelestialAdded = enemiesRoot.ChildAdded:Connect(function()
+		deferCelestialPresentationRefresh()
+	end)
+	Booster.Connections.CelestialRemoved = enemiesRoot.ChildRemoved:Connect(function()
+		deferCelestialPresentationRefresh()
 	end)
 
 	for _, instance in ipairs(enemiesRoot:GetDescendants()) do
 		suspendIfVisualScript(instance, enemiesRoot)
 		drainPositionRemote(instance, enemiesRoot)
 	end
+	refreshCelestialPresentation()
 end
 
 local function installVisualSuspension()
@@ -435,6 +542,8 @@ end
 
 local function uninstallVisualSuspension()
 	disconnect("EnemyAdded")
+	disconnect("CelestialAdded")
+	disconnect("CelestialRemoved")
 	disconnect("EnemiesRootAdded")
 	Booster.EnemiesRoot = nil
 	disconnectPositionDrains()
@@ -442,14 +551,17 @@ local function uninstallVisualSuspension()
 end
 
 local function disableMechanisms()
+	Booster.LifecycleGeneration += 1
 	Booster.Enabled = false
-	uninstallProjectileSuppression()
-	uninstallGiftRenderSuppression()
-	uninstallGraphicsSuppression()
-	uninstallVisualSuspension()
-	restoreCameras()
-	restoreHeadlessRenderer()
-	destroyBackgroundOverlay()
+	Booster.CelestialPresentationActive = false
+	runCleanupStep("background", destroyBackgroundOverlay)
+	runCleanupStep("renderer", restoreHeadlessRenderer)
+	runCleanupStep("camera", restoreCameras)
+	runCleanupStep("projectiles", uninstallProjectileSuppression)
+	runCleanupStep("gift rendering", uninstallGiftRenderSuppression)
+	runCleanupStep("graphics settings", uninstallGraphicsSuppression)
+	runCleanupStep("enemy presentation", uninstallVisualSuspension)
+	runCleanupStep("connections", disconnectAll)
 end
 
 function Booster.setBackgroundColor(color)
@@ -475,7 +587,9 @@ function Booster.setEnabled(enabled)
 		return true
 	end
 
+	Booster.LifecycleGeneration += 1
 	Booster.Enabled = true
+	Booster.CelestialPresentationActive = hasLiveCelestial()
 	local installed, reason = installProjectileSuppression()
 	if not installed then
 		Booster.Enabled = false
@@ -504,6 +618,7 @@ function Booster.setEnabled(enabled)
 		installBackgroundOverlay()
 		installHeadlessRenderer()
 		installCameraParking()
+		refreshCelestialPresentation(true)
 	end)
 	if not headlessInstalled then
 		disableMechanisms()

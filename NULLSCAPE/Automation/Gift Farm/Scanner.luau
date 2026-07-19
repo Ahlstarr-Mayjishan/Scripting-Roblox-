@@ -9,15 +9,16 @@ local Progress = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Progress.l
 local Collapse = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Collapse.luau")
 local GoldenEfficiency = getgenv().loadModule("NULLSCAPE/Automation/GoldenEfficiency.luau")
 local NativeGiftRegistry = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Native Gift Registry.luau")
+local RuntimeBudget = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Runtime Budget.luau")
 
 local Scanner = {}
 local SPAWN_SETTLE = 0.22
 local GOLDEN_SPAWN_SETTLE = 0.05
 local FANNY_PACK_TILE_PRIORITY = 4
-local FANNY_PACK_CACHE_INTERVAL = 0.4
-local SCAN_SAFETY_INTERVAL = 0.65
-local SCAN_FRAME_BUDGET = 0.003
-local SCAN_CHECK_INTERVAL = 48
+local FANNY_PACK_CACHE_INTERVAL = RuntimeBudget.Scanner.FannyPackCacheInterval
+local SCAN_SAFETY_INTERVAL = RuntimeBudget.Scanner.SafetyInterval
+local SCAN_FRAME_BUDGET = RuntimeBudget.Scanner.FrameBudget
+local SCAN_CHECK_INTERVAL = RuntimeBudget.Scanner.CheckInterval
 local TRACKED_GIFT_TYPES = { "PassageGift", "GoldenGift", "Gift" }
 local GOLDEN_GIFT_TYPES = { "PassageGift", "GoldenGift" }
 

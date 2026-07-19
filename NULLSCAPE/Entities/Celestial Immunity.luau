@@ -18,7 +18,8 @@ local RETRY_DELAYS = { 0, 0.1, 0.5 }
 local SOURCE_EVENTS = {
 	Celestial = {
 		ControllerFlag = "CelestialImmune",
-		Remotes = { ClientEvent = true, BeamEvent = true },
+		-- Preserve native intro, attacks, and ending. Outgoing kill reports are filtered by RemoteBlocking.
+		Remotes = {},
 	},
 	RealityBreak = {
 		ControllerFlag = "RealityBreakImmune",
