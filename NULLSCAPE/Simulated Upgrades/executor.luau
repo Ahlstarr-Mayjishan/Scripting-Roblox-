@@ -57,7 +57,9 @@ function Executor.syncVirtualGrapplerUpgradeVisuals(controller)
 			Helmet = controller and controller.HelmetEnabled == true,
 			MatrixTetrahedron = controller and controller.MatrixTetrahedronEnabled == true,
 			MiniatureHourglass = controller and controller.MiniatureHourglassEnabled == true,
-			NinjaBelt = isGrappler and controller and controller.GrappleVirtualNinjaBelt == true,
+			NinjaBelt = isGrappler
+				and controller
+				and (controller.GrappleVirtualNinjaBelt == true or controller.GrappleVirtualSharkTail == true),
 			PocketBell = controller and hasSelectedOption(controller.AirJumpSelections, "PocketBell"),
 			SharkTail = isGrappler and controller and controller.GrappleVirtualSharkTail == true,
 		})

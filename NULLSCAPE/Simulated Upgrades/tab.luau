@@ -329,7 +329,7 @@ return function(Client, Controller)
 	Tab:CreateSection("Grappler Upgrades")
 
 	Tab:CreateToggle({
-		Name = "Simulate Ninja Belt",
+		Name = "Ninja Belt",
 		Info = "Makes Grappler native HasUpgrade checks treat Ninja Belt as owned without spoofing other classes.",
 		CurrentValue = Controller.GrappleVirtualNinjaBelt or false,
 		Flag = "GrappleVirtualNinjaBeltToggle",
@@ -339,8 +339,8 @@ return function(Client, Controller)
 	})
 
 	Tab:CreateToggle({
-		Name = "Simulate Shark Tail",
-		Info = "Makes Grappler native HasUpgrade checks treat Shark Tail as owned without spoofing other classes.",
+		Name = "Shark Tail",
+		Info = "Enables native Shark Tail behavior for Grappler and supplies its Ninja Belt dependency.",
 		CurrentValue = Controller.GrappleVirtualSharkTail or false,
 		Flag = "GrappleVirtualSharkTailToggle",
 		Callback = function(Value)

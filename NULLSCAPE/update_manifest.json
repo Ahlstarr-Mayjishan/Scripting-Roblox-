@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.19.005",
+    "Version":  "2026.07.19.006",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -239,14 +239,14 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "3d502208412a9bd0b327c8cf8a4ca6e460467551c92a68cd0855a84ec4050921"
+                      "Sha256":  "84c20e091698b30a1fc8252ea9c6d8ebc856cdf7e0fa65fedaaebe534753286c"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/executor.luau",
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "bf45e49cbbc8d223ed68be9fcf77469c40e2386893c9101f0f795a1ac1be5f4c"
+                      "Sha256":  "c3c6936c5d0d7404b8bbac1199c31a09319144be1951bb11f224f200c0de61af"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau",
@@ -652,7 +652,7 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "9452cb5d6b25262e45e16098de96ad3d93f927276bc89dcaf3b968df79c347cf"
+                      "Sha256":  "1d657245c3c3022a2d751746127793536e1c62daadb93615388bf7725a9d3960"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/GC.luau",
@@ -995,7 +995,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "6ae079e592efa4477ac4f23e4b724a6f328e051031680d28fc9f3a4ccb5e8ace"
+                      "Sha256":  "d9bf97ddbdd196e9834b1fa55f66ae3940ece0dcdf3049e928d238e0e9c566e4"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",

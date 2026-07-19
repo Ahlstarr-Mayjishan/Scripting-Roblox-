@@ -939,7 +939,7 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 		elseif v == "PocketBell" or v == "Pocket Bell" then
 			isPocketBell = true
 		elseif v == "NinjaBelt" or v == "Ninja Belt" then
-			if Controller.GrappleVirtualNinjaBelt then
+			if Controller.GrappleVirtualNinjaBelt or Controller.GrappleVirtualSharkTail then
 				return true, true
 			end
 		elseif v == "SharkTail" or v == "Shark Tail" or v == "SharkBelt" or v == "Shark Belt" then
@@ -1014,7 +1014,7 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 		elseif v == "PocketBell" or v == "Pocket Bell" then
 			isPocketBell = true
 		elseif v == "NinjaBelt" or v == "Ninja Belt" then
-			if Controller.GrappleVirtualNinjaBelt then
+			if Controller.GrappleVirtualNinjaBelt or Controller.GrappleVirtualSharkTail then
 				return true, 1
 			end
 		elseif v == "SharkTail" or v == "Shark Tail" or v == "SharkBelt" or v == "Shark Belt" then

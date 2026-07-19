@@ -34,6 +34,7 @@ local ChargePlatformDurationState = {
 }
 local SharkTailWindowState = setmetatable({}, { __mode = "k" })
 local SharkTailEndTokens = setmetatable({}, { __mode = "k" })
+local SharkTailEligibleReleases = setmetatable({}, { __mode = "k" })
 local SharkTailCooldownWasEnabled = false
 
 local MODULE_PATHS = {
@@ -354,6 +355,7 @@ local function closeSharkTailWindow(grapple)
 	resetSharkTailBar(grapple)
 	SharkTailWindowState[grapple] = nil
 	SharkTailEndTokens[grapple] = nil
+	SharkTailEligibleReleases[grapple] = nil
 end
 
 local function scheduleSharkTailEndCleanup(grapple)
@@ -388,6 +390,7 @@ local function applySharkTailWindow(Control, grapple)
 			and not grapple.sharkTailDisable
 			and grapple.lastGrappleRelease
 			and grapple.lastGrappleRelease > 0
+			and SharkTailEligibleReleases[grapple] == grapple.lastGrappleRelease
 		)
 	then
 		if state then
@@ -441,7 +444,7 @@ local function shouldCloseSharkTailAfterEnd(grapple, wasCancelled)
 		return false
 	end
 
-	if wasCancelled ~= false then
+	if wasCancelled == true then
 		return true
 	end
 
@@ -623,6 +626,7 @@ function Executor.enable()
 
 			local yBefore = self and self.RootPart and self.RootPart.Velocity.Y
 			local yVelBelowMinBefore = self and self.yVelBelowMin
+			local wasNinjaBeltReel = self and self.grappleReel == true
 
 			local releaseSpeed = self and self.RootPart and self.RootPart.Velocity.Magnitude
 			if releaseSpeed then
@@ -635,9 +639,15 @@ function Executor.enable()
 				error(results[2], 0)
 			end
 
+			if wasCancelled ~= true and wasNinjaBeltReel and self.lastGrappleRelease > 0 then
+				SharkTailEligibleReleases[self] = self.lastGrappleRelease
+			else
+				SharkTailEligibleReleases[self] = nil
+			end
+
 			if shouldCloseSharkTailAfterEnd(self, wasCancelled) then
 				closeSharkTailWindow(self)
-			elseif wasCancelled == false then
+			elseif wasCancelled ~= true then
 				scheduleSharkTailEndCleanup(self)
 			end
 
@@ -766,6 +776,8 @@ end
 function Executor.disable()
 	HooksActive = false
 	SharkTailWindowState = setmetatable({}, { __mode = "k" })
+	SharkTailEndTokens = setmetatable({}, { __mode = "k" })
+	SharkTailEligibleReleases = setmetatable({}, { __mode = "k" })
 	SharkTailCooldownWasEnabled = false
 	if SharkTailCooldown and typeof(SharkTailCooldown.reset) == "function" then
 		pcall(SharkTailCooldown.reset)
