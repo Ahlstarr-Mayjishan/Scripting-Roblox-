@@ -171,6 +171,15 @@ local function isGrapplerClass()
 	return ClassContext and ClassContext.is("Grappler")
 end
 
+local function needsGrappleAssistRuntime(controller)
+	return controller
+		and (
+			controller.GrappleAssistEnabled == true
+			or controller.GrappleVoidRescueEnabled == true
+			or controller.GrappleSharkEscapeEnabled == true
+		)
+end
+
 function Controller:CleanUp()
 	local globals = getGlobals()
 	local finalCleanup = self.Destroyed
@@ -243,9 +252,9 @@ function Controller:ReapplyRespawnFeatures()
 		callExecutor("initializeMomentumGuard")
 	end
 
-	if (self.GrappleAssistEnabled or self.GrappleVoidRescueEnabled) and isGrapplerClass() then
+	if needsGrappleAssistRuntime(self) and isGrapplerClass() then
 		callExecutor("initializeGrappleAssist", self)
-	elseif self.GrappleAssistEnabled or self.GrappleVoidRescueEnabled then
+	elseif needsGrappleAssistRuntime(self) then
 		callExecutor("disableGrappleAssist")
 	end
 
@@ -414,7 +423,7 @@ function Controller:SetGrappleAssist(value)
 		return
 	end
 
-	if not self.GrappleAssistEnabled and not self.GrappleVoidRescueEnabled then
+	if not needsGrappleAssistRuntime(self) then
 		callExecutor("disableGrappleAssist")
 	end
 end
@@ -426,6 +435,9 @@ function Controller:IsGrappleFeatureEnabled(featureName)
 
 	if featureName == "SharkVoid" then
 		return self.GrappleVoidRescueEnabled == true
+	end
+	if featureName == "GrappleDodge" and self.GrappleSharkEscapeEnabled == true then
+		return true
 	end
 	if self.GrappleAssistEnabled ~= true then
 		return false
@@ -576,7 +588,7 @@ function Controller:SetGrappleVoidRescue(value)
 		if not callExecutor("initializeGrappleAssist", self) then
 			self.GrappleVoidRescueEnabled = false
 		end
-	elseif not self.GrappleAssistEnabled then
+	elseif not needsGrappleAssistRuntime(self) then
 		callExecutor("disableGrappleAssist")
 	end
 end
@@ -618,6 +630,11 @@ function Controller:SetGrapplerTechniqueSelection(options)
 	self.GrappleDodgeTechniqueEnabled = grappleDodge
 	self.GrappleDodgeEnabled = grappleDodge or sharkEscape
 	self.GrappleSharkEscapeEnabled = sharkEscape
+	if needsGrappleAssistRuntime(self) and isGrapplerClass() then
+		callExecutor("initializeGrappleAssist", self)
+	elseif not needsGrappleAssistRuntime(self) then
+		callExecutor("disableGrappleAssist")
+	end
 end
 
 function Controller:SetGrappleVoidRescueAutoReel(value)
@@ -699,6 +716,14 @@ end
 function Controller:SetGrappleSharkEscape(value)
 	self.GrappleSharkEscapeEnabled = value == true
 	self.GrappleDodgeEnabled = self.GrappleDodgeTechniqueEnabled == true or self.GrappleSharkEscapeEnabled
+	if self.GrappleSharkEscapeEnabled and isGrapplerClass() then
+		if not callExecutor("initializeGrappleAssist", self) then
+			self.GrappleSharkEscapeEnabled = false
+			self.GrappleDodgeEnabled = self.GrappleDodgeTechniqueEnabled == true
+		end
+	elseif not needsGrappleAssistRuntime(self) then
+		callExecutor("disableGrappleAssist")
+	end
 end
 
 function Controller:SetGrappleSharkEscapeMode(value)

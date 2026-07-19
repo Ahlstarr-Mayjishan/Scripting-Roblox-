@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.19.010",
+    "Version":  "2026.07.19.011",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -309,7 +309,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "b238f62e72989537b6f08c3c0d9416ee49342ba6495a01db33b5567c2fa1bdd7"
+                      "Sha256":  "5e08fd1c98219d79935bbf98b923e503e1ac7877b21c5b6a2e668456b2647920"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Curse Visual Assist.luau",
@@ -449,7 +449,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "bbcd579d8c6cdb3c8d30c586dc95dde95418f0378b85c92393b6c17532a51abb"
+                      "Sha256":  "626181e496fb5f82d18653311344e5892b47474bfe6595aa28405faa8d19bba3"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Intent Resolver.luau",

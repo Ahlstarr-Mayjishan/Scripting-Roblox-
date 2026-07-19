@@ -223,9 +223,28 @@ local function installCastHook(grappleModule, globals)
 
 	wrappedCast = function(self, forceRefresh, ...)
 		rememberGrapple(self)
+		local controller = getController()
+		local standaloneManualSharkEscape = controller
+			and controller.GrappleSharkEscapeEnabled == true
+			and tostring(controller.GrappleSharkEscapeMode or "Auto") == "Manual"
+
+		if
+			standaloneManualSharkEscape
+			and not isEnabled()
+			and GrappleDodge
+			and typeof(GrappleDodge.getManualCastHit) == "function"
+		then
+			local dodgeHit, source = GrappleDodge.getManualCastHit(self, controller)
+			if dodgeHit then
+				if CastTransaction and typeof(CastTransaction.expect) == "function" then
+					CastTransaction.expect(self, dodgeHit, controller, source or "SharkEscape")
+				end
+				armBellContact(dodgeHit)
+				return dodgeHit
+			end
+		end
 
 		if isEnabled() then
-			local controller = getController()
 			local manualCast = true
 			local fallbackHit, fallbackDirection, fallbackBlocked
 			local prioritizeAssist = EntityContext
