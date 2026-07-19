@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.20.008",
+    "Version":  "2026.07.20.009",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -57,7 +57,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "0100461123f67d2254041d3010c0eafc8db6da7aa91de04a32a631e2901e47c1"
+                      "Sha256":  "515cf4e26b4509dc53555a8512575f182d10a1ddf89836d381eca6068a73154f"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Runtime Budget.luau",
@@ -65,7 +65,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "422d6f6aa0feb96cff90237fa24c4f66f0f880bbd0125db6161dcffd11259528"
+                      "Sha256":  "cda3d6aeee25620bb27d5634f6f4ae22ee639bc7a929c1cd59807261acfbbd6d"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Run Policy.luau",
@@ -145,7 +145,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "b94f6696369522daf2723987c257ce65aa48329a1e1f48f5c715fda65ffd8496"
+                      "Sha256":  "0cd858c83e809fdd20b1755b27ac356d5fae637b7f8bcf149b4357bc3decfd3d"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Beacon.luau",
@@ -162,7 +162,7 @@
                                    "Gift Farm",
                                    "Pipelining"
                                ],
-                      "Sha256":  "8aa7de21c9678b02f77698e2b9a9f3c1a18cf318d2926de0c9d55ed9c923311d"
+                      "Sha256":  "591eba1cb29e7e570b05209c60f3c6b55f931066c71c1b68db37029c66ac665a"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Pipelined Collector/NetworkDispatch.luau",
@@ -171,7 +171,7 @@
                                    "Gift Farm",
                                    "Pipelining"
                                ],
-                      "Sha256":  "030bc93ac5abcd15dc192827fc29c008c9bfe4eb33e6f53c26218a970f2ce0f8"
+                      "Sha256":  "28435f87fbf0213680ac96c844080d3255aefb9fa3532dbc91ca6ef883516b13"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/controller.luau",
@@ -863,7 +863,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "91f09f2c13b6d2baf8ff20855b76c47d3db30383668e38ace7e2809371d08220"
+                      "Sha256":  "7fec61cb49d837a0c4e694162af6610f2b65587c71dae086c2a712123e03f560"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Collapse.luau",
@@ -877,7 +877,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "8dd8d9c0a64ee7d94395ff151f96c77f5c328d737e1ef8565f4702339acfd033"
+                      "Sha256":  "61e8e4a17cf10a63af8ec38c6009f16cfe733f3eb168755c86215aed8b582440"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Golden Wait.luau",

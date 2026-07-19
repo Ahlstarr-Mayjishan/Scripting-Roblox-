@@ -13,7 +13,6 @@ local PipelinedCollector = {}
 
 local MIN_WINDOW = 1
 local INITIAL_WINDOW = 3
-local MAX_WINDOW = 8
 local CLEAN_TICKETS_TO_GROW = 2
 local MIN_ACK_TIMEOUT = 0.18
 local MAX_ACK_TIMEOUT = 0.7
@@ -65,7 +64,7 @@ local function updateController(controller, inFlight, stats)
 	controller.GiftFarmPipelineAckLatency = latencyEstimate
 end
 
-local function adaptFromSettlement(result)
+local function adaptFromSettlement(result, windowCap)
 	local attempted = math.max(0, tonumber(result and result.Attempted) or 0)
 	local rejected = math.clamp(tonumber(result and result.Rejected) or 0, 0, attempted)
 	local unresolved = math.clamp(tonumber(result and result.Unresolved) or 0, 0, attempted)
@@ -89,7 +88,7 @@ local function adaptFromSettlement(result)
 	cleanTickets += 1
 	if cleanTickets >= CLEAN_TICKETS_TO_GROW then
 		cleanTickets = 0
-		adaptiveWindow = math.min(MAX_WINDOW, adaptiveWindow + 1)
+		adaptiveWindow = math.min(windowCap, adaptiveWindow + 1)
 	end
 end
 
@@ -137,6 +136,12 @@ function PipelinedCollector.collectRoute(controller, hrp, route, range, options,
 	local routeToken = pipelineToken
 	local inFlight = {}
 	local retryQueue = {}
+	local routeGiftCount = 0
+	for _, step in ipairs(route) do
+		routeGiftCount += #(step.Cluster or {})
+	end
+	local windowCap = RuntimeBudget.getPipelineWindowCap(routeGiftCount)
+	adaptiveWindow = math.min(adaptiveWindow, windowCap)
 	local stats = {
 		Dispatched = 0,
 		Attempted = 0,
@@ -206,7 +211,7 @@ function PipelinedCollector.collectRoute(controller, hrp, route, range, options,
 				Ticket = ticket,
 			}
 		end
-		adaptFromSettlement(result)
+		adaptFromSettlement(result, windowCap)
 		if lease and typeof(lease.reportCollectResult) == "function" and result.Attempted > 0 then
 			lease:reportCollectResult(result.Attempted, result.Rejected)
 		end

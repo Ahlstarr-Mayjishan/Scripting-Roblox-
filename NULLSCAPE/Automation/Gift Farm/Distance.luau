@@ -52,6 +52,14 @@ function Distance.getRootPosition(targetPosition)
 	return rootPos
 end
 
+function Distance.getSafeTargetPosition(targetPosition)
+	local rootPosition = Distance.getRootPosition(targetPosition)
+	if typeof(rootPosition) ~= "Vector3" then
+		return targetPosition
+	end
+	return rootPosition - ROOT_OFFSET
+end
+
 function Distance.isWithinRange(giftPosition, rootPosition, range)
 	local numericRange = tonumber(range) or 0
 	if numericRange <= 0 then

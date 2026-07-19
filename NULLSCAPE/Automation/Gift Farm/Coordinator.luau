@@ -1002,10 +1002,16 @@ local function runLoop(controller)
 				if
 					remaining
 					and #remaining > 0
-					and RuntimeBudget.shouldAppendTailRoute(route)
+					and RuntimeBudget.shouldAppendTailRoute(route, #remaining)
 					and typeof(ClusterPlanner.planTailRoute) == "function"
 				then
-					local tailRoute = ClusterPlanner.planTailRoute(remaining, range, hrp.Position)
+					local tailOrigin = hrp.Position
+					local lastStep = route[#route]
+					local lastTarget = lastStep and lastStep.Info and lastStep.Info.TargetPosition
+					if typeof(lastTarget) == "Vector3" then
+						tailOrigin = lastTarget + Vector3.new(0, 3, 0)
+					end
+					local tailRoute = ClusterPlanner.planTailRoute(remaining, range, tailOrigin)
 					for _, step in ipairs(tailRoute) do
 						table.insert(route, step)
 					end

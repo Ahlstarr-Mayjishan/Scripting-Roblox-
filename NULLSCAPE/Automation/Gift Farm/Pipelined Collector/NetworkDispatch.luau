@@ -10,6 +10,7 @@ local Stats = game:GetService("Stats")
 
 local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.luau")
 local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.luau")
+local RuntimeBudget = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Runtime Budget.luau")
 
 local NetworkDispatch = {}
 
@@ -298,6 +299,7 @@ function NetworkDispatch.dispatchCluster(hrp, cluster, range, options, lease)
 	}
 	local collectedEvent = Context.getCollectedGiftEvent()
 	local dispatched = 0
+	local pacingBatchSize = tonumber(options.PacingBatchSize) or RuntimeBudget.getCollectBatchSize(#cluster)
 	for _, item in ipairs(cluster) do
 		if isAborted(options, lease) then
 			break
@@ -307,8 +309,7 @@ function NetworkDispatch.dispatchCluster(hrp, cluster, range, options, lease)
 			if dispatchGift(ticket, item, collectedEvent) then
 				dispatched += 1
 			end
-			local batchSize = tonumber(options.PacingBatchSize)
-			if batchSize and dispatched > 0 and dispatched % batchSize == 0 then
+			if pacingBatchSize and dispatched > 0 and dispatched % pacingBatchSize == 0 then
 				RunService.Heartbeat:Wait()
 			end
 		end

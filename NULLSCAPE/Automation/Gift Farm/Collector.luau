@@ -398,7 +398,15 @@ local function runPrecisionCleanup(hrp, items, standingPosition, collectRange, c
 		end
 
 		comboCount = 0
-		collectItems(rejected, currentPos, collectRange, collectedEvent, attemptedGifts, attemptedSet)
+		collectItems(
+			rejected,
+			currentPos,
+			collectRange,
+			collectedEvent,
+			attemptedGifts,
+			attemptedSet,
+			RuntimeBudget.getCollectBatchSize(#rejected)
+		)
 		pulses += 1
 		RunService.Heartbeat:Wait()
 		waitIfPositive(CLEANUP_PULSE_INTERVAL)
@@ -493,6 +501,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 		local currentPos = hrp.Position
 		local attemptedGifts = {}
 		local attemptedSet = {}
+		local pacingBatchSize = options.NormalPacingBatchSize or RuntimeBudget.getCollectBatchSize(#cluster)
 		if precisionMode then
 			comboCount = 0
 		end
@@ -504,7 +513,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 			collectedEvent,
 			attemptedGifts,
 			attemptedSet,
-			options.NormalPacingBatchSize
+			pacingBatchSize
 		)
 		if isAborted(options, lease, currentSessionToken) then
 			return
@@ -547,7 +556,7 @@ function Collector.collectCluster(controller, hrp, cluster, range, options, leas
 				collectedEvent,
 				attemptedGifts,
 				attemptedSet,
-				options.NormalPacingBatchSize
+				pacingBatchSize
 			)
 			waitForNativeFlush()
 			task.wait(getValidationWait(controller, true))

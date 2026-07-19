@@ -5,9 +5,6 @@ local Distance = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Distance.l
 local RuntimeBudget = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Runtime Budget.luau")
 
 local RANGE_BUFFER = 3.5
-local MAX_ROUTE_POINTS = RuntimeBudget.Planner.MaxRoutePoints
-local MAX_TAIL_ROUTE_POINTS = RuntimeBudget.Planner.MaxTailRoutePoints
-local MAX_REFINED_CENTERS = RuntimeBudget.Planner.MaxRefinedCenters
 local EDGE_PENALTY_RATIO = 0.92
 local Y_SCALE = 0.8
 local ROOT_OFFSET = Vector3.new(0, 3, 0)
@@ -289,30 +286,34 @@ end
 
 local function pickSeed(index, origin)
 	local best = nil
+	local checkpoint = makeBudgetCheckpoint()
 	for _, item in ipairs(index.Candidates) do
 		if index.Active[item] and isBetterSeed(item, best, origin) then
 			best = item
 		end
+		checkpoint()
 	end
 	return best
 end
 
 local function buildIndexedCluster(index, seed, safeRange, origin)
-	local seedCluster = queryIndex(index, seed.pos, safeRange)
+	local seedPosition = Distance.getSafeTargetPosition(seed.pos)
+	local seedCluster = queryIndex(index, seedPosition, safeRange)
 	if #seedCluster == 0 then
 		return {}, nil
 	end
 
-	local centers = { seed.pos }
-	addCenter(centers, getWeightedCenter(seedCluster))
-	sortCluster(seedCluster, seed.pos)
-	for itemIndex = 1, math.min(#seedCluster, MAX_REFINED_CENTERS - #centers) do
-		addCenter(centers, seedCluster[itemIndex].pos)
+	local maxRefinedCenters = RuntimeBudget.getMaxRefinedCenters(index.Count)
+	local centers = { seedPosition }
+	addCenter(centers, Distance.getSafeTargetPosition(getWeightedCenter(seedCluster)))
+	sortCluster(seedCluster, seedPosition)
+	for itemIndex = 1, math.min(#seedCluster, maxRefinedCenters - #centers) do
+		addCenter(centers, Distance.getSafeTargetPosition(seedCluster[itemIndex].pos))
 	end
 
 	local bestCluster = seedCluster
-	local bestPosition = seed.pos
-	local bestScore = scoreCluster(seedCluster, seed.pos, seed, origin, safeRange)
+	local bestPosition = seedPosition
+	local bestScore = scoreCluster(seedCluster, seedPosition, seed, origin, safeRange)
 	for centerIndex = 2, #centers do
 		local position = centers[centerIndex]
 		local cluster = queryIndex(index, position, safeRange)
@@ -347,10 +348,12 @@ end
 
 local function getRemaining(index)
 	local remaining = {}
+	local checkpoint = makeBudgetCheckpoint()
 	for _, item in ipairs(index.Candidates) do
 		if index.Active[item] then
 			remaining[#remaining + 1] = item
 		end
+		checkpoint()
 	end
 	return remaining
 end
@@ -410,11 +413,13 @@ local function planIndexedRoute(candidates, range, origin, maxRoutePoints, tailC
 end
 
 function Planner.planRoute(candidates, range, origin)
-	return planIndexedRoute(candidates, range, origin, MAX_ROUTE_POINTS, false)
+	local source = candidates or {}
+	return planIndexedRoute(source, range, origin, RuntimeBudget.getPlannerRouteLimit(false, #source), false)
 end
 
 function Planner.planTailRoute(candidates, range, origin)
-	return planIndexedRoute(candidates, range, origin, MAX_TAIL_ROUTE_POINTS, true)
+	local source = candidates or {}
+	return planIndexedRoute(source, range, origin, RuntimeBudget.getPlannerRouteLimit(true, #source), true)
 end
 
 return Planner
