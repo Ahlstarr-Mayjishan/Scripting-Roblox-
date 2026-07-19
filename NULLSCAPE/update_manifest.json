@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.20.021",
+    "Version":  "2026.07.20.022",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -681,7 +681,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "a6d0d439fe842e79c229bdace36e7dcecc887a718870aee47a9413b3d8f9e02d"
+                      "Sha256":  "e304474a53c2f68c7aebdff87c48a2722f53ba8cee572c95119a10ad59fd973c"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Technique/Reel Saver/init.luau",
