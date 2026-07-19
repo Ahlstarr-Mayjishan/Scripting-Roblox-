@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.19.016",
+    "Version":  "2026.07.20.001",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -57,7 +57,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "5aff337f48fab70335e7eab967deb6828e35a526c6a21adf929654a03671962b"
+                      "Sha256":  "3308badfd3ac48b7b9068411e32d744d6bb6fbdae866539362faba1f30b867df"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Run Policy.luau",
@@ -145,7 +145,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "c51ef2b1d554453eee2e5ec1c070cf51b9ac6b54a738859df82f24e892f233d3"
+                      "Sha256":  "344714b37fc518451c6ddceaf84e9bdc9043825be6807821d053848c8f658c24"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Pipelined Collector/PipelinedCollector.luau",

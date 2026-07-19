@@ -13,6 +13,9 @@ local RETURN_DISTANCE = 8
 local RETURN_OPEN_DURATION = 5
 local RETURN_APPROACH_DISTANCE = 10
 local RETURN_TOUCH_PULSES = 3
+local WAIT_MIN_HORIZONTAL_DISTANCE = 36
+local WAIT_EDGE_CLEARANCE = 12
+local WAIT_HEIGHT = 4
 
 local returnDone = false
 local suppressed = false
@@ -98,18 +101,36 @@ local function forceReturnOpen()
 	return Beacon.restore(true)
 end
 
-local function getReturnCFrames(beacon, hrp)
+local function getFlatDirection(beacon, hrp)
 	local beaconPos = beacon.Position
 	local rootPos = hrp and hrp.Position or beaconPos
 	local offset = rootPos - beaconPos
 	local flat = Vector3.new(offset.X, 0, offset.Z)
 	if flat.Magnitude < 0.1 then
-		flat = Vector3.new(1, 0, 0)
+		local look = beacon.CFrame.LookVector
+		flat = Vector3.new(look.X, 0, look.Z)
+		if flat.Magnitude < 0.1 then
+			flat = Vector3.new(1, 0, 0)
+		end
 	end
+	return flat.Unit
+end
 
-	local approach = beaconPos + flat.Unit * RETURN_APPROACH_DISTANCE + Vector3.new(0, 4, 0)
+local function getReturnCFrames(beacon, hrp)
+	local beaconPos = beacon.Position
+	local direction = getFlatDirection(beacon, hrp)
+	local approach = beaconPos + direction * RETURN_APPROACH_DISTANCE + Vector3.new(0, 4, 0)
 	local target = beaconPos + Vector3.new(0, 4, 0)
 	return CFrame.new(approach), CFrame.new(target)
+end
+
+local function getWaitCFrame(beacon, hrp)
+	local halfWidth = math.max(beacon.Size.X, beacon.Size.Z) * 0.5
+	local safeDistance = math.max(WAIT_MIN_HORIZONTAL_DISTANCE, halfWidth + WAIT_EDGE_CLEARANCE)
+	local target = beacon.Position
+		+ getFlatDirection(beacon, hrp) * safeDistance
+		+ Vector3.new(0, WAIT_HEIGHT, 0)
+	return CFrame.new(target)
 end
 
 function Beacon.stageForWait(hrp, lease)
@@ -118,12 +139,13 @@ function Beacon.stageForWait(hrp, lease)
 		return false
 	end
 
-	local approach = getReturnCFrames(beacon, hrp)
-	Context.waitForStreamedGround(approach.Position, 0.25)
+	Beacon.suppressUntilReturn()
+	local waitCFrame = getWaitCFrame(beacon, hrp)
+	Context.waitForStreamedGround(waitCFrame.Position, 0.25)
 	if lease then
-		return lease:moveTo(approach)
+		return lease:moveTo(waitCFrame)
 	end
-	return Context.moveCharacterTo(approach)
+	return Context.moveCharacterTo(waitCFrame)
 end
 
 local function pulseBeaconTouch(beacon, hrp)

@@ -1160,7 +1160,8 @@ local function runLoop(controller)
 				if routeStats and (tonumber(routeStats.Accepted) or 0) > 0 then
 					markProgress()
 				end
-				if routeCompleted and shouldHoldForGoldenWait and typeof(Beacon.stageForWait) == "function" then
+				local shouldStageAfterRoute = routeCompleted and (shouldHoldForGoldenWait or wasPassageRoute)
+				if shouldStageAfterRoute and typeof(Beacon.stageForWait) == "function" then
 					transitionTo(controller, "Collecting", "Moving to a safe Golden Gift wait position")
 					Beacon.stageForWait(hrp, lease)
 				end
