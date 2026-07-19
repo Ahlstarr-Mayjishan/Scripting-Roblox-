@@ -24,6 +24,7 @@ local Booster = {
 	EnemiesRoot = nil,
 	Connections = {},
 	SuspendedScripts = setmetatable({}, { __mode = "k" }),
+	PositionDrains = setmetatable({}, { __mode = "k" }),
 	CameraStates = setmetatable({}, { __mode = "k" }),
 	RendererSuppressed = false,
 	OriginalGlobalShadows = nil,
@@ -313,6 +314,29 @@ local function suspendIfVisualScript(instance, enemiesRoot)
 	end)
 end
 
+local function drainPositionRemote(instance, enemiesRoot)
+	if
+		not Booster.Enabled
+		or not instance:IsA("RemoteEvent")
+		or instance.Name ~= "UpdatePosition"
+		or not instance:IsDescendantOf(enemiesRoot)
+		or Booster.PositionDrains[instance] ~= nil
+	then
+		return
+	end
+
+	Booster.PositionDrains[instance] = instance.OnClientEvent:Connect(function() end)
+end
+
+local function disconnectPositionDrains()
+	for remote, connection in pairs(Booster.PositionDrains) do
+		pcall(function()
+			connection:Disconnect()
+		end)
+		Booster.PositionDrains[remote] = nil
+	end
+end
+
 local function restoreVisualScripts()
 	for visualScript, state in pairs(Booster.SuspendedScripts) do
 		if state.Connection then
@@ -336,10 +360,12 @@ local function attachEnemiesRoot(enemiesRoot)
 	Booster.EnemiesRoot = enemiesRoot
 	Booster.Connections.EnemyAdded = enemiesRoot.DescendantAdded:Connect(function(instance)
 		suspendIfVisualScript(instance, enemiesRoot)
+		drainPositionRemote(instance, enemiesRoot)
 	end)
 
 	for _, instance in ipairs(enemiesRoot:GetDescendants()) do
 		suspendIfVisualScript(instance, enemiesRoot)
+		drainPositionRemote(instance, enemiesRoot)
 	end
 end
 
@@ -360,6 +386,7 @@ local function uninstallVisualSuspension()
 	disconnect("EnemyAdded")
 	disconnect("EnemiesRootAdded")
 	Booster.EnemiesRoot = nil
+	disconnectPositionDrains()
 	restoreVisualScripts()
 end
 

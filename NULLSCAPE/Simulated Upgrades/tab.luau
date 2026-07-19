@@ -326,8 +326,6 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateSection("Grappler Upgrades")
-
 	Tab:CreateToggle({
 		Name = "Ninja Belt",
 		Info = "Makes Grappler native HasUpgrade checks treat Ninja Belt as owned without spoofing other classes.",

@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.19.011",
+    "Version":  "2026.07.19.014",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -1009,7 +1009,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "d9bf97ddbdd196e9834b1fa55f66ae3940ece0dcdf3049e928d238e0e9c566e4"
+                      "Sha256":  "c3b842211a0b5f97c7e251c1ee75992d2c71edff5dbb8091a38ee6d4ddbe268f"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",
@@ -1085,7 +1085,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "cda71a9e13078fce2ddea4ee708aed90e465f92ef1267fa576f95195408ad3f2"
+                      "Sha256":  "71d3165da63b5aabf23af7234377e877d46f999832fd4edb5227b7575e6923aa"
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/Character Actions.luau",
