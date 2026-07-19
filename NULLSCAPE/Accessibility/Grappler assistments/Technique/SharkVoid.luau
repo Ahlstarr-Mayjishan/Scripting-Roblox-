@@ -16,6 +16,7 @@ local DEFAULT_HEIGHT = 45
 local DEFAULT_REEL_HOLD = 0.12
 local RESCUE_COOLDOWN = 0.55
 local VOID_ANCHOR_TOLERANCE = 10
+local VOID_REEL_LATERAL_OFFSET = 64
 
 local Logic = {
 	PendingEndAt = nil,
@@ -126,18 +127,19 @@ end
 
 local function findEmergencyVoidHit(grapple, controller)
 	local effectiveRange = getEffectiveRange(controller)
-	if not (VoidCastAssist and typeof(VoidCastAssist.isEnabled) == "function" and VoidCastAssist.isEnabled()) then
+	if not (VoidCastAssist and typeof(VoidCastAssist.findEmergency) == "function") then
 		return nil, false
 	end
 
-	if typeof(VoidCastAssist.findEmergency) == "function" then
-		local success, voidHit = pcall(VoidCastAssist.findEmergency, grapple, effectiveRange)
-		if success and voidHit then
-			return voidHit, true
-		end
+	local success, voidHit = pcall(VoidCastAssist.findEmergency, grapple, effectiveRange, {
+		Force = true,
+		LateralOffset = VOID_REEL_LATERAL_OFFSET,
+	})
+	if success and voidHit then
+		return voidHit, true
 	end
 
-	return nil, true
+	return nil, false
 end
 
 local function playReelSound(grapple)

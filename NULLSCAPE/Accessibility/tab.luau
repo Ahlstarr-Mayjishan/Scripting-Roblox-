@@ -669,7 +669,7 @@ return function(Client, Controller)
 
 	Tab:CreateToggle({
 		Name = "SharkVoid",
-		Info = "Automatically casts a void anchor only during a confirmed dangerous fall.",
+		Info = "Automatically casts, reels, and converts lateral momentum into a native SharkTail rescue during a dangerous fall.",
 		CurrentValue = Controller.GrappleVoidRescueEnabled == true,
 		Flag = "GrappleVoidRescueToggle",
 		Callback = function(Value)

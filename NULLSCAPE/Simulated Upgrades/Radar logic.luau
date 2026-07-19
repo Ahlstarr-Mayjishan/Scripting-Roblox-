@@ -12,7 +12,7 @@ local desiredCache = setmetatable({}, { __mode = "k" })
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
-local Workspace = game:GetService("Workspace")
+local NativeEnemyRadar = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Native Enemy Radar.luau")
 
 local SIM_ATTR = "NULLSCAPE_Simulated"
 
@@ -52,21 +52,6 @@ local FEATURE_TO_UPGRADE = {
 local DIRECT_FOLDER_UPGRADES = {
 	EnemyOnTop = true,
 }
-
-local function clearSimulatedEnemyRadarMarkers()
-	local enemies = Workspace:FindFirstChild("Enemies")
-	if not enemies then
-		return
-	end
-
-	for _, enemy in ipairs(enemies:GetChildren()) do
-		for _, child in ipairs(enemy:GetChildren()) do
-			if (child.Name == "ESP" or child.Name == "ESPCrayon") and child:IsA("BillboardGui") then
-				child:Destroy()
-			end
-		end
-	end
-end
 
 local function getUpgradesFolder()
 	local upgradeFolder = ReplicatedStorage:FindFirstChild("UpgradeFolder")
@@ -247,14 +232,6 @@ function Logic.syncSimulatedUpgradeHud(controller)
 	local desired = collectDesiredSimulatedUpgrades(controller)
 	local enemyRadarDesired = desired.EnemyOnTop == true
 	local enemyRadarNative = isNativelyOwned("EnemyOnTop")
-	local enemyRadarWasSimulated = simulatedUpgradeStates.EnemyOnTop == true
-
-	if not enemyRadarNative and (not enemyRadarDesired or not enemyRadarWasSimulated) then
-		-- Remove markers produced by older NULLSCAPE builds. New markers are owned by
-		-- the native spriteManager ChildAdded listener after EnemyOnTop is installed.
-		clearSimulatedEnemyRadarMarkers()
-	end
-
 	for _, child in ipairs(upgrades:GetChildren()) do
 		if
 			child:GetAttribute(SIM_ATTR)
@@ -270,6 +247,8 @@ function Logic.syncSimulatedUpgradeHud(controller)
 			ensureSimulatedUpgradeInt(upgrades, upgradeName)
 		end
 	end
+
+	NativeEnemyRadar.sync(enemyRadarDesired or enemyRadarNative, enemyRadarNative)
 
 	for _, upgradeName in ipairs(Logic.RADAR_UPGRADES) do
 		local simulatedEnabled = desired[upgradeName] == true and not isNativelyOwned(upgradeName)
@@ -362,9 +341,7 @@ function Logic.unbindUpgradeWatcher(controller)
 end
 
 function Logic.disableRadarSimulation()
-	if simulatedUpgradeStates.EnemyOnTop == true and not isNativelyOwned("EnemyOnTop") then
-		clearSimulatedEnemyRadarMarkers()
-	end
+	NativeEnemyRadar.sync(false, isNativelyOwned("EnemyOnTop"))
 
 	for _, upgradeName in ipairs(Logic.RADAR_UPGRADES) do
 		if simulatedUpgradeStates[upgradeName] == true and not isNativelyOwned(upgradeName) then

@@ -243,9 +243,9 @@ function Controller:ReapplyRespawnFeatures()
 		callExecutor("initializeMomentumGuard")
 	end
 
-	if self.GrappleAssistEnabled and isGrapplerClass() then
+	if (self.GrappleAssistEnabled or self.GrappleVoidRescueEnabled) and isGrapplerClass() then
 		callExecutor("initializeGrappleAssist", self)
-	elseif self.GrappleAssistEnabled then
+	elseif self.GrappleAssistEnabled or self.GrappleVoidRescueEnabled then
 		callExecutor("disableGrappleAssist")
 	end
 
@@ -414,20 +414,21 @@ function Controller:SetGrappleAssist(value)
 		return
 	end
 
-	if not self.GrappleAssistEnabled then
+	if not self.GrappleAssistEnabled and not self.GrappleVoidRescueEnabled then
 		callExecutor("disableGrappleAssist")
 	end
 end
 
--- Keep runtime feature gates in one place. Child toggles configure a feature;
--- they must never implicitly reactivate the parent Grapple Assist toggle.
 function Controller:IsGrappleFeatureEnabled(featureName)
-	if self.GrappleAssistEnabled ~= true or not isGrapplerClass() then
+	if not isGrapplerClass() then
 		return false
 	end
 
 	if featureName == "SharkVoid" then
 		return self.GrappleVoidRescueEnabled == true
+	end
+	if self.GrappleAssistEnabled ~= true then
+		return false
 	end
 	if featureName == "ReelSaver" then
 		return self.GrappleReelSaverEnabled == true
@@ -571,6 +572,13 @@ end
 
 function Controller:SetGrappleVoidRescue(value)
 	self.GrappleVoidRescueEnabled = value == true
+	if self.GrappleVoidRescueEnabled and isGrapplerClass() then
+		if not callExecutor("initializeGrappleAssist", self) then
+			self.GrappleVoidRescueEnabled = false
+		end
+	elseif not self.GrappleAssistEnabled then
+		callExecutor("disableGrappleAssist")
+	end
 end
 
 function Controller:SetGrapplerTechniqueSelection(options)

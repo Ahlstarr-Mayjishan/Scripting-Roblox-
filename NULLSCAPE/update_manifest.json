@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.19.008",
+    "Version":  "2026.07.19.010",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -309,7 +309,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "68c4f0cea4a21b8ef9e9bc44339a984aafaa43d1bccb418b036c215894f1c008"
+                      "Sha256":  "b238f62e72989537b6f08c3c0d9416ee49342ba6495a01db33b5567c2fa1bdd7"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Curse Visual Assist.luau",
@@ -365,7 +365,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "312e870a9c383b2a2693bf8b6120c4ecd13ff2bfb51a2bc145d98b7666029710"
+                      "Sha256":  "91253ef01d1eee136c5beb8a5b79106972ec400bac38bc43d431560aa8fa2ce3"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Adaptive Anchor Style.luau",
@@ -610,7 +610,7 @@
                       "Menu":  [
                                    "Accessibility"
                                ],
-                      "Sha256":  "b4b64e30c7e1beda803e6ab19f883751faa6c4a9b5c47b1c1b37bf2572dd72d5"
+                      "Sha256":  "55fa41fbafe1dbd7441b0d278421522f16a5fa98ab722a9cf1f9c139c433ebc5"
                   },
                   {
                       "Path":  "NULLSCAPE/Accessibility/Grappler assistments/Technique/Reel Saver/init.luau",
@@ -764,7 +764,7 @@
                       "Menu":  [
                                    "Class Adjustment"
                                ],
-                      "Sha256":  "30b3259209e0c0c577b1278d0471b724ed7218c77d7d99acf42789843b239ced"
+                      "Sha256":  "ed1f22192383205dcbe6d122c1171f8251cf094d5fff26b037e5065091e39377"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/SharkTail Cooldown.luau",
@@ -977,11 +977,18 @@
                       "Sha256":  "98e0dd4e5f11610b77599cdfdb55075ca34dad6feb23e00509b0959bc67a45a3"
                   },
                   {
+                      "Path":  "NULLSCAPE/Simulated Upgrades/Native Enemy Radar.luau",
+                      "Menu":  [
+                                   "Simulated Upgrades"
+                               ],
+                      "Sha256":  "b92a1964d193f26c62e5890b8b66a3d93d7b1306efa703846636d68e96854b19"
+                  },
+                  {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Radar logic.luau",
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "e19566cdafeea13979a1524cac328f02cee2e3413e3af0fdcbc25c489ff8290c"
+                      "Sha256":  "febde7c214c7dd6e8bea940ba1b8688f5b1126e304990c20be77e81ac580ff73"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Speed Buffs.luau",
