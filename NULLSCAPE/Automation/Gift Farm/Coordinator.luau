@@ -775,7 +775,7 @@ local function runLoop(controller)
 					continue
 				end
 
-				if lap2Active and Altar and typeof(Altar.tryStep) == "function" then
+				if xpTripcoinMode and lap2Active and Altar and typeof(Altar.tryStep) == "function" then
 					local lease = MovementLease.acquire("Lap2Purification")
 					local _, _, normalGiftRatio = Progress.getNormalGiftProgress(gch)
 					local handledAltar, altarStatus, altarDetail =

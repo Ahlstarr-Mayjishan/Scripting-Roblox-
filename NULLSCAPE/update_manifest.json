@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.19.014",
+    "Version":  "2026.07.19.016",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -57,7 +57,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "38e77e39ae1ce5605725a0c7c9844e42555631d968021897cf2470f936234736"
+                      "Sha256":  "5aff337f48fab70335e7eab967deb6828e35a526c6a21adf929654a03671962b"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Run Policy.luau",
