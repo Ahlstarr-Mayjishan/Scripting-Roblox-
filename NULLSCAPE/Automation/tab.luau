@@ -54,9 +54,9 @@ return function(Client, Controller)
 
 	Tab:CreateDropdown({
 		Name = "Medal Intermission Choice",
-		Info = "Chooses between the immediate Golden Gifts reward and the option that keeps native rerolls available.",
-		Options = { "Golden Gifts (No Rerolls)", "Rerolls (No Golden Gifts)" },
-		CurrentOption = Controller and Controller.MedalChoiceMode or "Rerolls (No Golden Gifts)",
+		Info = "Medal keeps native rerolls. Curse Medal grants Golden Gifts but disables rerolls.",
+		Options = { "Medal", "Curse Medal" },
+		CurrentOption = Controller and Controller.MedalChoiceMode or "Medal",
 		MultipleOptions = false,
 		Flag = "AutomationMedalChoiceModeDropdown",
 		Callback = function(Value)

@@ -206,8 +206,18 @@ local function visitLiveGifts(gch, callback)
 	return count
 end
 
+local function getEffectiveGoldenPercent(controller)
+	local configured = tonumber(controller and controller.GiftFarmGoldenEfficiency) or 100
+	local floorPercent = math.clamp(tonumber(controller and controller.GiftFarmGoldenEfficiencyFloor) or 0, 0, 100)
+	if floorPercent <= 0 then
+		return configured
+	end
+	local normalizedConfigured = if configured <= 0 then 100 else math.clamp(configured, 0, 100)
+	return math.max(normalizedConfigured, floorPercent)
+end
+
 local function getConfigSignature(controller)
-	return tostring(controller and controller.GiftFarmGoldenEfficiency or 100)
+	return tostring(getEffectiveGoldenPercent(controller))
 		.. ":"
 		.. tostring(controller and controller.GiftFarmXpTripcoinMode == true)
 end
@@ -246,7 +256,7 @@ end
 
 function Scanner.isGoldenTargetReached(gch, controller)
 	local collected, maximum = Progress.getGoldenGiftProgress(gch)
-	return GoldenEfficiency.evaluate(controller and controller.GiftFarmGoldenEfficiency, collected, maximum).Reached
+	return GoldenEfficiency.evaluate(getEffectiveGoldenPercent(controller), collected, maximum).Reached
 end
 
 function Scanner.getLiveGoldenKind(gch, controller)
@@ -295,9 +305,9 @@ function Scanner.scan(controller, gch)
 	local normalGifts = {}
 	local _, _, normalRatio = Progress.getNormalGiftProgress(gch)
 	local goldenCollected, goldenMax, goldenRatio = Progress.getGoldenGiftProgress(gch)
-	local goldenEfficiency =
-		GoldenEfficiency.evaluate(controller and controller.GiftFarmGoldenEfficiency, goldenCollected, goldenMax)
-	local normalOnly = controller and controller.GiftFarmXpTripcoinMode == true
+	local goldenEfficiency = GoldenEfficiency.evaluate(getEffectiveGoldenPercent(controller), goldenCollected, goldenMax)
+	local goldenFloor = tonumber(controller and controller.GiftFarmGoldenEfficiencyFloor) or 0
+	local normalOnly = controller and controller.GiftFarmXpTripcoinMode == true and goldenFloor <= 0
 	local rawGolden, rawPassage, rawNormal = 0, 0, 0
 	local settledGolden, settledPassage, settledNormal = 0, 0, 0
 	local hasFannyPack, fannyPackTiles = getFannyPackState(now)
@@ -381,6 +391,7 @@ function Scanner.scan(controller, gch)
 		GoldenProgressComplete = goldenMax > 0 and goldenCollected >= goldenMax,
 		GoldenTargetPercent = goldenEfficiency.TargetPercent,
 		GoldenTargetReached = goldenEfficiency.Reached,
+		GoldenTargetFloorPercent = math.clamp(goldenFloor, 0, 100),
 		NormalRemainingRatio = peakRawNormal > 0 and rawNormal / peakRawNormal or 1,
 		CollapseTracked = true,
 		FannyPackTracked = hasFannyPack,

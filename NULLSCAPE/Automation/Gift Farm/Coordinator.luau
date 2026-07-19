@@ -20,6 +20,7 @@ local MovementLease = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Movem
 local RunPolicy = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Run Policy.luau")
 local NativeGiftRegistry = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Native Gift Registry.luau")
 local XpTripcoinMode = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/XP Tripcoin Mode.luau")
+local Lap2Policy = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Lap2 Policy.luau")
 
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
@@ -137,6 +138,9 @@ local function recoverAfterStop(controller, detail)
 	if controller then
 		controller.GiftFarmGoldenComplete = false
 		controller.GiftFarmXpTripcoinMode = false
+	end
+	if Lap2Policy and typeof(Lap2Policy.reset) == "function" then
+		Lap2Policy.reset(controller)
 	end
 
 	transitionTo(controller, "Idle", detail or "Gift Farm stopped", true)
@@ -524,6 +528,9 @@ local function observeInRound(controller, gc)
 			syncXpTripcoinMode(controller)
 		else
 			controller.GiftFarmXpTripcoinMode = false
+			if Lap2Policy and typeof(Lap2Policy.reset) == "function" then
+				Lap2Policy.reset(controller)
+			end
 		end
 		if XpTripcoinMode and typeof(XpTripcoinMode.reset) == "function" then
 			XpTripcoinMode.reset()
@@ -677,6 +684,9 @@ local function runLoop(controller)
 				end
 
 				local xpTripcoinMode = syncXpTripcoinMode(controller)
+				local lap2Active = Lap2Policy
+					and typeof(Lap2Policy.sync) == "function"
+					and Lap2Policy.sync(controller) == true
 				if xpTripcoinMode and controller.PylonActivatorHolding == true then
 					controller.PylonActivatorHolding = false
 				end
@@ -752,6 +762,28 @@ local function runLoop(controller)
 					transitionTo(controller, policy.Status or "Paused", policy.Detail or "Gift Farm policy hold", true)
 					task.wait(0.1)
 					continue
+				end
+
+				if lap2Active and Altar and typeof(Altar.tryStep) == "function" then
+					local lease = MovementLease.acquire("Lap2Purification")
+					local _, _, normalGiftRatio = Progress.getNormalGiftProgress(gch)
+					local handledAltar, altarStatus, altarDetail =
+						Altar.tryStep(controller, hrp, lease, mySessionToken, normalGiftRatio, "Purification")
+					lease:release()
+					if not isSessionActive() then
+						continue
+					end
+					if handledAltar then
+						markProgress()
+						transitionTo(
+							controller,
+							altarStatus or "ActivatingAltar",
+							altarDetail or "LAP 2 | prioritizing Altar of Purification",
+							true
+						)
+						task.wait(0.08)
+						continue
+					end
 				end
 
 				if
@@ -1394,6 +1426,9 @@ function Coordinator.disable(controller)
 	NativeGiftRegistry.stop()
 	if XpTripcoinMode and typeof(XpTripcoinMode.stop) == "function" then
 		XpTripcoinMode.stop(controller)
+	end
+	if Lap2Policy and typeof(Lap2Policy.reset) == "function" then
+		Lap2Policy.reset(controller)
 	end
 
 	if wasEnabled then

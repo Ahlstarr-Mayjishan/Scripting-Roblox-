@@ -251,7 +251,7 @@ pcall(function()
 			InfiniteJumpToggle = false,
 			AutomationGiftFarmToggle = false,
 			AutomationCollectMedalToggle = false,
-			AutomationMedalChoiceModeDropdown = "Rerolls (No Golden Gifts)",
+			AutomationMedalChoiceModeDropdown = "Medal",
 			AutomationAutoChooseThingsToggle = false,
 			AutomationGiftFarmModeDropdown = "Normal (teleport)",
 			AutomationGiftFarmRangeSlider = 60,
@@ -314,6 +314,13 @@ pcall(function()
 		end
 		if currentSettings.AutomationGiftFarmRestModeDropdown == "Every Completed Level" then
 			currentSettings.AutomationGiftFarmRestModeDropdown = "Every Completed Round"
+			updated = true
+		end
+		if currentSettings.AutomationMedalChoiceModeDropdown == "Rerolls (No Golden Gifts)" then
+			currentSettings.AutomationMedalChoiceModeDropdown = "Medal"
+			updated = true
+		elseif currentSettings.AutomationMedalChoiceModeDropdown == "Golden Gifts (No Rerolls)" then
+			currentSettings.AutomationMedalChoiceModeDropdown = "Curse Medal"
 			updated = true
 		end
 		for newKey, oldKey in pairs(aliases) do

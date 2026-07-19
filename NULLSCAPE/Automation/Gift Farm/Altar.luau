@@ -174,8 +174,12 @@ local function getAltarName(root, tagged)
 		or readStringValue(marker and marker:FindFirstChild("RealName"))
 end
 
-local function buildSelection(controller)
+local function buildSelection(controller, forcedName)
 	local selected = {}
+	if typeof(forcedName) == "string" and forcedName ~= "" then
+		selected[forcedName] = true
+		return selected
+	end
 	local selections = controller and controller.AltarSelections
 
 	if typeof(selections) ~= "table" then
@@ -197,8 +201,8 @@ local function buildSelection(controller)
 	return selected
 end
 
-local function isSelected(controller)
-	local selected = buildSelection(controller)
+local function isSelected(controller, forcedName)
+	local selected = buildSelection(controller, forcedName)
 	for _ in pairs(selected) do
 		return true
 	end
@@ -308,8 +312,8 @@ local function getStateDetail(target, state)
 	return target.Name .. " | " .. stateText
 end
 
-local function findBestTarget(controller, hrp)
-	local selected = buildSelection(controller)
+local function findBestTarget(controller, hrp, forcedName)
+	local selected = buildSelection(controller, forcedName)
 	if not next(selected) then
 		return nil
 	end
@@ -393,13 +397,17 @@ local function findBestTarget(controller, hrp)
 	return currentTarget
 end
 
-function Altar.tryStep(controller, hrp, lease, _currentSessionToken, _normalGiftRatio)
+function Altar.tryStep(controller, hrp, lease, _currentSessionToken, _normalGiftRatio, forcedName)
 	if not (controller and hrp and hrp.Parent) then
 		return false
 	end
-	if not isSelected(controller) then
+	if not isSelected(controller, forcedName) then
 		currentTarget = nil
 		return false
+	end
+	if forcedName and currentTarget and currentTarget.Name ~= forcedName then
+		currentTarget = nil
+		currentTargetStartedAt = 0
 	end
 
 	if currentTarget and currentTarget.Root then
@@ -422,7 +430,7 @@ function Altar.tryStep(controller, hrp, lease, _currentSessionToken, _normalGift
 		end
 	end
 
-	local target, discovering = findBestTarget(controller, hrp)
+	local target, discovering = findBestTarget(controller, hrp, forcedName)
 	if discovering then
 		return true, "DiscoveringAltars", "Waiting for altar replication", false
 	end

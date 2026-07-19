@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.19.004",
+    "Version":  "2026.07.19.005",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "db61d1b844da44ed3f308b8b870503414cb75bf718cc35bc40fa371d079b41d2"
+                      "Sha256":  "9de700d91f3bed35166bc483072a30d09a75784b5beac30ded6aedc6c21aa5c7"
                   },
                   {
                       "Path":  "NULLSCAPE/loader.luau",
@@ -57,7 +57,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "b700861bf926d4110307b18fae4bc553b4c15a93bc61b21fe1918923d2076a1c"
+                      "Sha256":  "178a883c967443dc889d91c0ded60db649fe1fa10899d10f3c422be595b47b5e"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Run Policy.luau",
@@ -170,7 +170,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "76c265c08482505584b14e8aaaa973b5cc675d8216c20d056c96dadac3fccbce"
+                      "Sha256":  "dbb4dc048d7936ad820d41a2a08ea87adb6a5ae9faf82fd4112ded17a2da1d1b"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Kolona Auto QTE.luau",
@@ -778,7 +778,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "6f6e5e4818dd25f57f90e292729f2787ad0a2c1f2ec9f2d92b8cb6a07cbe56d4"
+                      "Sha256":  "66a0703f85a705657fb2e471075f4d83f4e07b2a386bb1d6f1c1a5854836781a"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Choice Catalog.luau",
@@ -834,14 +834,14 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "5f88d19e593af9a21849a2e087269f5cc944d1f17befdf9671caf0c5f926a563"
+                      "Sha256":  "d857f9610c40a2ccb836f0ce6fd4daf785ad650cad4bc9b35f60e3a782f868d8"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Altar.luau",
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "176ba907ab5ca36b1b4c6936c912ce36cd658a70cb041701b56d4fbe1d0c84a1"
+                      "Sha256":  "dc75864ca65a00cc4fe12a8e37da311fe9a620a44fc649eb85a8a761827163f6"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Cluster Planner.luau",
@@ -897,7 +897,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "e747fc190979dac28669b416925441fb42f802d1665b4f336ba5d424ced2457e"
+                      "Sha256":  "6bf957ad1caa86a3eab9b5a419005fda9473e74ec7fb507f42755adcceb936ff"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/executor.luau",
@@ -1152,7 +1152,15 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "f01596924d6f0f0dbc0903e966131ee51a5658643a46a429d08dfad298e52231"
+                      "Sha256":  "da9f88003ba8942134b18dfebe8f8f6efd075a09d938f1263aa18e0dcabb8786"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Automation/Gift Farm/Lap2 Policy.luau",
+                      "Menu":  [
+                                   "Automation",
+                                   "Gift Farm"
+                               ],
+                      "Sha256":  "039bd5257da3d425dca04136f0039fdf6e8521bc0bf447c682bb1afdfa395b55"
                   }
               ]
 }

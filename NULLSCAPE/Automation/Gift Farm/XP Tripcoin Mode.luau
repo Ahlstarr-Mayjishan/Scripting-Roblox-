@@ -56,14 +56,21 @@ function XpTripcoinMode.handleScan(controller, hrp, candidates, scanInfo, setSta
 	end
 
 	local rawNormal = scanInfo and (tonumber(scanInfo.RawNormal) or 0) or 0
-	if rawNormal > 0 then
+	local rawGolden = scanInfo and (tonumber(scanInfo.RawGolden) or 0) or 0
+	local goldenFloor = scanInfo and (tonumber(scanInfo.GoldenTargetFloorPercent) or 0) or 0
+	local waitingForRequiredGolden = goldenFloor > 0 and scanInfo.GoldenTargetReached ~= true
+	if rawNormal > 0 or rawGolden > 0 or waitingForRequiredGolden then
 		Beacon.suppressUntilReturn()
 		if #candidates == 0 then
-			setStatus(
-				controller,
-				"Paused",
-				string.format("XP + Tripcoin | waiting for %d normal gifts to settle", rawNormal)
-			)
+			local detail = if waitingForRequiredGolden
+				then string.format(
+					"LAP 2 | waiting for %.0f%% Golden Gifts (%d/%d)",
+					goldenFloor,
+					tonumber(scanInfo.GoldenCollected) or 0,
+					tonumber(scanInfo.GoldenMax) or 0
+				)
+				else string.format("XP + Tripcoin | waiting for %d normal gifts to settle", rawNormal)
+			setStatus(controller, "Paused", detail)
 			task.wait(0.08)
 			return true
 		end

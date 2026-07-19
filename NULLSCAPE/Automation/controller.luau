@@ -104,7 +104,7 @@ local Controller = {
 	GiftFarmEnabled = false,
 	GiftFarmMode = "Normal (teleport)",
 	CollectMedalEnabled = false,
-	MedalChoiceMode = "Rerolls (No Golden Gifts)",
+	MedalChoiceMode = "Medal",
 	GiftFarmRange = 60,
 	GiftFarmRangeRevision = 0,
 	GiftFarmAdaptiveSuccessRate = 1,
@@ -138,6 +138,8 @@ local Controller = {
 	GiftFarmMinLevel = 10,
 	GiftFarmMaxLevel = 50,
 	GiftFarmGoldenEfficiency = 100,
+	GiftFarmGoldenEfficiencyFloor = 0,
+	GiftFarmLap2Active = false,
 	GiftFarmRestMode = "Interval",
 	GiftFarmRestIntervalRounds = 5,
 	GiftFarmWaitMinutes10To24 = 5,
@@ -479,9 +481,9 @@ function Controller:SetCollectMedalEnabled(value)
 end
 
 function Controller:SetMedalChoiceMode(value)
-	self.MedalChoiceMode = value == "Golden Gifts (No Rerolls)"
-		and "Golden Gifts (No Rerolls)"
-		or "Rerolls (No Golden Gifts)"
+	self.MedalChoiceMode = if value == "Curse Medal" or value == "Golden Gifts (No Rerolls)"
+		then "Curse Medal"
+		else "Medal"
 	self.ConfigChanged:Fire()
 	return true
 end

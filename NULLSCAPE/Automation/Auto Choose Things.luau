@@ -38,8 +38,8 @@ local PRIORITY_UPGRADES = {
 	businesslicense = 2,
 	paycheck = 3,
 }
-local MEDAL_MODE_REWARD = "Golden Gifts (No Rerolls)"
-local MEDAL_MODE_REROLLS = "Rerolls (No Golden Gifts)"
+local MEDAL_MODE_STANDARD = "Medal"
+local MEDAL_MODE_CURSE = "Curse Medal"
 
 local enabled = false
 local running = false
@@ -209,10 +209,10 @@ local function classifyMedalChoice(root, prompt, itemIndex)
 	for _, identity in ipairs(identityValues) do
 		local normalizedIdentity = normalizeUpgradeName(identity)
 		if string.find(normalizedIdentity, "cursemedal", 1, true) then
-			return MEDAL_MODE_REROLLS
+			return MEDAL_MODE_CURSE
 		end
 		if normalizedIdentity == "medal" then
-			return MEDAL_MODE_REWARD
+			return MEDAL_MODE_STANDARD
 		end
 	end
 	if root then
@@ -221,14 +221,14 @@ local function classifyMedalChoice(root, prompt, itemIndex)
 			if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
 				local normalizedText = normalizeUpgradeName(descendant.Text)
 				if normalizedText == "cursemedal" then
-					return MEDAL_MODE_REROLLS
+					return MEDAL_MODE_CURSE
 				elseif normalizedText == "medal" then
 					hasMedalLabel = true
 				end
 			end
 		end
 		if hasMedalLabel then
-			return MEDAL_MODE_REWARD
+			return MEDAL_MODE_STANDARD
 		end
 	end
 
@@ -237,9 +237,9 @@ local function classifyMedalChoice(root, prompt, itemIndex)
 			for name, value in pairs(instance:GetAttributes()) do
 				if textContains(name, "reroll") then
 					if value == true or (tonumber(value) or 0) > 0 then
-						return MEDAL_MODE_REROLLS
+						return MEDAL_MODE_STANDARD
 					elseif value == false or tonumber(value) == 0 then
-						return MEDAL_MODE_REWARD
+						return MEDAL_MODE_CURSE
 					end
 				end
 			end
@@ -252,25 +252,25 @@ local function classifyMedalChoice(root, prompt, itemIndex)
 		tostring(prompt and prompt.ObjectText or ""),
 	}, " ")
 	if textContains(visibleText, "no reroll") or textContains(visibleText, "without reroll") then
-		return MEDAL_MODE_REWARD
+		return MEDAL_MODE_CURSE
 	end
 	if textContains(visibleText, "reroll") then
-		return MEDAL_MODE_REROLLS
+		return MEDAL_MODE_STANDARD
 	end
 	if
 		textContains(visibleText, "golden gift")
 		or textContains(visibleText, "reward")
 		or textContains(visibleText, "money")
 	then
-		return MEDAL_MODE_REWARD
+		return MEDAL_MODE_CURSE
 	end
 
 	local indexText = tostring(itemIndex or "")
 	if textContains(indexText, "reroll") then
-		return MEDAL_MODE_REROLLS
+		return MEDAL_MODE_STANDARD
 	end
 	if textContains(indexText, "golden") or textContains(indexText, "reward") then
-		return MEDAL_MODE_REWARD
+		return MEDAL_MODE_CURSE
 	end
 	return nil
 end
