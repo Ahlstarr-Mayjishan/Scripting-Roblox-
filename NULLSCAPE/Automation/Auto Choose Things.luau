@@ -422,7 +422,6 @@ local function collectTarget(controller, hrp)
 		lastSelectFolder = selectFolder
 		attemptedAt = {}
 		lastPrimaryChoiceAt = 0
-		ChoiceReroll.reset()
 	end
 	if not selectFolder then
 		return nil, "WaitingForSelect"
@@ -490,10 +489,10 @@ local function collectTarget(controller, hrp)
 	local decision
 	candidates, decision = ChoicePolicy.applyWithDecision(controller, candidates)
 	if decision.AllBlacklisted == true then
-		local reroll = ChoiceReroll.find(selectFolder, hrp, signature)
+		local reroll = ChoiceReroll.find(selectFolder, hrp, signature, decision.Category)
 		if reroll then
 			reroll.BatchSignature = signature
-			reroll.RerollCategory = decision.Category
+			reroll.RerollCategory = reroll.RerollCategory or decision.Category
 			return reroll
 		end
 		decision.Fallback = true
@@ -631,7 +630,7 @@ local function run(controller)
 				attemptedAt[target.Key] = os.clock()
 				local fired = firePrompt(target.Prompt)
 				if fired and target.Category == "Reroll" then
-					ChoiceReroll.markFired(target.BatchSignature, target.Remaining)
+					ChoiceReroll.markFired(target.BatchSignature, target.Remaining, target.RerollCategory)
 				elseif fired and target.Category ~= "Continue" then
 					lastPrimaryChoiceAt = os.clock()
 				end

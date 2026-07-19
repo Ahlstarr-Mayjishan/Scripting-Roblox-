@@ -22,8 +22,10 @@ local REMAINING_NAMES = {
 local pendingSignature = nil
 local pendingSince = 0
 local pendingRemaining = nil
+local pendingCategory = nil
 local exhaustedSignature = nil
 local exhaustedRemaining = nil
+local exhaustedCategories = {}
 local observedUses = 0
 local requestedUses = 0
 local cachedSelectFolder = nil
@@ -36,6 +38,33 @@ local BROAD_SCAN_CACHE_INTERVAL = 0.35
 
 local function containsReroll(value)
 	return string.find(string.lower(tostring(value or "")), "reroll", 1, true) ~= nil
+end
+
+local function categoryKey(category)
+	return string.lower(tostring(category or ""))
+end
+
+local function getRerollCategory(root, prompt, boundary)
+	local parts = {
+		tostring(prompt and prompt.ActionText or ""),
+		tostring(prompt and prompt.ObjectText or ""),
+	}
+	local current = root or prompt
+	while current and current ~= workspace and current ~= boundary do
+		parts[#parts + 1] = current.Name
+		current = current.Parent
+	end
+	local text = string.lower(table.concat(parts, " "))
+	if string.find(text, "greater", 1, true) and string.find(text, "curse", 1, true) then
+		return "Greater Curses"
+	end
+	if string.find(text, "enemy", 1, true) then
+		return "Enemies"
+	end
+	if string.find(text, "curse", 1, true) then
+		return "Curses"
+	end
+	return nil
 end
 
 local function belongsToReroll(root, prompt)
@@ -156,8 +185,11 @@ local function getPromptPart(root, prompt)
 	return root and root:FindFirstChildWhichIsA("BasePart", true)
 end
 
-function ChoiceReroll.find(selectFolder, hrp, signature)
+function ChoiceReroll.find(selectFolder, hrp, signature, category)
 	if not (selectFolder and hrp) then
+		return nil
+	end
+	if exhaustedCategories[categoryKey(category)] == true then
 		return nil
 	end
 
@@ -171,8 +203,16 @@ function ChoiceReroll.find(selectFolder, hrp, signature)
 		if descendant:IsA("ProximityPrompt") and belongsToReroll(descendant.Parent, descendant) then
 			local prompt = descendant
 			local root = prompt.Parent
+			local rerollCategory = getRerollCategory(root, prompt, selectFolder)
+			if category ~= nil and rerollCategory ~= nil and rerollCategory ~= category then
+				continue
+			end
 			local part = getPromptPart(root, prompt)
 			local remaining = readRemaining(root, prompt, selectFolder)
+			if remaining ~= nil and remaining <= 0 then
+				exhaustedCategories[categoryKey(rerollCategory or category)] = true
+				continue
+			end
 			if signature ~= nil and signature == exhaustedSignature then
 				if remaining ~= nil and exhaustedRemaining ~= nil and remaining < exhaustedRemaining then
 					exhaustedSignature = nil
@@ -196,6 +236,7 @@ function ChoiceReroll.find(selectFolder, hrp, signature)
 					Distance = (part.Position - hrp.Position).Magnitude,
 					Key = "REROLL|" .. prompt:GetFullName(),
 					Remaining = remaining,
+					RerollCategory = rerollCategory or category,
 				}
 			end
 		end
@@ -224,9 +265,13 @@ function ChoiceReroll.isWaitingForRefresh(signature)
 		return true
 	end
 	if signature ~= pendingSignature then
+		if pendingRemaining ~= nil and pendingRemaining <= 1 then
+			exhaustedCategories[categoryKey(pendingCategory)] = true
+		end
 		pendingSignature = nil
 		pendingSince = 0
 		pendingRemaining = nil
+		pendingCategory = nil
 		exhaustedSignature = nil
 		exhaustedRemaining = nil
 		observedUses += 1
@@ -239,14 +284,17 @@ function ChoiceReroll.isWaitingForRefresh(signature)
 	pendingSince = 0
 	exhaustedSignature = signature
 	exhaustedRemaining = pendingRemaining
+	exhaustedCategories[categoryKey(pendingCategory)] = true
 	pendingRemaining = nil
+	pendingCategory = nil
 	return false
 end
 
-function ChoiceReroll.markFired(signature, remaining)
+function ChoiceReroll.markFired(signature, remaining, category)
 	pendingSignature = signature
 	pendingSince = os.clock()
 	pendingRemaining = tonumber(remaining)
+	pendingCategory = category
 	requestedUses += 1
 end
 
@@ -260,8 +308,10 @@ function ChoiceReroll.reset()
 	pendingSignature = nil
 	pendingSince = 0
 	pendingRemaining = nil
+	pendingCategory = nil
 	exhaustedSignature = nil
 	exhaustedRemaining = nil
+	table.clear(exhaustedCategories)
 	observedUses = 0
 	requestedUses = 0
 	cachedSelectFolder = nil

@@ -142,7 +142,7 @@ return function(Client, Controller)
 
 	Tab:CreateSlider({
 		Name = "Momentum Reduction",
-		Info = "Brake animation duration: 10% -> 90%, 50% -> 50%, >=60% bypass.",
+		Info = "Matrix simulation strength. Below 70% keeps native braking; 70% or higher bypasses the brake animation.",
 		Range = { 10, 100 },
 		Increment = 10,
 		CurrentValue = math.clamp((Controller.MomentumReduction or 1.0) * 100, 10, 100),

@@ -863,7 +863,7 @@ local function updateClassLabel(classId)
 end
 
 HomeTab:CreateSection("Server Info")
-local statsLabel = HomeTab:CreateLabel("FPS: Calculating... | Ping: Calculating... | Players: 0/0")
+local statsLabel = HomeTab:CreateLabel("FPS: Calculating... | Ping: Calculating... | Players: 0")
 
 task.spawn(function()
 	while task.wait(1) do
@@ -872,8 +872,7 @@ task.spawn(function()
 		end
 		pcall(function()
 			local playerCount = #Players:GetPlayers()
-			local maxPlayers = Players.MaxPlayers
-			statsLabel:Set(string.format("FPS: %d | Ping: %d ms | Players: %d/%d", fps, ping, playerCount, maxPlayers))
+			statsLabel:Set(string.format("FPS: %d | Ping: %d ms | Players: %d", fps, ping, playerCount))
 		end)
 	end
 end)

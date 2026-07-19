@@ -22,6 +22,7 @@ local SpeedBuffs = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Speed Buff
 local Helmet = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Helmet.luau")
 local MiniatureHourglass = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Miniature Hourglass.luau")
 local AirJumps = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Air Jumps.luau")
+local ClientUpgradeInjector = getgenv().loadModule("NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau")
 local Medal = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Medal.luau")
 
 local Controller = {
@@ -104,9 +105,16 @@ local function refreshUpgradeServerState()
 
 		local success, UpgradeHandler = pcall(require, UpgradeHandlerModule)
 		if success and typeof(UpgradeHandler) == "table" and typeof(UpgradeHandler.ForceSyncServer) == "function" then
-			pcall(function()
+			local synced = pcall(function()
 				UpgradeHandler.ForceSyncServer()
 			end)
+			if
+				synced
+				and ClientUpgradeInjector
+				and typeof(ClientUpgradeInjector.captureCurrentNativeAndReapply) == "function"
+			then
+				ClientUpgradeInjector.captureCurrentNativeAndReapply()
+			end
 		end
 	end)
 end
@@ -878,6 +886,9 @@ function Controller:CleanUp()
 	if finalCleanup and Executor and typeof(Executor.stopBarriers) == "function" then
 		pcall(Executor.stopBarriers)
 	end
+	if finalCleanup and ClientUpgradeInjector and typeof(ClientUpgradeInjector.CleanUp) == "function" then
+		pcall(ClientUpgradeInjector.CleanUp)
+	end
 	if finalCleanup then
 		refreshUpgradeServerState()
 	end
@@ -953,7 +964,12 @@ getgenv()._NULLSCAPE_Globals.isUpgradeEnabledCheck = function(...)
 			end
 		end
 	end
-	if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+	if
+		isTetrahedron
+		and Controller.MatrixTetrahedronEnabled
+		and MatrixTetrahedron
+		and MatrixTetrahedron.isNativeMode(Controller)
+	then
 		return true, true
 	end
 	if isTheOrb and Controller.TheOrbEnabled then
@@ -1028,7 +1044,12 @@ getgenv()._NULLSCAPE_Globals.getUpgradeStackCheck = function(...)
 			end
 		end
 	end
-	if isTetrahedron and Controller.MatrixTetrahedronEnabled then
+	if
+		isTetrahedron
+		and Controller.MatrixTetrahedronEnabled
+		and MatrixTetrahedron
+		and MatrixTetrahedron.isNativeMode(Controller)
+	then
 		return true, 1
 	end
 	if isTheOrb and Controller.TheOrbEnabled then

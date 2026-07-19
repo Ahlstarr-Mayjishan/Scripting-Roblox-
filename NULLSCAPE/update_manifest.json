@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.20.013",
+    "Version":  "2026.07.20.018",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "eaa7afbcd35bc62baaff9cb5bbde6e78a54a3e169caa5c167c80df4cea899298"
+                      "Sha256":  "52d93764b11596805ec2051c8ccdfc1e57954155018157d01b037c8d03030d90"
                   },
                   {
                       "Path":  "NULLSCAPE/loader.luau",
@@ -254,35 +254,35 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "84c20e091698b30a1fc8252ea9c6d8ebc856cdf7e0fa65fedaaebe534753286c"
+                      "Sha256":  "7b376c77adfcfd5d0247cb13e9bb45a72f67ba527ec84540dd50eeae5d2149af"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/executor.luau",
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "c3c6936c5d0d7404b8bbac1199c31a09319144be1951bb11f224f200c0de61af"
+                      "Sha256":  "8a41a85d26212e4133cc49514e6fac7739026234b54d133556c0b76e6e701ebc"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Client Upgrade Injector.luau",
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "4405cb7232b01685312771047c00311acf10174b24aac49662a3da1b0bd1bb3a"
+                      "Sha256":  "21608b9f6143d6cdaac0e54623dfc22970ce5c70da298b4317f36f74d0d4d634"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Matrix Tetrahedron.luau",
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "1177d663a2c54d9f95061eed7107299e14e98a3c98b292a73d87195803113c4b"
+                      "Sha256":  "79c17fe13806dde75095458695cb326680cd735b9817f90436221cd7a683ca84"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Advanced Gravity Coil.luau",
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "2b7e806d20cd80963658b8422d5d83e7136c13a82590b5246aca8eed63190035"
+                      "Sha256":  "7a6c0fa724ba485732524ccdbcf7d699fef1022611fdc2261750223c0f648596"
                   },
                   {
                       "Path":  "NULLSCAPE/Simulated Upgrades/Better Jump Pad.luau",
@@ -793,7 +793,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "d0facd071c2c6baf09b1ff33191f941815cf29dad1bc456b21ea005daea2f8f1"
+                      "Sha256":  "79f8c621b96e4341e3c3b2d0735df8182b32947189650c8defc8cc8ca0581ec1"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Choice Catalog.luau",
@@ -814,7 +814,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "4484a5f20c22a61012d6f9e48b9d393d7badfce843b7eb8a2098406c31c6fc89"
+                      "Sha256":  "405302920ba7b2d88049fe1109f3949df2e930d01b78546026226eeea45199d3"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/executor.luau",
@@ -1024,7 +1024,7 @@
                       "Menu":  [
                                    "Simulated Upgrades"
                                ],
-                      "Sha256":  "c3b842211a0b5f97c7e251c1ee75992d2c71edff5dbb8091a38ee6d4ddbe268f"
+                      "Sha256":  "25d2d47613bf3d2626df4c3a55fbcb3d201f4c1fb3767d854b53e31a863f7316"
                   },
                   {
                       "Path":  "NULLSCAPE/Class Adjustment/Grappler/Grapple Catapult Boost.luau",

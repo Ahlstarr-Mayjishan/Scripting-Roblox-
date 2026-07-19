@@ -55,17 +55,17 @@ function Executor.syncVirtualGrapplerUpgradeVisuals(controller)
 			BetterJumpPad = controller and controller.BetterJumpPadEnabled == true,
 			DoubleJump = controller and hasSelectedOption(controller.AirJumpSelections, "DoubleJump"),
 			Helmet = controller and controller.HelmetEnabled == true,
-			MatrixTetrahedron = controller and controller.MatrixTetrahedronEnabled == true,
+			MatrixTetrahedron = controller
+				and controller.MatrixTetrahedronEnabled == true
+				and (tonumber(controller.MomentumReduction) or 1) >= 0.7,
 			MiniatureHourglass = controller and controller.MiniatureHourglassEnabled == true,
 			NinjaBelt = isGrappler
 				and controller
 				and (controller.GrappleVirtualNinjaBelt == true or controller.GrappleVirtualSharkTail == true),
 			PocketBell = controller and hasSelectedOption(controller.AirJumpSelections, "PocketBell"),
 			SharkTail = isGrappler and controller and controller.GrappleVirtualSharkTail == true,
+			TheOrb = controller and controller.TheOrbEnabled == true,
 		})
-		if controller and controller.TheOrbEnabled == true then
-			ClientUpgradeInjector.set("TheOrb", true, 1)
-		end
 	end
 	return true
 end
