@@ -301,6 +301,17 @@ function Controller:SetGiftFarmEnabled(value)
 	if upgradeController then
 		upgradeController.GiftMagnetBlocked = nextEnabled
 		if nextEnabled then
+			local range = clampGiftRange(self.GiftFarmRange)
+			self.GiftFarmRange = range
+			if typeof(upgradeController.SetAutoCollectGiftRange) == "function" then
+				pcall(function()
+					upgradeController:SetAutoCollectGiftRange(range)
+				end)
+			else
+				upgradeController.AutoCollectGiftRange = range
+				upgradeController.AutoCollectRange = range
+			end
+
 			if typeof(upgradeController.SetAutoCollectEnabled) == "function" then
 				pcall(function()
 					upgradeController:SetAutoCollectEnabled(false)
@@ -348,17 +359,9 @@ function Controller:SetGiftFarmRange(value)
 end
 
 function Controller:GetGiftFarmRange()
-	local upgradeController = getUpgradeController()
-	if upgradeController then
-		local linkedRange = upgradeController.AutoCollectGiftRange or upgradeController.AutoCollectRange
-		if tonumber(linkedRange) then
-			local range = clampGiftRange(linkedRange)
-			self.GiftFarmRange = range
-			return range
-		end
-	end
-
-	return clampGiftRange(self.GiftFarmRange)
+	local range = clampGiftRange(self.GiftFarmRange)
+	self.GiftFarmRange = range
+	return range
 end
 
 function Controller:SetGiftFarmReturnToBeaconAfterGolden(value)

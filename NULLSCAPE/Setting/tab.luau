@@ -84,8 +84,20 @@ return function(Client)
 		end,
 	})
 
+	SettingsTab:CreateColorPicker({
+		Name = "Ultimate FPS Background",
+		Color = Color3.fromRGB(24, 24, 24),
+		Flag = "UltimateFPSBackgroundColorPicker",
+		Callback = function(value)
+			local booster = Client.Modules and Client.Modules.UltimateFPSBooster
+			if booster and typeof(booster.setBackgroundColor) == "function" then
+				booster.setBackgroundColor(value)
+			end
+		end,
+	})
+
 	SettingsTab:CreateToggle({
-		Name = "Ultimated FSP Booster",
+		Name = "Ultimate FPS Booster",
 		CurrentValue = false,
 		Flag = "UltimateFPSBoosterToggle",
 		Callback = function(value)

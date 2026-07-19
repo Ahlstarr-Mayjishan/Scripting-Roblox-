@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.20.001",
+    "Version":  "2026.07.20.003",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -35,7 +35,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "70d9b3192e36b249a11c92931f5a6f9eac1730ade393c21f1ee932c0f278fe2d"
+                      "Sha256":  "591f02e30c4a0ea8070579a31619249765f3483ace6735d41f6c333115c397ee"
                   },
                   {
                       "Path":  "NULLSCAPE/Core/Remote Registry.luau",
@@ -170,7 +170,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "42a83d934e32128bd050889bb9d45b1cc846350f741e72b1e3f36dda7388d8bc"
+                      "Sha256":  "cf098b0d11f59dc0f693fbdd53d0c56b30f9e6960532fbbb5dc2a72fd7313007"
                   },
                   {
                       "Path":  "NULLSCAPE/Entities/Kolona Auto QTE.luau",
@@ -1085,7 +1085,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "71d3165da63b5aabf23af7234377e877d46f999832fd4edb5227b7575e6923aa"
+                      "Sha256":  "6a762ccbf44302cd5c8ce71ad1159323caeb11cf953c5ea197cd08a390ea07f0"
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/Character Actions.luau",

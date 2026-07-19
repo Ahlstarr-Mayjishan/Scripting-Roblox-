@@ -6,6 +6,8 @@
 ]]
 
 local Lighting = game:GetService("Lighting")
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -29,6 +31,9 @@ local Booster = {
 	RendererSuppressed = false,
 	OriginalGlobalShadows = nil,
 	OriginalQualityLevel = nil,
+	BackgroundColor = Color3.fromRGB(24, 24, 24),
+	BackgroundGui = nil,
+	BackgroundFrame = nil,
 }
 
 local PARKED_CAMERA_CFRAME = CFrame.lookAt(Vector3.new(0, -10000000, 0), Vector3.new(0, -10000000, -1))
@@ -40,6 +45,52 @@ local HEADLESS_GRAPHICS = {
 	HideTileDecoration = true,
 	ScrollTextures = false,
 }
+
+local function destroyBackgroundOverlay()
+	if Booster.BackgroundGui then
+		Booster.BackgroundGui:Destroy()
+	end
+	Booster.BackgroundGui = nil
+	Booster.BackgroundFrame = nil
+end
+
+local function installBackgroundOverlay()
+	destroyBackgroundOverlay()
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "NULLSCAPE_UltimateFPSBackground"
+	gui.DisplayOrder = -10000
+	gui.IgnoreGuiInset = true
+	gui.ResetOnSpawn = false
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+	local frame = Instance.new("Frame")
+	frame.Name = "Background"
+	frame.Active = false
+	frame.Selectable = false
+	frame.BorderSizePixel = 0
+	frame.BackgroundColor3 = Booster.BackgroundColor
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.ZIndex = 0
+	frame.Parent = gui
+
+	local parented = pcall(function()
+		gui.Parent = CoreGui
+	end)
+	if not parented then
+		local localPlayer = Players.LocalPlayer
+		local playerGui = localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")
+		if not playerGui then
+			gui:Destroy()
+			return false
+		end
+		gui.Parent = playerGui
+	end
+
+	Booster.BackgroundGui = gui
+	Booster.BackgroundFrame = frame
+	return true
+end
 
 local function disconnect(name)
 	local connection = Booster.Connections[name]
@@ -398,6 +449,19 @@ local function disableMechanisms()
 	uninstallVisualSuspension()
 	restoreCameras()
 	restoreHeadlessRenderer()
+	destroyBackgroundOverlay()
+end
+
+function Booster.setBackgroundColor(color)
+	if typeof(color) ~= "Color3" then
+		return false, "Background color must be a Color3"
+	end
+
+	Booster.BackgroundColor = color
+	if Booster.BackgroundFrame then
+		Booster.BackgroundFrame.BackgroundColor3 = color
+	end
+	return true
 end
 
 function Booster.setEnabled(enabled)
@@ -437,6 +501,7 @@ function Booster.setEnabled(enabled)
 	end
 
 	local headlessInstalled, headlessError = pcall(function()
+		installBackgroundOverlay()
 		installHeadlessRenderer()
 		installCameraParking()
 	end)
