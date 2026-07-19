@@ -21,6 +21,7 @@ local RunPolicy = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Run Polic
 local NativeGiftRegistry = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Native Gift Registry.luau")
 local XpTripcoinMode = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/XP Tripcoin Mode.luau")
 local Lap2Policy = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Lap2 Policy.luau")
+local RewardTelemetry = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Reward Telemetry.luau")
 
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
@@ -509,6 +510,10 @@ local function observeInRound(controller, gc)
 	end
 
 	local function resetRoundState(value)
+		local giftClientHandler = Context.getGiftClientHandler()
+		if not value and RewardTelemetry and typeof(RewardTelemetry.endRound) == "function" then
+			RewardTelemetry.endRound(controller, giftClientHandler)
+		end
 		sessionToken += 1
 		MovementLease.invalidateActive()
 		MovementLease.resetTransport()
@@ -566,6 +571,9 @@ local function observeInRound(controller, gc)
 		end
 		if Altar and typeof(Altar.reset) == "function" then
 			Altar.reset()
+		end
+		if value and RewardTelemetry and typeof(RewardTelemetry.beginRound) == "function" then
+			RewardTelemetry.beginRound(controller, giftClientHandler)
 		end
 
 		if value then
@@ -753,6 +761,9 @@ local function runLoop(controller)
 				end
 
 				local candidates, scanInfo = Scanner.scan(controller, gch)
+				if RewardTelemetry and typeof(RewardTelemetry.observeRound) == "function" then
+					RewardTelemetry.observeRound(gch)
+				end
 				if not isSessionActive() then
 					continue
 				end
@@ -1359,6 +1370,9 @@ function Coordinator.enable(controller, gc)
 	enabled = true
 	configDirty = true
 	NativeGiftRegistry.start()
+	if RewardTelemetry and typeof(RewardTelemetry.start) == "function" then
+		RewardTelemetry.start(controller)
+	end
 	if XpTripcoinMode and typeof(XpTripcoinMode.start) == "function" then
 		XpTripcoinMode.start(gc)
 	end
@@ -1424,6 +1438,9 @@ function Coordinator.disable(controller)
 		Scanner.stop()
 	end
 	NativeGiftRegistry.stop()
+	if RewardTelemetry and typeof(RewardTelemetry.stop) == "function" then
+		RewardTelemetry.stop()
+	end
 	if XpTripcoinMode and typeof(XpTripcoinMode.stop) == "function" then
 		XpTripcoinMode.stop(controller)
 	end

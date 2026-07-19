@@ -19,6 +19,7 @@ local OperatorAutoDisable = getgenv().loadModule("NULLSCAPE/Entities/Operator Au
 local RazorbloomAutoDisable = getgenv().loadModule("NULLSCAPE/Entities/Razorbloom Auto Disable.luau")
 local BellImmunity = getgenv().loadModule("NULLSCAPE/Entities/Bell Immunity.luau")
 local StatusImmunity = getgenv().loadModule("NULLSCAPE/Entities/StatusImmunity.luau")
+local PrimaryImmunityCatalog = getgenv().loadModule("NULLSCAPE/Entities/Primary Immunity Catalog.luau")
 local GC = getgenv().loadModule("NULLSCAPE/Entities/GC.luau")
 local KolonaAutoQTE = nil
 local SpringerAutoJump = nil
@@ -115,6 +116,8 @@ local Controller = {
 	LastShieldBaitAt = 0,
 	Destroyed = false,
 	StatusImmunity = StatusImmunity,
+	PrimaryImmunityChanged = Instance.new("BindableEvent"),
+	PrimaryImmunityBatching = false,
 
 	EnemiesFolder = nil,
 	PermanentConnections = {},
@@ -335,6 +338,27 @@ function Controller:ReconcileImmunityState()
 	end
 end
 
+function Controller:AreAllPrimaryImmunitiesEnabled()
+	for _, entry in ipairs(PrimaryImmunityCatalog) do
+		if self[entry.Flag] ~= true then
+			return false
+		end
+	end
+	return true
+end
+
+function Controller:SetAllPrimaryImmunities(value)
+	local enabled = value == true
+	self.PrimaryImmunityBatching = true
+	for _, entry in ipairs(PrimaryImmunityCatalog) do
+		self:SetImmunity(entry.Entity, enabled)
+	end
+	self.PrimaryImmunityBatching = false
+	self:ReconcileImmunityState()
+	self.PrimaryImmunityChanged:Fire(enabled)
+	return true
+end
+
 function Controller:CleanUp()
 	local globals = getgenv()._NULLSCAPE_Globals
 	local finalCleanup = self.Destroyed
@@ -400,6 +424,11 @@ function Controller:CleanUp()
 			end
 		end
 		table.clear(self.PermanentConnections)
+	end
+	if finalCleanup and self.PrimaryImmunityChanged then
+		pcall(function()
+			self.PrimaryImmunityChanged:Destroy()
+		end)
 	end
 
 	if finalCleanup then
@@ -649,9 +678,14 @@ function Controller:SetImmunity(entityName, value)
 		end
 	end
 
-	Executor.reconcile(GC)
-	if not self.BellImmune and not self.SpringerImmune then
-		restoreCharacterTouchStates()
+	if not self.PrimaryImmunityBatching then
+		Executor.reconcile(GC)
+		if not self.BellImmune and not self.SpringerImmune then
+			restoreCharacterTouchStates()
+		end
+		if self.PrimaryImmunityChanged then
+			self.PrimaryImmunityChanged:Fire(self:AreAllPrimaryImmunitiesEnabled())
+		end
 	end
 end
 

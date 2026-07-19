@@ -37,7 +37,12 @@ local function getStatusImmunity(Controller)
 	return activeController and activeController.StatusImmunity or nil
 end
 
+local primaryImmunityUISyncing = false
+
 local function setImmunity(Controller, entityName, value)
+	if primaryImmunityUISyncing then
+		return
+	end
 	local activeController = resolveController(nil, Controller)
 	if activeController and typeof(activeController.SetImmunity) == "function" then
 		activeController:SetImmunity(entityName, value)
@@ -87,10 +92,122 @@ return function(Client, Controller)
 	end
 
 	local Tab = Client.Window:CreateTab("Immunity", 4483362458)
+	local primaryControls = {}
+	local oneForAllControl = nil
+	local refreshScheduled = false
+	local updatePrimaryImmunityUI
+
+	local advancedOptions = {
+		Bell = {
+			{ Flag = "BellCurseImmune", Option = "Mighty Gong" },
+			{ Flag = "BellBlindnessImmune", Option = "Ring screen blindness" },
+			{ Flag = "BellOvertunedKillImmune", Option = "Overtuned kill" },
+		},
+		Flesh = {
+			{ Flag = "FleshConcussionImmune", Option = "Concussion" },
+			{ Flag = "FleshScreenEffectImmune", Option = "Screen effects" },
+		},
+		ICBM = { { Flag = "ICBMBurnImmune", Option = ICBM_SCORCHED_EARTH_OPTION } },
+		Operator = { { Flag = "OperatorAutoDisable", Option = "Auto Disable" } },
+		Springer = {
+			{ Flag = "SpringerKnockbackImmune", Option = "Immunity Shockwave" },
+			{ Flag = "SpringerAutoJumpEnabled", Option = "Auto Jump" },
+		},
+		Cadence = {
+			{ Flag = "CadenceAutoCollectInstruments", Option = "Auto Collect Instruments" },
+			{ Flag = "CadenceCheckStatus", Option = "CheckStatus" },
+		},
+		Ponderer = { { Flag = "PondererSilentLookat", Option = "Silent Lookat" } },
+		Kolona = { { Flag = "KolonaAutoQTEEnabled", Option = "Auto QTE" } },
+		Razorbloom = { { Flag = "RazorbloomAutoDisable", Option = "Auto Disable" } },
+	}
+
+	local function createPrimaryToggle(entityName, flagName, options)
+		local control = Tab:CreateToggle(options)
+		primaryControls[entityName] = { Control = control, Flag = flagName }
+		return control
+	end
+
+	local function createPrimaryDropdown(entityName, flagName, options)
+		local control = Tab:CreateDropdown(options)
+		primaryControls[entityName] = {
+			Control = control,
+			Flag = flagName,
+			Advanced = advancedOptions[entityName] or {},
+		}
+		return control
+	end
+
+	local function schedulePrimaryImmunityUIUpdate()
+		if refreshScheduled then
+			return
+		end
+		refreshScheduled = true
+		task.defer(function()
+			refreshScheduled = false
+			if updatePrimaryImmunityUI then
+				updatePrimaryImmunityUI()
+			end
+		end)
+	end
+
+	updatePrimaryImmunityUI = function()
+		local activeController = resolveController(nil, Controller)
+		if not activeController then
+			return false
+		end
+
+		primaryImmunityUISyncing = true
+		if oneForAllControl and typeof(oneForAllControl.Set) == "function" then
+			pcall(function()
+				oneForAllControl:Set(activeController:AreAllPrimaryImmunitiesEnabled())
+			end)
+		end
+		for _, entry in pairs(primaryControls) do
+			if entry.Control and typeof(entry.Control.Set) == "function" then
+				pcall(function()
+					if entry.Advanced then
+						local options = {}
+						if activeController[entry.Flag] == true then
+							table.insert(options, "Immunity")
+						end
+						for _, advanced in ipairs(entry.Advanced) do
+							if activeController[advanced.Flag] == true then
+								table.insert(options, advanced.Option)
+							end
+						end
+						entry.Control:Set(options)
+					else
+						entry.Control:Set(activeController[entry.Flag] == true)
+					end
+				end)
+			end
+		end
+		primaryImmunityUISyncing = false
+		return true
+	end
+
+	Tab:CreateSection("All Entities")
+	oneForAllControl = Tab:CreateToggle({
+		Name = "One for All",
+		CurrentValue = typeof(Controller.AreAllPrimaryImmunitiesEnabled) == "function"
+				and Controller:AreAllPrimaryImmunitiesEnabled()
+			or false,
+		Callback = function(Value)
+			if primaryImmunityUISyncing then
+				return
+			end
+			local activeController = resolveController(nil, Controller)
+			if activeController and typeof(activeController.SetAllPrimaryImmunities) == "function" then
+				activeController:SetAllPrimaryImmunities(Value)
+				schedulePrimaryImmunityUIUpdate()
+			end
+		end,
+	})
 
 	Tab:CreateSection("Entities List - Touch Immunity")
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Baby", "BabyImmune", {
 		Name = "Baby",
 		CurrentValue = getFlag(Controller, "BabyImmune"),
 		Flag = "ImmunityBabyToggle",
@@ -113,13 +230,16 @@ return function(Client, Controller)
 		table.insert(currentBellOptions, "Overtuned kill")
 	end
 
-	Tab:CreateDropdown({
+	createPrimaryDropdown("Bell", "BellImmune", {
 		Name = "Bell Hack Mode",
 		Options = { "Immunity", "Mighty Gong", "Ring screen blindness", "Overtuned kill" },
 		CurrentOption = currentBellOptions,
 		MultipleOptions = true,
 		Flag = "BellHackDropdownV2",
 		Callback = function(Options)
+			if primaryImmunityUISyncing then
+				return
+			end
 			local hasImmunity = optionSelected(Options, "Immunity")
 			local hasCurseImmune = optionSelected(Options, "Mighty Gong")
 				or optionSelected(Options, "Knockback (Curse)")
@@ -156,13 +276,16 @@ return function(Client, Controller)
 		table.insert(currentFleshOptions, "Screen effects")
 	end
 
-	Tab:CreateDropdown({
+	createPrimaryDropdown("Flesh", "FleshImmune", {
 		Name = "Flesh Hack Mode",
 		Options = { "Immunity", "Concussion", "Screen effects" },
 		CurrentOption = currentFleshOptions,
 		MultipleOptions = true,
 		Flag = "FleshHackDropdown",
 		Callback = function(Options)
+			if primaryImmunityUISyncing then
+				return
+			end
 			local hasImmunity = false
 			local hasConcussionImmune = false
 			local hasScreenEffectImmune = false
@@ -192,7 +315,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Mart", "MartImmune", {
 		Name = "Mart",
 		CurrentValue = getFlag(Controller, "MartImmune"),
 		Flag = "ImmunityMartToggle",
@@ -201,7 +324,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Telefragger", "TelefraggerImmune", {
 		Name = "Telefragger",
 		CurrentValue = getFlag(Controller, "TelefraggerImmune"),
 		Flag = "ImmunityTelefraggerToggle",
@@ -220,13 +343,16 @@ return function(Client, Controller)
 		table.insert(currentICBMOptions, ICBM_SCORCHED_EARTH_OPTION)
 	end
 
-	Tab:CreateDropdown({
+	createPrimaryDropdown("ICBM", "ICBMImmune", {
 		Name = "ICBM Hack Mode",
 		Options = { "Immunity", ICBM_SCORCHED_EARTH_OPTION },
 		CurrentOption = currentICBMOptions,
 		MultipleOptions = true,
 		Flag = "ICBMHackDropdown",
 		Callback = function(Options)
+			if primaryImmunityUISyncing then
+				return
+			end
 			local hasImmunity = optionSelected(Options, "Immunity")
 			local hasBurnImmunity = optionSelected(Options, ICBM_SCORCHED_EARTH_OPTION)
 				or optionSelected(Options, ICBM_SCORCHED_EARTH_LEGACY_OPTION)
@@ -244,7 +370,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Guardian", "GuardianImmune", {
 		Name = "Guardian",
 		CurrentValue = getFlag(Controller, "GuardianImmune"),
 		Flag = "ImmunityGuardianToggle",
@@ -261,13 +387,16 @@ return function(Client, Controller)
 		table.insert(currentOperatorOptions, "Auto Disable")
 	end
 
-	Tab:CreateDropdown({
+	createPrimaryDropdown("Operator", "OperatorImmune", {
 		Name = "Operator Hack Mode",
 		Options = { "Immunity", "Auto Disable" },
 		CurrentOption = currentOperatorOptions,
 		MultipleOptions = true,
 		Flag = "OperatorHackDropdown",
 		Callback = function(Options)
+			if primaryImmunityUISyncing then
+				return
+			end
 			local activeController = resolveController(nil, Controller)
 			if activeController and typeof(activeController.SetOperatorOptions) == "function" then
 				activeController:SetOperatorOptions(Options)
@@ -288,13 +417,16 @@ return function(Client, Controller)
 		table.insert(currentSpringerOptions, "Auto Jump")
 	end
 
-	Tab:CreateDropdown({
+	createPrimaryDropdown("Springer", "SpringerImmune", {
 		Name = "Springer Hack Mode",
 		Options = { "Immunity", "Immunity Shockwave", "Auto Jump" },
 		CurrentOption = currentSpringerOptions,
 		MultipleOptions = true,
 		Flag = "SpringerHackDropdown",
 		Callback = function(Options)
+			if primaryImmunityUISyncing then
+				return
+			end
 			local activeController = resolveController(nil, Controller)
 			if activeController and typeof(activeController.SetSpringerOptions) == "function" then
 				activeController:SetSpringerOptions(Options)
@@ -315,13 +447,16 @@ return function(Client, Controller)
 		table.insert(currentCadenceOptions, "CheckStatus")
 	end
 
-	Tab:CreateDropdown({
+	createPrimaryDropdown("Cadence", "CadenceImmune", {
 		Name = "Cadence",
 		Options = { "Immunity", "Auto Collect Instruments", "CheckStatus" },
 		CurrentOption = currentCadenceOptions,
 		MultipleOptions = true,
 		Flag = "CadenceOptionsDropdown",
 		Callback = function(Options)
+			if primaryImmunityUISyncing then
+				return
+			end
 			if typeof(Controller.SetCadenceOptions) == "function" then
 				Controller:SetCadenceOptions(Options)
 			else
@@ -352,13 +487,16 @@ return function(Client, Controller)
 		table.insert(currentPondererOptions, "Silent Lookat")
 	end
 
-	Tab:CreateDropdown({
+	createPrimaryDropdown("Ponderer", "PondererImmune", {
 		Name = "Ponderer Mode",
 		Options = { "Immunity", "Silent Lookat" },
 		CurrentOption = currentPondererOptions,
 		MultipleOptions = true,
 		Flag = "PondererHackDropdown",
 		Callback = function(Options)
+			if primaryImmunityUISyncing then
+				return
+			end
 			local hasImmunity = false
 			local hasSilentLookat = false
 			for _, opt in ipairs(Options) do
@@ -383,7 +521,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Celestial", "CelestialImmune", {
 		Name = "Celestial",
 		CurrentValue = getFlag(Controller, "CelestialImmune"),
 		Flag = "ImmunityCelestialToggle",
@@ -392,7 +530,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("RealityBreak", "RealityBreakImmune", {
 		Name = "Reality Break",
 		CurrentValue = getFlag(Controller, "RealityBreakImmune"),
 		Flag = "ImmunityRealityBreakToggle",
@@ -401,7 +539,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Scrapmaw", "ScrapmawImmune", {
 		Name = "Scrapmaw",
 		CurrentValue = getFlag(Controller, "ScrapmawImmune"),
 		Flag = "ImmunityScrapmawToggle",
@@ -410,7 +548,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Catalyst", "CatalystImmune", {
 		Name = "Catalyst",
 		CurrentValue = getFlag(Controller, "CatalystImmune"),
 		Flag = "ImmunityCatalystToggle",
@@ -419,7 +557,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("nilEnemy", "nilEnemyImmune", {
 		Name = "nilEnemy",
 		CurrentValue = getFlag(Controller, "nilEnemyImmune"),
 		Flag = "ImmunitynilEnemyToggle",
@@ -428,7 +566,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("nilMirage", "nilMirageImmune", {
 		Name = "nilMirage",
 		CurrentValue = getFlag(Controller, "nilMirageImmune"),
 		Flag = "ImmunitynilMirageToggle",
@@ -447,13 +585,16 @@ return function(Client, Controller)
 		table.insert(currentKolonaOptions, "Auto QTE")
 	end
 
-	Tab:CreateDropdown({
+	createPrimaryDropdown("Kolona", "KolonaImmune", {
 		Name = "Kolona Hack Mode",
 		Options = { "Immunity", "Auto QTE" },
 		CurrentOption = currentKolonaOptions,
 		MultipleOptions = true,
 		Flag = "KolonaHackDropdown",
 		Callback = function(Options)
+			if primaryImmunityUISyncing then
+				return
+			end
 			local hasImmunity = optionSelected(Options, "Immunity")
 			local hasAutoQTE = optionSelected(Options, "Auto QTE")
 			local activeController = resolveController(nil, Controller)
@@ -470,7 +611,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Oblivion", "OblivionImmune", {
 		Name = "Oblivion",
 		CurrentValue = getFlag(Controller, "OblivionImmune"),
 		Flag = "ImmunityOblivionToggle",
@@ -479,7 +620,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("ShadowBaby", "ShadowBabyImmune", {
 		Name = "ShadowBaby",
 		CurrentValue = getFlag(Controller, "ShadowBabyImmune"),
 		Flag = "ImmunityShadowBabyToggle",
@@ -488,7 +629,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Quartz", "QuartzImmune", {
 		Name = "Quartz",
 		CurrentValue = getFlag(Controller, "QuartzImmune"),
 		Flag = "ImmunityQuartzToggle",
@@ -497,7 +638,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Sigil", "SigilImmune", {
 		Name = "Sigil",
 		CurrentValue = getFlag(Controller, "SigilImmune"),
 		Flag = "ImmunitySigilToggle",
@@ -506,7 +647,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Slicer", "SlicerImmune", {
 		Name = "Slicer",
 		CurrentValue = getFlag(Controller, "SlicerImmune"),
 		Flag = "ImmunitySlicerToggle",
@@ -515,7 +656,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Voidbreaker", "VoidbreakerImmune", {
 		Name = "Voidbreaker",
 		CurrentValue = getFlag(Controller, "VoidbreakerImmune"),
 		Flag = "ImmunityVoidbreakerToggle",
@@ -532,13 +673,16 @@ return function(Client, Controller)
 		table.insert(currentRazorbloomOptions, "Auto Disable")
 	end
 
-	Tab:CreateDropdown({
+	createPrimaryDropdown("Razorbloom", "RazorbloomImmune", {
 		Name = "Razorbloom",
 		Options = { "Immunity", "Auto Disable" },
 		CurrentOption = currentRazorbloomOptions,
 		MultipleOptions = true,
 		Flag = "RazorbloomHackDropdown",
 		Callback = function(Options)
+			if primaryImmunityUISyncing then
+				return
+			end
 			local activeController = resolveController(nil, Controller)
 			if activeController and typeof(activeController.SetRazorbloomOptions) == "function" then
 				activeController:SetRazorbloomOptions(Options)
@@ -548,7 +692,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("VoidImplosion", "VoidImplosionImmune", {
 		Name = "Void Implosion",
 		CurrentValue = getFlag(Controller, "VoidImplosionImmune"),
 		Flag = "ImmunityVoidImplosionToggle",
@@ -557,7 +701,7 @@ return function(Client, Controller)
 		end,
 	})
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Seamine", "SeamineImmune", {
 		Name = "Seamine",
 		CurrentValue = getFlag(Controller, "SeamineImmune"),
 		Flag = "ImmunitySeamineToggle",
@@ -568,7 +712,7 @@ return function(Client, Controller)
 
 	Tab:CreateSection("Entities - Mimics")
 
-	Tab:CreateToggle({
+	createPrimaryToggle("Skinwalker", "SkinwalkerImmune", {
 		Name = "Husk",
 		CurrentValue = getFlag(Controller, "SkinwalkerImmune"),
 		Flag = "ImmunitySkinwalkerToggle",
@@ -615,4 +759,13 @@ return function(Client, Controller)
 			end
 		end,
 	})
+
+	local activeController = resolveController(nil, Controller)
+	if activeController and activeController.PrimaryImmunityChanged then
+		local connection = activeController.PrimaryImmunityChanged.Event:Connect(schedulePrimaryImmunityUIUpdate)
+		if Client and typeof(Client.ActiveConnections) == "table" then
+			table.insert(Client.ActiveConnections, connection)
+		end
+	end
+	schedulePrimaryImmunityUIUpdate()
 end
