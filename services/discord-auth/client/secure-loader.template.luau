@@ -4,6 +4,7 @@ local API_BASE = "__NULLSCAPE_AUTH_BASE_URL__"
 local getgenv = getgenv
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 
 local requestFn = request
@@ -86,6 +87,8 @@ local function createLoginView()
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = true
 	gui.DisplayOrder = 1000000
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.Enabled = true
 
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -243,19 +246,44 @@ local function createLoginView()
 		end
 	end)
 
-	local guiParent = CoreGui
+	local guiParents = {}
+	local localPlayer = Players.LocalPlayer
+	local playerGui = localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")
+	if not playerGui and localPlayer then
+		local success, result = pcall(function()
+			return localPlayer:WaitForChild("PlayerGui", 8)
+		end)
+		if success and typeof(result) == "Instance" then
+			playerGui = result
+		end
+	end
+	if playerGui then
+		table.insert(guiParents, playerGui)
+	end
 	if typeof(gethui) == "function" then
 		local success, protectedGui = pcall(gethui)
 		if success and typeof(protectedGui) == "Instance" then
-			guiParent = protectedGui
+			table.insert(guiParents, protectedGui)
 		end
 	end
+	table.insert(guiParents, CoreGui)
 
-	local mounted, mountError = pcall(function()
-		gui.Parent = guiParent
-	end)
+	local mounted = false
+	local mountError = nil
+	for _, guiParent in ipairs(guiParents) do
+		local success, err = pcall(function()
+			gui.Parent = guiParent
+		end)
+		if success and gui.Parent == guiParent then
+			mounted = true
+			break
+		end
+		gui.Parent = nil
+		mountError = err
+	end
 	if not mounted then
 		local message = "[NULLSCAPE] Unable to show the login window: " .. tostring(mountError)
+		warn(message)
 		if typeof(messagebox) == "function" then
 			pcall(messagebox, message, "NULLSCAPE Login", 0)
 		end
