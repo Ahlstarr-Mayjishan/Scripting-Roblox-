@@ -6,6 +6,7 @@
 local getgenv = getgenv
 local Game = game
 local HttpService = Game:GetService("HttpService")
+local Workspace = Game:GetService("Workspace")
 
 if getgenv().Client then
 	pcall(function()
@@ -864,6 +865,7 @@ end
 
 HomeTab:CreateSection("Server Info")
 local statsLabel = HomeTab:CreateLabel("FPS: Calculating... | Ping: Calculating... | Players: 0")
+local serverTimeLabel = HomeTab:CreateLabel("Server Time: Calculating...")
 
 task.spawn(function()
 	while task.wait(1) do
@@ -873,6 +875,8 @@ task.spawn(function()
 		pcall(function()
 			local playerCount = #Players:GetPlayers()
 			statsLabel:Set(string.format("FPS: %d | Ping: %d ms | Players: %d", fps, ping, playerCount))
+			local serverTimestamp = math.floor(Workspace:GetServerTimeNow())
+			serverTimeLabel:Set("Server Time: " .. os.date("!%H:%M:%S", serverTimestamp) .. " UTC")
 		end)
 	end
 end)

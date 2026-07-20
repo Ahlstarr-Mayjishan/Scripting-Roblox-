@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.20.026",
+    "Version":  "2026.07.20.027",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "f2ad631f7baf4ae21d8778fd580e7b58678c078dd2ed4ae1e3bae95c405c4011"
+                      "Sha256":  "320f6745eed0d2e6b271925866eab9956f3f9a5d1991088409ce09e61c63fd0c"
                   },
                   {
                       "Path":  "NULLSCAPE/loader.luau",
