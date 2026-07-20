@@ -79,6 +79,8 @@ local function writeAuthState(state)
 end
 
 local function createLoginView()
+	local compactHeight = 156
+	local manualLinkHeight = 218
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "NULLSCAPEAuthentication"
 	gui.ResetOnSpawn = false
@@ -88,7 +90,7 @@ local function createLoginView()
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.Position = UDim2.fromScale(0.5, 0.47)
-	panel.Size = UDim2.new(1, -32, 0, 156)
+	panel.Size = UDim2.new(1, -32, 0, compactHeight)
 	panel.BackgroundColor3 = Color3.fromRGB(25, 26, 31)
 	panel.BorderSizePixel = 0
 	panel.Parent = gui
@@ -101,8 +103,8 @@ local function createLoginView()
 	panelStroke.Thickness = 1
 	panelStroke.Parent = panel
 	local panelSize = Instance.new("UISizeConstraint")
-	panelSize.MinSize = Vector2.new(280, 156)
-	panelSize.MaxSize = Vector2.new(400, 156)
+	panelSize.MinSize = Vector2.new(280, compactHeight)
+	panelSize.MaxSize = Vector2.new(400, compactHeight)
 	panelSize.Parent = panel
 
 	local title = Instance.new("TextLabel")
@@ -153,8 +155,70 @@ local function createLoginView()
 	hint.TextXAlignment = Enum.TextXAlignment.Left
 	hint.Parent = panel
 
+	local linkBox = Instance.new("TextBox")
+	linkBox.Position = UDim2.fromOffset(18, 128)
+	linkBox.Size = UDim2.new(1, -36, 0, 36)
+	linkBox.BackgroundColor3 = Color3.fromRGB(17, 18, 22)
+	linkBox.BorderSizePixel = 0
+	linkBox.ClearTextOnFocus = false
+	linkBox.Font = Enum.Font.Code
+	linkBox.PlaceholderText = "Discord authorization link"
+	linkBox.Text = ""
+	linkBox.TextColor3 = Color3.fromRGB(224, 226, 231)
+	linkBox.TextSize = 12
+	linkBox.TextTruncate = Enum.TextTruncate.AtEnd
+	linkBox.TextXAlignment = Enum.TextXAlignment.Left
+	linkBox.TextEditable = true
+	linkBox.Visible = false
+	linkBox.Parent = panel
+	local linkCorner = Instance.new("UICorner")
+	linkCorner.CornerRadius = UDim.new(0, 6)
+	linkCorner.Parent = linkBox
+	local linkPadding = Instance.new("UIPadding")
+	linkPadding.PaddingLeft = UDim.new(0, 10)
+	linkPadding.PaddingRight = UDim.new(0, 10)
+	linkPadding.Parent = linkBox
+
 	local authorizeUrl = ""
+	local manualLinkShown = false
 	local buttonBaseColor = copyButton.BackgroundColor3
+	local function showManualLink(focus)
+		if authorizeUrl == "" then
+			return
+		end
+		linkBox.Text = authorizeUrl
+		if not manualLinkShown then
+			manualLinkShown = true
+			linkBox.Visible = true
+			hint.Position = UDim2.fromOffset(18, 178)
+			hint.Text = "Select and copy this link, then open it in your browser."
+			panelSize.MinSize = Vector2.new(280, manualLinkHeight)
+			panelSize.MaxSize = Vector2.new(400, manualLinkHeight)
+			TweenService:Create(panel, TweenInfo.new(0.15, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+				Size = UDim2.new(1, -32, 0, manualLinkHeight),
+			}):Play()
+		end
+		if focus then
+			linkBox:CaptureFocus()
+		end
+	end
+
+	local function tryCopyAuthorizeUrl()
+		local copy = setclipboard or toclipboard
+		if typeof(copy) ~= "function" or authorizeUrl == "" then
+			return false
+		end
+		return pcall(copy, authorizeUrl)
+	end
+
+	linkBox.Focused:Connect(function()
+		task.defer(function()
+			if linkBox.Parent and linkBox.Text ~= "" then
+				linkBox.CursorPosition = #linkBox.Text + 1
+				linkBox.SelectionStart = 1
+			end
+		end)
+	end)
 	copyButton.MouseEnter:Connect(function()
 		TweenService:Create(copyButton, TweenInfo.new(0.12), {
 			BackgroundColor3 = Color3.fromRGB(57, 128, 207),
@@ -166,16 +230,16 @@ local function createLoginView()
 		}):Play()
 	end)
 	copyButton.Activated:Connect(function()
-		local copy = setclipboard or toclipboard
-		if typeof(copy) == "function" and authorizeUrl ~= "" then
-			pcall(copy, authorizeUrl)
+		if tryCopyAuthorizeUrl() then
 			status.Text = "Authorization link copied."
 			copyButton.Text = "Link copied"
 			task.delay(1.2, function()
-			if copyButton.Parent then
-				copyButton.Text = "Copy Discord link"
-			end
-		end)
+				if copyButton.Parent then
+					copyButton.Text = "Copy Discord link"
+				end
+			end)
+		else
+			showManualLink(true)
 		end
 	end)
 
@@ -206,6 +270,15 @@ local function createLoginView()
 		Status = status,
 		SetAuthorizationUrl = function(url)
 			authorizeUrl = tostring(url or "")
+			if typeof(setclipboard or toclipboard) ~= "function" then
+				showManualLink(false)
+			end
+		end,
+		CopyAuthorizationUrl = function()
+			return tryCopyAuthorizeUrl()
+		end,
+		ShowManualAuthorizationUrl = function()
+			showManualLink(true)
 		end,
 	}
 end
@@ -255,10 +328,11 @@ local function authenticate()
 	local authorizationUrl = tostring(started.authorize_url or "")
 	view.SetAuthorizationUrl(authorizationUrl)
 	setStatus("Open the Discord link and approve access.")
-	local copy = setclipboard or toclipboard
-	if typeof(copy) == "function" then
-		pcall(copy, authorizationUrl)
+	if view.CopyAuthorizationUrl() then
 		setStatus("Discord link copied. Open it and approve access.")
+	else
+		view.ShowManualAuthorizationUrl()
+		setStatus("Copy the Discord link, then approve access in your browser.")
 	end
 
 	local deadline = os.clock() + tonumber(started.expires_in or 600)
