@@ -4,6 +4,7 @@ local API_BASE = "__NULLSCAPE_AUTH_BASE_URL__"
 local getgenv = getgenv
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
 
 local requestFn = request
 	or http_request
@@ -86,81 +87,95 @@ local function createLoginView()
 
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
-	panel.Position = UDim2.fromScale(0.5, 0.5)
-	panel.Size = UDim2.new(1, -32, 0, 224)
-	panel.BackgroundColor3 = Color3.fromRGB(28, 29, 33)
-	panel.BorderColor3 = Color3.fromRGB(63, 65, 72)
+	panel.Position = UDim2.fromScale(0.5, 0.47)
+	panel.Size = UDim2.new(1, -32, 0, 156)
+	panel.BackgroundColor3 = Color3.fromRGB(25, 26, 31)
+	panel.BorderSizePixel = 0
 	panel.Parent = gui
+	local panelCorner = Instance.new("UICorner")
+	panelCorner.CornerRadius = UDim.new(0, 8)
+	panelCorner.Parent = panel
+	local panelStroke = Instance.new("UIStroke")
+	panelStroke.Color = Color3.fromRGB(72, 75, 83)
+	panelStroke.Transparency = 0.2
+	panelStroke.Thickness = 1
+	panelStroke.Parent = panel
 	local panelSize = Instance.new("UISizeConstraint")
-	panelSize.MinSize = Vector2.new(288, 224)
-	panelSize.MaxSize = Vector2.new(460, 224)
+	panelSize.MinSize = Vector2.new(280, 156)
+	panelSize.MaxSize = Vector2.new(400, 156)
 	panelSize.Parent = panel
 
 	local title = Instance.new("TextLabel")
-	title.Position = UDim2.fromOffset(22, 18)
-	title.Size = UDim2.new(1, -44, 0, 32)
+	title.Position = UDim2.fromOffset(18, 16)
+	title.Size = UDim2.new(1, -36, 0, 28)
 	title.BackgroundTransparency = 1
 	title.Font = Enum.Font.GothamBold
 	title.Text = "NULLSCAPE Login"
 	title.TextColor3 = Color3.fromRGB(242, 243, 245)
-	title.TextSize = 22
+	title.TextSize = 20
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Parent = panel
 
 	local status = Instance.new("TextLabel")
-	status.Position = UDim2.fromOffset(22, 58)
-	status.Size = UDim2.new(1, -44, 0, 42)
+	status.Position = UDim2.fromOffset(18, 50)
+	status.Size = UDim2.new(1, -36, 0, 28)
 	status.BackgroundTransparency = 1
 	status.Font = Enum.Font.Gotham
 	status.Text = "Preparing Discord authentication..."
 	status.TextColor3 = Color3.fromRGB(196, 198, 204)
-	status.TextSize = 15
+	status.TextSize = 14
 	status.TextWrapped = true
 	status.TextXAlignment = Enum.TextXAlignment.Left
 	status.Parent = panel
 
-	local urlBox = Instance.new("TextBox")
-	urlBox.Position = UDim2.fromOffset(22, 112)
-	urlBox.Size = UDim2.new(1, -142, 0, 42)
-	urlBox.BackgroundColor3 = Color3.fromRGB(18, 19, 22)
-	urlBox.BorderColor3 = Color3.fromRGB(63, 65, 72)
-	urlBox.ClearTextOnFocus = false
-	urlBox.TextEditable = false
-	urlBox.Font = Enum.Font.Code
-	urlBox.PlaceholderText = "Discord authorization URL"
-	urlBox.Text = ""
-	urlBox.TextColor3 = Color3.fromRGB(220, 221, 225)
-	urlBox.TextSize = 13
-	urlBox.TextXAlignment = Enum.TextXAlignment.Left
-	urlBox.Parent = panel
-
 	local copyButton = Instance.new("TextButton")
-	copyButton.Position = UDim2.new(1, -110, 0, 112)
-	copyButton.Size = UDim2.fromOffset(88, 42)
+	copyButton.Position = UDim2.fromOffset(18, 90)
+	copyButton.Size = UDim2.new(1, -36, 0, 36)
 	copyButton.BackgroundColor3 = Color3.fromRGB(43, 113, 190)
 	copyButton.BorderSizePixel = 0
 	copyButton.Font = Enum.Font.GothamMedium
-	copyButton.Text = "Copy link"
+	copyButton.Text = "Copy Discord link"
 	copyButton.TextColor3 = Color3.new(1, 1, 1)
 	copyButton.TextSize = 14
 	copyButton.Parent = panel
+	local buttonCorner = Instance.new("UICorner")
+	buttonCorner.CornerRadius = UDim.new(0, 6)
+	buttonCorner.Parent = copyButton
 
 	local hint = Instance.new("TextLabel")
-	hint.Position = UDim2.fromOffset(22, 170)
-	hint.Size = UDim2.new(1, -44, 0, 30)
+	hint.Position = UDim2.fromOffset(18, 132)
+	hint.Size = UDim2.new(1, -36, 0, 16)
 	hint.BackgroundTransparency = 1
 	hint.Font = Enum.Font.Gotham
-	hint.Text = "Authorize in your browser. This window continues automatically."
+	hint.Text = "Approval continues automatically."
 	hint.TextColor3 = Color3.fromRGB(142, 145, 151)
-	hint.TextSize = 13
+	hint.TextSize = 12
 	hint.TextXAlignment = Enum.TextXAlignment.Left
 	hint.Parent = panel
 
+	local authorizeUrl = ""
+	local buttonBaseColor = copyButton.BackgroundColor3
+	copyButton.MouseEnter:Connect(function()
+		TweenService:Create(copyButton, TweenInfo.new(0.12), {
+			BackgroundColor3 = Color3.fromRGB(57, 128, 207),
+		}):Play()
+	end)
+	copyButton.MouseLeave:Connect(function()
+		TweenService:Create(copyButton, TweenInfo.new(0.12), {
+			BackgroundColor3 = buttonBaseColor,
+		}):Play()
+	end)
 	copyButton.Activated:Connect(function()
 		local copy = setclipboard or toclipboard
-		if typeof(copy) == "function" and urlBox.Text ~= "" then
-			pcall(copy, urlBox.Text)
+		if typeof(copy) == "function" and authorizeUrl ~= "" then
+			pcall(copy, authorizeUrl)
 			status.Text = "Authorization link copied."
+			copyButton.Text = "Link copied"
+			task.delay(1.2, function()
+			if copyButton.Parent then
+				copyButton.Text = "Copy Discord link"
+			end
+		end)
 		end
 	end)
 
@@ -182,11 +197,16 @@ local function createLoginView()
 		end
 		error(message, 0)
 	end
+	TweenService:Create(panel, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+		Position = UDim2.fromScale(0.5, 0.5),
+	}):Play()
 
 	return {
 		Gui = gui,
 		Status = status,
-		Url = urlBox,
+		SetAuthorizationUrl = function(url)
+			authorizeUrl = tostring(url or "")
+		end,
 	}
 end
 
@@ -232,11 +252,12 @@ local function authenticate()
 		return false, startError
 	end
 
-	view.Url.Text = tostring(started.authorize_url or "")
+	local authorizationUrl = tostring(started.authorize_url or "")
+	view.SetAuthorizationUrl(authorizationUrl)
 	setStatus("Open the Discord link and approve access.")
 	local copy = setclipboard or toclipboard
 	if typeof(copy) == "function" then
-		pcall(copy, view.Url.Text)
+		pcall(copy, authorizationUrl)
 		setStatus("Discord link copied. Open it and approve access.")
 	end
 
