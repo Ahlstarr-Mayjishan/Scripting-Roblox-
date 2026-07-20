@@ -125,7 +125,7 @@ local function createLoginView()
 	urlBox.BackgroundColor3 = Color3.fromRGB(18, 19, 22)
 	urlBox.BorderColor3 = Color3.fromRGB(63, 65, 72)
 	urlBox.ClearTextOnFocus = false
-	urlBox.Editable = false
+	urlBox.TextEditable = false
 	urlBox.Font = Enum.Font.Code
 	urlBox.PlaceholderText = "Discord authorization URL"
 	urlBox.Text = ""
