@@ -26,7 +26,18 @@ end
 
 local AUTH_FOLDER = "NULLSCAPE"
 local AUTH_FILE = AUTH_FOLDER .. "/auth_session.json"
+local AUTH_FALLBACK_FILE = "NULLSCAPE_auth_session.json"
+local AUTH_FILES = { AUTH_FILE, AUTH_FALLBACK_FILE }
+local RUNTIME_AUTH_KEY = "_NULLSCAPE_AuthSession"
 local MASTER_PATH = "NULLSCAPE/Main UI/master.luau"
+
+local runtimeEnvironment = _G
+if typeof(getgenv) == "function" then
+	local success, environment = pcall(getgenv)
+	if success and typeof(environment) == "table" then
+		runtimeEnvironment = environment
+	end
+end
 
 local function decodeJson(value)
 	local success, decoded = pcall(function()
@@ -64,19 +75,50 @@ local function newClientToken()
 end
 
 local function readAuthState()
-	if not (isfile and readfile and isfile(AUTH_FILE)) then
-		return {}
+	local cached = runtimeEnvironment and runtimeEnvironment[RUNTIME_AUTH_KEY]
+	if typeof(cached) == "string" then
+		local decoded = decodeJson(cached)
+		if decoded then
+			return decoded
+		end
 	end
-	local success, content = pcall(readfile, AUTH_FILE)
-	return success and decodeJson(content) or {}
+
+	if typeof(readfile) == "function" then
+		for _, path in ipairs(AUTH_FILES) do
+			local shouldRead = true
+			if typeof(isfile) == "function" then
+				local checked, exists = pcall(isfile, path)
+				shouldRead = checked and exists == true
+			end
+			if shouldRead then
+				local success, content = pcall(readfile, path)
+				local decoded = success and decodeJson(content) or nil
+				if decoded then
+					runtimeEnvironment[RUNTIME_AUTH_KEY] = content
+					return decoded
+				end
+			end
+		end
+	end
+
+	return {}
 end
 
 local function writeAuthState(state)
-	if not (makefolder and writefile) then
-		return false
+	local encoded = HttpService:JSONEncode(state)
+	runtimeEnvironment[RUNTIME_AUTH_KEY] = encoded
+
+	if typeof(writefile) ~= "function" then
+		return true
 	end
-	pcall(makefolder, AUTH_FOLDER)
-	return pcall(writefile, AUTH_FILE, HttpService:JSONEncode(state))
+	if typeof(makefolder) == "function" then
+		pcall(makefolder, AUTH_FOLDER)
+	end
+	local success = pcall(writefile, AUTH_FILE, encoded)
+	if not success then
+		success = pcall(writefile, AUTH_FALLBACK_FILE, encoded)
+	end
+	return success
 end
 
 local function createLoginView()
