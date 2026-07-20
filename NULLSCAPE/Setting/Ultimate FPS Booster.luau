@@ -39,6 +39,7 @@ local Booster = {
 }
 
 local PARKED_CAMERA_CFRAME = CFrame.lookAt(Vector3.new(0, -10000000, 0), Vector3.new(0, -10000000, -1))
+local RENDER_ENFORCEMENT_INTERVAL = 1
 local HEADLESS_GRAPHICS = {
 	CollapseVFX = false,
 	FragileTilesVFX = false,
@@ -122,6 +123,14 @@ local function runCleanupStep(name, callback)
 	end
 end
 
+local function set3dRenderingEnabled(enabled)
+	local success = pcall(function()
+		RunService:Set3dRenderingEnabled(enabled == true)
+	end)
+	Booster.RendererSuppressed = success and enabled ~= true
+	return success
+end
+
 local function installHeadlessRenderer()
 	if Booster.OriginalGlobalShadows == nil then
 		Booster.OriginalGlobalShadows = Lighting.GlobalShadows
@@ -136,15 +145,13 @@ local function installHeadlessRenderer()
 		rendering.QualityLevel = Enum.QualityLevel.Level01
 	end)
 
-	Booster.RendererSuppressed = pcall(function()
-		RunService:Set3dRenderingEnabled(false)
-	end)
+	if not set3dRenderingEnabled(false) then
+		error("Set3dRenderingEnabled is unavailable")
+	end
 end
 
 local function restoreHeadlessRenderer()
-	pcall(function()
-		RunService:Set3dRenderingEnabled(true)
-	end)
+	set3dRenderingEnabled(true)
 	Booster.RendererSuppressed = false
 
 	if Booster.OriginalGlobalShadows ~= nil then
@@ -245,19 +252,14 @@ local function setCelestialPresentationActive(active, force)
 			Booster.BackgroundGui.Enabled = false
 		end
 		restoreCameras()
-		pcall(function()
-			RunService:Set3dRenderingEnabled(true)
-		end)
-		Booster.RendererSuppressed = false
+		set3dRenderingEnabled(true)
 		return
 	end
 
 	if Booster.BackgroundGui then
 		Booster.BackgroundGui.Enabled = true
 	end
-	Booster.RendererSuppressed = pcall(function()
-		RunService:Set3dRenderingEnabled(false)
-	end)
+	set3dRenderingEnabled(false)
 	installCameraParking()
 end
 
@@ -270,6 +272,28 @@ local function deferCelestialPresentationRefresh()
 	task.defer(function()
 		if Booster.Enabled and Booster.LifecycleGeneration == generation then
 			refreshCelestialPresentation()
+		end
+	end)
+end
+
+local function startRendererEnforcement()
+	local generation = Booster.LifecycleGeneration
+	task.spawn(function()
+		while Booster.Enabled and Booster.LifecycleGeneration == generation do
+			if Booster.CelestialPresentationActive then
+				if Booster.BackgroundGui then
+					Booster.BackgroundGui.Enabled = false
+				end
+				set3dRenderingEnabled(true)
+			else
+				if not (Booster.BackgroundGui and Booster.BackgroundGui.Parent) then
+					installBackgroundOverlay()
+				elseif Booster.BackgroundGui.Enabled == false then
+					Booster.BackgroundGui.Enabled = true
+				end
+				set3dRenderingEnabled(false)
+			end
+			task.wait(RENDER_ENFORCEMENT_INTERVAL)
 		end
 	end)
 end
@@ -619,6 +643,7 @@ function Booster.setEnabled(enabled)
 		installHeadlessRenderer()
 		installCameraParking()
 		refreshCelestialPresentation(true)
+		startRendererEnforcement()
 	end)
 	if not headlessInstalled then
 		disableMechanisms()

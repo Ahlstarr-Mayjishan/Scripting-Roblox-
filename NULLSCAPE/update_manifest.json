@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.20.022",
+    "Version":  "2026.07.20.024",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -1163,7 +1163,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "2dbdce1ba058a36ee653b15f5776cd3aba17c38aa0c40142883ec075bb37ee63"
+                      "Sha256":  "1ff5763ffef7596629d90a5518e3db3c9be1be5a642fe309c3e33e1875dacfac"
                   },
                   {
                       "Path":  "NULLSCAPE/Setting/Character Actions.luau",
