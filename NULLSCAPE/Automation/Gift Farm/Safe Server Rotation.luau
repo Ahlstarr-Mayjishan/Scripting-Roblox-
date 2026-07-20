@@ -11,8 +11,7 @@ local TeleportService = game:GetService("TeleportService")
 local Rotation = {}
 local localPlayer = Players.LocalPlayer
 local httpGet = (game :: any).HttpGet
-local LOADER_URL =
-	"https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/NULLSCAPE/loader.luau"
+local LOADER_URL = "https://nullscape-discord-auth.reynoldszlotapastevand.workers.dev/loader"
 local SERVER_LIST_URL = "https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100&excludeFullGames=true"
 local RETRY_INTERVAL = 5
 
@@ -56,7 +55,16 @@ local function buildQueuedLoader()
 task.wait(1)
 local HttpService = game:GetService("HttpService")
 local url = %q .. "?nullscape_rotate=" .. HttpService:UrlEncode(tostring(os.time()) .. "-" .. HttpService:GenerateGUID(false))
+local requestFn = request or http_request or (http and http.request) or (syn and syn.request)
 local ok, source = pcall(function()
+	if typeof(requestFn) == "function" then
+		local response = requestFn({ Url = url, Method = "GET", Headers = { ["Cache-Control"] = "no-cache" } })
+		local statusCode = tonumber(response and (response.StatusCode or response.Status)) or 0
+		if statusCode ~= 200 then
+			error("HTTP " .. tostring(statusCode))
+		end
+		return response and (response.Body or response.body)
+	end
 	return game:HttpGet(url)
 end)
 if ok and typeof(source) == "string" and #source > 0 then

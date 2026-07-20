@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.20.034",
+    "Version":  "2026.07.21.001",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -21,7 +21,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "c1ae8dbe5474db1be2bdd0d62c7ca5c0e39d08d4354d5fd3de1c41617a0abc29"
+                      "Sha256":  "98ef3430cebc31298333ed57c3157df0eb87375a7b6a24effe74a91dd12d717d"
                   },
                   {
                       "Path":  "NULLSCAPE/Main UI/Updater.luau",
@@ -112,7 +112,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "d3ff45c5c46e921884f2462758896d4e66dfb010f9bbc5846f62b66b8a0cbe8a"
+                      "Sha256":  "cbd907daf0aaee65a7a4cc4a3dcc4fd9fb96817da779bd4428e0e7834cf780d7"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Runtime Health.luau",

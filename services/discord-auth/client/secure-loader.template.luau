@@ -190,9 +190,18 @@ local function createLoginView()
 	}
 end
 
+local viewCreated, viewOrError = pcall(createLoginView)
+if not viewCreated then
+	local message = "[NULLSCAPE] Login UI initialization failed: " .. tostring(viewOrError)
+	if typeof(messagebox) == "function" then
+		pcall(messagebox, message, "NULLSCAPE Login", 0)
+	end
+	error(message, 0)
+end
+local view = viewOrError
+
 local authState = readAuthState()
 authState.client_token = typeof(authState.client_token) == "string" and authState.client_token or newClientToken()
-local view = createLoginView()
 
 local function setStatus(text)
 	view.Status.Text = tostring(text)
