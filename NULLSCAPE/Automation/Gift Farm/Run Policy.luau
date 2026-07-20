@@ -208,18 +208,32 @@ local function performRuntimeGC()
 	end
 end
 
-local function leaveGame(controller)
+local function flushConfiguration()
+	local globals = getgenv()
+	local persistence = globals and globals._NULLSCAPE_ConfigurationPersistence
+	if persistence and typeof(persistence.flush) == "function" then
+		pcall(function()
+			persistence.flush(true)
+		end)
+	end
+end
+
+local function leaveGame(controller, reason, overlayText)
 	if state.Leaving then
 		return
 	end
 	state.Leaving = true
 	controller.GiftFarmEnabled = false
-	RuleOverlay.show(string.format("Gift Farm complete\n%d run(s) finished - leaving server", state.CompletedRuns))
+	performRuntimeGC()
+	flushConfiguration()
+	RuleOverlay.show(
+		overlayText or string.format("Gift Farm complete\n%d run(s) finished - leaving server", state.CompletedRuns)
+	)
 	state.LeaveThread = task.delay(1, function()
 		state.LeaveThread = nil
 		if localPlayer then
 			pcall(function()
-				localPlayer:Kick("Gift Farm repeats complete")
+				localPlayer:Kick(reason or "Gift Farm repeats complete")
 			end)
 		end
 	end)
@@ -472,11 +486,9 @@ function RunPolicy.step(controller, scanInfo)
 	)
 	controller.GiftFarmCurrentLevel = levelSnapshot.Level
 	local noTracking = NoTracking.step(controller)
-	if noTracking and noTracking.ResetComplete then
-		state.CompletedRoundsSinceRest = 0
-		RunLevelTracker.reset()
-		chooseTarget(controller)
-		return release(controller)
+	if noTracking and noTracking.ExitReady then
+		leaveGame(controller, "No-Tracking: stable intermission exit", noTracking.OverlayText)
+		return hold(controller, noTracking.Status, noTracking.Detail, noTracking.OverlayText)
 	end
 	if noTracking and noTracking.Hold then
 		state.WaitUntil = nil

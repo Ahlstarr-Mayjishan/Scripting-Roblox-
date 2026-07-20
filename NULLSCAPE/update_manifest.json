@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.20.025",
+    "Version":  "2026.07.20.026",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -80,7 +80,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "1d135102d85aebf4bf2fe91cab4c1adac04f4e6680967680b93889bc48a35bb0"
+                      "Sha256":  "84b11e130ecb9ba1ad721aa79fda422ee8fc8fb96f131e8e471f36c6a7abd7f8"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/RunLevelTracker.luau",
@@ -104,7 +104,15 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "7993235fba0ad8d6e1d6dcba200c68600097ebbda8e59a70ca5ecb26a5b1538c"
+                      "Sha256":  "b6788defbee2042fe7a363ef5c1e3c787ea7b9f19b30655237a9de144dd606a6"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Automation/Gift Farm/Runtime Health.luau",
+                      "Menu":  [
+                                   "Automation",
+                                   "Gift Farm"
+                               ],
+                      "Sha256":  "77b5a3b9404dad712affd0c28dd766e9cc2742dd77f06b3825ae534bc9f8700a"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Immunity Handoff.luau",
