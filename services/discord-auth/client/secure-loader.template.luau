@@ -5,7 +5,12 @@ local getgenv = getgenv
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 
-local requestFn = request or http_request or (syn and syn.request)
+local requestFn = request
+	or http_request
+	or (http and http.request)
+	or (syn and syn.request)
+	or (fluxus and fluxus.request)
+	or (krnl and krnl.request)
 if typeof(requestFn) ~= "function" then
 	error("[NULLSCAPE] This executor does not provide an HTTP request function", 0)
 end
