@@ -12,7 +12,11 @@ local requestFn = request
 	or (fluxus and fluxus.request)
 	or (krnl and krnl.request)
 if typeof(requestFn) ~= "function" then
-	error("[NULLSCAPE] This executor does not provide an HTTP request function", 0)
+	local message = "[NULLSCAPE] This executor does not provide an HTTP request function"
+	if typeof(messagebox) == "function" then
+		pcall(messagebox, message, "NULLSCAPE Login", 0)
+	end
+	error(message, 0)
 end
 if string.sub(API_BASE, 1, 8) ~= "https://" or string.find(API_BASE, "__", 1, true) then
 	error("[NULLSCAPE] Secure loader endpoint is not configured", 0)
@@ -30,7 +34,7 @@ local function decodeJson(value)
 end
 
 local function post(path, payload)
-	local response = requestFn({
+	local requestSucceeded, response = pcall(requestFn, {
 		Url = API_BASE .. path,
 		Method = "POST",
 		Headers = {
@@ -39,11 +43,15 @@ local function post(path, payload)
 		},
 		Body = HttpService:JSONEncode(payload),
 	})
+	if not requestSucceeded then
+		return nil, "REQUEST_FAILED: " .. tostring(response)
+	end
 	local statusCode = tonumber(response and (response.StatusCode or response.Status)) or 0
 	local body = response and (response.Body or response.body) or ""
 	local decoded = decodeJson(body)
 	if statusCode < 200 or statusCode >= 300 then
-		local code = decoded and decoded.error and decoded.error.code or ("HTTP_" .. tostring(statusCode))
+		local code = decoded and decoded.error and decoded.error.code
+			or ("HTTP_" .. tostring(statusCode) .. (body ~= "" and (": " .. tostring(body)) or ""))
 		return nil, tostring(code)
 	end
 	return decoded

@@ -197,12 +197,13 @@ async function discordCallback(url, env, config, ctx) {
     return approved
       ? html("Login approved", "Return to Roblox. NULLSCAPE will continue automatically.", true)
       : html("Access denied", "Your Discord account does not have an allowed role.", false);
-  } catch {
+  } catch (error) {
     await completeAuthRequest(env.DB, stateHash, {
       status: "denied",
       deniedReason: "DISCORD_AUTH_FAILED",
     }, now);
-    queueLog(ctx, config, "securityAlerts", "Discord OAuth failed before identity verification");
+    const reason = error instanceof Error ? error.message : "unknown Discord OAuth error";
+    queueLog(ctx, config, "securityAlerts", `Discord OAuth failed before identity verification | error=${reason}`);
     return html("Login failed", "Discord authentication could not be completed. Try again.", false);
   }
 }
