@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.20.024",
+    "Version":  "2026.07.20.025",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -14,7 +14,7 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "52d93764b11596805ec2051c8ccdfc1e57954155018157d01b037c8d03030d90"
+                      "Sha256":  "f2ad631f7baf4ae21d8778fd580e7b58678c078dd2ed4ae1e3bae95c405c4011"
                   },
                   {
                       "Path":  "NULLSCAPE/loader.luau",
@@ -35,7 +35,14 @@
                       "Menu":  [
                                    "Settings"
                                ],
-                      "Sha256":  "591f02e30c4a0ea8070579a31619249765f3483ace6735d41f6c333115c397ee"
+                      "Sha256":  "7522d24b0988bf12f52fc1358104ff2fd598106d5320cd649d61b8e336ff9b8b"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Setting/Configuration Persistence.luau",
+                      "Menu":  [
+                                   "Settings"
+                               ],
+                      "Sha256":  "eaa23af2fec69bcc29292dea5e2fa46683db0a019138427f0000ef80cb90c16b"
                   },
                   {
                       "Path":  "NULLSCAPE/Core/Remote Registry.luau",

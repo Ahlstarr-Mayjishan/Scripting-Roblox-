@@ -1266,6 +1266,15 @@ else
 	warn("[NULLSCAPE] Ultimate FPS booster unavailable: " .. tostring(ultimateFPSBoosterResult))
 end
 
+local configurationPersistenceLoaded, configurationPersistenceResult = pcall(function()
+	return loadModule("NULLSCAPE/Setting/Configuration Persistence.luau")
+end)
+if configurationPersistenceLoaded and typeof(configurationPersistenceResult) == "table" then
+	Client.Modules.ConfigurationPersistence = configurationPersistenceResult
+else
+	warn("[NULLSCAPE] Configuration persistence unavailable: " .. tostring(configurationPersistenceResult))
+end
+
 local settingsLoaded, settingsError = pcall(function()
 	local SettingsTab = loadModule("NULLSCAPE/Setting/tab.luau")
 	SettingsTab(Client)
@@ -1277,6 +1286,16 @@ end
 
 getgenv()._NULLSCAPE_Booting = true
 Rayfield:LoadConfiguration()
+local configurationPersistence = Client.Modules.ConfigurationPersistence
+if configurationPersistence and typeof(configurationPersistence.initialize) == "function" then
+	local saved, saveError = configurationPersistence.initialize(Rayfield, {
+		FolderName = "NULLSCAPE",
+		FileName = "master_settings.rfld",
+	})
+	if not saved then
+		warn("[NULLSCAPE] Configuration persistence failed to start: " .. tostring(saveError))
+	end
+end
 task.delay(2, function()
 	if getgenv().Client == Client then
 		getgenv()._NULLSCAPE_Booting = false

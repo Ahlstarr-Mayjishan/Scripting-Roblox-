@@ -111,6 +111,11 @@ return function(Client)
 			if not enabled then
 				warn("[NULLSCAPE] Ultimate FPS booster failed: " .. tostring(reason))
 			end
+
+			local persistence = Client.Modules and Client.Modules.ConfigurationPersistence
+			if persistence and typeof(persistence.flush) == "function" then
+				task.defer(persistence.flush, true)
+			end
 		end,
 	})
 
