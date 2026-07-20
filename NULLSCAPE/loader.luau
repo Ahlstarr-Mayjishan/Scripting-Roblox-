@@ -1,11 +1,10 @@
 --!nocheck
 
 local HttpService = game:GetService("HttpService")
-local MASTER_URL =
-	"https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/NULLSCAPE/Main%20UI/master.luau"
+local SECURE_LOADER_URL = "https://nullscape-discord-auth.reynoldszlotapastevand.workers.dev/loader"
 local fetchToken = tostring(os.time()) .. "-" .. HttpService:GenerateGUID(false)
 local httpGet = (game :: any).HttpGet
-local source = httpGet(game, MASTER_URL .. "?nullscape_boot=" .. HttpService:UrlEncode(fetchToken))
+local source = httpGet(game, SECURE_LOADER_URL .. "?nullscape_boot=" .. HttpService:UrlEncode(fetchToken))
 
 if string.sub(source, 1, 3) == "\239\187\191" then
 	source = string.sub(source, 4)

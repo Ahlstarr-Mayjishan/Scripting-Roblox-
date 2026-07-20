@@ -896,6 +896,8 @@ end)
 local moduleCache = {}
 local moduleLoading = {}
 local NIL_MODULE = {}
+local protectedSources = getgenv()._NULLSCAPE_ProtectedSources
+local protectedMode = typeof(protectedSources) == "table"
 local GITHUB_RAW_ROOT = "https://raw.githubusercontent.com/Ahlstarr-Mayjishan/Scripting-Roblox-/main/"
 local BOOT_FETCH_TOKEN = tostring(os.time()) .. "-" .. HttpService:GenerateGUID(false)
 
@@ -1017,10 +1019,16 @@ function Client:HotRestart(reason)
 	end
 
 	local source = nil
-	local ok, result = pcall(function()
-		local restartToken = tostring(os.time()) .. "-" .. HttpService:GenerateGUID(false)
-		return Game:HttpGet(getFreshRemoteUrl("NULLSCAPE/Main UI/master.luau", restartToken))
-	end)
+	local ok, result
+	local refreshProtectedBundle = getgenv()._NULLSCAPE_RefreshProtectedBundle
+	if protectedMode and typeof(refreshProtectedBundle) == "function" then
+		ok, result = pcall(refreshProtectedBundle)
+	else
+		ok, result = pcall(function()
+			local restartToken = tostring(os.time()) .. "-" .. HttpService:GenerateGUID(false)
+			return Game:HttpGet(getFreshRemoteUrl("NULLSCAPE/Main UI/master.luau", restartToken))
+		end)
+	end
 	if ok and typeof(result) == "string" and #result > 0 then
 		source = result
 	end
@@ -1028,7 +1036,7 @@ function Client:HotRestart(reason)
 		ok, result = pcall(readfile, "NULLSCAPE/Main UI/master.luau")
 		if ok and typeof(result) == "string" and #result > 0 then
 			source = result
-			warn("[NULLSCAPE] GitHub unavailable during hot restart; using the local fallback")
+			warn("[NULLSCAPE] Remote source unavailable during hot restart; using the local fallback")
 		end
 	end
 	if not source then
@@ -1058,6 +1066,14 @@ end
 -- TAB: SETTINGS
 -- ==========================================
 local function fetchRemoteSource(path)
+	if protectedMode then
+		local source = protectedSources[path]
+		if typeof(source) == "string" and #source > 0 then
+			return source
+		end
+		error("Protected source bundle is missing " .. tostring(path))
+	end
+
 	local success, source = pcall(function()
 		return Game:HttpGet(getFreshRemoteUrl(path))
 	end)
@@ -1102,7 +1118,7 @@ local function loadModule(path)
 
 	moduleLoading[path] = true
 
-	local sourceOrigin = "GitHub"
+	local sourceOrigin = protectedMode and "protected bundle" or "GitHub"
 	local sourceSuccess, sourceResult = pcall(fetchRemoteSource, path)
 	if not sourceSuccess and isfile and readfile and isfile(path) then
 		local remoteError = sourceResult

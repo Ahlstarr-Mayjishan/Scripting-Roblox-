@@ -19,3 +19,8 @@ tasks/
 .luaurc
 .selene.toml
 .sourcemap.json
+services/discord-auth/.dev.vars
+services/discord-auth/.wrangler/
+services/discord-auth/dist/
+services/discord-auth/generated/
+services/discord-auth/node_modules/

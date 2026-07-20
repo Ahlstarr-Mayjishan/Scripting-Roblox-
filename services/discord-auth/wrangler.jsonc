@@ -1,0 +1,59 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nullscape-discord-auth",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-20",
+  "workers_dev": true,
+  "secrets": {
+    "required": [
+      "DISCORD_CLIENT_SECRET",
+      "DISCORD_BOT_TOKEN",
+      "TOKEN_PEPPER"
+    ]
+  },
+  "vars": {
+    "PUBLIC_BASE_URL": "https://nullscape-discord-auth.reynoldszlotapastevand.workers.dev",
+    "DISCORD_CLIENT_ID": "1528729628393472130",
+    "DISCORD_GUILD_ID": "1528393276896317470",
+    "ALLOWED_ROLE_IDS": "1528658005703524533,1528394393399066674,1528395522115768341,1528400696213241888",
+    "CHANNEL_ADMIN_AUDIT": "1528712160404963458",
+    "CHANNEL_SYSTEM_HEALTH": "1528712049188671549",
+    "CHANNEL_SECURITY_ALERTS": "1528711953038704831",
+    "CHANNEL_SESSION_LOGS": "1528711893643038800",
+    "CHANNEL_LICENSE_LOGS": "1528711373801001050",
+    "CHANNEL_DISCORD_OAUTH_LOG": "1528706549566935142",
+    "CHANNEL_ADMIN_CONTROL": "1528705779568476260"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "NULLSCAPE_AUTH",
+      "database_id": "4438bfb2-568a-4049-bdcd-677c4a9d5191"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "AUTH_START_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 5, "period": 60 }
+    },
+    {
+      "name": "AUTH_STATUS_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "SESSION_VERIFY_LIMITER",
+      "namespace_id": "1003",
+      "simple": { "limit": 60, "period": 60 }
+    },
+    {
+      "name": "SOURCE_BUNDLE_LIMITER",
+      "namespace_id": "1004",
+      "simple": { "limit": 6, "period": 60 }
+    }
+  ],
+  "triggers": {
+    "crons": ["17 4 * * *"]
+  }
+}

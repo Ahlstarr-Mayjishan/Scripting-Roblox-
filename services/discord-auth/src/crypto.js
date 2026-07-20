@@ -1,0 +1,29 @@
+const encoder = new TextEncoder();
+
+export function randomToken(byteLength = 32) {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return base64Url(bytes);
+}
+
+export async function tokenHash(token, pepper) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(pepper),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(token));
+  return hex(new Uint8Array(signature));
+}
+
+function base64Url(bytes) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}
+
+function hex(bytes) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}

@@ -1167,7 +1167,11 @@ local function runLoop(controller)
 					transitionTo(controller, "Collecting", "Moving to a safe Golden Gift wait position")
 					Beacon.stageForWait(hrp, lease)
 				end
-				lease:release({ KeepFootholdDuration = 2.5, OnlyKeepFootholdIfAirborne = true })
+				lease:release({
+					HoldPosition = routeCompleted,
+					KeepFootholdDuration = 2.5,
+					OnlyKeepFootholdIfAirborne = true,
+				})
 
 				if not isSessionActive() then
 					continue

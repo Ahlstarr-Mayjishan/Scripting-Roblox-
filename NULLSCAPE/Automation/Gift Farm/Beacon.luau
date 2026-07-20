@@ -141,7 +141,12 @@ function Beacon.stageForWait(hrp, lease)
 
 	Beacon.suppressUntilReturn()
 	local waitCFrame = getWaitCFrame(beacon, hrp)
-	Context.waitForStreamedGround(waitCFrame.Position, 0.25)
+	if not Context.waitForStreamedGround(waitCFrame.Position, 0.25) then
+		if lease then
+			lease:placeFoothold(hrp.Position)
+		end
+		return false
+	end
 	if lease then
 		return lease:moveTo(waitCFrame)
 	end
