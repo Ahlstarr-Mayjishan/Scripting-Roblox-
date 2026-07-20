@@ -865,7 +865,19 @@ end
 
 HomeTab:CreateSection("Server Info")
 local statsLabel = HomeTab:CreateLabel("FPS: Calculating... | Ping: Calculating... | Players: 0")
-local serverTimeLabel = HomeTab:CreateLabel("Server Time: Calculating...")
+local serverUptimeLabel = HomeTab:CreateLabel("Server Uptime: Calculating...")
+
+local function formatServerUptime(seconds)
+	local total = math.max(0, math.floor(tonumber(seconds) or 0))
+	local days = math.floor(total / 86400)
+	local hours = math.floor(total % 86400 / 3600)
+	local minutes = math.floor(total % 3600 / 60)
+	local remainingSeconds = total % 60
+	if days > 0 then
+		return string.format("%dd %02d:%02d:%02d", days, hours, minutes, remainingSeconds)
+	end
+	return string.format("%02d:%02d:%02d", hours, minutes, remainingSeconds)
+end
 
 task.spawn(function()
 	while task.wait(1) do
@@ -875,8 +887,7 @@ task.spawn(function()
 		pcall(function()
 			local playerCount = #Players:GetPlayers()
 			statsLabel:Set(string.format("FPS: %d | Ping: %d ms | Players: %d", fps, ping, playerCount))
-			local serverTimestamp = math.floor(Workspace:GetServerTimeNow())
-			serverTimeLabel:Set("Server Time: " .. os.date("!%H:%M:%S", serverTimestamp) .. " UTC")
+			serverUptimeLabel:Set("Server Uptime: " .. formatServerUptime(Workspace.DistributedGameTime))
 		end)
 	end
 end)
