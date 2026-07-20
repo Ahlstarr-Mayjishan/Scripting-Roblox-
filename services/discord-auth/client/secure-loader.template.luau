@@ -164,7 +164,25 @@ local function createLoginView()
 		end
 	end)
 
-	gui.Parent = (gethui and gethui()) or CoreGui
+	local guiParent = CoreGui
+	if typeof(gethui) == "function" then
+		local success, protectedGui = pcall(gethui)
+		if success and typeof(protectedGui) == "Instance" then
+			guiParent = protectedGui
+		end
+	end
+
+	local mounted, mountError = pcall(function()
+		gui.Parent = guiParent
+	end)
+	if not mounted then
+		local message = "[NULLSCAPE] Unable to show the login window: " .. tostring(mountError)
+		if typeof(messagebox) == "function" then
+			pcall(messagebox, message, "NULLSCAPE Login", 0)
+		end
+		error(message, 0)
+	end
+
 	return {
 		Gui = gui,
 		Status = status,
