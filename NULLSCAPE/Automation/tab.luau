@@ -123,7 +123,7 @@ return function(Client, Controller)
 
 	Tab:CreateToggle({
 		Name = "No-Tracking me",
-		Info = "Casual runs without a level limit. Other difficulties reset through the void at level 9 or above.",
+		Info = "Runs continuously and safely rotates servers during intermission before long sessions become unstable.",
 		CurrentValue = Controller and Controller.GiftFarmNoTrackingEnabled or false,
 		Flag = "AutomationGiftFarmNoTrackingToggle",
 		Callback = function(Value)

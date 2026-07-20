@@ -1,7 +1,7 @@
 --!nocheck
 -- [[
 --  NULLSCAPE - Gift Farm No-Tracking Rule
---  Arms a clean intermission exit only when runtime health degrades.
+--  Arms a clean intermission rotation before long sessions become unstable.
 -- ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -10,7 +10,8 @@ local Context = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Context.lua
 local RuntimeHealth = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Runtime Health.luau")
 
 local NoTracking = {}
-local INTERMISSION_STABLE_TIME = 0.75
+local SESSION_ROTATION_LEVEL = 250
+local INTERMISSION_STABLE_TIME = 4.25
 
 local state = {
 	Armed = false,
@@ -42,12 +43,15 @@ function NoTracking.step(controller)
 	local level = getLevel()
 	if not state.Armed then
 		local health = RuntimeHealth.getStatus()
-		if not health.Unhealthy then
+		local sessionLimitReached = level >= SESSION_ROTATION_LEVEL
+		if not sessionLimitReached and not health.Unhealthy then
 			return nil
 		end
 		state.Armed = true
 		state.ArmedLevel = level
-		state.HealthReason = health.Reason or "client runtime health degraded"
+		state.HealthReason = if sessionLimitReached
+			then string.format("safe server rotation level %d reached", SESSION_ROTATION_LEVEL)
+			else health.Reason or "client runtime health degraded"
 	end
 
 	if Context.isInRound() == true then
@@ -74,14 +78,14 @@ function NoTracking.step(controller)
 
 	return {
 		Hold = true,
-		ExitReady = true,
-		Status = "NoTrackingExit",
+		RotateReady = true,
+		Status = "NoTrackingRotation",
 		Detail = string.format(
 			"%s at level %d; stable intermission confirmed",
 			state.HealthReason,
 			state.ArmedLevel or level
 		),
-		OverlayText = "No-Tracking me\nStable intermission confirmed - leaving",
+		OverlayText = "No-Tracking me\nStable intermission confirmed - rotating server",
 	}
 end
 

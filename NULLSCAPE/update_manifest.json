@@ -1,5 +1,5 @@
 ﻿{
-    "Version":  "2026.07.20.028",
+    "Version":  "2026.07.20.031",
     "MenuChanges":  [
                         "Settings",
                         "Automation",
@@ -80,7 +80,7 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "84b11e130ecb9ba1ad721aa79fda422ee8fc8fb96f131e8e471f36c6a7abd7f8"
+                      "Sha256":  "9b28de453c9a2f657c89e261d4dfa7600cb600c0b52a59a782c4c30ab8096879"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/RunLevelTracker.luau",
@@ -104,7 +104,15 @@
                                    "Automation",
                                    "Gift Farm"
                                ],
-                      "Sha256":  "b6788defbee2042fe7a363ef5c1e3c787ea7b9f19b30655237a9de144dd606a6"
+                      "Sha256":  "10a9e8c88921475177dae3ba46c3f570be7810175d76dfaf0325ef61c5074f2e"
+                  },
+                  {
+                      "Path":  "NULLSCAPE/Automation/Gift Farm/Safe Server Rotation.luau",
+                      "Menu":  [
+                                   "Automation",
+                                   "Gift Farm"
+                               ],
+                      "Sha256":  "d3ff45c5c46e921884f2462758896d4e66dfb010f9bbc5846f62b66b8a0cbe8a"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Runtime Health.luau",
@@ -934,7 +942,7 @@
                       "Menu":  [
                                    "Automation"
                                ],
-                      "Sha256":  "d857f9610c40a2ccb836f0ce6fd4daf785ad650cad4bc9b35f60e3a782f868d8"
+                      "Sha256":  "e8dc2f4a155d22021866932a42028e7f2cbf59389e6dfc15c0b62da1877ae340"
                   },
                   {
                       "Path":  "NULLSCAPE/Automation/Gift Farm/Altar.luau",

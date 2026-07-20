@@ -12,6 +12,7 @@ local ImmunityHandoff = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Imm
 local NoTracking = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/No Tracking.luau")
 local RuleOverlay = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Rule Overlay.luau")
 local RunLevelTracker = getgenv().loadModule("NULLSCAPE/Automation/RunLevelTracker.luau")
+local SafeServerRotation = getgenv().loadModule("NULLSCAPE/Automation/Gift Farm/Safe Server Rotation.luau")
 
 local RunPolicy = {}
 local localPlayer = Players.LocalPlayer
@@ -443,6 +444,7 @@ local function suspendRules(controller)
 		state.WaitLevel = nil
 		state.Leaving = false
 		NoTracking.reset()
+		SafeServerRotation.reset()
 		RunLevelTracker.reset()
 		state.CompletedRoundsSinceRest = 0
 		state.RulesSuspended = true
@@ -486,9 +488,20 @@ function RunPolicy.step(controller, scanInfo)
 	)
 	controller.GiftFarmCurrentLevel = levelSnapshot.Level
 	local noTracking = NoTracking.step(controller)
-	if noTracking and noTracking.ExitReady then
-		leaveGame(controller, "No-Tracking: stable intermission exit", noTracking.OverlayText)
-		return hold(controller, noTracking.Status, noTracking.Detail, noTracking.OverlayText)
+	if noTracking and noTracking.RotateReady then
+		performRuntimeGC()
+		flushConfiguration()
+		local rotating, rotationError = SafeServerRotation.begin()
+		if rotating then
+			state.Leaving = true
+			return hold(controller, noTracking.Status, noTracking.Detail, noTracking.OverlayText)
+		end
+		return hold(
+			controller,
+			"NoTrackingRotationRetry",
+			"Safe server rotation retry: " .. tostring(rotationError),
+			"No-Tracking me\nWaiting to retry server rotation"
+		)
 	end
 	if noTracking and noTracking.Hold then
 		state.WaitUntil = nil
@@ -537,6 +550,7 @@ function RunPolicy.disable(controller)
 	state.Leaving = false
 	state.RulesSuspended = false
 	NoTracking.reset()
+	SafeServerRotation.reset()
 	RunLevelTracker.reset()
 	state.CompletedRoundsSinceRest = 0
 	if controller then
