@@ -13,3 +13,11 @@ test("secure loader keeps auth state when mobile filesystem APIs are incomplete"
   assert.doesNotMatch(source, /not \(isfile and readfile and isfile/);
   assert.doesNotMatch(source, /not \(makefolder and writefile/);
 });
+test("secure loader does not delete saved sessions on transient verify failures", async () => {
+  const source = await readFile(loaderPath, "utf8");
+
+  assert.match(source, /isTerminalSessionError/);
+  assert.match(source, /SESSION_INVALID_OR_EXPIRED/);
+  assert.match(source, /Saved login could not be checked; continuing with saved session\./);
+  assert.match(source, /not isTerminalSessionError\(verifyError\)/);
+});

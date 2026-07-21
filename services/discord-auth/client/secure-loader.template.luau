@@ -121,6 +121,12 @@ local function writeAuthState(state)
 	return success
 end
 
+local function isTerminalSessionError(errorCode)
+	return errorCode == "SESSION_INVALID_OR_EXPIRED"
+		or errorCode == "INVALID_SESSION_TOKEN"
+		or errorCode == "INVALID_CLIENT_TOKEN"
+end
+
 local function createLoginView()
 	local compactHeight = 156
 	local manualLinkHeight = 218
@@ -372,21 +378,31 @@ end
 
 local function verifySavedSession()
 	if typeof(authState.session_token) ~= "string" then
-		return false
+		return false, "MISSING_SESSION"
 	end
-	local result = post("/v1/session/verify", {
+	local result, verifyError = post("/v1/session/verify", {
 		session_token = authState.session_token,
 		client_token = authState.client_token,
 	})
-	return result and result.valid == true
+	if result and result.valid == true then
+		return true
+	end
+	return false, verifyError or "SESSION_VERIFY_FAILED"
 end
 
 local function authenticate()
-	if verifySavedSession() then
+	local sessionVerified, verifyError = verifySavedSession()
+	if sessionVerified then
 		return true
 	end
-	authState.session_token = nil
-	writeAuthState(authState)
+	if typeof(authState.session_token) == "string" and not isTerminalSessionError(verifyError) then
+		setStatus("Saved login could not be checked; continuing with saved session.")
+		return true
+	end
+	if typeof(authState.session_token) == "string" then
+		authState.session_token = nil
+		writeAuthState(authState)
+	end
 
 	local started, startError = post("/v1/auth/start", {
 		client_token = authState.client_token,
