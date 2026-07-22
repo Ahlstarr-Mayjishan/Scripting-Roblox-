@@ -53,8 +53,8 @@ export async function consumeApprovedRequest(db, requestHash, clientHash, now) {
 }
 
 export async function createSession(db, record) {
-  await db.prepare(
-    `INSERT INTO sessions
+  return db.prepare(
+    `INSERT OR IGNORE INTO sessions
       (token_hash, client_hash, discord_user_id, display_name, role_ids_json, created_at, expires_at, last_seen_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?6)`,
   ).bind(

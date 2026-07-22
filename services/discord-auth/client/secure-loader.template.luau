@@ -30,6 +30,9 @@ local AUTH_FALLBACK_FILE = "NULLSCAPE_auth_session.json"
 local AUTH_FILES = { AUTH_FILE, AUTH_FALLBACK_FILE }
 local RUNTIME_AUTH_KEY = "_NULLSCAPE_AuthSession"
 local MASTER_PATH = "NULLSCAPE/Main UI/master.luau"
+local REQUEST_RETRY_ATTEMPTS = 4
+local REQUEST_RETRY_BASE_SECONDS = 0.75
+local POLL_RETRY_MAX_SECONDS = 12
 
 local runtimeEnvironment = _G
 if typeof(getgenv) == "function" then
@@ -57,7 +60,7 @@ local function post(path, payload)
 		Body = HttpService:JSONEncode(payload),
 	})
 	if not requestSucceeded then
-		return nil, "REQUEST_FAILED: " .. tostring(response)
+		return nil, "REQUEST_FAILED: " .. tostring(response), 0
 	end
 	local statusCode = tonumber(response and (response.StatusCode or response.Status)) or 0
 	local body = response and (response.Body or response.body) or ""
@@ -65,24 +68,61 @@ local function post(path, payload)
 	if statusCode < 200 or statusCode >= 300 then
 		local code = decoded and decoded.error and decoded.error.code
 			or ("HTTP_" .. tostring(statusCode) .. (body ~= "" and (": " .. tostring(body)) or ""))
-		return nil, tostring(code)
+		return nil, tostring(code), statusCode
 	end
-	return decoded
+	return decoded, nil, statusCode
+end
+
+local function isTransientRequestError(errorCode, statusCode)
+	local code = tostring(errorCode or "")
+	local status = tonumber(statusCode) or 0
+	if string.sub(code, 1, 14) == "REQUEST_FAILED" or code == "RATE_LIMITED" then
+		return true
+	end
+	if code == "SESSION_ISSUE_FAILED" then
+		return true
+	end
+	return status == 0 or status == 408 or status == 425 or status == 429 or status >= 500
+end
+
+local function postWithRetry(path, payload, attempts)
+	attempts = math.max(1, math.floor(tonumber(attempts) or REQUEST_RETRY_ATTEMPTS))
+	local lastError = nil
+	local lastStatus = 0
+	for attempt = 1, attempts do
+		local result, requestError, statusCode = post(path, payload)
+		if result then
+			return result
+		end
+		lastError = requestError
+		lastStatus = statusCode
+		if not isTransientRequestError(requestError, statusCode) or attempt >= attempts then
+			break
+		end
+		task.wait(math.min(REQUEST_RETRY_BASE_SECONDS * (2 ^ (attempt - 1)), 4))
+	end
+	return nil, lastError, lastStatus
 end
 
 local function newClientToken()
 	return HttpService:GenerateGUID(false) .. HttpService:GenerateGUID(false)
 end
 
+local authStorageMode = "runtime-only"
+
 local function readAuthState()
 	local cached = runtimeEnvironment and runtimeEnvironment[RUNTIME_AUTH_KEY]
 	if typeof(cached) == "string" then
 		local decoded = decodeJson(cached)
 		if decoded then
-			return decoded
+			return decoded, "runtime-only"
 		end
 	end
 
+	local newestState = nil
+	local newestEncoded = nil
+	local newestRevision = -1
+	local newestUpdatedAt = -1
 	if typeof(readfile) == "function" then
 		for _, path in ipairs(AUTH_FILES) do
 			local shouldRead = true
@@ -93,32 +133,64 @@ local function readAuthState()
 			if shouldRead then
 				local success, content = pcall(readfile, path)
 				local decoded = success and decodeJson(content) or nil
-				if decoded then
-					runtimeEnvironment[RUNTIME_AUTH_KEY] = content
-					return decoded
+				local revision = decoded and tonumber(decoded.revision) or 0
+				local updatedAt = decoded and tonumber(decoded.updated_at) or -1
+				if decoded and (revision > newestRevision or (revision == newestRevision and updatedAt > newestUpdatedAt)) then
+					newestState = decoded
+					newestRevision = revision
+					newestEncoded = content
+					newestUpdatedAt = updatedAt
 				end
 			end
 		end
 	end
+	if newestState then
+		runtimeEnvironment[RUNTIME_AUTH_KEY] = newestEncoded
+		return newestState, "persistent"
+	end
 
-	return {}
+	return {}, "runtime-only"
+end
+
+local function readBackAuthState(path, expectedClientToken, expectedRevision)
+	if typeof(readfile) ~= "function" then
+		return false
+	end
+	local success, content = pcall(readfile, path)
+	local decoded = success and decodeJson(content) or nil
+	return decoded ~= nil
+		and decoded.client_token == expectedClientToken
+		and decoded.revision == expectedRevision
 end
 
 local function writeAuthState(state)
+	state.revision = (tonumber(state.revision) or 0) + 1
+	state.updated_at = os.time()
 	local encoded = HttpService:JSONEncode(state)
 	runtimeEnvironment[RUNTIME_AUTH_KEY] = encoded
 
-	if typeof(writefile) ~= "function" then
-		return true
+	if typeof(writefile) ~= "function" or typeof(readfile) ~= "function" then
+		authStorageMode = "runtime-only"
+		return false, authStorageMode
 	end
 	if typeof(makefolder) == "function" then
 		pcall(makefolder, AUTH_FOLDER)
 	end
-	local success = pcall(writefile, AUTH_FILE, encoded)
-	if not success then
-		success = pcall(writefile, AUTH_FALLBACK_FILE, encoded)
+
+	local durableCopies = 0
+	for _, path in ipairs(AUTH_FILES) do
+		local success = pcall(writefile, path, encoded)
+		if success and readBackAuthState(path, state.client_token, state.revision) then
+			durableCopies += 1
+		end
 	end
-	return success
+
+	if durableCopies > 0 then
+		authStorageMode = "persistent"
+		return true, authStorageMode
+	end
+	authStorageMode = "runtime-only"
+	return false, authStorageMode
 end
 
 local function isTerminalSessionError(errorCode)
@@ -127,6 +199,13 @@ local function isTerminalSessionError(errorCode)
 		or errorCode == "INVALID_CLIENT_TOKEN"
 end
 
+local function isTerminalAuthenticationError(errorCode)
+	return errorCode == "ROLE_REQUIRED"
+		or errorCode == "GUILD_MEMBERSHIP_REQUIRED"
+		or errorCode == "DISCORD_AUTH_FAILED"
+		or errorCode == "INVALID_REQUEST_TOKEN"
+		or errorCode == "INVALID_CLIENT_TOKEN"
+end
 local function createLoginView()
 	local compactHeight = 156
 	local manualLinkHeight = 218
@@ -356,6 +435,9 @@ local function createLoginView()
 		ShowManualAuthorizationUrl = function()
 			showManualLink(true)
 		end,
+		SetHint = function(text)
+			hint.Text = tostring(text or "")
+		end,
 	}
 end
 
@@ -369,25 +451,129 @@ if not viewCreated then
 end
 local view = viewOrError
 
-local authState = readAuthState()
+local authState, loadedStorageMode = readAuthState()
+authStorageMode = loadedStorageMode or authStorageMode
 authState.client_token = typeof(authState.client_token) == "string" and authState.client_token or newClientToken()
+writeAuthState(authState)
+
+if authStorageMode == "persistent" then
+	view.SetHint("Session storage: persistent.")
+else
+	view.SetHint("Session storage: runtime only; keep Roblox open during approval.")
+end
 
 local function setStatus(text)
 	view.Status.Text = tostring(text)
+end
+
+local function clearPendingAuthentication()
+	authState.pending_auth = nil
+	writeAuthState(authState)
+end
+
+local function clearSession()
+	authState.session_token = nil
+	authState.expires_at = nil
+	writeAuthState(authState)
 end
 
 local function verifySavedSession()
 	if typeof(authState.session_token) ~= "string" then
 		return false, "MISSING_SESSION"
 	end
-	local result, verifyError = post("/v1/session/verify", {
+	local result, verifyError = postWithRetry("/v1/session/verify", {
 		session_token = authState.session_token,
 		client_token = authState.client_token,
-	})
+	}, 3)
 	if result and result.valid == true then
+		authState.expires_at = result.expires_at
+		writeAuthState(authState)
 		return true
 	end
 	return false, verifyError or "SESSION_VERIFY_FAILED"
+end
+
+local function showPendingAuthentication(pending, resumed)
+	view.SetAuthorizationUrl(pending.authorize_url)
+	if resumed then
+		setStatus("Resuming Discord approval...")
+		return
+	end
+	setStatus("Open the Discord link and approve access.")
+	if view.CopyAuthorizationUrl() then
+		setStatus("Discord link copied. Open it and approve access.")
+	else
+		view.ShowManualAuthorizationUrl()
+		setStatus("Copy the Discord link, then approve access in your browser.")
+	end
+end
+
+local function pollPendingAuthentication(pending, resumed)
+	showPendingAuthentication(pending, resumed)
+	local delaySeconds = math.max(tonumber(pending.poll_after_seconds) or 4, 4)
+	local networkRetrySeconds = delaySeconds
+
+	while os.time() < tonumber(pending.expires_at) do
+		local result, statusError, statusCode = post("/v1/auth/status", {
+			request_token = pending.request_token,
+			client_token = authState.client_token,
+		})
+		if result and result.status == "approved" and typeof(result.session_token) == "string" then
+			authState.session_token = result.session_token
+			authState.expires_at = result.expires_at
+			authState.pending_auth = nil
+			writeAuthState(authState)
+			return true
+		end
+
+		if result and result.status == "pending" then
+			delaySeconds = math.max(tonumber(result.poll_after_seconds) or 4, 4)
+			networkRetrySeconds = delaySeconds
+		elseif statusError then
+			if isTerminalAuthenticationError(statusError) then
+				clearPendingAuthentication()
+				return false, statusError
+			end
+			if statusError == "AUTH_REQUEST_NOT_FOUND" then
+				clearPendingAuthentication()
+				return false, statusError
+			end
+			if isTransientRequestError(statusError, statusCode) then
+				setStatus("Connection interrupted. Login will resume automatically...")
+				networkRetrySeconds = math.min(math.max(networkRetrySeconds * 1.5, 4), POLL_RETRY_MAX_SECONDS)
+				delaySeconds = networkRetrySeconds
+			else
+				clearPendingAuthentication()
+				return false, statusError
+			end
+		end
+
+		task.wait(delaySeconds)
+	end
+
+	clearPendingAuthentication()
+	return false, "AUTH_TIMEOUT"
+end
+
+local function resumePendingAuthentication()
+	local pending = authState.pending_auth
+	if typeof(pending) ~= "table" then
+		return false, nil, false
+	end
+	if typeof(pending.request_token) ~= "string"
+		or typeof(pending.authorize_url) ~= "string"
+		or tonumber(pending.expires_at) == nil
+	then
+		clearPendingAuthentication()
+		return false, "INVALID_PENDING_AUTH", false
+	end
+	if os.time() >= tonumber(pending.expires_at) then
+		clearPendingAuthentication()
+		return false, "AUTH_TIMEOUT", false
+	end
+
+	local resumed, resumeError = pollPendingAuthentication(pending, true)
+	return resumed, resumeError, true
 end
 
 local function authenticate()
@@ -400,46 +586,34 @@ local function authenticate()
 		return true
 	end
 	if typeof(authState.session_token) == "string" then
-		authState.session_token = nil
-		writeAuthState(authState)
+		clearSession()
 	end
 
-	local started, startError = post("/v1/auth/start", {
+	local resumed, resumeError, hadPending = resumePendingAuthentication()
+	if resumed then
+		return true
+	end
+	if hadPending and isTerminalAuthenticationError(resumeError) then
+		return false, resumeError
+	end
+
+	local started, startError = postWithRetry("/v1/auth/start", {
 		client_token = authState.client_token,
-	})
+	}, 3)
 	if not started then
 		return false, startError
 	end
 
-	local authorizationUrl = tostring(started.authorize_url or "")
-	view.SetAuthorizationUrl(authorizationUrl)
-	setStatus("Open the Discord link and approve access.")
-	if view.CopyAuthorizationUrl() then
-		setStatus("Discord link copied. Open it and approve access.")
-	else
-		view.ShowManualAuthorizationUrl()
-		setStatus("Copy the Discord link, then approve access in your browser.")
-	end
+	local now = os.time()
+	authState.pending_auth = {
+		request_token = started.request_token,
+		authorize_url = tostring(started.authorize_url or ""),
+		expires_at = now + math.max(tonumber(started.expires_in) or 600, 1),
+		poll_after_seconds = math.max(tonumber(started.poll_after_seconds) or 4, 4),
+	}
+	writeAuthState(authState)
 
-	local deadline = os.clock() + tonumber(started.expires_in or 600)
-	local delaySeconds = math.max(tonumber(started.poll_after_seconds) or 4, 4)
-	while os.clock() < deadline do
-		task.wait(delaySeconds)
-		local result, statusError = post("/v1/auth/status", {
-			request_token = started.request_token,
-			client_token = authState.client_token,
-		})
-		if result and result.status == "approved" and typeof(result.session_token) == "string" then
-			authState.session_token = result.session_token
-			authState.expires_at = result.expires_at
-			writeAuthState(authState)
-			return true
-		end
-		if statusError and statusError ~= "RATE_LIMITED" then
-			return false, statusError
-		end
-	end
-	return false, "AUTH_TIMEOUT"
+	return pollPendingAuthentication(authState.pending_auth, false)
 end
 
 local authenticated, authError = authenticate()
@@ -450,18 +624,28 @@ end
 
 setStatus("Downloading protected runtime...")
 local function fetchBundle()
-	return post("/v1/source/bundle", {
+	return postWithRetry("/v1/source/bundle", {
 		session_token = authState.session_token,
 		client_token = authState.client_token,
-	})
+	}, REQUEST_RETRY_ATTEMPTS)
 end
 
 local bundle, bundleError = fetchBundle()
+if (not bundle or typeof(bundle.sources) ~= "table") and isTerminalSessionError(bundleError) then
+	clearSession()
+	setStatus("Saved login expired. Reconnecting Discord...")
+	local reauthenticated, reauthError = authenticate()
+	if not reauthenticated then
+		setStatus("Login failed: " .. tostring(reauthError))
+		error("[NULLSCAPE] Authentication failed: " .. tostring(reauthError), 0)
+	end
+	setStatus("Downloading protected runtime...")
+	bundle, bundleError = fetchBundle()
+end
 if not bundle or typeof(bundle.sources) ~= "table" then
 	setStatus("Runtime download failed: " .. tostring(bundleError))
 	error("[NULLSCAPE] Protected runtime download failed: " .. tostring(bundleError), 0)
 end
-
 local sources = bundle.sources
 local masterPath = tostring(bundle.master_path or MASTER_PATH)
 local masterSource = sources[masterPath]

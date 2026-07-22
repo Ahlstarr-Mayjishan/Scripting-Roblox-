@@ -1,5 +1,5 @@
 import { hasAllowedRole } from "./config.js";
-import { randomToken, tokenHash } from "./crypto.js";
+import { randomToken, sessionTokenForRequest, tokenHash } from "./crypto.js";
 import {
   authorizationUrl,
   exchangeCode,
@@ -11,7 +11,6 @@ import { html, HttpError, json, loginInfoHtml, readJson } from "./http.js";
 import { secureLoaderResponse, sourceBundleResponse } from "./source.js";
 import {
   completeAuthRequest,
-  consumeApprovedRequest,
   createAuthRequest,
   createSession,
   deleteSession,
@@ -97,25 +96,28 @@ async function authStatus(request, env, config, ctx) {
     return json({ status: "denied", reason: record.denied_reason || "ROLE_REQUIRED" }, 403);
   }
 
-  const approved = await consumeApprovedRequest(env.DB, requestHash, clientHash, now);
-  if (!approved) throw new HttpError(409, "AUTH_REQUEST_ALREADY_USED");
-  const sessionToken = randomToken();
+  const sessionToken = await sessionTokenForRequest(requestToken, clientToken, config.tokenPepper);
+  const sessionHash = await tokenHash(sessionToken, config.tokenPepper);
   const expiresAt = now + SESSION_TTL_SECONDS;
-  await createSession(env.DB, {
-    tokenHash: await tokenHash(sessionToken, config.tokenPepper),
+  const creation = await createSession(env.DB, {
+    tokenHash: sessionHash,
     clientHash,
-    discordUserId: approved.discord_user_id,
-    displayName: approved.display_name,
-    roleIdsJson: approved.role_ids_json,
+    discordUserId: record.discord_user_id,
+    displayName: record.display_name,
+    roleIdsJson: record.role_ids_json,
     createdAt: now,
     expiresAt,
   });
-  queueLog(ctx, config, "sessionLogs", `Session issued | user=${approved.discord_user_id} | expires=${expiresAt}`);
+  const session = await readSession(env.DB, sessionHash, clientHash, now);
+  if (!session) throw new HttpError(503, "SESSION_ISSUE_FAILED");
+  if (Number(creation?.meta?.changes || 0) > 0) {
+    queueLog(ctx, config, "sessionLogs", `Session issued | user=${record.discord_user_id} | expires=${session.expires_at}`);
+  }
   return json({
     status: "approved",
     session_token: sessionToken,
-    expires_at: expiresAt,
-    user: { id: approved.discord_user_id, display_name: approved.display_name },
+    expires_at: session.expires_at,
+    user: { id: record.discord_user_id, display_name: record.display_name },
   });
 }
 

@@ -6,6 +6,19 @@ export function randomToken(byteLength = 32) {
   return base64Url(bytes);
 }
 
+export async function sessionTokenForRequest(requestToken, clientToken, pepper) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(pepper),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const material = `nullscape-session:v1:${requestToken}:${clientToken}`;
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(material));
+  return base64Url(new Uint8Array(signature));
+}
+
 export async function tokenHash(token, pepper) {
   const key = await crypto.subtle.importKey(
     "raw",
