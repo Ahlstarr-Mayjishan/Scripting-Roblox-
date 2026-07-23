@@ -59,3 +59,15 @@ test("secure loader mirrors auth state and reads the newest durable copy", async
   assert.match(source, /durableCopies/);
   assert.match(source, /durableCopies > 0/);
 });
+
+test("secure loader supports one-time mobile recovery without a reusable key", async () => {
+  const source = await readFile(loaderPath, "utf8");
+
+  assert.match(source, /Recovery code/);
+  assert.match(source, /ConsumeRecoveryCode/);
+  assert.match(source, /\/v1\/auth\/recover/);
+  assert.match(source, /device_label/);
+  assert.match(source, /DEVICE_LIMIT_REACHED/);
+  assert.match(source, /DEVICE_TRANSFER_COOLDOWN/);
+  assert.match(source, /NETWORK_REAUTH_REQUIRED/);
+});

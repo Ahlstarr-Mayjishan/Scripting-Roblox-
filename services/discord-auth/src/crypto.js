@@ -19,6 +19,17 @@ export async function sessionTokenForRequest(requestToken, clientToken, pepper) 
   return base64Url(new Uint8Array(signature));
 }
 
+export async function recoveryCodeForState(state, pepper) {
+  const digest = await tokenHash(`nullscape-recovery:v1:${state}`, pepper);
+  return digest.slice(0, 16).toUpperCase().match(/.{4}/g).join("-");
+}
+
+export function normalizeRecoveryCode(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replaceAll("-", "").replaceAll(" ", "").toUpperCase();
+  return /^[A-F0-9]{16}$/.test(normalized) ? normalized : null;
+}
+
 export async function tokenHash(token, pepper) {
   const key = await crypto.subtle.importKey(
     "raw",

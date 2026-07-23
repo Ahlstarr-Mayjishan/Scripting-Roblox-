@@ -6,6 +6,7 @@ local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local requestFn = request
 	or http_request
@@ -108,6 +109,17 @@ local function newClientToken()
 	return HttpService:GenerateGUID(false) .. HttpService:GenerateGUID(false)
 end
 
+local function getDeviceLabel()
+	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+		return "Mobile"
+	end
+	if UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled then
+		return "Console"
+	end
+	return "Desktop"
+end
+
+local DEVICE_LABEL = getDeviceLabel()
 local authStorageMode = "runtime-only"
 
 local function readAuthState()
@@ -197,18 +209,21 @@ local function isTerminalSessionError(errorCode)
 	return errorCode == "SESSION_INVALID_OR_EXPIRED"
 		or errorCode == "INVALID_SESSION_TOKEN"
 		or errorCode == "INVALID_CLIENT_TOKEN"
+		or errorCode == "NETWORK_REAUTH_REQUIRED"
 end
 
 local function isTerminalAuthenticationError(errorCode)
 	return errorCode == "ROLE_REQUIRED"
 		or errorCode == "GUILD_MEMBERSHIP_REQUIRED"
 		or errorCode == "DISCORD_AUTH_FAILED"
+		or errorCode == "DEVICE_LIMIT_REACHED"
+		or errorCode == "DEVICE_TRANSFER_COOLDOWN"
 		or errorCode == "INVALID_REQUEST_TOKEN"
 		or errorCode == "INVALID_CLIENT_TOKEN"
 end
 local function createLoginView()
-	local compactHeight = 156
-	local manualLinkHeight = 218
+	local compactHeight = 202
+	local manualLinkHeight = 250
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "NULLSCAPEAuthentication"
 	gui.ResetOnSpawn = false
@@ -276,7 +291,7 @@ local function createLoginView()
 
 	local hint = Instance.new("TextLabel")
 	hint.Position = UDim2.fromOffset(18, 132)
-	hint.Size = UDim2.new(1, -36, 0, 16)
+	hint.Size = UDim2.new(1, -36, 0, 24)
 	hint.BackgroundTransparency = 1
 	hint.Font = Enum.Font.Gotham
 	hint.Text = "Approval continues automatically."
@@ -285,8 +300,47 @@ local function createLoginView()
 	hint.TextXAlignment = Enum.TextXAlignment.Left
 	hint.Parent = panel
 
+	local recoveryBox = Instance.new("TextBox")
+	recoveryBox.Position = UDim2.fromOffset(18, 132)
+	recoveryBox.Size = UDim2.new(1, -128, 0, 32)
+	recoveryBox.BackgroundColor3 = Color3.fromRGB(17, 18, 22)
+	recoveryBox.BorderSizePixel = 0
+	recoveryBox.ClearTextOnFocus = false
+	recoveryBox.Font = Enum.Font.Code
+	recoveryBox.PlaceholderText = "Recovery code"
+	recoveryBox.Text = ""
+	recoveryBox.TextColor3 = Color3.fromRGB(224, 226, 231)
+	recoveryBox.PlaceholderColor3 = Color3.fromRGB(126, 129, 136)
+	recoveryBox.TextSize = 12
+	recoveryBox.TextXAlignment = Enum.TextXAlignment.Left
+	recoveryBox.Parent = panel
+	local recoveryCorner = Instance.new("UICorner")
+	recoveryCorner.CornerRadius = UDim.new(0, 6)
+	recoveryCorner.Parent = recoveryBox
+	local recoveryPadding = Instance.new("UIPadding")
+	recoveryPadding.PaddingLeft = UDim.new(0, 10)
+	recoveryPadding.PaddingRight = UDim.new(0, 10)
+	recoveryPadding.Parent = recoveryBox
+
+	local resumeButton = Instance.new("TextButton")
+	resumeButton.AnchorPoint = Vector2.new(1, 0)
+	resumeButton.Position = UDim2.new(1, -18, 0, 132)
+	resumeButton.Size = UDim2.fromOffset(84, 32)
+	resumeButton.BackgroundColor3 = Color3.fromRGB(51, 54, 61)
+	resumeButton.BorderSizePixel = 0
+	resumeButton.Font = Enum.Font.GothamMedium
+	resumeButton.Text = "Resume"
+	resumeButton.TextColor3 = Color3.fromRGB(232, 233, 237)
+	resumeButton.TextSize = 13
+	resumeButton.Parent = panel
+	local resumeCorner = Instance.new("UICorner")
+	resumeCorner.CornerRadius = UDim.new(0, 6)
+	resumeCorner.Parent = resumeButton
+
+	hint.Position = UDim2.fromOffset(18, 172)
+
 	local linkBox = Instance.new("TextBox")
-	linkBox.Position = UDim2.fromOffset(18, 128)
+	linkBox.Position = UDim2.fromOffset(18, 174)
 	linkBox.Size = UDim2.new(1, -36, 0, 36)
 	linkBox.BackgroundColor3 = Color3.fromRGB(17, 18, 22)
 	linkBox.BorderSizePixel = 0
@@ -311,6 +365,7 @@ local function createLoginView()
 
 	local authorizeUrl = ""
 	local manualLinkShown = false
+	local queuedRecoveryCode = nil
 	local buttonBaseColor = copyButton.BackgroundColor3
 	local function showManualLink(focus)
 		if authorizeUrl == "" then
@@ -320,7 +375,7 @@ local function createLoginView()
 		if not manualLinkShown then
 			manualLinkShown = true
 			linkBox.Visible = true
-			hint.Position = UDim2.fromOffset(18, 178)
+			hint.Position = UDim2.fromOffset(18, 216)
 			hint.Text = "Select and copy this link, then open it in your browser."
 			panelSize.MinSize = Vector2.new(280, manualLinkHeight)
 			panelSize.MaxSize = Vector2.new(400, manualLinkHeight)
@@ -370,6 +425,16 @@ local function createLoginView()
 			end)
 		else
 			showManualLink(true)
+		end
+	end)
+	resumeButton.Activated:Connect(function()
+		local value = string.upper((recoveryBox.Text or ""):gsub("[%s%-]", ""))
+		if string.match(value, "^[A-F0-9]+$") and #value == 16 then
+			queuedRecoveryCode = value
+			recoveryBox.Text = ""
+			status.Text = "Checking one-time recovery code..."
+		else
+			status.Text = "Enter the 16-character recovery code from Discord."
 		end
 	end)
 
@@ -438,6 +503,17 @@ local function createLoginView()
 		SetHint = function(text)
 			hint.Text = tostring(text or "")
 		end,
+		SetRecoveryCode = function(code)
+			local value = tostring(code or "")
+			if value ~= "" then
+				hint.Text = "Recovery: " .. value .. " (save only if Roblox closes)"
+			end
+		end,
+		ConsumeRecoveryCode = function()
+			local value = queuedRecoveryCode
+			queuedRecoveryCode = nil
+			return value
+		end,
 	}
 end
 
@@ -484,6 +560,7 @@ local function verifySavedSession()
 	local result, verifyError = postWithRetry("/v1/session/verify", {
 		session_token = authState.session_token,
 		client_token = authState.client_token,
+		device_label = DEVICE_LABEL,
 	}, 3)
 	if result and result.valid == true then
 		authState.expires_at = result.expires_at
@@ -495,6 +572,7 @@ end
 
 local function showPendingAuthentication(pending, resumed)
 	view.SetAuthorizationUrl(pending.authorize_url)
+	view.SetRecoveryCode(pending.recovery_code)
 	if resumed then
 		setStatus("Resuming Discord approval...")
 		return
@@ -508,22 +586,54 @@ local function showPendingAuthentication(pending, resumed)
 	end
 end
 
+local function acceptSession(result)
+	authState.session_token = result.session_token
+	authState.expires_at = result.expires_at
+	authState.pending_auth = nil
+	writeAuthState(authState)
+	return true
+end
+
+local function recoverAuthentication(recoveryCode)
+	local result, recoveryError = postWithRetry("/v1/auth/recover", {
+		recovery_code = recoveryCode,
+		client_token = authState.client_token,
+		device_label = DEVICE_LABEL,
+	}, 3)
+	if result and result.status == "approved" and typeof(result.session_token) == "string" then
+		setStatus("Login recovered on this device.")
+		return acceptSession(result)
+	end
+	return false, recoveryError or "RECOVERY_FAILED"
+end
+
 local function pollPendingAuthentication(pending, resumed)
 	showPendingAuthentication(pending, resumed)
 	local delaySeconds = math.max(tonumber(pending.poll_after_seconds) or 4, 4)
 	local networkRetrySeconds = delaySeconds
 
 	while os.time() < tonumber(pending.expires_at) do
+		local recoveryCode = view.ConsumeRecoveryCode()
+		if recoveryCode then
+			local recovered, recoveryError = recoverAuthentication(recoveryCode)
+			if recovered then
+				return true
+			end
+			if recoveryError == "DEVICE_LIMIT_REACHED" then
+				return false, recoveryError
+			end
+			if recoveryError == "DEVICE_TRANSFER_COOLDOWN" then
+				return false, recoveryError
+			end
+			setStatus("Recovery code is invalid, expired, or already used.")
+		end
 		local result, statusError, statusCode = post("/v1/auth/status", {
 			request_token = pending.request_token,
 			client_token = authState.client_token,
+			device_label = DEVICE_LABEL,
 		})
 		if result and result.status == "approved" and typeof(result.session_token) == "string" then
-			authState.session_token = result.session_token
-			authState.expires_at = result.expires_at
-			authState.pending_auth = nil
-			writeAuthState(authState)
-			return true
+			return acceptSession(result)
 		end
 
 		if result and result.status == "pending" then
@@ -599,6 +709,7 @@ local function authenticate()
 
 	local started, startError = postWithRetry("/v1/auth/start", {
 		client_token = authState.client_token,
+		device_label = DEVICE_LABEL,
 	}, 3)
 	if not started then
 		return false, startError
@@ -608,6 +719,7 @@ local function authenticate()
 	authState.pending_auth = {
 		request_token = started.request_token,
 		authorize_url = tostring(started.authorize_url or ""),
+		recovery_code = tostring(started.recovery_code or ""),
 		expires_at = now + math.max(tonumber(started.expires_in) or 600, 1),
 		poll_after_seconds = math.max(tonumber(started.poll_after_seconds) or 4, 4),
 	}
@@ -627,6 +739,7 @@ local function fetchBundle()
 	return postWithRetry("/v1/source/bundle", {
 		session_token = authState.session_token,
 		client_token = authState.client_token,
+		device_label = DEVICE_LABEL,
 	}, REQUEST_RETRY_ATTEMPTS)
 end
 

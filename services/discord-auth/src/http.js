@@ -32,6 +32,25 @@ h1{margin:0 0 12px;font-size:24px;color:${color}}p{margin:0;color:#c9cbd1;line-h
   });
 }
 
+export function approvalHtml(recoveryCode) {
+  const body = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>NULLSCAPE Login approved</title><style>
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#111214;color:#eee;font:16px system-ui,sans-serif}
+main{width:min(520px,calc(100% - 40px));border:1px solid #34363b;padding:28px;background:#1c1d21;border-radius:8px}
+h1{margin:0 0 12px;font-size:24px;color:#38d67a}p{color:#c9cbd1;line-height:1.5}
+code{display:block;margin-top:16px;padding:14px;text-align:center;letter-spacing:.12em;font:700 20px ui-monospace,monospace;background:#111214;border:1px solid #484b52;color:#78c8ff;user-select:all}
+</style></head><body><main><h1>Login approved</h1>
+<p>Return to Roblox. If Roblox was closed by your phone, run the loader again and enter this one-time recovery code:</p>
+<code>${escapeHtml(recoveryCode)}</code>
+<p>The code expires with this login request and can only be claimed by one device.</p>
+</main></body></html>`;
+  return new Response(body, {
+    status: 200,
+    headers: { ...SECURITY_HEADERS, "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
 export function loginInfoHtml(publicBaseUrl) {
   const loaderUrl = `${publicBaseUrl}/loader?v=${Date.now()}`;
   const body = `<!doctype html>
